@@ -32,7 +32,7 @@ export default function LeftPanel() {
   }, {})
 
   return (
-    <div className="glass-panel-solid flex h-full w-64 shrink-0 flex-col border-r sm:w-60">
+    <div className="glass-panel-solid flex h-full w-full flex-col overflow-hidden rounded-xl border shadow-lg shadow-black/20">
       {/* Tabs */}
       <div className="flex border-b" style={{ borderColor: 'var(--color-border)' }}>
         {([

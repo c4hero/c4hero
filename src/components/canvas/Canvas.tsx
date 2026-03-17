@@ -197,7 +197,7 @@ function applyAutoLayout(
 
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: direction, ranksep: 100, nodesep: 80 })
+  g.setGraph({ rankdir: direction, ranksep: 300, nodesep: 250 })
 
   for (const node of nodes) {
     g.setNode(node.id, { width: 200, height: 100 })
@@ -384,6 +384,7 @@ export default function Canvas() {
         maxZoom={2}
         snapToGrid={snapToGrid}
         snapGrid={[20, 20]}
+        connectionRadius={40}
         panOnDrag={spaceHeld ? [0, 1, 2] : [0]}
         defaultEdgeOptions={{
           type: 'relationship',

@@ -37,7 +37,7 @@ export default function BottomBar() {
   if (!workspace) return null
 
   return (
-    <footer className="glass-panel-solid relative z-20 flex h-9 shrink-0 items-center justify-between border-t px-3">
+    <footer className="glass-panel-solid absolute bottom-3 left-3 right-3 z-20 flex h-9 items-center justify-between rounded-xl border px-3 shadow-lg shadow-black/20">
       {/* Left: Tags */}
       <div className="flex items-center gap-1.5 overflow-x-auto">
         {view && (

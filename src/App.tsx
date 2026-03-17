@@ -85,46 +85,55 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <div className="flex h-full w-full flex-col" style={{ background: 'var(--color-bg-primary)' }}>
+      <div className="relative h-full w-full" style={{ background: 'var(--color-bg-primary)' }}>
         {/* Skip to main content link for screen readers */}
         <a href="#main-canvas" className="sr-only focus:not-sr-only focus:fixed focus:z-[200] focus:top-2 focus:left-2 focus:rounded-lg focus:bg-[var(--color-accent)] focus:px-4 focus:py-2 focus:text-sm focus:font-medium" style={{ color: 'var(--color-bg-primary)' }}>
           Skip to canvas
         </a>
+
+        {/* Canvas fills the entire viewport */}
+        <main id="main-canvas" className="absolute inset-0" aria-label="Architecture canvas">
+          <Canvas />
+          <Toolbar />
+          <CanvasHints />
+        </main>
+
+        {/* Floating TopBar */}
         <TopBar />
 
-        <div className="relative flex min-h-0 flex-1">
-          {/* Left panel */}
-          {leftPanelOpen && !isOverlay && <nav aria-label="Workspace navigation"><LeftPanel /></nav>}
-          {leftPanelOpen && isOverlay && (
-            <>
+        {/* Floating LeftPanel */}
+        {leftPanelOpen && !isOverlay && (
+          <nav className="absolute left-3 top-[60px] bottom-[52px] z-30 w-60" aria-label="Workspace navigation">
+            <LeftPanel />
+          </nav>
+        )}
+        {leftPanelOpen && isOverlay && (
+          <>
+            <div className="panel-backdrop fixed inset-0 z-30" onClick={closeOverlayPanels} />
+            <nav className="panel-slide-left fixed left-3 top-[60px] bottom-[52px] z-40 w-60" aria-label="Workspace navigation">
+              <LeftPanel />
+            </nav>
+          </>
+        )}
+
+        {/* Floating RightPanel */}
+        {rightPanelOpen && !isOverlay && (
+          <aside className="absolute right-3 top-[60px] bottom-[52px] z-30 w-72 sm:w-64" aria-label="Element properties">
+            <RightPanel />
+          </aside>
+        )}
+        {rightPanelOpen && isOverlay && (
+          <>
+            {!leftPanelOpen && (
               <div className="panel-backdrop fixed inset-0 z-30" onClick={closeOverlayPanels} />
-              <div className="panel-slide-left fixed inset-y-0 left-0 z-40 mt-12">
-                <nav aria-label="Workspace navigation"><LeftPanel /></nav>
-              </div>
-            </>
-          )}
+            )}
+            <aside className="panel-slide-right fixed right-3 top-[60px] bottom-[52px] z-40 w-72 sm:w-64" aria-label="Element properties">
+              <RightPanel />
+            </aside>
+          </>
+        )}
 
-          {/* Canvas + Toolbar */}
-          <main id="main-canvas" className="relative min-h-0 flex-1" aria-label="Architecture canvas">
-            <Canvas />
-            <Toolbar />
-            <CanvasHints />
-          </main>
-
-          {/* Right panel */}
-          {rightPanelOpen && !isOverlay && <aside aria-label="Element properties"><RightPanel /></aside>}
-          {rightPanelOpen && isOverlay && (
-            <>
-              {!leftPanelOpen && (
-                <div className="panel-backdrop fixed inset-0 z-30" onClick={closeOverlayPanels} />
-              )}
-              <div className="panel-slide-right fixed inset-y-0 right-0 z-40 mt-12">
-                <aside aria-label="Element properties"><RightPanel /></aside>
-              </div>
-            </>
-          )}
-        </div>
-
+        {/* Floating BottomBar */}
         <BottomBar />
       </div>
 

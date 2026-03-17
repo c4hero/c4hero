@@ -13,6 +13,7 @@ export default function Toolbar() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const setLayoutDirection = useWorkspaceStore((s) => s.setLayoutDirection)
+  const leftPanelOpen = useWorkspaceStore((s) => s.leftPanelOpen)
 
   if (!workspace) return null
 
@@ -22,7 +23,7 @@ export default function Toolbar() {
 
   return (
     <div
-      className="absolute left-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-xl border p-1.5"
+      className={`absolute ${leftPanelOpen ? 'left-[264px]' : 'left-3'} top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-xl border p-1.5 transition-[left] duration-300 ease-out`}
       style={{
         background: 'rgba(15, 25, 35, 0.9)',
         backdropFilter: 'blur(12px)',
@@ -74,7 +75,7 @@ export default function Toolbar() {
         icon={<AlignVerticalSpaceAround size={16} />}
         label="Tidy layout"
         onClick={() => {
-          // Trigger re-layout by clearing positions in the current view
+          // Clear all positions + pinned flags in the current view to trigger dagre re-layout
           const store = useWorkspaceStore.getState()
           if (!store.workspace || !store.activeViewKey) return
           const ws = structuredClone(store.workspace)
@@ -87,7 +88,8 @@ export default function Toolbar() {
           const v = allViews.find(v => v.key === store.activeViewKey)
           if (v) {
             for (const el of v.elements) { el.x = undefined; el.y = undefined; el.pinned = undefined }
-            store.loadWorkspace(ws)
+            // Set workspace directly — don't use loadWorkspace which resets activeViewKey
+            useWorkspaceStore.setState({ workspace: ws })
           }
         }}
       />

@@ -38,7 +38,7 @@ export default function RightPanel() {
   const view = activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
   return (
-    <div className="glass-panel-solid flex h-full w-72 shrink-0 flex-col border-l sm:w-64">
+    <div className="glass-panel-solid flex h-full w-full flex-col overflow-hidden rounded-xl border shadow-lg shadow-black/20">
       {element ? (
         <ElementProperties element={element} onClose={clearSelection} />
       ) : relationship ? (

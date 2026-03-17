@@ -78,7 +78,7 @@ export default function TopBar() {
   }
 
   return (
-    <header className="glass-panel-solid relative z-50 flex h-12 shrink-0 items-center justify-between border-b px-3 sm:px-4">
+    <header className="glass-panel-solid absolute left-3 right-3 top-3 z-50 flex h-11 items-center justify-between rounded-xl border px-3 shadow-lg shadow-black/20 sm:px-4">
       {/* Left */}
       <div className="flex items-center gap-1.5 sm:gap-2">
         <button onClick={toggleLeftPanel} className="btn-icon" title={leftPanelOpen ? 'Close left panel' : 'Open left panel'}>

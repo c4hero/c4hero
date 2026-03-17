@@ -264,6 +264,22 @@ body {
   box-shadow: 0 0 10px var(--color-accent-glow) !important;
 }
 
+.c4-handle-target {
+  width: 20px !important;
+  height: 20px !important;
+  background: transparent !important;
+  opacity: 0;
+}
+
+/* When React Flow is in connecting mode, show target handles as glowing zones */
+.react-flow__node.connectable .c4-handle-target,
+.connecting .c4-handle-target {
+  opacity: 1;
+  background: var(--color-accent-glow) !important;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent) !important;
+}
+
 /* ─── Scrollbar ────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
