@@ -1,0 +1,161 @@
+import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
+import { buildElementMap } from '@/store/workspace'
+
+// ─── Sidecar schema ─────────────────────────────────────────────────
+// Stores c4hero-specific metadata that isn't part of the Structurizr DSL.
+
+interface SidecarElement {
+  status?: ElementStatus
+  owner?: string
+}
+
+interface SidecarRelationship {
+  lineStyle?: LineStyle
+}
+
+interface SidecarViewElement {
+  pinned?: boolean
+}
+
+interface SidecarView {
+  elements?: Record<string, SidecarViewElement>
+}
+
+export interface SidecarData {
+  version: 1
+  elements?: Record<string, SidecarElement>
+  relationships?: Record<string, SidecarRelationship>
+  views?: Record<string, SidecarView>
+}
+
+// ─── Extract sidecar from workspace ─────────────────────────────────
+
+export function extractSidecar(workspace: Workspace): SidecarData | null {
+  const sidecar: SidecarData = { version: 1 }
+  let hasData = false
+
+  // Elements: status, owner
+  const elementMap = buildElementMap(workspace)
+  const elements: Record<string, SidecarElement> = {}
+  for (const [id, el] of elementMap) {
+    const entry: SidecarElement = {}
+    if (el.status) entry.status = el.status
+    if (el.owner) entry.owner = el.owner
+    if (Object.keys(entry).length > 0) {
+      elements[id] = entry
+      hasData = true
+    }
+  }
+  if (Object.keys(elements).length > 0) sidecar.elements = elements
+
+  // Relationships: lineStyle
+  const relationships: Record<string, SidecarRelationship> = {}
+  for (const rel of workspace.model.relationships) {
+    if (rel.lineStyle) {
+      relationships[rel.id] = { lineStyle: rel.lineStyle }
+      hasData = true
+    }
+  }
+  if (Object.keys(relationships).length > 0) sidecar.relationships = relationships
+
+  // Views: pinned elements
+  const allViews = [
+    ...workspace.views.systemLandscapeViews,
+    ...workspace.views.systemContextViews,
+    ...workspace.views.containerViews,
+    ...workspace.views.componentViews,
+  ]
+  const views: Record<string, SidecarView> = {}
+  for (const view of allViews) {
+    const viewElements: Record<string, SidecarViewElement> = {}
+    for (const el of view.elements) {
+      if (el.pinned) {
+        viewElements[el.id] = { pinned: true }
+        hasData = true
+      }
+    }
+    if (Object.keys(viewElements).length > 0) {
+      views[view.key] = { elements: viewElements }
+    }
+  }
+  if (Object.keys(views).length > 0) sidecar.views = views
+
+  return hasData ? sidecar : null
+}
+
+// ─── Apply sidecar to workspace ─────────────────────────────────────
+
+export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
+  if (sidecar.version !== 1) return
+
+  // Elements
+  if (sidecar.elements) {
+    const applyToElement = (id: string, data: SidecarElement) => {
+      // People
+      for (const p of workspace.model.people) {
+        if (p.id === id) { Object.assign(p, data); return }
+      }
+      // Systems, containers, components
+      for (const sys of workspace.model.softwareSystems) {
+        if (sys.id === id) { Object.assign(sys, data); return }
+        for (const c of sys.containers) {
+          if (c.id === id) { Object.assign(c, data); return }
+          for (const comp of c.components) {
+            if (comp.id === id) { Object.assign(comp, data); return }
+          }
+        }
+      }
+    }
+    for (const [id, data] of Object.entries(sidecar.elements)) {
+      applyToElement(id, data)
+    }
+  }
+
+  // Relationships
+  if (sidecar.relationships) {
+    for (const rel of workspace.model.relationships) {
+      const data = sidecar.relationships[rel.id]
+      if (data) {
+        if (data.lineStyle) rel.lineStyle = data.lineStyle
+      }
+    }
+  }
+
+  // Views: pinned
+  if (sidecar.views) {
+    const allViews = [
+      ...workspace.views.systemLandscapeViews,
+      ...workspace.views.systemContextViews,
+      ...workspace.views.containerViews,
+      ...workspace.views.componentViews,
+    ]
+    for (const view of allViews) {
+      const viewData = sidecar.views[view.key]
+      if (!viewData?.elements) continue
+      for (const el of view.elements) {
+        const elData = viewData.elements[el.id]
+        if (elData?.pinned) el.pinned = true
+      }
+    }
+  }
+}
+
+// ─── Sidecar filename ───────────────────────────────────────────────
+
+export function sidecarName(dslName: string): string {
+  return dslName.replace(/\.dsl$/, '') + '.c4hero.json'
+}
+
+export function serializeSidecar(data: SidecarData): string {
+  return JSON.stringify(data, null, 2)
+}
+
+export function parseSidecar(json: string): SidecarData | null {
+  try {
+    const data = JSON.parse(json)
+    if (data?.version === 1) return data as SidecarData
+    return null
+  } catch {
+    return null
+  }
+}
