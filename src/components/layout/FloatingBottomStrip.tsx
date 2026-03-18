@@ -420,6 +420,8 @@ function TagRow({
         {/* Style button */}
         <button
           onClick={onEditStyle}
+          className="hover-surface-inactive"
+          data-active={editingStyle ? 'true' : undefined}
           style={{
             width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: 'var(--radius-sm)', border: 'none',
@@ -428,8 +430,6 @@ function TagRow({
             cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s',
           }}
           title="Edit style"
-          onMouseEnter={(e) => { if (!editingStyle) e.currentTarget.style.background = 'var(--color-surface-3)' }}
-          onMouseLeave={(e) => { if (!editingStyle) e.currentTarget.style.background = 'transparent' }}
         >
           <Palette size={11} />
         </button>
@@ -437,14 +437,13 @@ function TagRow({
         {/* Delete button */}
         <button
           onClick={onDelete}
+          className="hover-danger"
           style={{
             width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: 'var(--radius-sm)', border: 'none', background: 'transparent',
-            color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s',
+            color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s, color 0.1s',
           }}
           title="Remove tag globally"
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; e.currentTarget.style.color = 'var(--color-error)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
         >
           <X size={11} />
         </button>
@@ -580,13 +579,12 @@ function TagStyleEditor({ tag, style, onClose }: {
       {style && (
         <button
           onClick={() => { removeElementStyle(tag); onClose() }}
+          className="hover-danger-text"
           style={{
             marginTop: 10, width: '100%', padding: '5px 0', borderRadius: 'var(--radius-sm)',
             border: '1px solid rgba(239,68,68,0.3)', background: 'transparent',
             color: 'var(--color-error)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
           Remove style
         </button>
