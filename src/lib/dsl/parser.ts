@@ -45,10 +45,13 @@ function nextId(): string {
 
 // ─── Parser Implementation ──────────────────────────────────────────
 
+const MAX_DEPTH = 50
+
 class ContextAwareParser {
     private tokens: Token[]
     private pos = 0
     private errors: ParseError[] = []
+    private depth = 0
 
     // Variable name <-> element id mappings
     private varToId = new Map<string, string>()
@@ -289,6 +292,8 @@ class ContextAwareParser {
     // ─── Model Parsing ──────────────────────────────────────────────
 
     private parseModelBody(model: Model, groupRefIds?: string[]): void {
+        this.depth++
+        if (this.depth > MAX_DEPTH) { this.addError('Maximum nesting depth exceeded', this.peek()); this.depth--; return }
         while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
             this.skipNewlines()
             if (this.check('RBRACE') || this.peekType() === 'EOF') break
@@ -424,6 +429,7 @@ class ContextAwareParser {
 
             this.advance()
         }
+        this.depth--
     }
 
     // ─── Element Parsing ────────────────────────────────────────────
@@ -488,6 +494,8 @@ class ContextAwareParser {
     }
 
     private parseSoftwareSystemBody(sys: SoftwareSystem, model?: Model): void {
+        this.depth++
+        if (this.depth > MAX_DEPTH) { this.addError('Maximum nesting depth exceeded', this.peek()); this.depth--; return }
         while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
             this.skipNewlines()
             if (this.check('RBRACE') || this.peekType() === 'EOF') break
@@ -571,6 +579,7 @@ class ContextAwareParser {
 
             this.advance()
         }
+        this.depth--
     }
 
     private parseContainer(varName?: string, model?: Model): Container | null {
@@ -606,6 +615,8 @@ class ContextAwareParser {
     }
 
     private parseContainerBody(container: Container, model?: Model): void {
+        this.depth++
+        if (this.depth > MAX_DEPTH) { this.addError('Maximum nesting depth exceeded', this.peek()); this.depth--; return }
         while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
             this.skipNewlines()
             if (this.check('RBRACE') || this.peekType() === 'EOF') break
@@ -684,6 +695,7 @@ class ContextAwareParser {
 
             this.advance()
         }
+        this.depth--
     }
 
     private parseComponent(varName?: string): Component | null {

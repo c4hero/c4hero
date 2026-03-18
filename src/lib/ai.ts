@@ -1,3 +1,11 @@
+const API_TIMEOUT_MS = 30_000
+
+function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
 export type AIProvider = 'anthropic' | 'openai'
 
 interface AIConfig {
@@ -50,7 +58,7 @@ ${context ? `Context: ${context}` : ''}
 Respond with ONLY the description text, no quotes or explanation.`
 
   if (config.provider === 'anthropic') {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -70,7 +78,7 @@ Respond with ONLY the description text, no quotes or explanation.`
   }
 
   if (config.provider === 'openai') {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -110,7 +118,7 @@ Requirements:
 Respond with ONLY the Structurizr DSL code, no explanation or markdown.`
 
   if (config.provider === 'anthropic') {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -130,7 +138,7 @@ Respond with ONLY the Structurizr DSL code, no explanation or markdown.`
   }
 
   if (config.provider === 'openai') {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

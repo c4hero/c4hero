@@ -1,5 +1,8 @@
 import type { Workspace } from '@/types/model'
 
+/** Max file size for DSL files: 10MB */
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+
 /** File handle for re-saving to the same file */
 let currentFileHandle: FileSystemFileHandle | null = null
 /** File handle for the sidecar .c4hero.json */
@@ -107,6 +110,7 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
       })
       currentFileHandle = handle
       const file = await handle.getFile()
+      if (file.size > MAX_FILE_SIZE) throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
       const content = await file.text()
       addRecentFile(file.name)
 
