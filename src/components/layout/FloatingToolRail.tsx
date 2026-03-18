@@ -155,6 +155,9 @@ export default function FloatingToolRail() {
   return (
     <>
     <div
+      className="glass-panel"
+      role="toolbar"
+      aria-label="Canvas tools"
       style={{
         position: 'fixed',
         left: 14,
@@ -165,12 +168,7 @@ export default function FloatingToolRail() {
         flexDirection: 'column',
         alignItems: 'center',
         padding: '8px 0',
-        borderRadius: 14,
-        border: '1px solid var(--color-border)',
-        background: 'rgba(13, 17, 23, 0.88)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.03)',
+        borderRadius: 'var(--radius-xl)',
       }}
     >
       {/* Add element */}
@@ -202,17 +200,12 @@ export default function FloatingToolRail() {
               onClick={() => setArrangePanelOpen(false)}
             />
             <div
+              className="glass-flyout"
               style={{
                 position: 'absolute',
                 left: 56,
                 top: 0,
                 zIndex: 50,
-                background: 'rgba(13,17,23,0.92)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 10,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
                 padding: 4,
                 display: 'flex',
                 flexDirection: 'column',
@@ -220,50 +213,22 @@ export default function FloatingToolRail() {
                 minWidth: 160,
               }}
             >
-              <div
-                style={{
-                  padding: '4px 10px 4px',
-                  fontSize: 9,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  color: 'var(--color-text-muted)',
-                }}
-              >
+              <div className="flyout-label">
                 Auto-arrange
               </div>
               {(['TB', 'LR', 'BT', 'RL'] as LayoutDirection[]).map((dir) => (
                 <button
                   key={dir}
+                  className="flyout-item"
+                  data-active={currentDirection === dir}
                   onClick={() => handleAutoArrange(dir)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '7px 10px',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 500,
-                    color: currentDirection === dir ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                    background: currentDirection === dir ? 'var(--color-surface-3)' : 'transparent',
-                    cursor: 'pointer',
-                    transition: 'background 0.12s',
-                    border: 'none',
-                    width: '100%',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (currentDirection !== dir) e.currentTarget.style.background = 'var(--color-surface-2)'
-                  }}
-                  onMouseLeave={(e) => {
-                    if (currentDirection !== dir) e.currentTarget.style.background = 'transparent'
-                  }}
                 >
                   <span style={{ color: currentDirection === dir ? 'var(--color-accent)' : 'var(--color-text-muted)', display: 'flex' }}>
                     {DIRECTION_ICONS[dir]}
                   </span>
                   {DIRECTION_LABELS[dir]}
                   {currentDirection === dir && (
-                    <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-accent)' }}>
+                    <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-accent)' }}>
                       current
                     </span>
                   )}
@@ -295,17 +260,12 @@ export default function FloatingToolRail() {
                   onClick={() => setAlignPanelOpen(false)}
                 />
                 <div
+                  className="glass-flyout"
                   style={{
                     position: 'absolute',
                     left: 56,
                     top: 0,
                     zIndex: 50,
-                    background: 'rgba(13,17,23,0.92)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 10,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
                     padding: 4,
                     display: 'flex',
                     flexDirection: 'column',
@@ -313,16 +273,7 @@ export default function FloatingToolRail() {
                     minWidth: 170,
                   }}
                 >
-                  <div
-                    style={{
-                      padding: '4px 10px 4px',
-                      fontSize: 9,
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.1em',
-                      color: 'var(--color-text-muted)',
-                    }}
-                  >
+                  <div className="flyout-label">
                     Align {selectedElementIds.length} elements
                   </div>
                   <AlignMenuItem icon={<AlignStartVertical size={14} />} label="Align left" onClick={() => { handleAlign('left'); setAlignPanelOpen(false) }} />
@@ -776,26 +727,7 @@ function CreateChip({
 
 function AlignMenuItem({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '7px 10px',
-        borderRadius: 6,
-        fontSize: 12,
-        fontWeight: 500,
-        color: 'var(--color-text-secondary)',
-        background: 'transparent',
-        cursor: 'pointer',
-        transition: 'background 0.12s',
-        border: 'none',
-        width: '100%',
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-    >
+    <button className="flyout-item" onClick={onClick}>
       <span style={{ color: 'var(--color-text-muted)', display: 'flex' }}>{icon}</span>
       {label}
     </button>
