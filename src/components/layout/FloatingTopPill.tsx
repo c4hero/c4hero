@@ -189,18 +189,13 @@ export default function FloatingTopPill() {
       {/* Column: pill on top, slide-down panels below — inherit same natural width */}
       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', minWidth: 0 }}>
       <div
+        className="glass-panel"
         style={{
           pointerEvents: 'auto',
           maxWidth: '100%',
           height: 44,
           display: 'flex',
           alignItems: 'center',
-          borderRadius: 12,
-          border: '1px solid var(--color-border)',
-          background: 'rgba(13, 17, 23, 0.88)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.03)',
           minWidth: 0,
           overflow: 'visible',
         }}
@@ -243,7 +238,7 @@ export default function FloatingTopPill() {
         >
           <span
             style={{
-              fontSize: 13,
+              fontSize: 'var(--text-base)',
               fontWeight: 600,
               color: 'var(--color-text-primary)',
               overflow: 'hidden',
@@ -271,7 +266,7 @@ export default function FloatingTopPill() {
               alignItems: 'center',
               gap: 6,
               borderRight: '1px solid var(--color-border)',
-              fontSize: 13,
+              fontSize: 'var(--text-base)',
               fontWeight: 700,
               color: 'var(--color-text-primary)',
               background: 'transparent',
@@ -296,7 +291,7 @@ export default function FloatingTopPill() {
                         setViewDropdownOpen(false)
                       }}
                       style={{
-                        fontSize: 12,
+                        fontSize: 'var(--text-sm)',
                         color: 'var(--color-text-muted)',
                         background: 'transparent',
                         cursor: 'pointer',
@@ -323,7 +318,7 @@ export default function FloatingTopPill() {
             {activeView && (
               <span
                 style={{
-                  fontSize: 10,
+                  fontSize: 'var(--text-xs)',
                   fontWeight: 800,
                   padding: '2px 5px',
                   borderRadius: 4,
@@ -426,6 +421,7 @@ export default function FloatingTopPill() {
                 />
                 <div
                   role="menu"
+                  className="glass-flyout"
                   style={{
                     position: 'absolute',
                     right: 0,
@@ -433,11 +429,7 @@ export default function FloatingTopPill() {
                     zIndex: 60,
                     marginTop: 4,
                     minWidth: 180,
-                    background: 'var(--color-surface-1)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 10,
                     padding: '4px 0',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
                   }}
                 >
                   <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
@@ -548,26 +540,24 @@ export default function FloatingTopPill() {
       {viewDropdownOpen && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 48 }} onClick={() => { setViewDropdownOpen(false); setRenamingViewKey(null) }} />
-          <div style={{
-            zIndex: 49,
-            background: 'rgba(13,17,23,0.97)',
-            border: '1px solid var(--color-border)',
-            borderTop: 'none',
-            borderRadius: '0 0 14px 14px',
-            boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
-            overflow: 'hidden',
-            pointerEvents: 'auto',
-            maxHeight: 'calc(100vh - 80px)',
-            overflowY: 'auto',
-          }}>
+          <div
+            className="glass-panel-solid"
+            style={{
+              zIndex: 49,
+              borderTop: 'none',
+              borderRadius: '0 0 14px 14px',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
+              animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
+              overflow: 'hidden',
+              pointerEvents: 'auto',
+              maxHeight: 'calc(100vh - 80px)',
+              overflowY: 'auto',
+            }}>
             {/* Views grouped by type */}
             <div style={{ padding: '12px 0' }}>
               {Object.entries(viewsByType).map(([type, typeViews]) => (
                 <div key={type}>
-                  <div style={{ padding: '4px 16px 6px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-text-muted)' }}>
+                  <div className="flyout-label" style={{ padding: '4px 16px 6px', letterSpacing: '0.12em' }}>
                     {VIEW_TYPE_LABELS[type] ?? type}
                   </div>
                   {typeViews.map((v) => {
@@ -631,7 +621,7 @@ export default function FloatingTopPill() {
                         >
                           {isRenaming ? (
                             <button onClick={e => { e.stopPropagation(); renameView(v.key, renameValue.trim() || v.title || v.key); setRenamingViewKey(null) }}
-                              style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'rgba(34,197,94,0.15)', border: 'none', cursor: 'pointer', color: '#22c55e' }} title="Save">
+                              style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'rgba(34,197,94,0.15)', border: 'none', cursor: 'pointer', color: 'var(--color-success)' }} title="Save">
                               <Check size={13} />
                             </button>
                           ) : (
@@ -646,7 +636,7 @@ export default function FloatingTopPill() {
                           <button onClick={e => { e.stopPropagation(); if (views.length > 1) deleteView(v.key) }}
                             disabled={views.length <= 1}
                             style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1 }}
-                            onMouseEnter={e => { if (views.length > 1) { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.color = '#ef4444' } }}
+                            onMouseEnter={e => { if (views.length > 1) { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.color = 'var(--color-error)' } }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
                             title={views.length <= 1 ? 'Cannot delete last view' : 'Delete view'}>
                             <Trash2 size={13} />

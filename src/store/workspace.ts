@@ -383,8 +383,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   }),
 
   updateElementLive: (id, patch) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
+    if (!s.workspace) return s
+    // Shallow-clone workspace, deep-clone only the model for live typing perf
+    const ws = { ...s.workspace, model: structuredClone(s.workspace.model) }
     applyElementPatch(ws, id, patch)
     return { workspace: ws } // no undo push
   }),

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, buildElementMap } from '@/store/workspace'
@@ -32,6 +32,7 @@ import {
   AlignCenterHorizontal,
   Settings,
 } from 'lucide-react'
+import { useArrowNav } from '@/hooks/useArrowNav'
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   person: <UserRound size={14} />,
@@ -82,6 +83,24 @@ export default function FloatingToolRail() {
   const [arrangePanelOpen, setArrangePanelOpen] = useState(false)
   const [alignPanelOpen, setAlignPanelOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+
+  const arrangeFlyoutRef = useRef<HTMLDivElement>(null)
+  const alignFlyoutRef = useRef<HTMLDivElement>(null)
+  useArrowNav(arrangeFlyoutRef)
+  useArrowNav(alignFlyoutRef)
+
+  // Escape key closes any open flyout
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setAddPanelOpen(false)
+        setArrangePanelOpen(false)
+        setAlignPanelOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
 
   if (!workspace) return null
 
@@ -200,6 +219,7 @@ export default function FloatingToolRail() {
               onClick={() => setArrangePanelOpen(false)}
             />
             <div
+              ref={arrangeFlyoutRef}
               className="glass-flyout"
               style={{
                 position: 'absolute',
@@ -260,6 +280,7 @@ export default function FloatingToolRail() {
                   onClick={() => setAlignPanelOpen(false)}
                 />
                 <div
+                  ref={alignFlyoutRef}
                   className="glass-flyout"
                   style={{
                     position: 'absolute',
