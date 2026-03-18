@@ -1,43 +1,26 @@
 import { X } from 'lucide-react'
 import { useSettingsStore, type MinimapMode } from '@/store/settings'
-import { useFocusTrap } from '@/hooks/useFocusTrap'
+import DialogShell from '@/components/shared/DialogShell'
 
 export default function CanvasSettingsDialog({ onClose }: { onClose: () => void }) {
   const settings = useSettingsStore()
-  const trapRef = useFocusTrap<HTMLDivElement>()
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'var(--color-backdrop)' }}
-        onClick={onClose}
-      />
-
-      {/* Dialog */}
-      <div
-        ref={trapRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Canvas Settings"
-        onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
-        style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 101,
-          width: 380,
-          maxHeight: '80dvh',
-          overflowY: 'auto',
-          borderRadius: 'var(--radius-xl)',
-          border: '1px solid var(--color-border)',
-          background: 'var(--glass-bg-heavy)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
-        }}
-      >
+    <DialogShell
+      onClose={onClose}
+      ariaLabel="Canvas Settings"
+      style={{
+        width: 380,
+        maxHeight: '80dvh',
+        overflowY: 'auto',
+        borderRadius: 'var(--radius-xl)',
+        border: '1px solid var(--color-border)',
+        background: 'var(--glass-bg-heavy)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
+      }}
+    >
         {/* Header */}
         <div
           style={{
@@ -124,8 +107,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
         >
           Settings are saved automatically to local storage.
         </div>
-      </div>
-    </>
+    </DialogShell>
   )
 }
 

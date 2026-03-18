@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { ViewType } from '@/types/model'
 import { X } from 'lucide-react'
-import { useFocusTrap } from '@/hooks/useFocusTrap'
+import DialogShell from '@/components/shared/DialogShell'
 
 const VIEW_TYPES: { value: ViewType; label: string }[] = [
   { value: 'systemLandscape', label: 'System Landscape' },
@@ -42,19 +42,13 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
     onClose()
   }
 
-  const trapRef = useFocusTrap<HTMLDivElement>()
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
-      <div className="absolute inset-0 panel-backdrop" onClick={onClose} />
-      <div
-        ref={trapRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Create View"
-        className="relative w-full max-w-sm rounded-xl border p-5 shadow-2xl"
-        style={{ background: 'var(--color-surface-1)', borderColor: 'var(--color-border)' }}
-      >
+    <DialogShell
+      onClose={onClose}
+      ariaLabel="Create View"
+      className="relative w-full max-w-sm rounded-xl border p-5 shadow-2xl"
+      style={{ background: 'var(--color-surface-1)', borderColor: 'var(--color-border)' }}
+    >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold">Create View</h2>
           <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close dialog"><X size={14} /></button>
@@ -116,7 +110,6 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
             Create View
           </button>
         </div>
-      </div>
-    </div>
+    </DialogShell>
   )
 }

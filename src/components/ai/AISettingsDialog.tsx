@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getAIConfig, saveAIConfig, clearAIConfig, type AIProvider } from '@/lib/ai'
 import { X, Key, Sparkles } from 'lucide-react'
-import { useFocusTrap } from '@/hooks/useFocusTrap'
+import DialogShell from '@/components/shared/DialogShell'
 
 export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
   const [provider, setProvider] = useState<AIProvider>('anthropic')
@@ -30,22 +30,16 @@ export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
     setSaved(false)
   }
 
-  const trapRef = useFocusTrap<HTMLDivElement>()
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
-      <div className="panel-backdrop absolute inset-0" onClick={onClose} />
-      <div
-        ref={trapRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="AI Settings"
-        className="relative w-full max-w-md rounded-xl border p-6 shadow-2xl"
-        style={{
-          background: 'var(--color-surface-1)',
-          borderColor: 'var(--color-border)',
-        }}
-      >
+    <DialogShell
+      onClose={onClose}
+      ariaLabel="AI Settings"
+      className="relative w-full max-w-md rounded-xl border p-6 shadow-2xl"
+      style={{
+        background: 'var(--color-surface-1)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
@@ -125,7 +119,6 @@ export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
             {saved ? 'Saved!' : 'Save'}
           </button>
         </div>
-      </div>
-    </div>
+    </DialogShell>
   )
 }
