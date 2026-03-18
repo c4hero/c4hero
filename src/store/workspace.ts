@@ -73,6 +73,7 @@ interface WorkspaceState extends UndoState {
   updateElementLive: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified', technology?: string }) => void
   updateElementTechnology: (id: string, technology: string) => void
   deleteElement: (id: string) => void
+  deleteElements: (ids: string[]) => void
 
   // Group CRUD
   addGroup: (name: string, elementIds?: string[]) => string
@@ -435,6 +436,39 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       ...pushUndo(s),
       workspace: ws,
       selectedElementIds: s.selectedElementIds.filter(eid => eid !== id),
+      selectedRelationshipId: null,
+    }
+  }),
+
+  deleteElements: (ids) => set((s) => {
+    const ws = cloneWs(s)
+    if (!ws) return s
+    const idSet = new Set(ids)
+    ws.model.people = ws.model.people.filter(p => !idSet.has(p.id))
+    ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
+      if (idSet.has(sys.id)) return false
+      sys.containers = sys.containers.filter(c => {
+        if (idSet.has(c.id)) return false
+        c.components = c.components.filter(comp => !idSet.has(comp.id))
+        return true
+      })
+      return true
+    })
+    ws.model.relationships = ws.model.relationships.filter(
+      r => !idSet.has(r.sourceId) && !idSet.has(r.destinationId)
+    )
+    forEachView(ws, (v) => {
+      v.elements = v.elements.filter(e => !idSet.has(e.id))
+      v.relationships = v.relationships.filter(r => ws.model.relationships.some(mr => mr.id === r.id))
+    })
+    ws.model.groups = ws.model.groups.map(g => ({
+      ...g,
+      elementIds: g.elementIds.filter(eid => !idSet.has(eid)),
+    }))
+    return {
+      ...pushUndo(s),
+      workspace: ws,
+      selectedElementIds: [],
       selectedRelationshipId: null,
     }
   }),

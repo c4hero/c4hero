@@ -45,7 +45,7 @@ export default function FloatingToolRail() {
   const selectedElementIds = useWorkspaceStore((s) => s.selectedElementIds)
   const addGroup = useWorkspaceStore((s) => s.addGroup)
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
-  const deleteElement = useWorkspaceStore((s) => s.deleteElement)
+  const deleteElements = useWorkspaceStore((s) => s.deleteElements)
   const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
   const reactFlow = useReactFlow()
   const [addPanelOpen, setAddPanelOpen] = useState(false)
@@ -354,7 +354,7 @@ export default function FloatingToolRail() {
             label={`Delete ${selectedElementIds.length} elements`}
             color="var(--color-error)"
             onClick={() => {
-              for (const id of selectedElementIds) deleteElement(id)
+              deleteElements(selectedElementIds)
             }}
           />
         </>

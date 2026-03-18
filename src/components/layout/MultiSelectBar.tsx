@@ -17,7 +17,7 @@ export default function MultiSelectBar() {
   const selectedElementIds = useWorkspaceStore((s) => s.selectedElementIds)
   const addGroup = useWorkspaceStore((s) => s.addGroup)
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
-  const deleteElement = useWorkspaceStore((s) => s.deleteElement)
+  const deleteElements = useWorkspaceStore((s) => s.deleteElements)
   const reactFlow = useReactFlow()
   const [alignOpen, setAlignOpen] = useState(false)
 
@@ -182,7 +182,7 @@ export default function MultiSelectBar() {
         className="hover-lift"
         style={{ ...btnStyle, color: 'var(--color-error)', paddingRight: 12 }}
         title={`Delete ${count} elements`}
-        onClick={() => { for (const id of selectedElementIds) deleteElement(id) }}
+        onClick={() => deleteElements(selectedElementIds)}
       >
         <Trash2 size={14} />
         <span>Delete</span>

@@ -132,9 +132,7 @@ export function useKeyboardShortcuts() {
           store.deleteRelationship(store.selectedRelationshipId)
           return
         }
-        for (const id of store.selectedElementIds) {
-          store.deleteElement(id)
-        }
+        store.deleteElements(store.selectedElementIds)
         return
       }
 
