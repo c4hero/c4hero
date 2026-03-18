@@ -111,11 +111,10 @@ export default function MultiSelectBar() {
       {/* Align dropdown */}
       <div style={{ position: 'relative', height: '100%' }}>
         <button
+          className="hover-lift"
           style={{ ...btnStyle, paddingRight: 8 }}
           onClick={() => setAlignOpen(o => !o)}
           title="Align elements"
-          onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-text-primary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-secondary)'; e.currentTarget.style.background = 'transparent' }}
         >
           <AlignCenterVertical size={14} />
           <span>Align</span>
@@ -152,9 +151,7 @@ export default function MultiSelectBar() {
                 <div key={i} style={{ height: 1, background: 'var(--color-border)', margin: '2px 6px' }} />
               ) : (
                 <button key={item.mode} onClick={() => handleAlign(item.mode)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', cursor: 'pointer', border: 'none' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-2)'; e.currentTarget.style.color = 'var(--color-text-primary)' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-secondary)' }}
+                  className="flyout-item"
                 >
                   <span style={{ color: 'var(--color-text-muted)', display: 'flex' }}>{item.icon}</span>
                   {item.label}
@@ -169,11 +166,10 @@ export default function MultiSelectBar() {
 
       {/* Group */}
       <button
+        className="hover-lift"
         style={btnStyle}
         title={`Group ${count} elements`}
         onClick={() => { const id = addGroup('New Group', selectedElementIds); selectGroup(id) }}
-        onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-text-primary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-        onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-secondary)'; e.currentTarget.style.background = 'transparent' }}
       >
         <Layers size={14} />
         <span>Group</span>
@@ -183,11 +179,10 @@ export default function MultiSelectBar() {
 
       {/* Delete */}
       <button
+        className="hover-lift"
         style={{ ...btnStyle, color: 'var(--color-error)', paddingRight: 12 }}
         title={`Delete ${count} elements`}
         onClick={() => { for (const id of selectedElementIds) deleteElement(id) }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
       >
         <Trash2 size={14} />
         <span>Delete</span>

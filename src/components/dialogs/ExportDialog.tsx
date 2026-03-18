@@ -58,7 +58,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
           borderRadius: 6,
           border: '1px solid var(--color-border)',
           background: isDone ? 'rgba(34,197,94,0.12)' : 'var(--color-surface-2)',
-          color: isDone ? '#22c55e' : 'var(--color-text-secondary)',
+          color: isDone ? 'var(--color-success)' : 'var(--color-text-secondary)',
           cursor: isLoading ? 'wait' : 'pointer',
           flexShrink: 0,
           transition: 'background 0.15s, color 0.15s',
