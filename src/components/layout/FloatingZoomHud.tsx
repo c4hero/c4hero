@@ -12,6 +12,7 @@ export default function FloatingZoomHud() {
 
   return (
     <div
+      className="glass-panel"
       style={{
         position: 'fixed',
         bottom: 'max(14px, calc(env(safe-area-inset-bottom, 0px) + 8px))',
@@ -19,12 +20,7 @@ export default function FloatingZoomHud() {
         zIndex: 50,
         display: 'flex',
         alignItems: 'center',
-        borderRadius: 10,
-        border: '1px solid var(--color-border)',
-        background: 'rgba(13, 17, 23, 0.88)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.03)',
+        borderRadius: 'var(--radius-md)',
         overflow: 'hidden',
       }}
     >
@@ -94,7 +90,7 @@ function ZoomLabel() {
     <span
       style={{
         padding: '0 8px',
-        fontSize: 11,
+        fontSize: 'var(--text-xs)',
         fontWeight: 600,
         color: 'var(--color-text-muted)',
         borderLeft: '1px solid var(--color-border)',

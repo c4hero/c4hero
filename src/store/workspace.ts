@@ -568,10 +568,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   deleteView: (key) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    ws.views.systemLandscapeViews = ws.views.systemLandscapeViews.filter(v => v.key !== key)
-    ws.views.systemContextViews = ws.views.systemContextViews.filter(v => v.key !== key)
-    ws.views.containerViews = ws.views.containerViews.filter(v => v.key !== key)
-    ws.views.componentViews = ws.views.componentViews.filter(v => v.key !== key)
+    // Find which array contains the key and only filter that one
+    const viewArrayKeys = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews'] as const
+    for (const arrKey of viewArrayKeys) {
+      const idx = ws.views[arrKey].findIndex(v => v.key === key)
+      if (idx !== -1) {
+        ws.views[arrKey].splice(idx, 1)
+        break
+      }
+    }
     const newActiveKey = s.activeViewKey === key ? getFirstViewKey(ws) : s.activeViewKey
     return { ...pushUndo(s), workspace: ws, activeViewKey: newActiveKey }
   }),

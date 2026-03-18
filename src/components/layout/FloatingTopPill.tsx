@@ -134,6 +134,7 @@ export default function FloatingTopPill() {
           onClick={() => useWorkspaceStore.getState().closeWorkspace()}
           title="Close workspace"
           aria-label="Close workspace"
+          className="hover-subtle"
           style={{
             padding: '0 12px',
             height: '100%',
@@ -146,8 +147,6 @@ export default function FloatingTopPill() {
             transition: 'background 0.12s',
             flexShrink: 0,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
           <img src="/c4-logo.svg" alt="c4hero" style={{ width: 24, height: 24 }} />
         </button>

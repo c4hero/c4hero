@@ -14,7 +14,7 @@ import {
   reconnectEdge,
 } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
-import { useWorkspaceStore, getActiveView, getAllViews, buildElementMap, buildRelationshipMap, canDrillInto } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, canDrillInto } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
@@ -105,18 +105,6 @@ function computeHandlePair(
 }
 
 /** Build React Flow nodes from workspace view (no edges yet — those need final positions). */
-/** Compute how many views each element appears in (stable across view/filter changes). */
-function buildViewCountMap(workspace: Workspace): Map<string, number> {
-  const allViews = getAllViews(workspace)
-  const map = new Map<string, number>()
-  for (const v of allViews) {
-    for (const ve of v.elements) {
-      map.set(ve.id, (map.get(ve.id) ?? 0) + 1)
-    }
-  }
-  return map
-}
-
 function buildNodes(
   workspace: Workspace,
   view: View,
@@ -456,7 +444,6 @@ export default function Canvas() {
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
-  const drillInto = useWorkspaceStore((s) => s.drillInto)
   const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
@@ -464,6 +451,12 @@ export default function Canvas() {
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
   const minimapMode = useSettingsStore((s) => s.minimapMode)
   const snapToGrid = useSettingsStore((s) => s.snapToGrid)
+
+  // Stable callback refs — avoid new function references every render which would
+  // invalidate expensive useMemos that depend on them.
+  const stableDrillInto = useCallback((elementId: string) => {
+    useWorkspaceStore.getState().drillInto(elementId)
+  }, [])
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null)
 
@@ -488,10 +481,19 @@ export default function Canvas() {
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
-  // Extract just the views object — this reference only changes when views are added/removed/modified,
-  // not on model-only mutations (element rename, tag change, etc.), avoiding unnecessary recomputation.
-  const views = useWorkspaceStore((s) => s.workspace?.views)
+  // Compute a stable fingerprint of the view structure (keys + element counts) so that
+  // the viewCountMap only recomputes when views are actually added/removed or their elements change,
+  // not on every workspace clone (e.g. element rename, tag change).
+  const viewStructureKey = useWorkspaceStore((s) => {
+    if (!s.workspace) return ''
+    const v = s.workspace.views
+    const all = [...v.systemLandscapeViews, ...v.systemContextViews, ...v.containerViews, ...v.componentViews]
+    // Build a fingerprint: "viewKey:elCount:el1,el2,..." for each view
+    return all.map(view => `${view.key}:${view.elements.map(e => e.id).join(',')}`).join('|')
+  })
   const viewCountMap = useMemo(() => {
+    if (!viewStructureKey) return new Map<string, number>()
+    const views = useWorkspaceStore.getState().workspace?.views
     if (!views) return new Map<string, number>()
     const allViews = [
       ...views.systemLandscapeViews,
@@ -506,14 +508,14 @@ export default function Canvas() {
       }
     }
     return map
-  }, [views])
+  }, [viewStructureKey])
 
   const { initialNodes, initialEdges } = useMemo(() => {
     if (!workspace || !view) return { initialNodes: [], initialEdges: [] }
     const direction = view.autoLayout?.direction ?? 'TB'
 
     // 1. Build nodes with raw positions from view
-    const rawNodes = buildNodes(workspace, view, drillInto, activeTagFilter, activeStatusFilter, viewCountMap)
+    const rawNodes = buildNodes(workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap)
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
     const relationshipMap = buildRelationshipMap(workspace)
@@ -539,7 +541,7 @@ export default function Canvas() {
     const edges = buildEdges(workspace, view, allNodes)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, drillInto, activeTagFilter, activeStatusFilter])
+  }, [workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -605,11 +607,12 @@ export default function Canvas() {
 
   const onNodeDoubleClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      if (workspace && canDrillInto(workspace, node.id)) {
-        drillInto(node.id)
+      const ws = useWorkspaceStore.getState().workspace
+      if (ws && canDrillInto(ws, node.id)) {
+        useWorkspaceStore.getState().drillInto(node.id)
       }
     },
-    [workspace, drillInto],
+    [],
   )
 
   const onNodeDragStop = useCallback(

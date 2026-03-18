@@ -428,7 +428,7 @@ function TagRow({
             border: focused ? '1px solid var(--color-accent)' : '1px solid transparent',
             background: focused ? 'var(--color-surface-3)' : 'transparent',
             color: 'var(--color-text-primary)',
-            fontSize: 12, fontWeight: 500, outline: 'none',
+            fontSize: 'var(--text-sm)', fontWeight: 500, outline: 'none',
             transition: 'border-color 0.12s, background 0.12s',
           }}
         />
@@ -568,7 +568,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           <select
             value={shape}
             onChange={(e) => update({ shape: e.target.value || undefined })}
-            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 11, outline: 'none' }}
+            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
           >
             <option value="">Default</option>
             {STRUCTURIZR_SHAPES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -578,7 +578,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           <select
             value={border}
             onChange={(e) => update({ border: e.target.value || undefined })}
-            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 11, outline: 'none' }}
+            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
           >
             <option value="">Default</option>
             <option value="Solid">Solid</option>
@@ -593,7 +593,7 @@ function TagStyleEditor({ tag, style, onClose }: {
             onChange={(e) => { const val = Number(e.target.value) / 100; update({ opacity: val < 1 ? val : undefined }) }}
             style={{ flex: 1, accentColor: 'var(--color-accent)' }}
           />
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 30, textAlign: 'right' }}>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', width: 30, textAlign: 'right' }}>
             {Math.round((opacity ?? 1) * 100)}%
           </span>
         </StyleField>
@@ -603,7 +603,7 @@ function TagStyleEditor({ tag, style, onClose }: {
             value={fontSize ?? ''}
             placeholder="Default"
             onChange={(e) => update({ fontSize: e.target.value ? Number(e.target.value) : undefined })}
-            style={{ width: 60, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 11, outline: 'none' }}
+            style={{ width: 60, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
           />
         </StyleField>
       </div>
@@ -613,7 +613,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           style={{
             marginTop: 10, width: '100%', padding: '5px 0', borderRadius: 5,
             border: '1px solid rgba(239,68,68,0.3)', background: 'transparent',
-            color: 'var(--color-error)', fontSize: 10, fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s',
+            color: 'var(--color-error)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
@@ -628,7 +628,7 @@ function TagStyleEditor({ tag, style, onClose }: {
 function StyleField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', width: 70, flexShrink: 0 }}>
+      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-muted)', width: 70, flexShrink: 0 }}>
         {label}
       </span>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -650,7 +650,7 @@ function ColorPicker({ value, onChange, presets }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="#hex or name"
-        style={{ flex: 1, height: 26, padding: '0 8px', paddingLeft: 26, borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 11, outline: 'none' }}
+        style={{ flex: 1, height: 26, padding: '0 8px', paddingLeft: 26, borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
       />
       <button
         onClick={() => setShowPresets((o) => !o)}
@@ -666,7 +666,7 @@ function ColorPicker({ value, onChange, presets }: {
               />
             ))}
             <button onClick={() => { onChange(''); setShowPresets(false) }}
-              style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 10, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <X size={10} />
             </button>
           </div>

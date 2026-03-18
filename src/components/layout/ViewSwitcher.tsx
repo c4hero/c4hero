@@ -57,6 +57,7 @@ export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: View
           aria-expanded={open}
           aria-haspopup="true"
           aria-label="Switch view"
+          className="hover-subtle"
           style={{
             padding: '0 12px',
             height: 44,
@@ -74,8 +75,6 @@ export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: View
             minWidth: 0,
             overflow: 'hidden',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
           {breadcrumb.length > 1 && (
             <>
@@ -120,7 +119,7 @@ export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: View
                 fontSize: 'var(--text-xs)',
                 fontWeight: 800,
                 padding: '2px 5px',
-                borderRadius: 4,
+                borderRadius: 'var(--radius-sm)',
                 background: 'var(--color-accent-glow)',
                 color: 'var(--color-accent)',
                 letterSpacing: '0.05em',
@@ -187,7 +186,8 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                 return (
                   <div
                     key={v.key}
-                    className="group"
+                    className="group hover-subtle-inactive"
+                    data-active={isActive ? 'true' : undefined}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -197,11 +197,9 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                       borderLeft: isActive ? '2px solid var(--color-accent)' : '2px solid transparent',
                       transition: 'background 0.1s',
                     }}
-                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
                     {/* Level badge */}
-                    <span style={{ fontSize: 'var(--text-xxs)', fontWeight: 800, padding: '2px 5px', borderRadius: 4, background: isActive ? 'rgba(88,166,255,0.2)' : 'var(--color-surface-3)', color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)', letterSpacing: '0.05em', flexShrink: 0, marginRight: 10 }}>
+                    <span style={{ fontSize: 'var(--text-xxs)', fontWeight: 800, padding: '2px 5px', borderRadius: 'var(--radius-sm)', background: isActive ? 'rgba(88,166,255,0.2)' : 'var(--color-surface-3)', color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)', letterSpacing: '0.05em', flexShrink: 0, marginRight: 10 }}>
                       {LEVEL_BADGE[v.type] ?? v.type.slice(0,2).toUpperCase()}
                     </span>
 
@@ -247,18 +245,16 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                         </button>
                       ) : (
                         <button onClick={e => { e.stopPropagation(); setRenamingViewKey(v.key); setRenameValue(v.title ?? v.key) }}
-                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-3)'; e.currentTarget.style.color = 'var(--color-text-primary)' }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
+                          className="hover-lift"
+                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', transition: 'background 0.12s, color 0.12s' }}
                           title="Rename">
                           <Pencil size={13} />
                         </button>
                       )}
                       <button onClick={e => { e.stopPropagation(); if (views.length > 1) deleteView(v.key) }}
                         disabled={views.length <= 1}
-                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1 }}
-                        onMouseEnter={e => { if (views.length > 1) { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.color = 'var(--color-error)' } }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
+                        className="hover-danger"
+                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1, transition: 'background 0.12s, color 0.12s' }}
                         title={views.length <= 1 ? 'Cannot delete last view' : 'Delete view'}>
                         <Trash2 size={13} />
                       </button>
@@ -274,9 +270,8 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
         <div style={{ borderTop: '1px solid var(--color-border)' }}>
           <button
             onClick={() => { onClose(); onShowCreateView() }}
+            className="hover-accent-subtle"
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px', fontSize: 'var(--text-base)', color: 'var(--color-accent)', background: 'transparent', cursor: 'pointer', transition: 'background 0.1s', border: 'none' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(88,166,255,0.06)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
             <Plus size={14} /> New view
           </button>

@@ -190,6 +190,7 @@ body {
   justify-content: center;
   border-radius: 8px;
   padding: 6px;
+  border: none;
   transition: background 150ms ease, color 150ms ease, transform 100ms ease;
   color: var(--color-text-secondary);
   min-width: 32px;
@@ -227,6 +228,74 @@ body {
 
 .btn-surface:active {
   transform: scale(0.98);
+}
+
+/* ─── Hover utilities ─────────────────────────────────────── */
+
+/* Subtle hover — barely visible, for inline triggers like logo */
+.hover-subtle:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Surface-2 hover — for list items in flyouts */
+.hover-surface-2:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+
+/* Surface-3 hover — for section headers, icon buttons */
+.hover-surface:hover {
+  background: var(--color-surface-3);
+}
+
+/* Light lift hover — for toolbar buttons, zoom controls */
+.hover-lift:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+/* Danger hover — for delete actions */
+.hover-danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-error);
+}
+
+/* Danger text hover — for inline destructive buttons */
+.hover-danger-text:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Accent subtle hover — for accent-colored interactive rows */
+.hover-accent-subtle:hover {
+  background: rgba(88, 166, 255, 0.06);
+}
+
+/*
+ * Conditional hover: only applies when NOT active.
+ * Use data-active="true" on the element to suppress hover.
+ */
+.hover-lift-inactive:not([data-active="true"]):hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+.hover-subtle-inactive:not([data-active="true"]):hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+}
+
+.hover-surface-inactive:not([data-active="true"]):hover {
+  background: var(--color-surface-3);
+}
+
+.hover-surface-2-inactive:not([data-active="true"]):hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+
+.hover-danger-inactive:not([data-active="true"]):hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-error);
 }
 
 /* ─── React Flow dark theme ────────────────────────────────── */

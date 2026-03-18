@@ -69,7 +69,7 @@ export default function MultiSelectBar() {
     border: 'none',
     cursor: 'pointer',
     color: 'var(--color-text-secondary)',
-    fontSize: 12,
+    fontSize: 'var(--text-sm)',
     gap: 5,
     transition: 'color 0.12s, background 0.12s',
   }
@@ -90,23 +90,21 @@ export default function MultiSelectBar() {
       pointerEvents: 'none',
       animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
     }}>
-    <div style={{
-      pointerEvents: 'auto',
-      flex: 1,
-      display: 'flex',
-      alignItems: 'center',
-      height: 36,
-      borderRadius: '0 0 10px 10px',
-      border: '1px solid var(--color-border)',
-      borderTop: 'none',
-      background: 'rgba(22, 48, 68, 0.96)',
-      backdropFilter: 'blur(16px)',
-      WebkitBackdropFilter: 'blur(16px)',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-      overflow: 'hidden',
-    }}>
+    <div
+      className="glass-panel-solid"
+      style={{
+        pointerEvents: 'auto',
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        height: 36,
+        borderRadius: '0 0 var(--radius-md) var(--radius-md)',
+        borderTop: 'none',
+        overflow: 'hidden',
+      }}
+    >
       {/* Count badge */}
-      <div style={{ padding: '0 12px', fontSize: 12, fontWeight: 600, color: 'var(--color-accent)', borderRight: '1px solid var(--color-border)' }}>
+      <div style={{ padding: '0 12px', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-accent)', borderRight: '1px solid var(--color-border)' }}>
         {count} selected
       </div>
 
@@ -126,21 +124,20 @@ export default function MultiSelectBar() {
         {alignOpen && (
           <>
             <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setAlignOpen(false)} />
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 50,
-              marginTop: 4,
-              background: 'rgba(13,17,23,0.97)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 10,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
-              padding: 4,
-              minWidth: 170,
-            }}>
-              <div style={{ padding: '4px 10px 6px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text-muted)' }}>
+            <div
+              className="glass-flyout"
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 50,
+                marginTop: 4,
+                padding: 4,
+                minWidth: 170,
+              }}
+            >
+              <div style={{ padding: '4px 10px 6px', fontSize: 'var(--text-xxs)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'var(--color-text-muted)' }}>
                 Align {count} elements
               </div>
               {[
@@ -155,7 +152,7 @@ export default function MultiSelectBar() {
                 <div key={i} style={{ height: 1, background: 'var(--color-border)', margin: '2px 6px' }} />
               ) : (
                 <button key={item.mode} onClick={() => handleAlign(item.mode)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', cursor: 'pointer', border: 'none' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', cursor: 'pointer', border: 'none' }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-2)'; e.currentTarget.style.color = 'var(--color-text-primary)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-secondary)' }}
                 >
