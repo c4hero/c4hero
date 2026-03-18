@@ -488,11 +488,25 @@ export default function Canvas() {
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
-  // Memoize viewCountMap separately — only recompute when workspace model changes, not on view/filter changes
+  // Extract just the views object — this reference only changes when views are added/removed/modified,
+  // not on model-only mutations (element rename, tag change, etc.), avoiding unnecessary recomputation.
+  const views = useWorkspaceStore((s) => s.workspace?.views)
   const viewCountMap = useMemo(() => {
-    if (!workspace) return new Map<string, number>()
-    return buildViewCountMap(workspace)
-  }, [workspace])
+    if (!views) return new Map<string, number>()
+    const allViews = [
+      ...views.systemLandscapeViews,
+      ...views.systemContextViews,
+      ...views.containerViews,
+      ...views.componentViews,
+    ]
+    const map = new Map<string, number>()
+    for (const v of allViews) {
+      for (const ve of v.elements) {
+        map.set(ve.id, (map.get(ve.id) ?? 0) + 1)
+      }
+    }
+    return map
+  }, [views])
 
   const { initialNodes, initialEdges } = useMemo(() => {
     if (!workspace || !view) return { initialNodes: [], initialEdges: [] }

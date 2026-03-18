@@ -280,22 +280,10 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
                       toggleElementInView(activeViewKey, el.id)
                       // Don't close — user may want to add multiple
                     }}
+                    className="flyout-item"
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      width: '100%',
                       padding: '5px 8px',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      color: 'var(--color-text-secondary)',
-                      background: 'transparent',
-                      cursor: 'pointer',
-                      transition: 'background 0.1s',
-                      border: 'none',
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                   >
                     <span style={{ color: TYPE_COLORS[el.type], display: 'flex', flexShrink: 0 }}>
                       {TYPE_ICONS[el.type]}
@@ -332,12 +320,12 @@ function SubtypeChip({
         alignItems: 'center',
         gap: 4,
         padding: '4px 8px',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-sm)',
         border: '1px solid var(--color-border)',
         background: 'var(--color-surface-2)',
         cursor: 'pointer',
         transition: 'background 0.12s, border-color 0.12s',
-        fontSize: 10,
+        fontSize: 'var(--text-xs)',
         fontWeight: 500,
         color: 'var(--color-text-muted)',
       }}
@@ -379,7 +367,7 @@ function CreateChip({
         alignItems: 'center',
         gap: 6,
         padding: '6px 10px',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-sm)',
         border: dashed ? '1px dashed var(--color-border)' : '1px solid var(--color-border)',
         background: 'var(--color-surface-2)',
         cursor: 'pointer',

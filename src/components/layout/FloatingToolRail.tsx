@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -41,7 +41,7 @@ const DIRECTION_LABELS: Record<LayoutDirection, string> = {
 export default function FloatingToolRail() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const setLayoutDirection = useWorkspaceStore((s) => s.setLayoutDirection)
+  const resetAndRelayout = useWorkspaceStore((s) => s.resetAndRelayout)
   const selectedElementIds = useWorkspaceStore((s) => s.selectedElementIds)
   const addGroup = useWorkspaceStore((s) => s.addGroup)
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
@@ -55,8 +55,15 @@ export default function FloatingToolRail() {
 
   const arrangeFlyoutRef = useRef<HTMLDivElement>(null)
   const alignFlyoutRef = useRef<HTMLDivElement>(null)
+  const addElementFlyoutRef = useRef<HTMLDivElement>(null)
+  const addBtnRef = useRef<HTMLButtonElement>(null)
+  const arrangeBtnRef = useRef<HTMLButtonElement>(null)
+  const alignBtnRef = useRef<HTMLButtonElement>(null)
   useArrowNav(arrangeFlyoutRef)
   useArrowNav(alignFlyoutRef)
+
+  // Track which trigger to return focus to on close
+  const lastOpenPanel = useRef<'add' | 'arrange' | 'align' | null>(null)
 
   // Escape key closes any open flyout
   useEffect(() => {
@@ -70,6 +77,69 @@ export default function FloatingToolRail() {
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
+
+  // Focus management: move focus into flyout when opened, return to trigger when closed
+  const prevAddOpen = useRef(false)
+  const prevArrangeOpen = useRef(false)
+  const prevAlignOpen = useRef(false)
+
+  useEffect(() => {
+    if (addPanelOpen && !prevAddOpen.current) {
+      lastOpenPanel.current = 'add'
+      // Focus first focusable element inside the add element flyout
+      requestAnimationFrame(() => {
+        const container = addElementFlyoutRef.current
+        if (container) {
+          const focusable = container.querySelector<HTMLElement>(
+            'input, button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+          focusable?.focus()
+        }
+      })
+    } else if (!addPanelOpen && prevAddOpen.current && lastOpenPanel.current === 'add') {
+      addBtnRef.current?.focus()
+      lastOpenPanel.current = null
+    }
+    prevAddOpen.current = addPanelOpen
+  }, [addPanelOpen])
+
+  useEffect(() => {
+    if (arrangePanelOpen && !prevArrangeOpen.current) {
+      lastOpenPanel.current = 'arrange'
+      requestAnimationFrame(() => {
+        const container = arrangeFlyoutRef.current
+        if (container) {
+          const focusable = container.querySelector<HTMLElement>(
+            'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+          focusable?.focus()
+        }
+      })
+    } else if (!arrangePanelOpen && prevArrangeOpen.current && lastOpenPanel.current === 'arrange') {
+      arrangeBtnRef.current?.focus()
+      lastOpenPanel.current = null
+    }
+    prevArrangeOpen.current = arrangePanelOpen
+  }, [arrangePanelOpen])
+
+  useEffect(() => {
+    if (alignPanelOpen && !prevAlignOpen.current) {
+      lastOpenPanel.current = 'align'
+      requestAnimationFrame(() => {
+        const container = alignFlyoutRef.current
+        if (container) {
+          const focusable = container.querySelector<HTMLElement>(
+            'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+          focusable?.focus()
+        }
+      })
+    } else if (!alignPanelOpen && prevAlignOpen.current && lastOpenPanel.current === 'align') {
+      alignBtnRef.current?.focus()
+      lastOpenPanel.current = null
+    }
+    prevAlignOpen.current = alignPanelOpen
+  }, [alignPanelOpen])
 
   if (!workspace) return null
 
@@ -116,27 +186,8 @@ export default function FloatingToolRail() {
   }
 
   function handleAutoArrange(direction?: LayoutDirection) {
-    const store = useWorkspaceStore.getState()
-    if (!store.workspace || !store.activeViewKey) return
-    const ws = structuredClone(store.workspace)
-    const allViews = [
-      ...ws.views.systemLandscapeViews,
-      ...ws.views.systemContextViews,
-      ...ws.views.containerViews,
-      ...ws.views.componentViews,
-    ]
-    const v = allViews.find((v) => v.key === store.activeViewKey)
-    if (v) {
-      for (const el of v.elements) {
-        el.x = undefined
-        el.y = undefined
-        el.pinned = undefined
-      }
-      useWorkspaceStore.setState({ workspace: ws })
-    }
-    if (direction && activeViewKey) {
-      setLayoutDirection(activeViewKey, direction)
-    }
+    if (!activeViewKey) return
+    resetAndRelayout(activeViewKey, direction)
     setArrangePanelOpen(false)
   }
 
@@ -162,19 +213,25 @@ export default function FloatingToolRail() {
       {/* Add element */}
       <div style={{ position: 'relative' }}>
         <RailBtn
+          ref={addBtnRef}
           icon={<Plus size={16} />}
           label="Add element"
           active={addPanelOpen}
           expanded={addPanelOpen}
           onClick={() => { setAddPanelOpen((o) => !o); setArrangePanelOpen(false) }}
         />
-        {addPanelOpen && <AddElementPanel onClose={() => setAddPanelOpen(false)} />}
+        {addPanelOpen && (
+          <div ref={addElementFlyoutRef}>
+            <AddElementPanel onClose={() => setAddPanelOpen(false)} />
+          </div>
+        )}
       </div>
 
       {/* Auto-arrange */}
       <RailSep />
       <div style={{ position: 'relative' }}>
         <RailBtn
+          ref={arrangeBtnRef}
           icon={<LayoutDashboard size={16} />}
           label="Auto-arrange"
           active={arrangePanelOpen}
@@ -236,6 +293,7 @@ export default function FloatingToolRail() {
           {/* Align */}
           <div style={{ position: 'relative' }}>
             <RailBtn
+              ref={alignBtnRef}
               icon={<AlignCenterVertical size={16} />}
               label="Align"
               active={alignPanelOpen}
@@ -345,23 +403,17 @@ function RailSep() {
   )
 }
 
-function RailBtn({
-  icon,
-  label,
-  color,
-  active,
-  expanded,
-  onClick,
-}: {
+const RailBtn = forwardRef<HTMLButtonElement, {
   icon: React.ReactNode
   label: string
   color?: string
   active?: boolean
   expanded?: boolean
   onClick?: () => void
-}) {
+}>(function RailBtn({ icon, label, color, active, expanded, onClick }, ref) {
   return (
     <button
+      ref={ref}
       title={label}
       aria-label={label}
       aria-expanded={expanded}
@@ -397,4 +449,4 @@ function RailBtn({
       {icon}
     </button>
   )
-}
+})

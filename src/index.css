@@ -14,7 +14,7 @@
   --color-accent-glow: rgba(88, 166, 255, 0.15);
   --color-text-primary: #e6edf3;
   --color-text-secondary: #8b949e;
-  --color-text-muted: #6e7681;
+  --color-text-muted: #848d97;
   --color-text-subtle: #484f58;
 
   /* C4 diagram node accents */
@@ -523,6 +523,29 @@ textarea:focus-visible {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border-width: 0;
+}
+
+.sr-only:focus-visible {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: auto;
+  height: auto;
+  padding: 10px 20px;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: nowrap;
+  background: var(--color-surface-1);
+  color: var(--color-accent);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 /* ─── High contrast mode ──────────────────────────────────── */

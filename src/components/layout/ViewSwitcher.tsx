@@ -121,7 +121,7 @@ export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: View
                 fontWeight: 800,
                 padding: '2px 5px',
                 borderRadius: 4,
-                background: 'rgba(88,166,255,0.15)',
+                background: 'var(--color-accent-glow)',
                 color: 'var(--color-accent)',
                 letterSpacing: '0.05em',
                 flexShrink: 0,
@@ -166,7 +166,7 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
         style={{
           zIndex: 49,
           borderTop: 'none',
-          borderRadius: '0 0 14px 14px',
+          borderRadius: `0 0 var(--radius-xl) var(--radius-xl)`,
           boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
           animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
           overflow: 'hidden',
@@ -217,7 +217,7 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                           e.stopPropagation()
                         }}
                         onClick={e => e.stopPropagation()}
-                        style={{ flex: 1, fontSize: 'var(--text-base)', background: 'var(--color-surface-2)', border: '1px solid var(--color-accent)', borderRadius: 6, padding: '4px 8px', color: 'var(--color-text-primary)', outline: 'none', minWidth: 0, margin: '4px 0' }}
+                        style={{ flex: 1, fontSize: 'var(--text-base)', background: 'var(--color-surface-2)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '4px 8px', color: 'var(--color-text-primary)', outline: 'none', minWidth: 0, margin: '4px 0' }}
                       />
                     ) : (
                       <button
@@ -242,12 +242,12 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                     >
                       {isRenaming ? (
                         <button onClick={e => { e.stopPropagation(); renameView(v.key, renameValue.trim() || v.title || v.key); setRenamingViewKey(null) }}
-                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'rgba(34,197,94,0.15)', border: 'none', cursor: 'pointer', color: 'var(--color-success)' }} title="Save">
+                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'rgba(34,197,94,0.15)', border: 'none', cursor: 'pointer', color: 'var(--color-success)' }} title="Save">
                           <Check size={13} />
                         </button>
                       ) : (
                         <button onClick={e => { e.stopPropagation(); setRenamingViewKey(v.key); setRenameValue(v.title ?? v.key) }}
-                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
+                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
                           onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-3)'; e.currentTarget.style.color = 'var(--color-text-primary)' }}
                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
                           title="Rename">
@@ -256,7 +256,7 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                       )}
                       <button onClick={e => { e.stopPropagation(); if (views.length > 1) deleteView(v.key) }}
                         disabled={views.length <= 1}
-                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1 }}
+                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1 }}
                         onMouseEnter={e => { if (views.length > 1) { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.color = 'var(--color-error)' } }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
                         title={views.length <= 1 ? 'Cannot delete last view' : 'Delete view'}>

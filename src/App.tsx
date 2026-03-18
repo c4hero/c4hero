@@ -69,9 +69,12 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
+      <a href="#c4hero-canvas" className="sr-only">
+        Skip to main content
+      </a>
       <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
         {/* Canvas fills entire viewport */}
-        <main aria-label="Architecture diagram canvas">
+        <main id="c4hero-canvas" aria-label="Architecture diagram canvas">
           <Canvas />
         </main>
 

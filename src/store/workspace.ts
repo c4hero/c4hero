@@ -100,6 +100,8 @@ interface WorkspaceState extends UndoState {
   // View element management
   toggleElementInView: (viewKey: string, elementId: string) => void
   setLayoutDirection: (viewKey: string, direction: 'TB' | 'BT' | 'LR' | 'RL') => void
+  /** Reset all node positions and optionally change layout direction in a single undo step */
+  resetAndRelayout: (viewKey: string, direction?: 'TB' | 'BT' | 'LR' | 'RL') => void
 
   // Canvas settings
   setActiveTagFilter: (tag: string | null) => void
@@ -663,6 +665,24 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return { ...pushUndo(s), workspace: ws }
   }),
 
+  resetAndRelayout: (viewKey, direction) => set((s) => {
+    const ws = cloneWs(s)
+    if (!ws) return s
+    const view = findView(ws, viewKey)
+    if (!view) return s
+    // Reset positions and pinned flags
+    for (const el of view.elements) {
+      el.x = undefined
+      el.y = undefined
+      el.pinned = undefined
+    }
+    // Optionally change direction
+    if (direction) {
+      view.autoLayout = { ...view.autoLayout, direction }
+    }
+    return { ...pushUndo(s), workspace: ws }
+  }),
+
   // ─── Canvas Settings ──────────────────────────────────────────
 
   setActiveTagFilter: (tag) => set({ activeTagFilter: tag }),
@@ -757,8 +777,7 @@ export function getSelectedElement(
   selectedIds: string[],
 ): ModelElement | undefined {
   if (selectedIds.length === 0) return undefined
-  const map = buildElementMap(workspace)
-  return map.get(selectedIds[0])
+  return findElement(workspace, selectedIds[0])
 }
 
 export function getRelationshipById(

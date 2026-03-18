@@ -91,18 +91,13 @@ export default function FloatingBottomStrip() {
         }}
       >
       <div
+        className="glass-panel"
         style={{
           pointerEvents: 'auto',
           maxWidth: '100%',
           display: 'flex',
           alignItems: 'center',
           height: 44,
-          borderRadius: 12,
-          border: '1px solid var(--color-border)',
-          background: 'rgba(13, 17, 23, 0.88)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.03)',
           whiteSpace: 'nowrap',
           overflowX: 'auto',
           overflowY: 'hidden',
@@ -120,7 +115,7 @@ export default function FloatingBottomStrip() {
         {mode === 'tags' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px' }}>
             {viewTags.length === 0 && (
-              <span style={{ padding: '0 8px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+              <span style={{ padding: '0 8px', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
                 No custom tags
               </span>
             )}
@@ -134,11 +129,11 @@ export default function FloatingBottomStrip() {
                   style={{
                     height: 30,
                     padding: '0 10px',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-sm)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 5,
-                    fontSize: 11,
+                    fontSize: 'var(--text-xs)',
                     fontWeight: 600,
                     color: isActive ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
                     background: isActive ? (tagStyle?.background ?? 'var(--color-accent)') : 'transparent',
@@ -172,7 +167,7 @@ export default function FloatingBottomStrip() {
               onClick={() => setTagManagerOpen((o) => !o)}
               style={{
                 width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 6,
+                borderRadius: 'var(--radius-sm)',
                 background: tagManagerOpen ? 'rgba(88,166,255,0.12)' : 'transparent',
                 color: tagManagerOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: 'pointer', border: 'none', transition: 'background 0.1s, color 0.1s',
@@ -206,9 +201,9 @@ export default function FloatingBottomStrip() {
                   key={opt.value}
                   onClick={() => setActiveStatusFilter(isActive ? null : opt.value)}
                   style={{
-                    height: 30, padding: '0 10px', borderRadius: 6,
+                    height: 30, padding: '0 10px', borderRadius: 'var(--radius-sm)',
                     display: 'flex', alignItems: 'center', gap: 6,
-                    fontSize: 11, fontWeight: 600,
+                    fontSize: 'var(--text-xs)', fontWeight: 600,
                     color: isActive ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
                     background: isActive ? opt.color : 'transparent',
                     cursor: 'pointer', transition: 'background 0.12s, color 0.12s', border: 'none',
@@ -279,6 +274,7 @@ function TagManagerPanel({
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={onClose} />
       <div
+        className="glass-panel-solid"
         style={{
           position: 'fixed',
           bottom: 68,
@@ -289,12 +285,6 @@ function TagManagerPanel({
           maxHeight: 440,
           display: 'flex',
           flexDirection: 'column',
-          borderRadius: 12,
-          border: '1px solid var(--color-border)',
-          background: 'rgba(13, 17, 23, 0.96)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
           overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
@@ -305,7 +295,7 @@ function TagManagerPanel({
           padding: '12px 14px 10px',
           borderBottom: '1px solid var(--color-border)',
         }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
             Manage Tags
           </div>
           <button onClick={onClose} className="btn-icon" style={{ minWidth: 24, minHeight: 24, padding: 4 }}>
@@ -316,7 +306,7 @@ function TagManagerPanel({
         {/* Tag list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px' }}>
           {tags.length === 0 && (
-            <div style={{ padding: '16px 8px', fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+            <div style={{ padding: '16px 8px', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', textAlign: 'center' }}>
               No custom tags yet
             </div>
           )}
@@ -354,20 +344,20 @@ function TagManagerPanel({
             placeholder="New tag name..."
             style={{
               flex: 1, height: 30, padding: '0 10px',
-              borderRadius: 7, border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)',
               background: 'var(--color-surface-2)', color: 'var(--color-text-primary)',
-              fontSize: 11, outline: 'none',
+              fontSize: 'var(--text-xs)', outline: 'none',
             }}
           />
           <button
             onClick={handleAddTag}
             disabled={!newTagValue.trim()}
             style={{
-              height: 30, padding: '0 12px', borderRadius: 7,
+              height: 30, padding: '0 12px', borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--color-border)',
               background: newTagValue.trim() ? 'var(--color-accent)' : 'var(--color-surface-2)',
               color: newTagValue.trim() ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
-              fontSize: 11, fontWeight: 600, cursor: newTagValue.trim() ? 'pointer' : 'default',
+              fontSize: 'var(--text-xs)', fontWeight: 600, cursor: newTagValue.trim() ? 'pointer' : 'default',
               display: 'flex', alignItems: 'center', gap: 4, transition: 'background 0.12s',
             }}
           >
@@ -512,12 +502,12 @@ function ModeTab({ icon, label, active, onClick, isFirst }: {
       onClick={onClick}
       style={{
         height: '100%', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 5,
-        fontSize: 11, fontWeight: 600,
+        fontSize: 'var(--text-xs)', fontWeight: 600,
         color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
         background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
         borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
         cursor: 'pointer', border: 'none', transition: 'color 0.12s, background 0.12s',
-        borderRadius: isFirst ? '11px 0 0 11px' : 0,
+        borderRadius: isFirst ? 'var(--radius-lg) 0 0 var(--radius-lg)' : 0,
       }}
       onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
       onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
