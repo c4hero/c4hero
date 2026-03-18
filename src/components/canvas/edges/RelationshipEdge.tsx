@@ -121,9 +121,9 @@ function RelationshipEdge({
             style={{
               position: 'absolute',
               transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 20}px)`,
-              background: 'rgba(13, 17, 23, 0.95)',
+              background: 'var(--glass-bg-heavy)',
               border: '1px solid var(--color-border)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-md)',
               padding: '6px 10px',
               maxWidth: 240,
               zIndex: 100,
