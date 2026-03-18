@@ -98,7 +98,7 @@ export default function WelcomeScreen() {
         {/* Logo + tagline */}
         <div className="flex flex-col items-center gap-4">
           <h1 className="flex flex-col items-center gap-2">
-            <img src="https://c4hero.com/c4-logo.svg" alt="c4hero — visual architecture modelling tool" className="h-10 sm:h-12" />
+            <img src="/c4-logo.svg" alt="c4hero — visual architecture modelling tool" className="h-10 sm:h-12" />
           </h1>
           <p className="text-center text-sm leading-relaxed sm:text-base" style={{ color: 'var(--color-text-muted)' }}>
             Visual architecture modelling with Structurizr DSL

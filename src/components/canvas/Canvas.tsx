@@ -547,11 +547,74 @@ export default function Canvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const reactFlowInstance = useReactFlow()
 
-  // Sync when view changes
+  // Fit view — poll until all content nodes are measured, then call fitView.
+  // Overlay nodes (boundary, groups) are excluded from the fit bounds since
+  // they're larger than the content and would shift the center into empty space.
+  const fitPending = useRef(false)
+  // Store the RF instance from onInit — setViewport/fitView only work reliably
+  // after onInit fires (panZoom is initialized). useReactFlow() returns a proxy
+  // that may not have panZoom attached yet when called programmatically.
+  const rfInitInstance = useRef<typeof reactFlowInstance | null>(null)
+
+  const fitContentNodes = useCallback(() => {
+    if (!fitPending.current) return
+    const rf = rfInitInstance.current ?? reactFlowInstance
+
+    // Check: canvas DOM must be full-size
+    const el = document.querySelector('.react-flow') as HTMLElement | null
+    if (!el) { requestAnimationFrame(fitContentNodes); return }
+    const { width, height } = el.getBoundingClientRect()
+    if (width < 200 || height < 200) { requestAnimationFrame(fitContentNodes); return }
+
+    // Check: all content nodes must be measured
+    const contentNodes = rf.getNodes().filter(
+      n => n.id !== '__scope_boundary__' && !n.id.startsWith('group-')
+    )
+    if (contentNodes.length === 0 || !contentNodes.every(n => n.measured?.width && n.measured?.height)) {
+      requestAnimationFrame(fitContentNodes)
+      return
+    }
+
+    // All conditions met — compute bounds and set viewport
+    fitPending.current = false
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const n of contentNodes) {
+      const w = n.measured!.width!
+      const h = n.measured!.height!
+      minX = Math.min(minX, n.position.x)
+      minY = Math.min(minY, n.position.y)
+      maxX = Math.max(maxX, n.position.x + w)
+      maxY = Math.max(maxY, n.position.y + h)
+    }
+    if (!isFinite(minX)) return
+    const PADDING = 0.15
+    const boundsW = maxX - minX
+    const boundsH = maxY - minY
+    const zoom = Math.max(0.1, Math.min(
+      (width * (1 - PADDING * 2)) / boundsW,
+      (height * (1 - PADDING * 2)) / boundsH,
+      2
+    ))
+    rf.setViewport(
+      { x: width / 2 - (minX + boundsW / 2) * zoom, y: height / 2 - (minY + boundsH / 2) * zoom, zoom },
+      { duration: 300 }
+    )
+  }, [reactFlowInstance])
+
+  // Sync nodes/edges when they change, then kick off fit poll
   useEffect(() => {
     setNodes(initialNodes)
     setEdges(initialEdges)
-  }, [initialNodes, initialEdges, setNodes, setEdges])
+    fitPending.current = true
+    requestAnimationFrame(fitContentNodes)
+  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes])
+
+  const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+    onNodesChange(changes)
+    if (fitPending.current) {
+      requestAnimationFrame(fitContentNodes)
+    }
+  }, [onNodesChange, fitContentNodes])
 
   // Center view on newly created element
   const focusElementId = useWorkspaceStore((s) => s.focusElementId)
@@ -668,7 +731,11 @@ export default function Canvas() {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
+        onInit={(instance) => {
+          rfInitInstance.current = instance
+          if (fitPending.current) requestAnimationFrame(fitContentNodes)
+        }}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
         onNodeDoubleClick={onNodeDoubleClick}
@@ -682,8 +749,6 @@ export default function Canvas() {
         onPaneClick={() => { setContextMenu(null); clearSelection() }}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
         proOptions={{ hideAttribution: true }}
         minZoom={0.1}
         maxZoom={2}

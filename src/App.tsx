@@ -74,7 +74,7 @@ export default function App() {
       </a>
       <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
         {/* Canvas fills entire viewport */}
-        <main id="c4hero-canvas" aria-label="Architecture diagram canvas">
+        <main id="c4hero-canvas" aria-label="Architecture diagram canvas" style={{ position: 'absolute', inset: 0 }}>
           <Canvas />
         </main>
 
