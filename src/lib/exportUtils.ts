@@ -23,16 +23,6 @@ export function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-/** Copy text to clipboard */
-export async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    return false
-  }
-}
-
 /** Export the canvas viewport as PNG */
 export type ExportTheme = 'dark' | 'light'
 

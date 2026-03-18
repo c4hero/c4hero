@@ -126,6 +126,8 @@ export default function FloatingBottomStrip() {
                 <button
                   key={tag}
                   onClick={() => setActiveTagFilter(isActive ? null : tag)}
+                  className="hover-lift-inactive"
+                  data-active={isActive ? 'true' : undefined}
                   style={{
                     height: 30,
                     padding: '0 10px',
@@ -141,18 +143,6 @@ export default function FloatingBottomStrip() {
                     transition: 'background 0.12s, color 0.12s',
                     border: 'none',
                   }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-                      e.currentTarget.style.color = 'var(--color-text-primary)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.color = 'var(--color-text-muted)'
-                    }
-                  }}
                 >
                   {tagStyle?.background && !isActive && (
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: tagStyle.background, flexShrink: 0 }} />
@@ -165,6 +155,8 @@ export default function FloatingBottomStrip() {
             {/* Edit button */}
             <button
               onClick={() => setTagManagerOpen((o) => !o)}
+              className="hover-lift-inactive"
+              data-active={tagManagerOpen ? 'true' : undefined}
               style={{
                 width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 'var(--radius-sm)',
@@ -173,18 +165,6 @@ export default function FloatingBottomStrip() {
                 cursor: 'pointer', border: 'none', transition: 'background 0.1s, color 0.1s',
               }}
               title="Manage tags"
-              onMouseEnter={(e) => {
-                if (!tagManagerOpen) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-                  e.currentTarget.style.color = 'var(--color-text-primary)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!tagManagerOpen) {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = 'var(--color-text-muted)'
-                }
-              }}
             >
               <Pencil size={12} />
             </button>
@@ -200,6 +180,8 @@ export default function FloatingBottomStrip() {
                 <button
                   key={opt.value}
                   onClick={() => setActiveStatusFilter(isActive ? null : opt.value)}
+                  className="hover-lift-inactive"
+                  data-active={isActive ? 'true' : undefined}
                   style={{
                     height: 30, padding: '0 10px', borderRadius: 'var(--radius-sm)',
                     display: 'flex', alignItems: 'center', gap: 6,
@@ -208,18 +190,6 @@ export default function FloatingBottomStrip() {
                     background: isActive ? opt.color : 'transparent',
                     cursor: 'pointer', transition: 'background 0.12s, color 0.12s', border: 'none',
                     opacity: viewStatuses.includes(opt.value) || isActive ? 1 : 0.4,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-                      e.currentTarget.style.color = 'var(--color-text-primary)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.color = 'var(--color-text-muted)'
-                    }
                   }}
                 >
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
@@ -500,6 +470,8 @@ function ModeTab({ icon, label, active, onClick, isFirst }: {
   return (
     <button
       onClick={onClick}
+      className="hover-subtle-inactive"
+      data-active={active ? 'true' : undefined}
       style={{
         height: '100%', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 5,
         fontSize: 'var(--text-xs)', fontWeight: 600,
@@ -509,8 +481,6 @@ function ModeTab({ icon, label, active, onClick, isFirst }: {
         cursor: 'pointer', border: 'none', transition: 'color 0.12s, background 0.12s',
         borderRadius: isFirst ? 'var(--radius-lg) 0 0 var(--radius-lg)' : 0,
       }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
     >
       {icon}
       {label}
