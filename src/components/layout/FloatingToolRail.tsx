@@ -179,6 +179,7 @@ export default function FloatingToolRail() {
           icon={<Plus size={16} />}
           label="Add element"
           active={addPanelOpen}
+          expanded={addPanelOpen}
           onClick={() => { setAddPanelOpen((o) => !o); setArrangePanelOpen(false) }}
         />
         {addPanelOpen && <AddElementPanel onClose={() => setAddPanelOpen(false)} />}
@@ -191,6 +192,7 @@ export default function FloatingToolRail() {
           icon={<LayoutDashboard size={16} />}
           label="Auto-arrange"
           active={arrangePanelOpen}
+          expanded={arrangePanelOpen}
           onClick={() => { setArrangePanelOpen((o) => !o); setAddPanelOpen(false) }}
         />
         {arrangePanelOpen && (
@@ -283,6 +285,7 @@ export default function FloatingToolRail() {
               icon={<AlignCenterVertical size={16} />}
               label="Align"
               active={alignPanelOpen}
+              expanded={alignPanelOpen}
               onClick={() => { setAlignPanelOpen((o) => !o); setAddPanelOpen(false); setArrangePanelOpen(false) }}
             />
             {alignPanelOpen && (
@@ -819,18 +822,22 @@ function RailBtn({
   label,
   color,
   active,
+  expanded,
   onClick,
 }: {
   icon: React.ReactNode
   label: string
   color?: string
   active?: boolean
+  expanded?: boolean
   onClick?: () => void
 }) {
   return (
     <button
       title={label}
       aria-label={label}
+      aria-expanded={expanded}
+      aria-haspopup={expanded !== undefined ? 'true' : undefined}
       onClick={onClick}
       style={{
         width: 44,

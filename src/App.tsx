@@ -71,17 +71,28 @@ export default function App() {
     <ReactFlowProvider>
       <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
         {/* Canvas fills entire viewport */}
-        <Canvas />
+        <main aria-label="Architecture diagram canvas">
+          <Canvas />
+        </main>
 
         {/* Floating chrome overlays */}
-        <FloatingTopPill />
+        <nav aria-label="Workspace navigation">
+          <FloatingTopPill />
+        </nav>
         <MultiSelectBar />
-        <FloatingToolRail />
+        <nav aria-label="Tools">
+          <FloatingToolRail />
+        </nav>
         <FloatingViewsPanel />
-        <FloatingInspector />
+        <aside aria-label="Element inspector">
+          <FloatingInspector />
+        </aside>
         <FloatingBottomStrip />
         <FloatingZoomHud />
         <CanvasHints />
+
+        {/* Live region for announcements */}
+        <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
       </div>
 
       {/* Dialogs */}

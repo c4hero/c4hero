@@ -3,6 +3,7 @@ import { useWorkspaceStore, getAllViews, getBreadcrumb } from '@/store/workspace
 import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, getCurrentFileHandle } from '@/lib/fileIO'
+import { announce } from '@/lib/announce'
 import type { View } from '@/types/model'
 import CreateViewDialog from '@/components/views/CreateViewDialog'
 import ExportDialog from '@/components/dialogs/ExportDialog'
@@ -143,7 +144,9 @@ export default function FloatingTopPill() {
     else if (type === 'png-light') ok = await copyCanvasAsPNG('light')
     else if (type === 'dsl') ok = await copyTextToClipboard(serializeDSL(workspace))
     const label = type === 'dsl' ? 'DSL' : `PNG (${type === 'png-dark' ? 'dark' : 'light'})`
-    setCopyToast(ok ? `Copied ${label}` : 'Copy failed')
+    const msg = ok ? `Copied ${label}` : 'Copy failed'
+    setCopyToast(msg)
+    announce(msg)
     setTimeout(() => setCopyToast(null), 2000)
   }
 
@@ -157,10 +160,12 @@ export default function FloatingTopPill() {
       savedUndoLengthRef.current = n
       useWorkspaceStore.getState().setLastSavedUndoLength(n)
       setSaveStatus('saved')
+      announce('File saved')
       if (savedFlashTimer.current) clearTimeout(savedFlashTimer.current)
       savedFlashTimer.current = setTimeout(() => setSaveStatus('idle'), 2000)
     } else {
       setSaveStatus('error')
+      announce('Save failed')
       if (savedFlashTimer.current) clearTimeout(savedFlashTimer.current)
       savedFlashTimer.current = setTimeout(() => setSaveStatus('idle'), 3000)
     }
@@ -255,6 +260,9 @@ export default function FloatingTopPill() {
         <div style={{ position: 'relative', flex: 1, minWidth: 0, overflow: 'visible' }}>
           <button
             onClick={() => { setViewDropdownOpen((o) => !o); setExportDialogOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }}
+            aria-expanded={viewDropdownOpen}
+            aria-haspopup="true"
+            aria-label="Switch view"
             style={{
               padding: '0 12px',
               height: 44,
@@ -405,6 +413,8 @@ export default function FloatingTopPill() {
               style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40 }}
               title="More actions"
               aria-label="More actions"
+              aria-expanded={hamburgerOpen}
+              aria-haspopup="true"
             >
               <MoreHorizontal size={16} />
             </button>
@@ -415,6 +425,7 @@ export default function FloatingTopPill() {
                   onClick={() => setHamburgerOpen(false)}
                 />
                 <div
+                  role="menu"
                   style={{
                     position: 'absolute',
                     right: 0,
@@ -715,6 +726,7 @@ function MenuItemRow({
 }) {
   return (
     <button
+      role="menuitem"
       onClick={onClick}
       disabled={disabled}
       style={{
@@ -728,6 +740,7 @@ function MenuItemRow({
         background: 'transparent',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.4 : 1,
+        border: 'none',
       }}
       onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = 'var(--color-surface-3)' }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
