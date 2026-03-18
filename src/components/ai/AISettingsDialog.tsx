@@ -1,20 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { getAIConfig, saveAIConfig, clearAIConfig, type AIProvider } from '@/lib/ai'
 import { X, Key, Sparkles } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 
 export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
-  const [provider, setProvider] = useState<AIProvider>('anthropic')
-  const [apiKey, setApiKey] = useState('')
+  const [provider, setProvider] = useState<AIProvider>(() => getAIConfig()?.provider ?? 'anthropic')
+  const [apiKey, setApiKey] = useState(() => getAIConfig()?.apiKey ?? '')
   const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    const config = getAIConfig()
-    if (config) {
-      setProvider(config.provider)
-      setApiKey(config.apiKey)
-    }
-  }, [])
 
   function handleSave() {
     if (apiKey.trim()) {

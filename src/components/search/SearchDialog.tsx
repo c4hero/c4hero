@@ -98,9 +98,8 @@ export default function SearchDialog() {
     return results.slice(0, 20)
   }, [workspace, query, typeFilter, tagFilter])
 
-  useEffect(() => {
-    setSelectedIndex(0)
-  }, [query, typeFilter, tagFilter])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setSelectedIndex(0) }, [query, typeFilter, tagFilter])
 
   function handleSelect(result: SearchResult) {
     if (result.kind === 'element') {

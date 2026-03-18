@@ -16,9 +16,8 @@ export default memo(function InlineName({ elementId, name }: { elementId: string
   }, [editing])
 
   // Sync if name changes externally while not editing
-  useEffect(() => {
-    if (!editing) setDraft(name)
-  }, [name, editing])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (!editing) setDraft(name) }, [name, editing])
 
   const commit = () => {
     setEditing(false)
