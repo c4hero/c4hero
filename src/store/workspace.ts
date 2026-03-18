@@ -126,6 +126,8 @@ interface WorkspaceState extends UndoState {
   setPresentationMode: (on: boolean) => void
 }
 
+// ─── Internal Helpers ────────────────────────────────────────────────
+
 /** Push current workspace to undo stack before mutation */
 function pushUndo(s: WorkspaceState): Partial<UndoState> {
   if (!s.workspace) return {}
@@ -138,18 +140,76 @@ function cloneWs(s: WorkspaceState): Workspace | null {
   return s.workspace ? structuredClone(s.workspace) : null
 }
 
-/** Return a name that doesn't collide with any existing element name.
- *  Appends " 2", " 3", … until it finds a free slot. */
-function uniqueElementName(base: string, ws: Workspace): string {
-  const taken = new Set<string>()
-  for (const p of ws.model.people) taken.add(p.name)
+/** Get flat array of all views (mutable — for use inside mutations on cloned workspace) */
+function allViewsOf(ws: Workspace): View[] {
+  return [
+    ...ws.views.systemLandscapeViews,
+    ...ws.views.systemContextViews,
+    ...ws.views.containerViews,
+    ...ws.views.componentViews,
+  ]
+}
+
+/** Find a view by key inside a (possibly cloned) workspace */
+function findView(ws: Workspace, key: string): View | undefined {
+  return allViewsOf(ws).find(v => v.key === key)
+}
+
+/** Iterate every element in the model tree. Callback receives the element.
+ *  Return true from callback to stop early. */
+function forEachElement(ws: Workspace, fn: (el: ModelElement) => boolean | void): void {
+  for (const p of ws.model.people) { if (fn(p)) return }
   for (const sys of ws.model.softwareSystems) {
-    taken.add(sys.name)
+    if (fn(sys)) return
     for (const c of sys.containers) {
-      taken.add(c.name)
-      for (const comp of c.components) taken.add(comp.name)
+      if (fn(c)) return
+      for (const comp of c.components) { if (fn(comp)) return }
     }
   }
+}
+
+/** Find an element by ID in the model tree */
+function findElement(ws: Workspace, id: string): ModelElement | undefined {
+  let found: ModelElement | undefined
+  forEachElement(ws, (el) => { if (el.id === id) { found = el; return true } })
+  return found
+}
+
+type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>>
+  & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string }
+
+/** Apply a patch to an element in-place. Shared by updateElement and updateElementLive. */
+function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): void {
+  forEachElement(ws, (el) => {
+    if (el.id !== id) return false
+    if (patch.name !== undefined) el.name = patch.name
+    if (patch.description !== undefined) el.description = patch.description
+    if (patch.tags !== undefined) el.tags = patch.tags
+    if (patch.status !== undefined) el.status = patch.status
+    if (patch.owner !== undefined) el.owner = patch.owner
+    if (patch.url !== undefined) el.url = patch.url
+    if (patch.location !== undefined && (el.type === 'person' || el.type === 'softwareSystem')) {
+      (el as Person | SoftwareSystem).location = patch.location
+    }
+    if (patch.technology !== undefined && (el.type === 'container' || el.type === 'component')) {
+      (el as Container | Component).technology = patch.technology
+    }
+    return true
+  })
+}
+
+/** Apply a callback to every view in the workspace (mutates views in place) */
+function forEachView(ws: Workspace, fn: (v: View) => void): void {
+  for (const v of ws.views.systemLandscapeViews) fn(v)
+  for (const v of ws.views.systemContextViews) fn(v)
+  for (const v of ws.views.containerViews) fn(v)
+  for (const v of ws.views.componentViews) fn(v)
+}
+
+/** Return a name that doesn't collide with any existing element name. */
+function uniqueElementName(base: string, ws: Workspace): string {
+  const taken = new Set<string>()
+  forEachElement(ws, (el) => { taken.add(el.name) })
   if (!taken.has(base)) return base
   let n = 2
   while (taken.has(`${base} ${n}`)) n++
@@ -159,13 +219,7 @@ function uniqueElementName(base: string, ws: Workspace): string {
 /** Add an element to the current view */
 function addToCurrentView(ws: Workspace, activeViewKey: string | null, elementId: string, position?: { x: number; y: number }) {
   if (!activeViewKey) return
-  const allViews = [
-    ...ws.views.systemLandscapeViews,
-    ...ws.views.systemContextViews,
-    ...ws.views.containerViews,
-    ...ws.views.componentViews,
-  ]
-  const view = allViews.find(v => v.key === activeViewKey)
+  const view = findView(ws, activeViewKey)
   if (view && !view.elements.some(e => e.id === elementId)) {
     view.elements.push({ id: elementId, x: position?.x, y: position?.y })
   }
@@ -324,72 +378,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   updateElement: (id, patch) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    const update = (el: ModelElement) => {
-      if (el.id !== id) return false
-      if (patch.name !== undefined) el.name = patch.name
-      if (patch.description !== undefined) el.description = patch.description
-      if (patch.tags !== undefined) el.tags = patch.tags
-      if (patch.status !== undefined) el.status = patch.status
-      if (patch.owner !== undefined) el.owner = patch.owner
-      if (patch.url !== undefined) el.url = patch.url
-      if (patch.location !== undefined && (el.type === 'person' || el.type === 'softwareSystem')) {
-        (el as Person | SoftwareSystem).location = patch.location
-      }
-      return true
-    }
-    for (const p of ws.model.people) { if (update(p)) break }
-    for (const sys of ws.model.softwareSystems) {
-      if (update(sys)) break
-      for (const c of sys.containers) {
-        if (update(c)) break
-        for (const comp of c.components) { if (update(comp)) break }
-      }
-    }
+    applyElementPatch(ws, id, patch)
     return { ...pushUndo(s), workspace: ws }
   }),
 
   updateElementLive: (id, patch) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    const update = (el: ModelElement) => {
-      if (el.id !== id) return false
-      if (patch.name !== undefined) el.name = patch.name
-      if (patch.description !== undefined) el.description = patch.description
-      if (patch.tags !== undefined) el.tags = patch.tags
-      if (patch.status !== undefined) el.status = patch.status
-      if (patch.owner !== undefined) el.owner = patch.owner
-      if (patch.url !== undefined) el.url = patch.url
-      if (patch.location !== undefined && (el.type === 'person' || el.type === 'softwareSystem')) {
-        (el as Person | SoftwareSystem).location = patch.location
-      }
-      if (patch.technology !== undefined && (el.type === 'container' || el.type === 'component')) {
-        (el as Container | Component).technology = patch.technology
-      }
-      return true
-    }
-    for (const p of ws.model.people) { if (update(p)) break }
-    for (const sys of ws.model.softwareSystems) {
-      if (update(sys)) break
-      for (const c of sys.containers) {
-        if (update(c)) break
-        for (const comp of c.components) { if (update(comp)) break }
-      }
-    }
+    applyElementPatch(ws, id, patch)
     return { workspace: ws } // no undo push
   }),
 
   updateElementTechnology: (id, technology) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    for (const sys of ws.model.softwareSystems) {
-      for (const c of sys.containers) {
-        if (c.id === id) { c.technology = technology; return { ...pushUndo(s), workspace: ws } }
-        for (const comp of c.components) {
-          if (comp.id === id) { comp.technology = technology; return { ...pushUndo(s), workspace: ws } }
-        }
-      }
-    }
-    return s
+    applyElementPatch(ws, id, { technology })
+    return { ...pushUndo(s), workspace: ws }
   }),
 
   deleteElement: (id) => set((s) => {
@@ -412,19 +416,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       r => r.sourceId !== id && r.destinationId !== id
     )
     // Remove from all views
-    const removeFromViews = (views: View[]) => {
-      for (const v of views) {
-        v.elements = v.elements.filter(e => e.id !== id)
-        v.relationships = v.relationships.filter(r => {
-          const rel = ws.model.relationships.find(mr => mr.id === r.id)
-          return rel !== undefined
-        })
-      }
-    }
-    removeFromViews(ws.views.systemLandscapeViews)
-    removeFromViews(ws.views.systemContextViews)
-    removeFromViews(ws.views.containerViews)
-    removeFromViews(ws.views.componentViews)
+    forEachView(ws, (v) => {
+      v.elements = v.elements.filter(e => e.id !== id)
+      v.relationships = v.relationships.filter(r => {
+        const rel = ws.model.relationships.find(mr => mr.id === r.id)
+        return rel !== undefined
+      })
+    })
     // Remove from all groups
     ws.model.groups = ws.model.groups.map(g => ({
       ...g,
@@ -488,16 +486,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       ws.model.relationships.push(rel)
       // Add to current view
       if (s.activeViewKey) {
-        const allViews = [
-          ...ws.views.systemLandscapeViews,
-          ...ws.views.systemContextViews,
-          ...ws.views.containerViews,
-          ...ws.views.componentViews,
-        ]
-        const view = allViews.find(v => v.key === s.activeViewKey)
-        if (view) {
-          view.relationships.push({ id })
-        }
+        const view = findView(ws, s.activeViewKey)
+        if (view) view.relationships.push({ id })
       }
       return { ...pushUndo(s), workspace: ws, selectedRelationshipId: id, selectedElementIds: [] }
     })
@@ -534,15 +524,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!ws) return s
     ws.model.relationships = ws.model.relationships.filter(r => r.id !== id)
     // Remove from all views
-    const removeFromViews = (views: View[]) => {
-      for (const v of views) {
-        v.relationships = v.relationships.filter(r => r.id !== id)
-      }
-    }
-    removeFromViews(ws.views.systemLandscapeViews)
-    removeFromViews(ws.views.systemContextViews)
-    removeFromViews(ws.views.containerViews)
-    removeFromViews(ws.views.componentViews)
+    forEachView(ws, (v) => {
+      v.relationships = v.relationships.filter(r => r.id !== id)
+    })
     return {
       ...pushUndo(s),
       workspace: ws,
@@ -646,13 +630,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   toggleElementInView: (viewKey, elementId) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    const allViews = [
-      ...ws.views.systemLandscapeViews,
-      ...ws.views.systemContextViews,
-      ...ws.views.containerViews,
-      ...ws.views.componentViews,
-    ]
-    const view = allViews.find(v => v.key === viewKey)
+    const view = findView(ws, viewKey)
     if (!view) return s
     const idx = view.elements.findIndex(e => e.id === elementId)
     if (idx >= 0) {
@@ -672,13 +650,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setLayoutDirection: (viewKey, direction) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    const allViews = [
-      ...ws.views.systemLandscapeViews,
-      ...ws.views.systemContextViews,
-      ...ws.views.containerViews,
-      ...ws.views.componentViews,
-    ]
-    const view = allViews.find(v => v.key === viewKey)
+    const view = findView(ws, viewKey)
     if (!view) return s
     view.autoLayout = { ...view.autoLayout, direction }
     // Reset positions and pinned flags to trigger full re-layout
@@ -716,15 +688,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!newTag.trim() || oldTag === newTag) return s
     const ws = cloneWs(s)
     if (!ws) return s
-    const renameInEl = (el: ModelElement) => { el.tags = el.tags.map(t => t === oldTag ? newTag : t) }
-    for (const p of ws.model.people) renameInEl(p)
-    for (const sys of ws.model.softwareSystems) {
-      renameInEl(sys)
-      for (const c of sys.containers) {
-        renameInEl(c)
-        for (const comp of c.components) renameInEl(comp)
-      }
-    }
+    forEachElement(ws, (el) => { el.tags = el.tags.map(t => t === oldTag ? newTag : t) })
     for (const rel of ws.model.relationships) { rel.tags = rel.tags.map(t => t === oldTag ? newTag : t) }
     const style = ws.views.configuration.styles.elements.find(es => es.tag === oldTag)
     if (style) style.tag = newTag
@@ -734,15 +698,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   removeTagGlobal: (tag) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    const removeFromEl = (el: ModelElement) => { el.tags = el.tags.filter(t => t !== tag) }
-    for (const p of ws.model.people) removeFromEl(p)
-    for (const sys of ws.model.softwareSystems) {
-      removeFromEl(sys)
-      for (const c of sys.containers) {
-        removeFromEl(c)
-        for (const comp of c.components) removeFromEl(comp)
-      }
-    }
+    forEachElement(ws, (el) => { el.tags = el.tags.filter(t => t !== tag) })
     for (const rel of ws.model.relationships) { rel.tags = rel.tags.filter(t => t !== tag) }
     ws.views.configuration.styles.elements = ws.views.configuration.styles.elements.filter(es => es.tag !== tag)
     return { ...pushUndo(s), workspace: ws }
@@ -770,37 +726,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 // ─── Selectors ───────────────────────────────────────────────────────
 
 function getFirstViewKey(workspace: Workspace): string | null {
-  const allViews = getAllViews(workspace)
-  return allViews[0]?.key ?? null
+  return allViewsOf(workspace)[0]?.key ?? null
 }
 
 export function getAllViews(workspace: Workspace): View[] {
-  return [
-    ...workspace.views.systemLandscapeViews,
-    ...workspace.views.systemContextViews,
-    ...workspace.views.containerViews,
-    ...workspace.views.componentViews,
-  ]
+  return allViewsOf(workspace)
 }
 
 export function getActiveView(workspace: Workspace, key: string): View | undefined {
-  return getAllViews(workspace).find((v) => v.key === key)
+  return findView(workspace, key)
 }
 
 export function buildElementMap(workspace: Workspace): Map<string, ModelElement> {
   const map = new Map<string, ModelElement>()
-  for (const person of workspace.model.people) {
-    map.set(person.id, person)
-  }
-  for (const system of workspace.model.softwareSystems) {
-    map.set(system.id, system)
-    for (const container of system.containers) {
-      map.set(container.id, container)
-      for (const component of container.components) {
-        map.set(component.id, component)
-      }
-    }
-  }
+  forEachElement(workspace, (el) => { map.set(el.id, el) })
   return map
 }
 
@@ -829,8 +768,7 @@ export function getRelationshipById(
 }
 
 function findChildView(workspace: Workspace, elementId: string): View | undefined {
-  const elementMap = buildElementMap(workspace)
-  const element = elementMap.get(elementId)
+  const element = findElement(workspace, elementId)
   if (!element) return undefined
 
   if (element.type === 'softwareSystem') {
