@@ -508,9 +508,9 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 4,
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   padding: '3px 8px',
-                  fontSize: 11,
+                  fontSize: 'var(--text-xs-plus)',
                   fontWeight: 500,
                   background: isBuiltIn ? 'transparent' : 'var(--color-surface-3)',
                   border: isBuiltIn ? '1px dashed var(--color-border)' : '1px solid var(--color-border)',
@@ -613,7 +613,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
         borderBottom: '1px solid var(--color-border)',
       }}>
         <Layers size={13} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-accent)', flex: 1 }}>
+        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-accent)', flex: 1 }}>
           Group
         </span>
         <button
@@ -644,7 +644,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
         <div>
           <FieldLabel>Members ({members.length})</FieldLabel>
           {members.length === 0 ? (
-            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No members yet</p>
+            <p style={{ fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No members yet</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {members.map(el => (
@@ -653,11 +653,11 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
                   alignItems: 'center',
                   gap: 6,
                   padding: '5px 8px',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-sm)',
                   background: 'var(--color-surface-2)',
                 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: TYPE_COLORS[el.type] ?? 'var(--color-accent)', flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 12, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ flex: 1, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {el.name}
                   </span>
                   <button
@@ -697,7 +697,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
               flexDirection: 'column',
               gap: 1,
               border: '1px solid var(--color-border)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               background: 'var(--color-surface-1)',
               padding: 4,
             }}>
@@ -712,7 +712,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
                     gap: 6,
                     padding: '5px 8px',
                     borderRadius: 5,
-                    fontSize: 12,
+                    fontSize: 'var(--text-sm)',
                     color: 'var(--color-text-secondary)',
                     background: 'transparent',
                     border: 'none',

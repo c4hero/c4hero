@@ -101,7 +101,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
           style={{
             padding: '10px 20px 14px',
             borderTop: '1px solid var(--color-border)',
-            fontSize: 11,
+            fontSize: 'var(--text-xs-plus)',
             color: 'var(--color-text-muted)',
           }}
         >
@@ -125,10 +125,10 @@ function SettingRow({
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+        <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
           {label}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
+        <div style={{ fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)', marginTop: 2 }}>
           {description}
         </div>
       </div>
@@ -150,7 +150,7 @@ function SegmentedControl({
     <div
       style={{
         display: 'flex',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-md)',
         border: '1px solid var(--color-border)',
         overflow: 'hidden',
         flexShrink: 0,
@@ -162,7 +162,7 @@ function SegmentedControl({
           onClick={() => onChange(opt.value)}
           style={{
             padding: '5px 10px',
-            fontSize: 11,
+            fontSize: 'var(--text-xs-plus)',
             fontWeight: 600,
             color: value === opt.value ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
             background: value === opt.value ? 'var(--color-accent)' : 'var(--color-surface-2)',

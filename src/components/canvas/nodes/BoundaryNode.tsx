@@ -12,7 +12,7 @@ function BoundaryNode({ data }: NodeProps & { data: BoundaryNodeData }) {
       style={{
         width: '100%',
         height: '100%',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid rgba(255,255,255,0.08)',
         background: 'rgba(255,255,255,0.015)',
         pointerEvents: 'none',
@@ -22,7 +22,7 @@ function BoundaryNode({ data }: NodeProps & { data: BoundaryNodeData }) {
       {/* Header label — top-left */}
       <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 1 }}>
         <span style={{
-          fontSize: 11,
+          fontSize: 'var(--text-xs-plus)',
           fontWeight: 700,
           color: 'rgba(255,255,255,0.35)',
           letterSpacing: '0.02em',
@@ -31,7 +31,7 @@ function BoundaryNode({ data }: NodeProps & { data: BoundaryNodeData }) {
           {data.name}
         </span>
         <span style={{
-          fontSize: 9,
+          fontSize: 'var(--text-xxs)',
           fontWeight: 500,
           color: 'rgba(255,255,255,0.18)',
           textTransform: 'uppercase',

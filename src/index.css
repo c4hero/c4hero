@@ -73,6 +73,7 @@
   /* Font size scale */
   --text-xxs: 9px;
   --text-xs: 10px;
+  --text-xs-plus: 11px;
   --text-sm: 12px;
   --text-base: 13px;
   --text-lg: 14px;

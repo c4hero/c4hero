@@ -254,11 +254,11 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
         {/* Element list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px 8px' }}>
           {notInView.length === 0 ? (
-            <div style={{ padding: '12px 6px', fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+            <div style={{ padding: '12px 6px', fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)', textAlign: 'center' }}>
               All elements are already in this view
             </div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: '12px 6px', fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+            <div style={{ padding: '12px 6px', fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)', textAlign: 'center' }}>
               No matching elements
             </div>
           ) : (
@@ -366,7 +366,7 @@ function CreateChip({
         background: 'var(--color-surface-2)',
         cursor: 'pointer',
         transition: 'background 0.12s, border-color 0.12s',
-        fontSize: 11,
+        fontSize: 'var(--text-xs-plus)',
         fontWeight: 600,
         color: 'var(--color-text-secondary)',
       } as React.CSSProperties}
