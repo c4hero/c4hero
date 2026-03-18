@@ -204,12 +204,25 @@ export function saveToLocalStorage(workspace: Workspace) {
   }
 }
 
+/** Basic shape check to validate parsed JSON looks like a Workspace */
+function isWorkspaceShape(obj: unknown): obj is Workspace {
+  if (!obj || typeof obj !== 'object') return false
+  const w = obj as Record<string, unknown>
+  if (!w.model || typeof w.model !== 'object') return false
+  if (!w.views || typeof w.views !== 'object') return false
+  const m = w.model as Record<string, unknown>
+  if (!Array.isArray(m.people) || !Array.isArray(m.softwareSystems)) return false
+  return true
+}
+
 /** Load workspace from localStorage crash recovery */
 export function loadFromLocalStorage(): Workspace | null {
   try {
     const data = localStorage.getItem('c4hero_crash_recovery')
     if (!data) return null
-    return JSON.parse(data) as Workspace
+    const parsed = JSON.parse(data)
+    if (!isWorkspaceShape(parsed)) return null
+    return parsed
   } catch {
     return null
   }

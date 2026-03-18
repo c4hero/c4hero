@@ -146,6 +146,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={onClose} />
       <div
+        className="glass-flyout"
         style={{
           position: 'absolute',
           left: 56,
@@ -155,26 +156,14 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
           maxHeight: 420,
           display: 'flex',
           flexDirection: 'column',
-          background: 'rgba(13,17,23,0.92)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 12,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
           overflow: 'hidden',
         }}
       >
         {/* Create new section */}
         <div style={{ padding: '10px 12px 8px' }}>
           <div
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              color: 'var(--color-text-muted)',
-              marginBottom: 8,
-            }}
+            className="flyout-label"
+            style={{ marginBottom: 8 }}
           >
             Create new
           </div>
@@ -193,14 +182,8 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
           {creatableTypes.canCreateContainer !== null && (
             <div style={{ marginTop: 8 }}>
               <div
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  color: 'var(--color-text-muted)',
-                  marginBottom: 5,
-                }}
+                className="flyout-label"
+                style={{ marginBottom: 5 }}
               >
                 Common containers
               </div>
@@ -232,14 +215,8 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
         {/* Add existing section */}
         <div style={{ padding: '8px 12px 6px' }}>
           <div
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              color: 'var(--color-text-muted)',
-              marginBottom: 6,
-            }}
+            className="flyout-label"
+            style={{ marginBottom: 6 }}
           >
             Add existing to view
           </div>
@@ -249,7 +226,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
               alignItems: 'center',
               gap: 6,
               padding: '5px 8px',
-              borderRadius: 7,
+              borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--color-border)',
               background: 'var(--color-surface-2)',
               marginBottom: 4,
@@ -266,7 +243,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
                 background: 'transparent',
                 border: 'none',
                 outline: 'none',
-                fontSize: 12,
+                fontSize: 'var(--text-sm)',
                 color: 'var(--color-text-primary)',
               }}
               autoFocus
@@ -288,12 +265,9 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
             Object.entries(grouped).map(([type, elements]) => (
               <div key={type}>
                 <div
+                  className="flyout-label"
                   style={{
                     padding: '4px 8px 2px',
-                    fontSize: 9,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
                     color: TYPE_COLORS[type] ?? 'var(--color-text-muted)',
                   }}
                 >

@@ -10,7 +10,11 @@ export function getAIConfig(): AIConfig | null {
   try {
     const data = sessionStorage.getItem('c4hero_ai_config')
     if (!data) return null
-    return JSON.parse(data)
+    const parsed = JSON.parse(data)
+    if (!parsed || typeof parsed !== 'object') return null
+    if (parsed.provider !== 'anthropic' && parsed.provider !== 'openai') return null
+    if (typeof parsed.apiKey !== 'string' || !parsed.apiKey) return null
+    return parsed as AIConfig
   } catch {
     return null
   }
