@@ -705,6 +705,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
                 <button
                   key={el.id}
                   onClick={() => addMember(el.id)}
+                  className="hover-surface-2"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -717,9 +718,8 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
                     border: 'none',
                     cursor: 'pointer',
                     textAlign: 'left',
+                    transition: 'background 0.12s',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: TYPE_COLORS[el.type] ?? 'var(--color-accent)', flexShrink: 0 }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{el.name}</span>

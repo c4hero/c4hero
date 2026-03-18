@@ -315,7 +315,9 @@ function SubtypeChip({
   return (
     <button
       onClick={onClick}
+      className="hover-chip"
       style={{
+        '--hover-border-color': 'var(--color-type-container)',
         display: 'flex',
         alignItems: 'center',
         gap: 4,
@@ -324,21 +326,11 @@ function SubtypeChip({
         border: '1px solid var(--color-border)',
         background: 'var(--color-surface-2)',
         cursor: 'pointer',
-        transition: 'background 0.12s, border-color 0.12s',
+        transition: 'background 0.12s, border-color 0.12s, color 0.12s',
         fontSize: 'var(--text-xs)',
         fontWeight: 500,
         color: 'var(--color-text-muted)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--color-surface-3)'
-        e.currentTarget.style.borderColor = 'var(--color-type-container)'
-        e.currentTarget.style.color = 'var(--color-text-primary)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'var(--color-surface-2)'
-        e.currentTarget.style.borderColor = 'var(--color-border)'
-        e.currentTarget.style.color = 'var(--color-text-muted)'
-      }}
+      } as React.CSSProperties}
     >
       <span style={{ color: 'var(--color-type-container)', display: 'flex' }}>{icon}</span>
       {label}
@@ -362,7 +354,9 @@ function CreateChip({
   return (
     <button
       onClick={onClick}
+      className="hover-chip"
       style={{
+        '--hover-border-color': color,
         display: 'flex',
         alignItems: 'center',
         gap: 6,
@@ -375,15 +369,7 @@ function CreateChip({
         fontSize: 11,
         fontWeight: 600,
         color: 'var(--color-text-secondary)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--color-surface-3)'
-        e.currentTarget.style.borderColor = color
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'var(--color-surface-2)'
-        e.currentTarget.style.borderColor = 'var(--color-border)'
-      }}
+      } as React.CSSProperties}
     >
       <span style={{ color, display: 'flex' }}>{icon}</span>
       {label}

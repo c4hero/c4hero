@@ -286,6 +286,7 @@ body {
 
 .hover-surface-inactive:not([data-active="true"]):hover {
   background: var(--color-surface-3);
+  color: var(--color-text-primary);
 }
 
 .hover-surface-2-inactive:not([data-active="true"]):hover {
@@ -296,6 +297,18 @@ body {
 .hover-danger-inactive:not([data-active="true"]):hover {
   background: rgba(239, 68, 68, 0.12);
   color: var(--color-error);
+}
+
+/* Show child actions on parent row hover */
+.group:hover .view-row-actions {
+  opacity: 1 !important;
+}
+
+/* Chip hover — lifts bg to surface-3, uses custom property for border accent */
+.hover-chip:hover {
+  background: var(--color-surface-3);
+  border-color: var(--hover-border-color, var(--color-border-hover));
+  color: var(--color-text-primary);
 }
 
 /* ─── React Flow dark theme ────────────────────────────────── */

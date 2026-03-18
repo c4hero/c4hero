@@ -49,6 +49,8 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
         disabled={isLoading}
         title={label}
         aria-label={label}
+        className="hover-surface-inactive"
+        data-active={isLoading || isDone ? 'true' : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -62,18 +64,6 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
           cursor: isLoading ? 'wait' : 'pointer',
           flexShrink: 0,
           transition: 'background 0.15s, color 0.15s',
-        }}
-        onMouseEnter={(e) => {
-          if (!isLoading && !isDone) {
-            e.currentTarget.style.background = 'var(--color-surface-3)'
-            e.currentTarget.style.color = 'var(--color-text-primary)'
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isDone) {
-            e.currentTarget.style.background = 'var(--color-surface-2)'
-            e.currentTarget.style.color = 'var(--color-text-secondary)'
-          }
         }}
       >
         {isDone ? <Check size={14} /> : <Icon size={14} />}

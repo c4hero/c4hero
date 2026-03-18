@@ -93,6 +93,7 @@ export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: View
                       color: 'var(--color-text-muted)',
                       background: 'transparent',
                       cursor: 'pointer',
+                      border: 'none',
                     }}
                   >
                     {crumb.label}
@@ -220,7 +221,7 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                     ) : (
                       <button
                         onClick={() => { setActiveView(v.key); onClose(); setRenamingViewKey(null) }}
-                        style={{ flex: 1, textAlign: 'left', padding: '10px 0', fontSize: 'var(--text-base)', fontWeight: isActive ? 600 : 400, color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', background: 'transparent', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+                        style={{ flex: 1, textAlign: 'left', padding: '10px 0', fontSize: 'var(--text-base)', fontWeight: isActive ? 600 : 400, color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', background: 'transparent', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, border: 'none' }}
                       >
                         {v.title ?? v.key}
                       </button>
@@ -229,14 +230,6 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                     {/* Actions */}
                     <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginLeft: 6, opacity: 0, transition: 'opacity 0.1s' }}
                       className="view-row-actions"
-                      ref={el => {
-                        // show on row hover
-                        const row = el?.closest('[class~="group"]') as HTMLElement | null
-                        if (row) {
-                          row.onmouseenter = () => { if (el) el.style.opacity = '1' }
-                          row.onmouseleave = () => { if (el) el.style.opacity = '0' }
-                        }
-                      }}
                     >
                       {isRenaming ? (
                         <button onClick={e => { e.stopPropagation(); renameView(v.key, renameValue.trim() || v.title || v.key); setRenamingViewKey(null) }}
