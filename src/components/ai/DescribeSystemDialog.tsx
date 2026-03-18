@@ -3,6 +3,7 @@ import { useWorkspaceStore } from '@/store/workspace'
 import { generateWorkspaceFromDescription, getAIConfig } from '@/lib/ai'
 import { parseDSL } from '@/lib/dsl'
 import { X, Sparkles, Loader2 } from 'lucide-react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 export default function DescribeSystemDialog({ onClose }: { onClose: () => void }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
@@ -42,10 +43,16 @@ export default function DescribeSystemDialog({ onClose }: { onClose: () => void 
     }
   }
 
+  const trapRef = useFocusTrap<HTMLDivElement>()
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div className="panel-backdrop absolute inset-0" onClick={onClose} />
       <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Describe your system"
         className="relative w-full max-w-lg rounded-xl border p-6 shadow-2xl"
         style={{
           background: 'var(--color-surface-1)',
@@ -81,7 +88,7 @@ export default function DescribeSystemDialog({ onClose }: { onClose: () => void 
         />
 
         {error && (
-          <div className="mt-3 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: '#ef4444', color: '#ef4444', background: 'rgba(239,68,68,0.08)' }}>
+          <div className="mt-3 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)', background: 'rgba(239,68,68,0.08)' }}>
             {error}
           </div>
         )}

@@ -4,6 +4,7 @@
 import type {
     Workspace,
     Model,
+    Group,
     Person,
     SoftwareSystem,
     Container,
@@ -35,15 +36,11 @@ export interface ParseResult {
 
 // ─── ID Generation ───────────────────────────────────────────────────
 
-let idCounter = 0
-
-function resetIdCounter(): void {
-    idCounter = 0
-}
+let globalIdCounter = 0
 
 function nextId(): string {
-    idCounter++
-    return String(idCounter)
+    globalIdCounter++
+    return `p${globalIdCounter}`
 }
 
 // ─── Parser Implementation ──────────────────────────────────────────
@@ -197,7 +194,6 @@ class ContextAwareParser {
     // ─── Main Parse ──────────────────────────────────────────────────
 
     parse(): ParseResult {
-        resetIdCounter()
         const workspace = this.createEmptyWorkspace()
 
         this.skipNewlines()
@@ -292,7 +288,7 @@ class ContextAwareParser {
 
     // ─── Model Parsing ──────────────────────────────────────────────
 
-    private parseModelBody(model: Model): void {
+    private parseModelBody(model: Model, groupRefIds?: string[]): void {
         while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
             this.skipNewlines()
             if (this.check('RBRACE') || this.peekType() === 'EOF') break
@@ -326,12 +322,24 @@ class ContextAwareParser {
 
                 if (kw === 'group') {
                     this.advance()
-                    this.readOptionalString()
+                    const groupName = this.readOptionalString() ?? `Group ${model.groups.length + 1}`
                     this.skipNewlines()
                     if (this.match('LBRACE')) {
-                        this.parseModelBody(model)
+                        const memberRefs: string[] = []
+                        const beforePeople = model.people.length
+                        const beforeSystems = model.softwareSystems.length
+                        this.parseModelBody(model, memberRefs)
                         this.skipNewlines()
                         this.expect('RBRACE')
+                        const definedIds = [
+                            ...model.people.slice(beforePeople).map(p => p.id),
+                            ...model.softwareSystems.slice(beforeSystems).map(s => s.id),
+                        ]
+                        const allIds = [...new Set([...definedIds, ...memberRefs])]
+                        if (allIds.length > 0) {
+                            const group: Group = { id: nextId(), name: groupName, elementIds: allIds }
+                            model.groups.push(group)
+                        }
                     }
                     continue
                 }
@@ -403,6 +411,11 @@ class ContextAwareParser {
                     continue
                 }
 
+                // Standalone identifier — if collecting group refs, resolve it
+                if (groupRefIds !== undefined) {
+                    const resolvedId = this.resolveRef(token.value)
+                    if (resolvedId) groupRefIds.push(resolvedId)
+                }
                 this.pos = saved
                 this.advance()
                 this.skipToNextLine()

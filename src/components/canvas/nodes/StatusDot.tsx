@@ -1,13 +1,14 @@
+import { memo } from 'react'
 import type { ElementStatus } from '@/types/model'
 
 const STATUS_COLORS: Record<ElementStatus, string> = {
-  Live: '#22c55e',
-  Planned: '#3b82f6',
-  Deprecated: '#f59e0b',
-  Removed: '#ef4444',
+  Live: 'var(--color-status-live)',
+  Planned: 'var(--color-status-planned)',
+  Deprecated: 'var(--color-status-deprecated)',
+  Removed: 'var(--color-status-removed)',
 }
 
-export default function StatusDot({ status }: { status?: ElementStatus }) {
+export default memo(function StatusDot({ status }: { status?: ElementStatus }) {
   if (!status) return null
   return (
     <span
@@ -17,4 +18,4 @@ export default function StatusDot({ status }: { status?: ElementStatus }) {
       data-testid="status-dot"
     />
   )
-}
+})

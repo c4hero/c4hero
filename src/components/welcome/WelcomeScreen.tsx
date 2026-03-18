@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import {
   createBigBankSample,
@@ -7,7 +7,7 @@ import {
   createMonolithTemplate,
   createEventDrivenTemplate,
 } from '@/lib/templates'
-import { openDSLFile, getRecentFiles } from '@/lib/fileIO'
+import { openDSLFile, getRecentFiles, hasFileSystemAccess } from '@/lib/fileIO'
 import { parseDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
 import { getAIConfig } from '@/lib/ai'
@@ -18,9 +18,11 @@ import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
 
 export default function WelcomeScreen() {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
+  useEffect(() => { document.title = 'c4hero' }, [])
   const [showAISettings, setShowAISettings] = useState(false)
   const [showDescribe, setShowDescribe] = useState(false)
   const jsonInputRef = useRef<HTMLInputElement>(null)
+  const dslInputRef = useRef<HTMLInputElement>(null)
 
   function handleImportJSON(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -39,7 +41,28 @@ export default function WelcomeScreen() {
     e.target.value = ''
   }
 
+  async function handleDSLInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const content = await file.text()
+    const { workspace, errors } = parseDSL(content)
+    if (errors.length > 0) console.warn('DSL parse warnings:', errors)
+    if (workspace) {
+      if (!workspace.name) workspace.name = file.name.replace(/\.dsl$/, '')
+      loadWorkspace(workspace)
+    } else {
+      alert('Failed to parse DSL file. Check console for errors.')
+    }
+  }
+
   async function handleOpenFile() {
+    // Android Chrome blocks programmatic input.click() from async context —
+    // use a DOM-resident input ref so the click happens synchronously in the gesture.
+    if (!hasFileSystemAccess()) {
+      dslInputRef.current?.click()
+      return
+    }
     const file = await openDSLFile()
     if (!file) return
     const { workspace, errors } = parseDSL(file.content)
@@ -68,13 +91,15 @@ export default function WelcomeScreen() {
 
   return (
     <div
-      className="flex h-full w-full items-center justify-center overflow-y-auto px-5 py-12"
-      style={{ background: 'var(--color-bg-primary)' }}
+      className="flex h-full w-full items-start justify-center overflow-y-auto px-5"
+      style={{ background: 'var(--color-bg-primary)', paddingTop: 'max(3rem, calc(env(safe-area-inset-top, 0px) + 1.5rem))', paddingBottom: 'max(3rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))' }}
     >
-      <div className="flex w-full max-w-md flex-col items-center gap-10 sm:max-w-lg">
+      <div className="flex w-full max-w-md flex-col items-center gap-10 sm:max-w-lg my-auto">
         {/* Logo + tagline */}
         <div className="flex flex-col items-center gap-4">
-          <img src="https://c4hero.com/c4-logo.svg" alt="c4hero" className="h-10 sm:h-12" />
+          <h1 className="flex flex-col items-center gap-2">
+            <img src="https://c4hero.com/c4-logo.svg" alt="c4hero — visual architecture modelling tool" className="h-10 sm:h-12" />
+          </h1>
           <p className="text-center text-sm leading-relaxed sm:text-base" style={{ color: 'var(--color-text-muted)' }}>
             Visual architecture modelling with Structurizr DSL
           </p>
@@ -87,7 +112,14 @@ export default function WelcomeScreen() {
           <ActionCard icon={<Play size={22} />} label="Explore sample" onClick={() => loadWorkspace(createBigBankSample())} />
         </div>
 
-        {/* Import JSON */}
+        {/* Hidden file inputs — must live in DOM for Android Chrome gesture handling */}
+        <input
+          ref={dslInputRef}
+          type="file"
+          accept=".dsl,.txt"
+          className="hidden"
+          onChange={handleDSLInputChange}
+        />
         <input
           ref={jsonInputRef}
           type="file"
@@ -109,12 +141,12 @@ export default function WelcomeScreen() {
 
         {/* Templates */}
         <div className="w-full">
-          <h3
+          <h2
             className="mb-3 text-xs font-semibold uppercase tracking-wide"
             style={{ color: 'var(--color-text-muted)' }}
           >
             Templates
-          </h3>
+          </h2>
           <div className="flex flex-col gap-1">
             <TemplateItem
               icon={<Server size={16} />}

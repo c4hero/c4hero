@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getAIConfig, saveAIConfig, clearAIConfig, type AIProvider } from '@/lib/ai'
 import { X, Key, Sparkles } from 'lucide-react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
   const [provider, setProvider] = useState<AIProvider>('anthropic')
@@ -29,10 +30,16 @@ export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
     setSaved(false)
   }
 
+  const trapRef = useFocusTrap<HTMLDivElement>()
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div className="panel-backdrop absolute inset-0" onClick={onClose} />
       <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="AI Settings"
         className="relative w-full max-w-md rounded-xl border p-6 shadow-2xl"
         style={{
           background: 'var(--color-surface-1)',
@@ -111,7 +118,7 @@ export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
             disabled={!apiKey.trim()}
             className="rounded-lg px-4 py-2 text-sm font-medium transition-all disabled:opacity-30"
             style={{
-              background: saved ? '#22c55e' : 'var(--color-accent)',
+              background: saved ? 'var(--color-success)' : 'var(--color-accent)',
               color: 'var(--color-bg-primary)',
             }}
           >

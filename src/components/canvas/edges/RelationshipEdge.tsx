@@ -54,7 +54,7 @@ function RelationshipEdge({
   }
 
   // Apply style from RelationshipStyle if available
-  const strokeColor = selected ? 'var(--color-accent)' : (relStyle?.color ?? '#3b4f63')
+  const strokeColor = selected ? 'var(--color-accent)' : (relStyle?.color ?? 'var(--color-edge)')
   const strokeWidth = selected ? 2 : (relStyle?.thickness ?? 1.5)
   const isDashed = isAsync || (relStyle?.dashed ?? false)
 
@@ -121,7 +121,7 @@ function RelationshipEdge({
             style={{
               position: 'absolute',
               transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 20}px)`,
-              background: 'rgba(15, 25, 35, 0.95)',
+              background: 'rgba(13, 17, 23, 0.95)',
               border: '1px solid var(--color-border)',
               borderRadius: 8,
               padding: '6px 10px',

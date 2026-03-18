@@ -1,5 +1,5 @@
 import { useWorkspaceStore, canDrillInto, getCreatableTypes } from '@/store/workspace'
-import { Trash2, ZoomIn, Copy, UserRound, Globe, Box, Puzzle } from 'lucide-react'
+import { Trash2, ZoomIn, UserRound, Globe, Box, Puzzle } from 'lucide-react'
 
 interface ContextMenuProps {
   x: number
@@ -40,7 +40,6 @@ export default function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps)
             {canDrill && (
               <MenuItem icon={<ZoomIn size={14} />} label="Drill into" onClick={() => { drillInto(nodeId); onClose() }} />
             )}
-            <MenuItem icon={<Copy size={14} />} label="Duplicate" onClick={() => { /* TODO */ onClose() }} />
             <div className="my-1 border-t" style={{ borderColor: 'var(--color-border)' }} />
             <MenuItem icon={<Trash2 size={14} />} label="Delete" danger onClick={() => { deleteElement(nodeId); onClose() }} />
           </>
@@ -70,7 +69,7 @@ function MenuItem({ icon, label, danger, onClick }: { icon: React.ReactNode; lab
     <button
       onClick={onClick}
       className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--color-surface-3)]"
-      style={{ color: danger ? '#ef4444' : 'var(--color-text-primary)' }}
+      style={{ color: danger ? 'var(--color-error)' : 'var(--color-text-primary)' }}
     >
       {icon}
       {label}

@@ -4,6 +4,7 @@ import SystemNode from './SystemNode'
 import ContainerNode from './ContainerNode'
 import ComponentNode from './ComponentNode'
 import GroupNode from './GroupNode'
+import BoundaryNode from './BoundaryNode'
 
 export const nodeTypes: NodeTypes = {
   person: PersonNode,
@@ -11,4 +12,5 @@ export const nodeTypes: NodeTypes = {
   container: ContainerNode,
   component: ComponentNode,
   group: GroupNode,
+  boundary: BoundaryNode,
 }

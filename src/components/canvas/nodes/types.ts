@@ -6,4 +6,5 @@ export interface C4NodeData {
   childCount?: number
   canDrill?: boolean
   onDrillIn?: (elementId: string) => void
+  viewCount?: number
 }

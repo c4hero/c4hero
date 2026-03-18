@@ -88,20 +88,29 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
 export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   if (sidecar.version !== 1) return
 
-  // Elements
+  // Elements — only apply known sidecar properties
   if (sidecar.elements) {
+    const ALLOWED_ELEMENT_KEYS: (keyof SidecarElement)[] = ['status', 'owner']
+    const sanitize = (data: SidecarElement): SidecarElement => {
+      const clean: SidecarElement = {}
+      for (const key of ALLOWED_ELEMENT_KEYS) {
+        if (key in data) (clean as Record<string, unknown>)[key] = data[key]
+      }
+      return clean
+    }
     const applyToElement = (id: string, data: SidecarElement) => {
+      const safe = sanitize(data)
       // People
       for (const p of workspace.model.people) {
-        if (p.id === id) { Object.assign(p, data); return }
+        if (p.id === id) { Object.assign(p, safe); return }
       }
       // Systems, containers, components
       for (const sys of workspace.model.softwareSystems) {
-        if (sys.id === id) { Object.assign(sys, data); return }
+        if (sys.id === id) { Object.assign(sys, safe); return }
         for (const c of sys.containers) {
-          if (c.id === id) { Object.assign(c, data); return }
+          if (c.id === id) { Object.assign(c, safe); return }
           for (const comp of c.components) {
-            if (comp.id === id) { Object.assign(comp, data); return }
+            if (comp.id === id) { Object.assign(comp, safe); return }
           }
         }
       }

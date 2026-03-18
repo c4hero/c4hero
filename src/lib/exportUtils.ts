@@ -34,62 +34,87 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /** Export the canvas viewport as PNG */
-export async function exportCanvasAsPNG(): Promise<Blob | null> {
-  const viewport = document.querySelector('.react-flow__viewport') as HTMLElement | null
-  if (!viewport) return null
+export type ExportTheme = 'dark' | 'light'
+
+/** Light theme background / override vars */
+const LIGHT_STYLE: Record<string, string> = {
+  '--color-bg-primary': '#f8fafc',
+  '--color-surface-1': '#ffffff',
+  '--color-surface-2': '#f1f5f9',
+  '--color-surface-3': '#e2e8f0',
+  '--color-border': '#cbd5e1',
+  '--color-text-primary': '#0f172a',
+  '--color-text-secondary': '#334155',
+  '--color-text-muted': '#64748b',
+}
+
+export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Blob | null> {
+  const renderer = document.querySelector('.react-flow__renderer') as HTMLElement | null
+  if (!renderer) return null
 
   try {
-    const cloned = viewport.cloneNode(true) as HTMLElement
-    // Inline all computed styles
-    inlineStyles(viewport, cloned)
-
-    const rect = viewport.getBoundingClientRect()
-    const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
-      <foreignObject width="100%" height="100%">
-        <div xmlns="http://www.w3.org/1999/xhtml">${new XMLSerializer().serializeToString(cloned)}</div>
-      </foreignObject>
-    </svg>`
-
-    const canvas = document.createElement('canvas')
-    const scale = 2
-    canvas.width = rect.width * scale
-    canvas.height = rect.height * scale
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-
-    const img = new Image()
-    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-
-    return new Promise((resolve) => {
-      img.onload = () => {
-        ctx.scale(scale, scale)
-        ctx.drawImage(img, 0, 0)
-        URL.revokeObjectURL(url)
-        canvas.toBlob(b => resolve(b), 'image/png')
-      }
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(null) }
-      img.src = url
+    const { toPng } = await import('html-to-image')
+    const bg = theme === 'light' ? '#f8fafc' : '#0a0f14'
+    const dataUrl = await toPng(renderer, {
+      pixelRatio: 2,
+      backgroundColor: bg,
+      style: {
+        borderRadius: '0',
+        ...(theme === 'light' ? LIGHT_STYLE : {}),
+      },
     })
+    const res = await fetch(dataUrl)
+    return await res.blob()
   } catch {
     return null
   }
 }
 
 /** Export the canvas viewport as SVG string */
-export function exportCanvasAsSVG(): string | null {
+export function exportCanvasAsSVG(theme: ExportTheme = 'dark'): string | null {
   const viewport = document.querySelector('.react-flow__viewport') as HTMLElement | null
   if (!viewport) return null
 
   const cloned = viewport.cloneNode(true) as HTMLElement
   inlineStyles(viewport, cloned)
-  const rect = viewport.getBoundingClientRect()
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
+  // For light theme, override CSS custom property values on the cloned root
+  if (theme === 'light') {
+    Object.entries(LIGHT_STYLE).forEach(([k, v]) => {
+      ;(cloned as HTMLElement).style.setProperty(k, v)
+    })
+  }
+
+  const rect = viewport.getBoundingClientRect()
+  const bg = theme === 'light' ? '#f8fafc' : '#0a0f14'
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}" style="background:${bg}">
   <foreignObject width="100%" height="100%">
     <div xmlns="http://www.w3.org/1999/xhtml">${new XMLSerializer().serializeToString(cloned)}</div>
   </foreignObject>
 </svg>`
+}
+
+/** Copy PNG to clipboard */
+export async function copyCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<boolean> {
+  try {
+    const blob = await exportCanvasAsPNG(theme)
+    if (!blob) return false
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Copy DSL text to clipboard */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Recursively inline computed styles onto cloned elements */

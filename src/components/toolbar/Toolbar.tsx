@@ -25,7 +25,7 @@ export default function Toolbar() {
     <div
       className={`absolute ${leftPanelOpen ? 'left-[264px]' : 'left-3'} top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-xl border p-1.5 transition-[left] duration-300 ease-out`}
       style={{
-        background: 'rgba(15, 25, 35, 0.9)',
+        background: 'rgba(13, 17, 23, 0.9)',
         backdropFilter: 'blur(12px)',
         borderColor: 'var(--color-border)',
       }}

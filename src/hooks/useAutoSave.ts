@@ -28,6 +28,10 @@ export function useAutoSave() {
         if (sidecar) {
           writeSidecarToHandle(serializeSidecar(sidecar))
         }
+
+        // Update saved marker so the status dot goes green
+        const undoLength = useWorkspaceStore.getState().undoStack.length
+        useWorkspaceStore.getState().setLastSavedUndoLength(undoLength)
       }
     }, 1000)
 

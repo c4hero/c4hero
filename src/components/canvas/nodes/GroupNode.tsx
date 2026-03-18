@@ -12,12 +12,14 @@ function GroupNode({ data, selected }: NodeProps & { data: GroupNodeData }) {
     <div
       className="rounded-xl p-4"
       style={{
-        minWidth: 320,
-        minHeight: 180,
+        width: '100%',
+        height: '100%',
+        minWidth: undefined,
+        minHeight: undefined,
         border: selected
           ? '2px dashed var(--color-accent)'
-          : '2px dashed rgba(45, 212, 191, 0.25)',
-        background: 'rgba(45, 212, 191, 0.03)',
+          : '2px dashed rgba(88, 166, 255, 0.25)',
+        background: 'rgba(88, 166, 255, 0.03)',
         transition: 'border-color 200ms ease',
       }}
     >

@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, memo } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 
 /** Inline rename: displays name as text, double-click to edit */
-export default function InlineName({ elementId, name }: { elementId: string; name: string }) {
+export default memo(function InlineName({ elementId, name }: { elementId: string; name: string }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(name)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -53,12 +53,16 @@ export default function InlineName({ elementId, name }: { elementId: string; nam
   return (
     <div
       className="c4-node-name cursor-text"
+      tabIndex={0}
       onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
-      title="Double-click to rename"
+      onKeyDown={(e) => {
+        if (e.key === 'F2' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); setEditing(true) }
+      }}
+      title="Double-click or press F2 to rename"
       role="button"
-      aria-label={`${name} - double-click to rename`}
+      aria-label={`${name} - press F2 to rename`}
     >
       {name}
     </div>
   )
-}
+})

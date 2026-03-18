@@ -1,0 +1,687 @@
+import { useMemo, useRef, useState } from 'react'
+import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/workspace'
+import type { ElementStatus, ElementStyle } from '@/types/model'
+import { Tag, Activity, X, Palette, Pencil, Plus, Check } from 'lucide-react'
+
+type Mode = 'tags' | 'status'
+
+const STATUS_OPTIONS: { value: ElementStatus; label: string; color: string }[] = [
+  { value: 'Live', label: 'Live', color: 'var(--color-status-live)' },
+  { value: 'Deprecated', label: 'Deprecated', color: 'var(--color-status-deprecated)' },
+  { value: 'Planned', label: 'Planned', color: 'var(--color-status-planned)' },
+  { value: 'Removed', label: 'Removed', color: 'var(--color-status-removed)' },
+]
+
+const DEFAULT_BUILTIN_TAGS = ['Person', 'Software System', 'Container', 'Component', 'Element', 'Relationship',
+  'Web Application', 'Service', 'Database', 'Queue', 'Mobile App', 'File System']
+
+export default function FloatingBottomStrip() {
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
+  const setActiveTagFilter = useWorkspaceStore((s) => s.setActiveTagFilter)
+  const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
+  const setActiveStatusFilter = useWorkspaceStore((s) => s.setActiveStatusFilter)
+
+
+  const [mode, setMode] = useState<Mode>('tags')
+  const [tagManagerOpen, setTagManagerOpen] = useState(false)
+
+  const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
+
+  // All custom tags across entire workspace
+  const allWorkspaceTags = useMemo(() => {
+    if (!workspace) return []
+    const tags = new Set<string>()
+    const elementMap = buildElementMap(workspace)
+    for (const el of elementMap.values()) {
+      for (const tag of el.tags) {
+        if (!DEFAULT_BUILTIN_TAGS.includes(tag)) tags.add(tag)
+      }
+    }
+    for (const s of workspace.views.configuration.styles.elements) {
+      if (!DEFAULT_BUILTIN_TAGS.includes(s.tag)) tags.add(s.tag)
+    }
+    return Array.from(tags).sort()
+  }, [workspace])
+
+  // Tags visible in current view (for filter pills)
+  const viewTags = useMemo(() => {
+    if (!view || !workspace) return []
+    const tags = new Set<string>()
+    const elementMap = buildElementMap(workspace)
+    for (const ve of view.elements) {
+      const el = elementMap.get(ve.id)
+      if (el) for (const tag of el.tags) {
+        if (!DEFAULT_BUILTIN_TAGS.includes(tag)) tags.add(tag)
+      }
+    }
+    return Array.from(tags).sort()
+  }, [workspace, view])
+
+  const viewStatuses = useMemo(() => {
+    if (!view || !workspace) return []
+    const statuses = new Set<ElementStatus>()
+    const elementMap = buildElementMap(workspace)
+    for (const ve of view.elements) {
+      const el = elementMap.get(ve.id)
+      if (el?.status) statuses.add(el.status)
+    }
+    return Array.from(statuses)
+  }, [workspace, view])
+
+  if (!workspace) return null
+
+  const elementStyles = workspace.views.configuration.styles.elements
+  const getStyleForTag = (tag: string) => elementStyles.find((s) => s.tag === tag)
+
+  return (
+    <>
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 'max(14px, calc(env(safe-area-inset-bottom, 0px) + 8px))',
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          display: 'flex',
+          justifyContent: 'center',
+          padding: '0 14px',
+          pointerEvents: 'none',
+        }}
+      >
+      <div
+        style={{
+          pointerEvents: 'auto',
+          maxWidth: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          height: 44,
+          borderRadius: 12,
+          border: '1px solid var(--color-border)',
+          background: 'rgba(13, 17, 23, 0.88)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.03)',
+          whiteSpace: 'nowrap',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          scrollbarWidth: 'none',
+        }}
+      >
+        {/* Mode tabs */}
+        <ModeTab icon={<Tag size={13} />} label="Tags" active={mode === 'tags'} onClick={() => setMode('tags')} isFirst />
+        <ModeTab icon={<Activity size={13} />} label="Status" active={mode === 'status'} onClick={() => setMode('status')} />
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 24, background: 'var(--color-border)' }} />
+
+        {/* Tags mode */}
+        {mode === 'tags' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px' }}>
+            {viewTags.length === 0 && (
+              <span style={{ padding: '0 8px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                No custom tags
+              </span>
+            )}
+            {viewTags.map((tag) => {
+              const tagStyle = getStyleForTag(tag)
+              const isActive = activeTagFilter === tag
+              return (
+                <button
+                  key={tag}
+                  onClick={() => setActiveTagFilter(isActive ? null : tag)}
+                  style={{
+                    height: 30,
+                    padding: '0 10px',
+                    borderRadius: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: isActive ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
+                    background: isActive ? (tagStyle?.background ?? 'var(--color-accent)') : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'background 0.12s, color 0.12s',
+                    border: 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                      e.currentTarget.style.color = 'var(--color-text-primary)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.color = 'var(--color-text-muted)'
+                    }
+                  }}
+                >
+                  {tagStyle?.background && !isActive && (
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: tagStyle.background, flexShrink: 0 }} />
+                  )}
+                  {tag}
+                </button>
+              )
+            })}
+
+            {/* Edit button */}
+            <button
+              onClick={() => setTagManagerOpen((o) => !o)}
+              style={{
+                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 6,
+                background: tagManagerOpen ? 'rgba(88,166,255,0.12)' : 'transparent',
+                color: tagManagerOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                cursor: 'pointer', border: 'none', transition: 'background 0.1s, color 0.1s',
+              }}
+              title="Manage tags"
+              onMouseEnter={(e) => {
+                if (!tagManagerOpen) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                  e.currentTarget.style.color = 'var(--color-text-primary)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!tagManagerOpen) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = 'var(--color-text-muted)'
+                }
+              }}
+            >
+              <Pencil size={12} />
+            </button>
+          </div>
+        )}
+
+        {/* Status mode */}
+        {mode === 'status' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px' }}>
+            {STATUS_OPTIONS.map((opt) => {
+              const isActive = activeStatusFilter === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setActiveStatusFilter(isActive ? null : opt.value)}
+                  style={{
+                    height: 30, padding: '0 10px', borderRadius: 6,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    fontSize: 11, fontWeight: 600,
+                    color: isActive ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
+                    background: isActive ? opt.color : 'transparent',
+                    cursor: 'pointer', transition: 'background 0.12s, color 0.12s', border: 'none',
+                    opacity: viewStatuses.includes(opt.value) || isActive ? 1 : 0.4,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                      e.currentTarget.style.color = 'var(--color-text-primary)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.color = 'var(--color-text-muted)'
+                    }
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      </div>
+
+      {/* Tag Manager Panel */}
+      {tagManagerOpen && (
+        <TagManagerPanel
+          tags={allWorkspaceTags}
+          getStyleForTag={getStyleForTag}
+          onClose={() => setTagManagerOpen(false)}
+        />
+      )}
+    </>
+  )
+}
+
+// ─── Tag Manager Panel ────────────────────────────────────────────────
+
+function TagManagerPanel({
+  tags,
+  getStyleForTag,
+  onClose,
+}: {
+  tags: string[]
+  getStyleForTag: (tag: string) => ElementStyle | undefined
+  onClose: () => void
+}) {
+  const renameTag = useWorkspaceStore((s) => s.renameTag)
+  const removeTagGlobal = useWorkspaceStore((s) => s.removeTagGlobal)
+  const updateElementStyle = useWorkspaceStore((s) => s.updateElementStyle)
+  const [editingStyleFor, setEditingStyleFor] = useState<string | null>(null)
+  const [newTagValue, setNewTagValue] = useState('')
+  const newTagInputRef = useRef<HTMLInputElement>(null)
+
+  function handleAddTag() {
+    const trimmed = newTagValue.trim()
+    if (!trimmed) return
+    updateElementStyle({ tag: trimmed })
+    setNewTagValue('')
+    newTagInputRef.current?.focus()
+  }
+
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={onClose} />
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 68,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 100,
+          width: 340,
+          maxHeight: 440,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: 12,
+          border: '1px solid var(--color-border)',
+          background: 'rgba(13, 17, 23, 0.96)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
+          overflow: 'hidden',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 14px 10px',
+          borderBottom: '1px solid var(--color-border)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+            Manage Tags
+          </div>
+          <button onClick={onClose} className="btn-icon" style={{ minWidth: 24, minHeight: 24, padding: 4 }}>
+            <X size={12} />
+          </button>
+        </div>
+
+        {/* Tag list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px' }}>
+          {tags.length === 0 && (
+            <div style={{ padding: '16px 8px', fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+              No custom tags yet
+            </div>
+          )}
+          {tags.map((tag) => (
+            <TagRow
+              key={tag}
+              tag={tag}
+              style={getStyleForTag(tag)}
+              editingStyle={editingStyleFor === tag}
+              onEditStyle={() => setEditingStyleFor(editingStyleFor === tag ? null : tag)}
+              onCloseStyle={() => setEditingStyleFor(null)}
+              onRename={(newName) => { renameTag(tag, newName) }}
+              onDelete={() => removeTagGlobal(tag)}
+            />
+          ))}
+        </div>
+
+        {/* Add tag */}
+        <div style={{
+          borderTop: '1px solid var(--color-border)',
+          padding: '8px 10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}>
+          <input
+            ref={newTagInputRef}
+            type="text"
+            value={newTagValue}
+            onChange={(e) => setNewTagValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); handleAddTag() }
+              if (e.key === 'Escape') setNewTagValue('')
+            }}
+            placeholder="New tag name..."
+            style={{
+              flex: 1, height: 30, padding: '0 10px',
+              borderRadius: 7, border: '1px solid var(--color-border)',
+              background: 'var(--color-surface-2)', color: 'var(--color-text-primary)',
+              fontSize: 11, outline: 'none',
+            }}
+          />
+          <button
+            onClick={handleAddTag}
+            disabled={!newTagValue.trim()}
+            style={{
+              height: 30, padding: '0 12px', borderRadius: 7,
+              border: '1px solid var(--color-border)',
+              background: newTagValue.trim() ? 'var(--color-accent)' : 'var(--color-surface-2)',
+              color: newTagValue.trim() ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
+              fontSize: 11, fontWeight: 600, cursor: newTagValue.trim() ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', gap: 4, transition: 'background 0.12s',
+            }}
+          >
+            <Plus size={11} />
+            Add
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Tag Row ──────────────────────────────────────────────────────────
+
+function TagRow({
+  tag, style, editingStyle,
+  onEditStyle, onCloseStyle, onRename, onDelete,
+}: {
+  tag: string
+  style: ElementStyle | undefined
+  editingStyle: boolean
+  onEditStyle: () => void
+  onCloseStyle: () => void
+  onRename: (newName: string) => void
+  onDelete: () => void
+}) {
+  const [draft, setDraft] = useState(tag)
+  const [focused, setFocused] = useState(false)
+
+  // Sync if tag name changes externally (after rename)
+  if (!focused && draft !== tag) setDraft(tag)
+
+  function commitRename() {
+    setFocused(false)
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== tag) onRename(trimmed)
+    else setDraft(tag)
+  }
+
+  return (
+    <>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '3px 4px', borderRadius: 7,
+        transition: 'background 0.1s',
+      }}>
+        {/* Color swatch */}
+        <div style={{
+          width: 12, height: 12, borderRadius: 3, flexShrink: 0,
+          background: style?.background ?? 'var(--color-border)',
+          border: '1px solid rgba(255,255,255,0.1)',
+        }} />
+
+        {/* Rename input */}
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur() }
+            if (e.key === 'Escape') { setDraft(tag); (e.target as HTMLElement).blur() }
+          }}
+          style={{
+            flex: 1, height: 26, padding: '0 7px',
+            borderRadius: 5,
+            border: focused ? '1px solid var(--color-accent)' : '1px solid transparent',
+            background: focused ? 'var(--color-surface-3)' : 'transparent',
+            color: 'var(--color-text-primary)',
+            fontSize: 12, fontWeight: 500, outline: 'none',
+            transition: 'border-color 0.12s, background 0.12s',
+          }}
+        />
+
+        {/* Confirm rename (when focused and changed) */}
+        {focused && draft.trim() !== tag && (
+          <button
+            onMouseDown={(e) => { e.preventDefault(); commitRename() }}
+            style={{
+              width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 5, border: 'none', background: 'rgba(88,166,255,0.15)', color: 'var(--color-accent)',
+              cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            <Check size={11} />
+          </button>
+        )}
+
+        {/* Style button */}
+        <button
+          onClick={onEditStyle}
+          style={{
+            width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 5, border: 'none',
+            background: editingStyle ? 'rgba(88,166,255,0.12)' : 'transparent',
+            color: editingStyle ? 'var(--color-accent)' : 'var(--color-text-muted)',
+            cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s',
+          }}
+          title="Edit style"
+          onMouseEnter={(e) => { if (!editingStyle) e.currentTarget.style.background = 'var(--color-surface-3)' }}
+          onMouseLeave={(e) => { if (!editingStyle) e.currentTarget.style.background = 'transparent' }}
+        >
+          <Palette size={11} />
+        </button>
+
+        {/* Delete button */}
+        <button
+          onClick={onDelete}
+          style={{
+            width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 5, border: 'none', background: 'transparent',
+            color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s',
+          }}
+          title="Remove tag globally"
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; e.currentTarget.style.color = 'var(--color-error)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
+        >
+          <X size={11} />
+        </button>
+      </div>
+
+      {/* Inline style editor */}
+      {editingStyle && (
+        <TagStyleEditor
+          tag={tag}
+          style={style}
+          onClose={onCloseStyle}
+        />
+      )}
+    </>
+  )
+}
+
+// ─── Mode Tab ─────────────────────────────────────────────────────────
+
+function ModeTab({ icon, label, active, onClick, isFirst }: {
+  icon: React.ReactNode; label: string; active: boolean; onClick: () => void; isFirst?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        height: '100%', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 5,
+        fontSize: 11, fontWeight: 600,
+        color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+        background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
+        borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
+        cursor: 'pointer', border: 'none', transition: 'color 0.12s, background 0.12s',
+        borderRadius: isFirst ? '11px 0 0 11px' : 0,
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+// ─── Tag Style Editor (inline in manager) ────────────────────────────
+
+const STRUCTURIZR_SHAPES = [
+  'Box', 'RoundedBox', 'Circle', 'Ellipse', 'Hexagon',
+  'Cylinder', 'Pipe', 'Person', 'Robot', 'Folder',
+  'WebBrowser', 'MobileDevicePortrait', 'MobileDeviceLandscape', 'Component',
+]
+
+const PRESET_COLORS = [
+  '#2dd4bf', '#4ade80', '#38bdf8', '#a78bfa', '#f472b6',
+  '#f59e0b', '#ef4444', '#6366f1', '#14b8a6', '#8b5cf6',
+  '#22c55e', '#3b82f6', '#ec4899', '#f97316', '#64748b',
+]
+
+function TagStyleEditor({ tag, style, onClose }: {
+  tag: string; style: ElementStyle | undefined; onClose: () => void
+}) {
+  const updateElementStyle = useWorkspaceStore((s) => s.updateElementStyle)
+  const removeElementStyle = useWorkspaceStore((s) => s.removeElementStyle)
+
+  const bg = style?.background ?? ''
+  const fg = style?.color ?? ''
+  const shape = style?.shape ?? ''
+  const border = style?.border ?? ''
+  const opacity = style?.opacity
+  const fontSize = style?.fontSize
+
+  function update(patch: Partial<ElementStyle>) {
+    updateElementStyle({ tag, ...patch })
+  }
+
+  return (
+    <div style={{
+      margin: '2px 4px 6px 22px',
+      padding: 12,
+      borderRadius: 8,
+      border: '1px solid var(--color-border)',
+      background: 'rgba(255,255,255,0.03)',
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <StyleField label="Background">
+          <ColorPicker value={bg} onChange={(v) => update({ background: v || undefined })} presets={PRESET_COLORS} />
+        </StyleField>
+        <StyleField label="Color (text)">
+          <ColorPicker value={fg} onChange={(v) => update({ color: v || undefined })} presets={['#ffffff', '#e2e8f0', '#0b1219', '#1e293b', ...PRESET_COLORS.slice(0, 6)]} />
+        </StyleField>
+        <StyleField label="Shape">
+          <select
+            value={shape}
+            onChange={(e) => update({ shape: e.target.value || undefined })}
+            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 11, outline: 'none' }}
+          >
+            <option value="">Default</option>
+            {STRUCTURIZR_SHAPES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </StyleField>
+        <StyleField label="Border">
+          <select
+            value={border}
+            onChange={(e) => update({ border: e.target.value || undefined })}
+            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 11, outline: 'none' }}
+          >
+            <option value="">Default</option>
+            <option value="Solid">Solid</option>
+            <option value="Dashed">Dashed</option>
+            <option value="Dotted">Dotted</option>
+          </select>
+        </StyleField>
+        <StyleField label="Opacity">
+          <input
+            type="range" min={0} max={100} step={5}
+            value={(opacity ?? 1) * 100}
+            onChange={(e) => { const val = Number(e.target.value) / 100; update({ opacity: val < 1 ? val : undefined }) }}
+            style={{ flex: 1, accentColor: 'var(--color-accent)' }}
+          />
+          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 30, textAlign: 'right' }}>
+            {Math.round((opacity ?? 1) * 100)}%
+          </span>
+        </StyleField>
+        <StyleField label="Font size">
+          <input
+            type="number" min={8} max={40}
+            value={fontSize ?? ''}
+            placeholder="Default"
+            onChange={(e) => update({ fontSize: e.target.value ? Number(e.target.value) : undefined })}
+            style={{ width: 60, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 11, outline: 'none' }}
+          />
+        </StyleField>
+      </div>
+      {style && (
+        <button
+          onClick={() => { removeElementStyle(tag); onClose() }}
+          style={{
+            marginTop: 10, width: '100%', padding: '5px 0', borderRadius: 5,
+            border: '1px solid rgba(239,68,68,0.3)', background: 'transparent',
+            color: 'var(--color-error)', fontSize: 10, fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+        >
+          Remove style
+        </button>
+      )}
+    </div>
+  )
+}
+
+function StyleField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', width: 70, flexShrink: 0 }}>
+        {label}
+      </span>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ColorPicker({ value, onChange, presets }: {
+  value: string; onChange: (value: string) => void; presets: string[]
+}) {
+  const [showPresets, setShowPresets] = useState(false)
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, position: 'relative' }}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="#hex or name"
+        style={{ flex: 1, height: 26, padding: '0 8px', paddingLeft: 26, borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 11, outline: 'none' }}
+      />
+      <button
+        onClick={() => setShowPresets((o) => !o)}
+        style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, borderRadius: 3, border: '1px solid var(--color-border)', background: value || 'transparent', cursor: 'pointer', padding: 0 }}
+      />
+      {showPresets && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 201 }} onClick={() => setShowPresets(false)} />
+          <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 202, marginBottom: 4, padding: 6, borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-surface-1)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+            {presets.map((c) => (
+              <button key={c} onClick={() => { onChange(c); setShowPresets(false) }}
+                style={{ width: 22, height: 22, borderRadius: 4, border: value === c ? '2px solid var(--color-accent)' : '1px solid var(--color-border)', background: c, cursor: 'pointer', padding: 0 }}
+              />
+            ))}
+            <button onClick={() => { onChange(''); setShowPresets(false) }}
+              style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 10, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={10} />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

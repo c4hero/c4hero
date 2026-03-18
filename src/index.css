@@ -2,36 +2,58 @@
 @import "@xyflow/react/dist/style.css";
 
 @theme {
-  --color-bg-primary: #0b1219;
-  --color-surface-1: #0f1923;
-  --color-surface-2: #15202d;
-  --color-surface-3: #1c2b3a;
-  --color-border: #1e3044;
-  --color-border-hover: #2a4460;
-  --color-accent: #2dd4bf;
-  --color-accent-hover: #5eead4;
-  --color-accent-glow: rgba(45, 212, 191, 0.15);
-  --color-text-primary: #e2e8f0;
-  --color-text-secondary: #94a3b8;
-  --color-text-muted: #64748b;
+  /* Surfaces — canonical c4hero palette */
+  --color-bg-primary: #0d1117;
+  --color-surface-1: #161b22;
+  --color-surface-2: #1c2128;
+  --color-surface-3: #21262d;
+  --color-border: rgba(88, 166, 255, 0.10);
+  --color-border-hover: rgba(88, 166, 255, 0.25);
+  --color-accent: #58a6ff;
+  --color-accent-hover: #79b8ff;
+  --color-accent-glow: rgba(88, 166, 255, 0.15);
+  --color-text-primary: #e6edf3;
+  --color-text-secondary: #8b949e;
+  --color-text-muted: #6e7681;
+  --color-text-subtle: #484f58;
 
-  /* C4 type accent colors */
-  --color-type-person: #4ade80;
-  --color-type-system: #2dd4bf;
-  --color-type-container: #38bdf8;
-  --color-type-component: #a78bfa;
+  /* C4 diagram node accents */
+  --color-type-person: #86efac;
+  --color-type-system: #93c5fd;
+  --color-type-container: #7dd3fc;
+  --color-type-component: #60a5fa;
+
+  /* External element colors */
+  --color-type-external: #9ca3af;
+  --color-tint-external: rgba(156, 163, 175, 0.06);
+  --color-border-external: rgba(107, 114, 128, 0.5);
 
   /* C4 type background tints */
-  --color-tint-person: rgba(74, 222, 128, 0.06);
-  --color-tint-system: rgba(45, 212, 191, 0.06);
-  --color-tint-container: rgba(56, 189, 248, 0.06);
-  --color-tint-component: rgba(167, 139, 250, 0.06);
+  --color-tint-person: #1a3a2a;
+  --color-tint-system: #1a2f4a;
+  --color-tint-container: #142540;
+  --color-tint-component: #0f1f35;
 
-  /* C4 type border tints */
-  --color-border-person: rgba(74, 222, 128, 0.2);
-  --color-border-system: rgba(45, 212, 191, 0.2);
-  --color-border-container: rgba(56, 189, 248, 0.2);
-  --color-border-component: rgba(167, 139, 250, 0.2);
+  /* C4 type border colors */
+  --color-border-person: #22c55e;
+  --color-border-system: #3b82f6;
+  --color-border-container: #2563eb;
+  --color-border-component: #1d4ed8;
+
+  /* Semantic status colors */
+  --color-status-live: #22c55e;
+  --color-status-planned: #60a5fa;
+  --color-status-deprecated: #f97316;
+  --color-status-removed: #ef4444;
+
+  /* Feedback colors */
+  --color-error: #ef4444;
+  --color-warning: #f97316;
+  --color-success: #22c55e;
+  --color-info: #58a6ff;
+
+  /* Edge / relationship colors */
+  --color-edge: #484f58;
 }
 
 body {
@@ -49,17 +71,25 @@ body {
   height: 100dvh;
 }
 
+/* ─── Safe area insets (notch / dynamic island / home bar) ─── */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
 /* ─── Glass panels ─────────────────────────────────────────── */
 
 .glass-panel {
-  background: rgba(15, 25, 35, 0.85);
+  background: rgba(13, 17, 23, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-color: var(--color-border);
 }
 
 .glass-panel-solid {
-  background: rgba(15, 25, 35, 0.95);
+  background: rgba(13, 17, 23, 0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-color: var(--color-border);
@@ -68,9 +98,7 @@ body {
 /* ─── Overlay backdrop ─────────────────────────────────────── */
 
 .panel-backdrop {
-  background: rgba(11, 18, 25, 0.6);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(11, 18, 25, 0.55);
 }
 
 /* ─── Transitions ──────────────────────────────────────────── */
@@ -154,15 +182,15 @@ body {
 }
 
 .react-flow__node.selected {
-  filter: drop-shadow(0 0 12px rgba(45, 212, 191, 0.25));
+  filter: drop-shadow(0 0 12px rgba(88, 166, 255, 0.25));
 }
 
 /* ─── C4 Node cards ────────────────────────────────────────── */
 
 .c4-node {
   border-radius: 12px;
-  padding: 14px 16px;
-  min-width: 180px;
+  padding: 16px 14px;
+  min-width: 200px;
   max-width: 280px;
   transition: box-shadow 200ms ease, border-color 200ms ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
@@ -173,7 +201,7 @@ body {
 }
 
 .c4-node.selected {
-  box-shadow: 0 0 0 2px var(--color-accent), 0 4px 24px rgba(45, 212, 191, 0.15);
+  box-shadow: 0 0 0 3px var(--color-accent), 0 4px 24px rgba(88, 166, 255, 0.2);
 }
 
 .c4-node-type {
@@ -210,6 +238,52 @@ body {
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
   color: var(--color-text-secondary);
+}
+
+/* ─── Type chip (Option C layout) ────────────────────────── */
+
+.c4-type-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  padding: 0 5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ─── Action buttons (Option C layout) ───────────────────── */
+
+.c4-node-actions {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.c4-node:hover .c4-node-actions {
+  opacity: 1;
+}
+
+.c4-node-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+  padding: 0;
+}
+
+.c4-node-action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .c4-node-badge {
@@ -252,10 +326,22 @@ body {
   transition: opacity 150ms ease, background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
 }
 
+/* Center handles (slot b) show on node hover */
 .c4-node:hover .c4-handle-visible {
   opacity: 1;
   background: var(--color-accent);
   box-shadow: 0 0 6px var(--color-accent-glow);
+}
+
+/* Extra handles (slot a, c) on occupied sides show on hover */
+.c4-handle-extra {
+  width: 6px;
+  height: 6px;
+}
+
+/* Extra handles on unoccupied sides stay hidden even on hover */
+.c4-node:hover .c4-handle-hidden-extra {
+  opacity: 0 !important;
 }
 
 .c4-handle-visible:hover {
@@ -265,15 +351,22 @@ body {
 }
 
 .c4-handle-target {
-  width: 20px !important;
-  height: 20px !important;
+  width: 14px !important;
+  height: 14px !important;
   background: transparent !important;
   opacity: 0;
 }
 
+/* Hidden extra targets stay hidden */
+.c4-handle-target.c4-handle-hidden-extra {
+  width: 0 !important;
+  height: 0 !important;
+  pointer-events: none !important;
+}
+
 /* When React Flow is in connecting mode, show target handles as glowing zones */
-.react-flow__node.connectable .c4-handle-target,
-.connecting .c4-handle-target {
+.react-flow__node.connectable .c4-handle-target:not(.c4-handle-hidden-extra),
+.connecting .c4-handle-target:not(.c4-handle-hidden-extra) {
   opacity: 1;
   background: var(--color-accent-glow) !important;
   border-radius: 50%;

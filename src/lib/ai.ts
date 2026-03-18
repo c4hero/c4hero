@@ -5,10 +5,10 @@ interface AIConfig {
   apiKey: string
 }
 
-/** Get stored AI config from localStorage */
+/** Get stored AI config from sessionStorage (keys stay in-memory per session) */
 export function getAIConfig(): AIConfig | null {
   try {
-    const data = localStorage.getItem('c4hero_ai_config')
+    const data = sessionStorage.getItem('c4hero_ai_config')
     if (!data) return null
     return JSON.parse(data)
   } catch {
@@ -16,14 +16,14 @@ export function getAIConfig(): AIConfig | null {
   }
 }
 
-/** Save AI config to localStorage */
+/** Save AI config to sessionStorage */
 export function saveAIConfig(config: AIConfig) {
-  localStorage.setItem('c4hero_ai_config', JSON.stringify(config))
+  sessionStorage.setItem('c4hero_ai_config', JSON.stringify(config))
 }
 
 /** Clear AI config */
 export function clearAIConfig() {
-  localStorage.removeItem('c4hero_ai_config')
+  sessionStorage.removeItem('c4hero_ai_config')
 }
 
 /** Generate a description for an element using AI */

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useWorkspaceStore, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, View, Container, Component } from '@/types/model'
 import { Search, X, UserRound, Globe, Box, Puzzle, LayoutGrid } from 'lucide-react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   person: <UserRound size={14} />,
@@ -133,8 +134,10 @@ export default function SearchDialog() {
     setTagFilter(prev => prev === tag ? null : tag)
   }
 
+  const trapRef = useFocusTrap<HTMLDivElement>()
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 panel-backdrop"
@@ -143,6 +146,10 @@ export default function SearchDialog() {
 
       {/* Dialog */}
       <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search"
         className="relative w-full max-w-lg rounded-xl border shadow-2xl"
         style={{
           background: 'var(--color-surface-1)',

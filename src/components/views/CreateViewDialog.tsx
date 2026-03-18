@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { ViewType } from '@/types/model'
 import { X } from 'lucide-react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 const VIEW_TYPES: { value: ViewType; label: string }[] = [
   { value: 'systemLandscape', label: 'System Landscape' },
@@ -41,10 +42,16 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
     onClose()
   }
 
+  const trapRef = useFocusTrap<HTMLDivElement>()
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div className="absolute inset-0 panel-backdrop" onClick={onClose} />
       <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create View"
         className="relative w-full max-w-sm rounded-xl border p-5 shadow-2xl"
         style={{ background: 'var(--color-surface-1)', borderColor: 'var(--color-border)' }}
       >

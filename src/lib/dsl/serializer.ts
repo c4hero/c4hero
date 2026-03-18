@@ -142,6 +142,21 @@ class SerializerContext {
             this.serializeSoftwareSystem(model.softwareSystems[i])
         }
 
+        // Groups
+        const nonEmptyGroups = model.groups.filter(g => g.elementIds.length > 0)
+        if (nonEmptyGroups.length > 0) {
+            this.emitBlank()
+            for (const group of nonEmptyGroups) {
+                this.emit(`group "${this.escapeString(group.name)}" {`)
+                this.depth++
+                for (const elementId of group.elementIds) {
+                    this.emit(this.idToVar.get(elementId) ?? elementId)
+                }
+                this.depth--
+                this.emit('}')
+            }
+        }
+
         // Relationships
         if (model.relationships.length > 0) {
             this.emitBlank()

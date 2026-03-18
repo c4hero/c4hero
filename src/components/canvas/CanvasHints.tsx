@@ -69,7 +69,7 @@ function Hint({ id, children, onDismiss }: { id: string; children: React.ReactNo
     <div
       className="absolute bottom-16 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-lg border px-4 py-2.5 text-xs"
       style={{
-        background: 'rgba(15, 25, 35, 0.9)',
+        background: 'rgba(13, 17, 23, 0.9)',
         borderColor: 'var(--color-border)',
         color: 'var(--color-text-secondary)',
         backdropFilter: 'blur(8px)',

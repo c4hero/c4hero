@@ -66,7 +66,7 @@ export async function writeSidecarToHandle(json: string): Promise<boolean> {
     }
     // Otherwise try to create one in the same directory as the DSL file
     if (currentFileHandle) {
-      const dirHandle = await (currentFileHandle as any).getParent?.() as FileSystemDirectoryHandle | undefined
+      const dirHandle = await currentFileHandle.getParent?.()
       if (dirHandle) {
         const dslFile = await currentFileHandle.getFile()
         const sidecarFileName = dslFile.name.replace(/\.dsl$/, '') + '.c4hero.json'
@@ -113,7 +113,7 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
       // Try to load sidecar from same directory
       let sidecarJson: string | undefined
       try {
-        const dirHandle = await (handle as any).getParent?.() as FileSystemDirectoryHandle | undefined
+        const dirHandle = await handle.getParent?.()
         if (dirHandle) {
           const sidecarFileName = file.name.replace(/\.dsl$/, '') + '.c4hero.json'
           const sidecarFileHandle = await dirHandle.getFileHandle(sidecarFileName)
@@ -186,10 +186,18 @@ export async function saveDSLFile(content: string, suggestedName?: string): Prom
   return true
 }
 
+/** Max crash recovery size: 4MB (localStorage typically caps at 5-10MB) */
+const MAX_CRASH_RECOVERY_BYTES = 4 * 1024 * 1024
+
 /** Save workspace JSON to localStorage for crash recovery */
 export function saveToLocalStorage(workspace: Workspace) {
   try {
-    localStorage.setItem('c4hero_crash_recovery', JSON.stringify(workspace))
+    const json = JSON.stringify(workspace)
+    if (json.length > MAX_CRASH_RECOVERY_BYTES) {
+      console.warn(`Workspace too large for crash recovery (${(json.length / 1024 / 1024).toFixed(1)}MB). Skipping localStorage save.`)
+      return
+    }
+    localStorage.setItem('c4hero_crash_recovery', json)
     localStorage.setItem('c4hero_crash_recovery_time', new Date().toISOString())
   } catch {
     // localStorage full or unavailable
@@ -234,5 +242,10 @@ declare global {
   interface FilePickerAcceptType {
     description?: string
     accept: Record<string, string[]>
+  }
+
+  // Chrome-only extension: getParent() on FileSystemFileHandle
+  interface FileSystemFileHandle {
+    getParent?(): Promise<FileSystemDirectoryHandle>
   }
 }

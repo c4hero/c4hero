@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { useWorkspaceStore, getCreatableTypes } from '@/store/workspace'
+import { useWorkspaceStore, getCreatableTypes, getActiveView } from '@/store/workspace'
 import { serializeDSL, parseDSL } from '@/lib/dsl'
 import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { parseSidecar, applySidecar, extractSidecar, serializeSidecar } from '@/lib/sidecar'
@@ -26,11 +26,22 @@ export function useKeyboardShortcuts() {
       const store = useWorkspaceStore.getState()
       const target = e.target as HTMLElement
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable
-
-      // Don't handle shortcuts when typing in inputs
-      if (isInput) return
-
       const mod = e.metaKey || e.ctrlKey
+
+      // ─── Global meta shortcuts (work even in inputs) ───
+      if (mod && e.key === 'k') {
+        e.preventDefault()
+        store.setCommandPaletteOpen(!store.commandPaletteOpen)
+        return
+      }
+      if (mod && e.key === 'f') {
+        e.preventDefault()
+        store.setSearchOpen(!store.searchOpen)
+        return
+      }
+
+      // Don't handle remaining shortcuts when typing in inputs
+      if (isInput) return
 
       // ─── Global shortcuts ─────────────────────────────
       if (mod && e.key === 'z' && !e.shiftKey) {
@@ -43,9 +54,12 @@ export function useKeyboardShortcuts() {
         store.redo()
         return
       }
-      if (mod && e.key === 'k') {
+      if (mod && e.key === 'a') {
         e.preventDefault()
-        store.setSearchOpen(!store.searchOpen)
+        if (store.workspace && store.activeViewKey) {
+          const view = getActiveView(store.workspace, store.activeViewKey)
+          if (view) store.selectElements(view.elements.map(el => el.id))
+        }
         return
       }
       if (mod && e.key === 's') {
@@ -85,6 +99,10 @@ export function useKeyboardShortcuts() {
       if (e.key === 'Escape') {
         if (store.presentationMode) {
           store.setPresentationMode(false)
+          return
+        }
+        if (store.commandPaletteOpen) {
+          store.setCommandPaletteOpen(false)
           return
         }
         if (store.searchOpen) {

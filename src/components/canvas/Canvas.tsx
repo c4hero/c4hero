@@ -5,14 +5,17 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type Node,
   type Edge,
   type OnSelectionChangeParams,
   type Connection,
   BackgroundVariant,
+  reconnectEdge,
 } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
-import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, canDrillInto } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, getAllViews, buildElementMap, buildRelationshipMap, canDrillInto } from '@/store/workspace'
+import { useSettingsStore } from '@/store/settings'
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
@@ -77,7 +80,7 @@ function getChildCount(element: ModelElement): number | undefined {
 }
 
 /** Pick the best source/target handle sides based on relative node positions.
- *  Returns [sourceHandle, targetHandle] IDs matching NodeHandles component. */
+ *  Uses center slot (b) by default. Handle ID format: {side}-{slot}-{type} */
 function computeHandlePair(
   srcPos: { x: number; y: number },
   dstPos: { x: number; y: number },
@@ -85,46 +88,62 @@ function computeHandlePair(
   const dx = dstPos.x - srcPos.x
   const dy = dstPos.y - srcPos.y
 
-  // Use the dominant axis to pick sides
+  // Use the dominant axis to pick sides, default to center slot (b)
   if (Math.abs(dx) > Math.abs(dy)) {
-    // Horizontal dominant
     if (dx > 0) {
-      return { sourceHandle: 'right-source', targetHandle: 'left-target' }
+      return { sourceHandle: 'right-b-source', targetHandle: 'left-b-target' }
     } else {
-      return { sourceHandle: 'left-source', targetHandle: 'right-target' }
+      return { sourceHandle: 'left-b-source', targetHandle: 'right-b-target' }
     }
   } else {
-    // Vertical dominant
     if (dy > 0) {
-      return { sourceHandle: 'bottom-source', targetHandle: 'top-target' }
+      return { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
     } else {
-      return { sourceHandle: 'top-source', targetHandle: 'bottom-target' }
+      return { sourceHandle: 'top-b-source', targetHandle: 'bottom-b-target' }
     }
   }
 }
 
 /** Build React Flow nodes from workspace view (no edges yet — those need final positions). */
+/** Compute how many views each element appears in (stable across view/filter changes). */
+function buildViewCountMap(workspace: Workspace): Map<string, number> {
+  const allViews = getAllViews(workspace)
+  const map = new Map<string, number>()
+  for (const v of allViews) {
+    for (const ve of v.elements) {
+      map.set(ve.id, (map.get(ve.id) ?? 0) + 1)
+    }
+  }
+  return map
+}
+
 function buildNodes(
   workspace: Workspace,
   view: View,
   onDrillIn: (elementId: string) => void,
   activeTagFilter: string | null,
+  activeStatusFilter: string | null,
+  viewCountMap: Map<string, number>,
 ): Node[] {
   const elementMap = buildElementMap(workspace)
   const elementStyles = workspace.views.configuration.styles.elements
 
   const nodes: Node[] = []
+
   for (const viewEl of view.elements) {
     const element = elementMap.get(viewEl.id)
     if (!element) continue
 
     const style = getElementStyle(element, elementStyles)
-    const matchesFilter = !activeTagFilter || element.tags.includes(activeTagFilter)
+    const matchesTag = !activeTagFilter || element.tags.includes(activeTagFilter)
+    const matchesStatus = !activeStatusFilter || element.status === activeStatusFilter
+    const matchesFilter = matchesTag && matchesStatus
+    const pos = { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }
 
     nodes.push({
       id: element.id,
       type: element.type,
-      position: { x: viewEl.x ?? 0, y: viewEl.y ?? 0 },
+      position: pos,
       data: {
         element,
         style,
@@ -132,15 +151,162 @@ function buildNodes(
         canDrill: canDrillInto(workspace, element.id),
         onDrillIn,
         dimmed: !matchesFilter,
+        viewCount: viewCountMap.get(element.id) ?? 1,
       },
-      style: matchesFilter ? undefined : { opacity: 0.2 },
+      style: matchesFilter ? undefined : { opacity: 0.4 },
     })
   }
 
   return nodes
 }
 
+/** Build group background nodes using post-layout element positions. */
+function buildGroupNodes(
+  workspace: Workspace,
+  groups: typeof workspace.model.groups,
+  laidOutNodes: Node[],
+): Node[] {
+  const NODE_W = 200
+  const NODE_H = 100
+  const PADDING = 24
+
+  // Build position map from the already-laid-out element nodes
+  const posMap = new Map<string, { x: number; y: number }>()
+  for (const n of laidOutNodes) {
+    if (!n.id.startsWith('group-') && n.id !== '__scope_boundary__') {
+      posMap.set(n.id, n.position)
+    }
+  }
+
+  const groupNodes: Node[] = []
+  for (const group of groups) {
+    const memberPositions = group.elementIds
+      .map((id) => posMap.get(id))
+      .filter((p): p is { x: number; y: number } => p !== undefined)
+
+    if (memberPositions.length < 2) continue
+
+    const minX = Math.min(...memberPositions.map((p) => p.x))
+    const minY = Math.min(...memberPositions.map((p) => p.y))
+    const maxX = Math.max(...memberPositions.map((p) => p.x)) + NODE_W
+    const maxY = Math.max(...memberPositions.map((p) => p.y)) + NODE_H
+
+    groupNodes.push({
+      id: `group-${group.id}`,
+      type: 'group',
+      position: { x: minX - PADDING, y: minY - PADDING },
+      style: { width: (maxX - minX) + PADDING * 2, height: (maxY - minY) + PADDING * 2 },
+      data: { label: group.name, elementCount: group.elementIds.length },
+      zIndex: -1,
+      selectable: true,
+      draggable: false,
+    })
+  }
+  return groupNodes
+}
+
+/** Build the implicit scope boundary node for container/component views using post-layout positions. */
+function buildBoundaryNode(
+  workspace: Workspace,
+  view: View,
+  laidOutNodes: Node[],
+): Node | null {
+  const NODE_W = 200
+  const NODE_H = 100
+  const BOUNDARY_PADDING = 32
+
+  // Build position map from laid-out element nodes only
+  const posMap = new Map<string, { x: number; y: number }>()
+  for (const n of laidOutNodes) {
+    if (!n.id.startsWith('group-') && n.id !== '__scope_boundary__') {
+      posMap.set(n.id, n.position)
+    }
+  }
+
+  if (view.type === 'container' && view.softwareSystemId) {
+    const scopeSystem = workspace.model.softwareSystems.find(s => s.id === view.softwareSystemId)
+    if (scopeSystem) {
+      const containerIds = new Set(scopeSystem.containers.map(c => c.id))
+      const internalPositions = Array.from(posMap.entries())
+        .filter(([id]) => containerIds.has(id))
+        .map(([, pos]) => pos)
+
+      if (internalPositions.length > 0) {
+        const minX = Math.min(...internalPositions.map(p => p.x))
+        const minY = Math.min(...internalPositions.map(p => p.y))
+        const maxX = Math.max(...internalPositions.map(p => p.x)) + NODE_W
+        const maxY = Math.max(...internalPositions.map(p => p.y)) + NODE_H
+        return {
+          id: '__scope_boundary__',
+          type: 'boundary',
+          position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING },
+          style: { width: (maxX - minX) + BOUNDARY_PADDING * 2, height: (maxY - minY) + BOUNDARY_PADDING * 2 },
+          data: { name: scopeSystem.name, typeLabel: 'Software System' },
+          zIndex: -2,
+          selectable: false,
+          draggable: false,
+          focusable: false,
+        }
+      }
+    }
+  }
+
+  if (view.type === 'component' && view.containerId) {
+    const scopeContainer = workspace.model.softwareSystems
+      .flatMap(s => s.containers)
+      .find(c => c.id === view.containerId)
+    if (scopeContainer) {
+      const componentIds = new Set(scopeContainer.components.map(c => c.id))
+      const internalPositions = Array.from(posMap.entries())
+        .filter(([id]) => componentIds.has(id))
+        .map(([, pos]) => pos)
+
+      if (internalPositions.length > 0) {
+        const minX = Math.min(...internalPositions.map(p => p.x))
+        const minY = Math.min(...internalPositions.map(p => p.y))
+        const maxX = Math.max(...internalPositions.map(p => p.x)) + NODE_W
+        const maxY = Math.max(...internalPositions.map(p => p.y)) + NODE_H
+        return {
+          id: '__scope_boundary__',
+          type: 'boundary',
+          position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING },
+          style: { width: (maxX - minX) + BOUNDARY_PADDING * 2, height: (maxY - minY) + BOUNDARY_PADDING * 2 },
+          data: { name: scopeContainer.name, typeLabel: 'Container' },
+          zIndex: -2,
+          selectable: false,
+          draggable: false,
+          focusable: false,
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 /** Build edges using final node positions for optimal handle routing. */
+/** Distribute multiple edges on the same side across 3 slots (a–c) */
+const SLOTS = ['a', 'b', 'c'] as const
+
+/**
+ * Pick N slots from the 3 available, centered on b.
+ * N=1→[b], N=2→[a,c], N=3→[a,b,c],
+ * N>3→cycle through all 3.
+ */
+function pickSlots(n: number): string[] {
+  if (n <= 0) return []
+  const all = SLOTS as unknown as string[]
+  if (n >= all.length) {
+    // More edges than slots: assign all slots then cycle
+    return Array.from({ length: n }, (_, i) => all[i % all.length])
+  }
+  const spread: Record<number, string[]> = {
+    1: ['b'],
+    2: ['a', 'c'],
+  }
+  return spread[n] ?? all
+}
+
 function buildEdges(
   workspace: Workspace,
   view: View,
@@ -154,8 +320,19 @@ function buildEdges(
   for (const n of nodes) posMap.set(n.id, n.position)
 
   const viewElementIds = new Set(view.elements.map(e => e.id))
-  const edges: Edge[] = []
 
+  // First pass: compute base side pairs for all edges
+  interface EdgeInfo {
+    relId: string
+    sourceId: string
+    targetId: string
+    sourceSide: string
+    targetSide: string
+    relStyle: ReturnType<typeof getRelationshipStyle>
+    rel: NonNullable<ReturnType<typeof relationshipMap.get>>
+  }
+
+  const edgeInfos: EdgeInfo[] = []
   for (const viewRel of view.relationships) {
     const rel = relationshipMap.get(viewRel.id)
     if (!rel) continue
@@ -166,16 +343,70 @@ function buildEdges(
     const dstPos = posMap.get(rel.destinationId)
     const handles = srcPos && dstPos
       ? computeHandlePair(srcPos, dstPos)
-      : { sourceHandle: 'bottom-source', targetHandle: 'top-target' }
+      : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
+
+    // Extract side name (e.g. "right" from "right-b-source")
+    const sourceSide = handles.sourceHandle.split('-')[0]
+    const targetSide = handles.targetHandle.split('-')[0]
+
+    edgeInfos.push({ relId: rel.id, sourceId: rel.sourceId, targetId: rel.destinationId, sourceSide, targetSide, relStyle, rel })
+  }
+
+  // Second pass: count ALL edges per node+side (regardless of source/target direction),
+  // then assign slots so edges sharing a side never overlap.
+  // Key: "nodeId:side" → list of { edgeIndex, role: 'source' | 'target' }
+  const sideGroups = new Map<string, { edgeIndex: number; role: 'source' | 'target' }[]>()
+  for (let i = 0; i < edgeInfos.length; i++) {
+    const e = edgeInfos[i]
+    const srcKey = `${e.sourceId}:${e.sourceSide}`
+    const tgtKey = `${e.targetId}:${e.targetSide}`
+    if (!sideGroups.has(srcKey)) sideGroups.set(srcKey, [])
+    sideGroups.get(srcKey)!.push({ edgeIndex: i, role: 'source' })
+    if (!sideGroups.has(tgtKey)) sideGroups.set(tgtKey, [])
+    sideGroups.get(tgtKey)!.push({ edgeIndex: i, role: 'target' })
+  }
+
+  // Assign slots: single edge → b, two → a+c, three → a+b+c
+  const sourceSlots = new Map<number, string>() // edgeIndex → slot
+  const targetSlots = new Map<number, string>()
+
+  for (const [key, entries] of sideGroups) {
+    const side = key.split(':')[1]
+
+    // Sort by the perpendicular coordinate of the opposite node to minimize crossings
+    const sorted = [...entries].sort((a, b) => {
+      const isHorizontalSide = side === 'top' || side === 'bottom'
+      const nodeIdA = a.role === 'source' ? edgeInfos[a.edgeIndex].targetId : edgeInfos[a.edgeIndex].sourceId
+      const nodeIdB = b.role === 'source' ? edgeInfos[b.edgeIndex].targetId : edgeInfos[b.edgeIndex].sourceId
+      const posA = posMap.get(nodeIdA)
+      const posB = posMap.get(nodeIdB)
+      if (!posA || !posB) return 0
+      return isHorizontalSide ? posA.x - posB.x : posA.y - posB.y
+    })
+
+    const chosen = pickSlots(sorted.length)
+    for (let j = 0; j < sorted.length; j++) {
+      const { edgeIndex, role } = sorted[j]
+      const slotMap = role === 'source' ? sourceSlots : targetSlots
+      slotMap.set(edgeIndex, chosen[j])
+    }
+  }
+
+  // Build final edges with slot-assigned handles
+  const edges: Edge[] = []
+  for (let i = 0; i < edgeInfos.length; i++) {
+    const e = edgeInfos[i]
+    const srcSlot = sourceSlots.get(i) ?? 'b'
+    const tgtSlot = targetSlots.get(i) ?? 'b'
 
     edges.push({
-      id: rel.id,
-      source: rel.sourceId,
-      target: rel.destinationId,
-      sourceHandle: handles.sourceHandle,
-      targetHandle: handles.targetHandle,
+      id: e.rel.id,
+      source: e.sourceId,
+      target: e.targetId,
+      sourceHandle: `${e.sourceSide}-${srcSlot}-source`,
+      targetHandle: `${e.targetSide}-${tgtSlot}-target`,
       type: 'relationship',
-      data: { relationship: rel, relationshipStyle: relStyle },
+      data: { relationship: e.rel, relationshipStyle: e.relStyle },
     })
   }
 
@@ -223,13 +454,16 @@ export default function Canvas() {
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const selectElements = useWorkspaceStore((s) => s.selectElements)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
+  const selectGroup = useWorkspaceStore((s) => s.selectGroup)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
   const drillInto = useWorkspaceStore((s) => s.drillInto)
   const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
+  const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
   const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
-  const minimapEnabled = useWorkspaceStore((s) => s.minimapEnabled)
-  const snapToGrid = useWorkspaceStore((s) => s.snapToGrid)
+  const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
+  const minimapMode = useSettingsStore((s) => s.minimapMode)
+  const snapToGrid = useSettingsStore((s) => s.snapToGrid)
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null)
 
@@ -254,12 +488,18 @@ export default function Canvas() {
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
+  // Memoize viewCountMap separately — only recompute when workspace model changes, not on view/filter changes
+  const viewCountMap = useMemo(() => {
+    if (!workspace) return new Map<string, number>()
+    return buildViewCountMap(workspace)
+  }, [workspace])
+
   const { initialNodes, initialEdges } = useMemo(() => {
     if (!workspace || !view) return { initialNodes: [], initialEdges: [] }
     const direction = view.autoLayout?.direction ?? 'TB'
 
     // 1. Build nodes with raw positions from view
-    const rawNodes = buildNodes(workspace, view, drillInto, activeTagFilter)
+    const rawNodes = buildNodes(workspace, view, drillInto, activeTagFilter, activeStatusFilter, viewCountMap)
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
     const relationshipMap = buildRelationshipMap(workspace)
@@ -275,14 +515,21 @@ export default function Canvas() {
     // 3. Auto-layout: position unpinned nodes, keep pinned ones
     const laidOut = applyAutoLayout(rawNodes, tempEdges, view, direction)
 
-    // 4. Build final edges using post-layout positions for handle routing
-    const edges = buildEdges(workspace, view, laidOut)
+    // 4. Build group background nodes and scope boundary using post-layout positions
+    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut)
+    const boundaryNode = buildBoundaryNode(workspace, view, laidOut)
+    const overlayNodes = [...(boundaryNode ? [boundaryNode] : []), ...groupNodes]
+    const allNodes = [...overlayNodes, ...laidOut]
 
-    return { initialNodes: laidOut, initialEdges: edges }
-  }, [workspace, view, drillInto, activeTagFilter])
+    // 5. Build final edges using post-layout positions for handle routing
+    const edges = buildEdges(workspace, view, allNodes)
+
+    return { initialNodes: allNodes, initialEdges: edges }
+  }, [workspace, view, drillInto, activeTagFilter, activeStatusFilter])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const reactFlowInstance = useReactFlow()
 
   // Sync when view changes
   useEffect(() => {
@@ -290,18 +537,42 @@ export default function Canvas() {
     setEdges(initialEdges)
   }, [initialNodes, initialEdges, setNodes, setEdges])
 
+  // Center view on newly created element
+  const focusElementId = useWorkspaceStore((s) => s.focusElementId)
+  const clearFocusElement = useWorkspaceStore((s) => s.clearFocusElement)
+  useEffect(() => {
+    if (!focusElementId) return
+    clearFocusElement()
+    // Wait a frame for React Flow to render the new node
+    requestAnimationFrame(() => {
+      const node = reactFlowInstance.getNode(focusElementId)
+      if (node) {
+        reactFlowInstance.setCenter(
+          node.position.x + (node.measured?.width ?? 200) / 2,
+          node.position.y + (node.measured?.height ?? 100) / 2,
+          { duration: 300, zoom: reactFlowInstance.getZoom() },
+        )
+      }
+    })
+  }, [focusElementId, clearFocusElement, reactFlowInstance])
+
   const onSelectionChange = useCallback(
     ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
-      if (selectedNodes.length > 0) {
-        selectElements(selectedNodes.map((n) => n.id))
+      const groupNodes = selectedNodes.filter(n => n.id.startsWith('group-'))
+      const elementNodes = selectedNodes.filter(n => !n.id.startsWith('group-'))
+
+      if (groupNodes.length > 0) {
+        selectGroup(groupNodes[0].id.slice(6)) // strip 'group-' prefix
+      } else if (elementNodes.length > 0) {
+        selectElements(elementNodes.map((n) => n.id))
       } else if (selectedEdges.length > 0) {
         const edgeData = selectedEdges[0].data as { relationship?: { id: string } } | undefined
         if (edgeData?.relationship) selectRelationship(edgeData.relationship.id)
-      } else {
-        clearSelection()
       }
+      // Do NOT clear selection here — clicking inspector inputs causes React Flow
+      // to report empty selection. Clearing is handled by onPaneClick instead.
     },
-    [selectElements, selectRelationship, clearSelection],
+    [selectElements, selectRelationship, selectGroup],
   )
 
   // Show minimap only while panning/zooming
@@ -350,13 +621,29 @@ export default function Canvas() {
     [],
   )
 
+  // Track recent connections to prevent duplicates from multiple handle matches
+  const recentConnect = useRef<string | null>(null)
   const onConnect = useCallback(
     (connection: Connection) => {
       if (connection.source && connection.target && connection.source !== connection.target) {
+        const key = `${connection.source}->${connection.target}`
+        if (recentConnect.current === key) return
+        recentConnect.current = key
+        setTimeout(() => { recentConnect.current = null }, 100)
         addRelationship(connection.source, connection.target)
       }
     },
     [addRelationship],
+  )
+
+  const onReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      if (newConnection.source && newConnection.target) {
+        reconnectRelationship(oldEdge.id, newConnection.source, newConnection.target)
+        setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
+      }
+    },
+    [reconnectRelationship, setEdges],
   )
 
   return (
@@ -372,9 +659,10 @@ export default function Canvas() {
         onMoveEnd={onMoveEnd}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
+        onReconnect={onReconnect}
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
-        onPaneClick={() => setContextMenu(null)}
+        onPaneClick={() => { setContextMenu(null); clearSelection() }}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
@@ -388,6 +676,7 @@ export default function Canvas() {
         panOnDrag={spaceHeld ? [0, 1, 2] : [0]}
         defaultEdgeOptions={{
           type: 'relationship',
+          reconnectable: true,
         }}
       >
         <Background
@@ -396,16 +685,16 @@ export default function Canvas() {
           size={1}
           color="#1e3044"
         />
-        {minimapEnabled && (
+        {minimapMode !== 'never' && (
           <MiniMap
             nodeStrokeWidth={3}
             zoomable
             pannable
             style={{
               backgroundColor: 'var(--color-surface-1)',
-              opacity: minimapVisible ? 1 : 0,
+              opacity: minimapMode === 'always' || minimapVisible ? 1 : 0,
               transition: 'opacity 300ms ease',
-              pointerEvents: minimapVisible ? 'auto' : 'none',
+              pointerEvents: minimapMode === 'always' || minimapVisible ? 'auto' : 'none',
             }}
           />
         )}
@@ -421,7 +710,7 @@ export default function Canvas() {
               markerHeight={8}
               orient="auto-start-reverse"
             >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b4f63" />
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-edge)" />
             </marker>
           </defs>
         </svg>
