@@ -166,6 +166,7 @@ export default function SearchDialog() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search elements, views, technology..."
+            aria-label="Search elements and views"
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--color-text-primary)' }}
           />

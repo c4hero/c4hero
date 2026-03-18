@@ -128,6 +128,7 @@ export default function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Type a command..."
+            aria-label="Search commands"
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--color-text-primary)' }}
           />

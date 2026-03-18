@@ -51,7 +51,7 @@ export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
             <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
             <h2 className="text-base font-semibold">AI Settings</h2>
           </div>
-          <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1">
+          <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close dialog">
             <X size={16} />
           </button>
         </div>

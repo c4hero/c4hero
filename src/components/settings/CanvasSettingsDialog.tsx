@@ -54,6 +54,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
           <button
             onClick={onClose}
             className="btn-icon"
+            aria-label="Close dialog"
             style={{ minWidth: 28, minHeight: 28, padding: 4 }}
           >
             <X size={14} />

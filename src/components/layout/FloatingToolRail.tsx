@@ -246,6 +246,7 @@ export default function FloatingToolRail() {
             />
             <div
               ref={arrangeFlyoutRef}
+              role="menu"
               className="glass-flyout"
               style={{
                 position: 'absolute',
@@ -308,6 +309,7 @@ export default function FloatingToolRail() {
                 />
                 <div
                   ref={alignFlyoutRef}
+                  role="menu"
                   className="glass-flyout"
                   style={{
                     position: 'absolute',

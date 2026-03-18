@@ -57,7 +57,7 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold">Create View</h2>
-          <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1"><X size={14} /></button>
+          <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close dialog"><X size={14} /></button>
         </div>
 
         <div className="space-y-3">
