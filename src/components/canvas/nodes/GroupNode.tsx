@@ -18,7 +18,7 @@ function GroupNode({ data, selected }: NodeProps & { data: GroupNodeData }) {
         minHeight: undefined,
         border: selected
           ? '2px dashed var(--color-accent)'
-          : '2px dashed rgba(88, 166, 255, 0.25)',
+          : '2px dashed var(--color-border-hover)',
         background: 'rgba(88, 166, 255, 0.03)',
         transition: 'border-color 200ms ease',
       }}
