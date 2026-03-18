@@ -6,12 +6,6 @@ import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { parseSidecar, applySidecar, extractSidecar, serializeSidecar } from '@/lib/sidecar'
 
 export function useKeyboardShortcuts() {
-  const workspace = useWorkspaceStore((s) => s.workspace)
-  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const selectedElementIds = useWorkspaceStore((s) => s.selectedElementIds)
-  const selectedRelationshipId = useWorkspaceStore((s) => s.selectedRelationshipId)
-  const presentationMode = useWorkspaceStore((s) => s.presentationMode)
-
   let reactFlow: ReturnType<typeof useReactFlow> | null = null
   try {
     reactFlow = useReactFlow()
@@ -204,5 +198,7 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [workspace, activeViewKey, selectedElementIds, selectedRelationshipId, presentationMode, rf])
+  // All state is read from getState() inside the handler — only rf is a closure dependency
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rf])
 }
