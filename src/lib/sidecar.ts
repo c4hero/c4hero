@@ -162,8 +162,12 @@ export function serializeSidecar(data: SidecarData): string {
 export function parseSidecar(json: string): SidecarData | null {
   try {
     const data = JSON.parse(json)
-    if (data?.version === 1) return data as SidecarData
-    return null
+    if (!data || typeof data !== 'object' || data.version !== 1) return null
+    // Validate expected shape — elements/relationships/views should be objects if present
+    if (data.elements && typeof data.elements !== 'object') return null
+    if (data.relationships && typeof data.relationships !== 'object') return null
+    if (data.views && typeof data.views !== 'object') return null
+    return data as SidecarData
   } catch {
     return null
   }
