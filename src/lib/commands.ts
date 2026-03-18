@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   UserRound, Globe, Box, Puzzle, Layers, Undo2, Redo2, Trash2,
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
-  LayoutGrid, Search, Download, Save, Settings, Monitor,
+  LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, FileText, Image, FileCode,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews } from '@/store/workspace'
@@ -42,7 +42,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         return !!s.workspace && getCreatableTypes(s.workspace, s.activeViewKey).canCreatePerson
       },
-      execute: () => store().addPerson('New Person'),
+      execute: () => { store().addPerson('New Person') },
     },
     {
       id: 'add-system',
@@ -55,7 +55,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         return !!s.workspace && getCreatableTypes(s.workspace, s.activeViewKey).canCreateSystem
       },
-      execute: () => store().addSoftwareSystem('New System'),
+      execute: () => { store().addSoftwareSystem('New System') },
     },
     {
       id: 'add-container',
@@ -171,7 +171,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       icon: Maximize2,
       shortcut: '0',
       keywords: ['fit', 'zoom', 'reset'],
-      execute: () => reactFlow?.fitView({ duration: 300, padding: 0.2 }),
+      execute: () => { reactFlow?.fitView({ duration: 300, padding: 0.2 }) },
     },
     {
       id: 'zoom-in',
@@ -179,7 +179,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: ZoomIn,
       shortcut: '+',
-      execute: () => reactFlow?.zoomIn({ duration: 200 }),
+      execute: () => { reactFlow?.zoomIn({ duration: 200 }) },
     },
     {
       id: 'zoom-out',
@@ -187,7 +187,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: ZoomOut,
       shortcut: '−',
-      execute: () => reactFlow?.zoomOut({ duration: 200 }),
+      execute: () => { reactFlow?.zoomOut({ duration: 200 }) },
     },
     {
       id: 'auto-arrange',

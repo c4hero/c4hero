@@ -1213,6 +1213,7 @@ class ContextAwareParser {
 // ─── Public API ─────────────────────────────────────────────────────
 
 export function parse(input: string): ParseResult {
+    globalIdCounter = 0 // Reset per parse call to avoid growing IDs across invocations
     const lexResult = lex(input)
     const parser = new ContextAwareParser(lexResult.tokens)
     const result = parser.parse()

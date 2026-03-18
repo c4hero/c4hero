@@ -76,6 +76,13 @@ export function exportCanvasAsSVG(theme: ExportTheme = 'dark'): string | null {
   if (!viewport) return null
 
   const cloned = viewport.cloneNode(true) as HTMLElement
+  // Strip any script elements and event handler attributes for safety
+  for (const script of cloned.querySelectorAll('script')) script.remove()
+  for (const el of cloned.querySelectorAll('*')) {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.startsWith('on')) el.removeAttribute(attr.name)
+    }
+  }
   inlineStyles(viewport, cloned)
 
   // For light theme, override CSS custom property values on the cloned root
