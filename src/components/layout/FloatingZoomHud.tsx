@@ -57,6 +57,7 @@ function ZoomHudBtn({
       title={title}
       aria-label={title}
       onClick={onClick}
+      className="hover-lift"
       style={{
         width: 32,
         height: 32,
@@ -68,14 +69,6 @@ function ZoomHudBtn({
         cursor: 'pointer',
         transition: 'background 0.12s, color 0.12s',
         border: 'none',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-        e.currentTarget.style.color = 'var(--color-text-primary)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'transparent'
-        e.currentTarget.style.color = 'var(--color-text-muted)'
       }}
     >
       {children}

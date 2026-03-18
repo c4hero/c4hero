@@ -401,7 +401,7 @@ function TagRow({
     <>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '3px 4px', borderRadius: 7,
+        padding: '3px 4px', borderRadius: 'var(--radius-sm)',
         transition: 'background 0.1s',
       }}>
         {/* Color swatch */}
@@ -424,7 +424,7 @@ function TagRow({
           }}
           style={{
             flex: 1, height: 26, padding: '0 7px',
-            borderRadius: 5,
+            borderRadius: 'var(--radius-sm)',
             border: focused ? '1px solid var(--color-accent)' : '1px solid transparent',
             background: focused ? 'var(--color-surface-3)' : 'transparent',
             color: 'var(--color-text-primary)',
@@ -439,7 +439,7 @@ function TagRow({
             onMouseDown={(e) => { e.preventDefault(); commitRename() }}
             style={{
               width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 5, border: 'none', background: 'rgba(88,166,255,0.15)', color: 'var(--color-accent)',
+              borderRadius: 'var(--radius-sm)', border: 'none', background: 'rgba(88,166,255,0.15)', color: 'var(--color-accent)',
               cursor: 'pointer', flexShrink: 0,
             }}
           >
@@ -452,7 +452,7 @@ function TagRow({
           onClick={onEditStyle}
           style={{
             width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 5, border: 'none',
+            borderRadius: 'var(--radius-sm)', border: 'none',
             background: editingStyle ? 'rgba(88,166,255,0.12)' : 'transparent',
             color: editingStyle ? 'var(--color-accent)' : 'var(--color-text-muted)',
             cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s',
@@ -469,7 +469,7 @@ function TagRow({
           onClick={onDelete}
           style={{
             width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 5, border: 'none', background: 'transparent',
+            borderRadius: 'var(--radius-sm)', border: 'none', background: 'transparent',
             color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s',
           }}
           title="Remove tag globally"
@@ -553,7 +553,7 @@ function TagStyleEditor({ tag, style, onClose }: {
     <div style={{
       margin: '2px 4px 6px 22px',
       padding: 12,
-      borderRadius: 8,
+      borderRadius: 'var(--radius-md)',
       border: '1px solid var(--color-border)',
       background: 'rgba(255,255,255,0.03)',
     }}>
@@ -568,7 +568,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           <select
             value={shape}
             onChange={(e) => update({ shape: e.target.value || undefined })}
-            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
+            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
           >
             <option value="">Default</option>
             {STRUCTURIZR_SHAPES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -578,7 +578,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           <select
             value={border}
             onChange={(e) => update({ border: e.target.value || undefined })}
-            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
+            style={{ flex: 1, height: 26, padding: '0 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
           >
             <option value="">Default</option>
             <option value="Solid">Solid</option>
@@ -603,7 +603,7 @@ function TagStyleEditor({ tag, style, onClose }: {
             value={fontSize ?? ''}
             placeholder="Default"
             onChange={(e) => update({ fontSize: e.target.value ? Number(e.target.value) : undefined })}
-            style={{ width: 60, height: 26, padding: '0 6px', borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
+            style={{ width: 60, height: 26, padding: '0 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
           />
         </StyleField>
       </div>
@@ -611,7 +611,7 @@ function TagStyleEditor({ tag, style, onClose }: {
         <button
           onClick={() => { removeElementStyle(tag); onClose() }}
           style={{
-            marginTop: 10, width: '100%', padding: '5px 0', borderRadius: 5,
+            marginTop: 10, width: '100%', padding: '5px 0', borderRadius: 'var(--radius-sm)',
             border: '1px solid rgba(239,68,68,0.3)', background: 'transparent',
             color: 'var(--color-error)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s',
           }}
@@ -650,7 +650,7 @@ function ColorPicker({ value, onChange, presets }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="#hex or name"
-        style={{ flex: 1, height: 26, padding: '0 8px', paddingLeft: 26, borderRadius: 5, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
+        style={{ flex: 1, height: 26, padding: '0 8px', paddingLeft: 26, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
       />
       <button
         onClick={() => setShowPresets((o) => !o)}
@@ -659,14 +659,14 @@ function ColorPicker({ value, onChange, presets }: {
       {showPresets && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 201 }} onClick={() => setShowPresets(false)} />
-          <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 202, marginBottom: 4, padding: 6, borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-surface-1)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+          <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 202, marginBottom: 4, padding: 6, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface-1)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
             {presets.map((c) => (
               <button key={c} onClick={() => { onChange(c); setShowPresets(false) }}
-                style={{ width: 22, height: 22, borderRadius: 4, border: value === c ? '2px solid var(--color-accent)' : '1px solid var(--color-border)', background: c, cursor: 'pointer', padding: 0 }}
+                style={{ width: 22, height: 22, borderRadius: 'var(--radius-sm)', border: value === c ? '2px solid var(--color-accent)' : '1px solid var(--color-border)', background: c, cursor: 'pointer', padding: 0 }}
               />
             ))}
             <button onClick={() => { onChange(''); setShowPresets(false) }}
-              style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              style={{ width: 22, height: 22, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <X size={10} />
             </button>
           </div>

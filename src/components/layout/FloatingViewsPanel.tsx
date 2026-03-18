@@ -124,6 +124,7 @@ function ViewsList({
         <div key={type}>
           <button
             onClick={() => setExpanded((e) => ({ ...e, [type]: !e[type] }))}
+            className="hover-surface"
             style={{
               display: 'flex',
               width: '100%',
@@ -139,9 +140,8 @@ function ViewsList({
               background: 'transparent',
               cursor: 'pointer',
               transition: 'background 0.12s',
+              border: 'none',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-3)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
             {expanded[type] ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
             {VIEW_TYPE_LABELS[type] ?? type}
@@ -156,6 +156,8 @@ function ViewsList({
                 <button
                   key={view.key}
                   onClick={() => onSelect(view.key)}
+                  className="hover-surface-2-inactive"
+                  data-active={view.key === activeViewKey ? 'true' : undefined}
                   style={{
                     display: 'flex',
                     width: '100%',
@@ -176,18 +178,7 @@ function ViewsList({
                         : 'none',
                     cursor: 'pointer',
                     transition: 'background 0.12s, color 0.12s',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (view.key !== activeViewKey) {
-                      e.currentTarget.style.background = 'var(--color-surface-2)'
-                      e.currentTarget.style.color = 'var(--color-text-primary)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (view.key !== activeViewKey) {
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.color = 'var(--color-text-muted)'
-                    }
+                    border: 'none',
                   }}
                 >
                   {view.title ?? view.key}

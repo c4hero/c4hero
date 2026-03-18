@@ -419,6 +419,8 @@ const RailBtn = forwardRef<HTMLButtonElement, {
       aria-expanded={expanded}
       aria-haspopup={expanded !== undefined ? 'true' : undefined}
       onClick={onClick}
+      className="hover-lift-inactive"
+      data-active={active ? 'true' : undefined}
       style={{
         width: 44,
         height: 44,
@@ -432,18 +434,6 @@ const RailBtn = forwardRef<HTMLButtonElement, {
         cursor: onClick ? 'pointer' : 'default',
         transition: 'background 0.12s, color 0.12s',
         border: 'none',
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-          e.currentTarget.style.color = color ?? 'var(--color-text-primary)'
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = 'transparent'
-          e.currentTarget.style.color = color ?? 'var(--color-text-muted)'
-        }
       }}
     >
       {icon}
