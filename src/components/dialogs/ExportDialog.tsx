@@ -57,7 +57,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
           justifyContent: 'center',
           width: 32,
           height: 32,
-          borderRadius: 6,
+          borderRadius: 'var(--radius-sm)',
           border: '1px solid var(--color-border)',
           background: isDone ? 'rgba(34,197,94,0.12)' : 'var(--color-surface-2)',
           color: isDone ? 'var(--color-success)' : 'var(--color-text-secondary)',
@@ -111,7 +111,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
     <>
       {/* Backdrop */}
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'rgba(11,18,25,0.45)' }}
+        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'var(--color-backdrop)' }}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -123,10 +123,10 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
         aria-label="Export workspace"
         style={{
           zIndex: 49,
-          background: 'rgba(13,17,23,0.97)',
+          background: 'var(--glass-bg-heavy)',
           border: '1px solid var(--color-border)',
           borderTop: 'none',
-          borderRadius: '0 0 14px 14px',
+          borderRadius: '0 0 var(--radius-xl) var(--radius-xl)',
           boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
@@ -145,7 +145,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
             borderBottom: '1px solid var(--color-border)',
           }}
         >
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+          <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
             Export
           </span>
         </div>
@@ -191,13 +191,13 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
                 gap: 6,
                 alignItems: 'center',
                 padding: '6px 8px',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 background: 'rgba(255,255,255,0.03)',
               }}
             >
               <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)' }}>{row.label}</div>
-                <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{row.ext}</div>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, color: 'var(--color-text-primary)' }}>{row.label}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{row.ext}</div>
               </div>
 
               {/* Download dark */}
@@ -241,7 +241,7 @@ function ColHeader({ icon: Icon, label }: { icon: typeof Download; label: string
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, color: 'var(--color-text-muted)' }}>
       <Icon size={11} />
-      <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
+      <span style={{ fontSize: 'var(--text-xxs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
     </div>
   )
 }

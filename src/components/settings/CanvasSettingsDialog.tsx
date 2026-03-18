@@ -10,7 +10,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
     <>
       {/* Backdrop */}
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(11,18,25,0.5)' }}
+        style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'var(--color-backdrop)' }}
         onClick={onClose}
       />
 
@@ -30,9 +30,9 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
           width: 380,
           maxHeight: '80dvh',
           overflowY: 'auto',
-          borderRadius: 14,
+          borderRadius: 'var(--radius-xl)',
           border: '1px solid var(--color-border)',
-          background: 'rgba(13, 17, 23, 0.96)',
+          background: 'var(--glass-bg-heavy)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
@@ -48,7 +48,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
             borderBottom: '1px solid var(--color-border)',
           }}
         >
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          <span style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
             Canvas Settings
           </span>
           <button

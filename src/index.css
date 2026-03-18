@@ -67,6 +67,9 @@
   --radius-lg: 12px;
   --radius-xl: 14px;
 
+  /* Backdrop */
+  --color-backdrop: rgba(11, 18, 25, 0.5);
+
   /* Font size scale */
   --text-xxs: 9px;
   --text-xs: 10px;
@@ -167,7 +170,7 @@ body {
 /* ─── Overlay backdrop ─────────────────────────────────────── */
 
 .panel-backdrop {
-  background: rgba(11, 18, 25, 0.55);
+  background: var(--color-backdrop);
 }
 
 /* ─── Transitions ──────────────────────────────────────────── */

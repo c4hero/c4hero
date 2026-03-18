@@ -91,7 +91,7 @@ export default function CommandPalette() {
     <>
       {/* Backdrop */}
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'rgba(11,18,25,0.45)' }}
+        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'var(--color-backdrop)' }}
         onClick={close}
         aria-hidden="true"
       />
@@ -103,10 +103,10 @@ export default function CommandPalette() {
         aria-label="Command palette"
         style={{
           zIndex: 49,
-          background: 'rgba(13,17,23,0.97)',
+          background: 'var(--glass-bg-heavy)',
           borderTop: 'none',
           border: '1px solid var(--color-border)',
-          borderRadius: '0 0 14px 14px',
+          borderRadius: '0 0 var(--radius-xl) var(--radius-xl)',
           boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
