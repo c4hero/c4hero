@@ -2,8 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getCommands, CATEGORY_ORDER, CATEGORY_LABELS, type Command } from '@/lib/commands'
-import { Command as CommandIcon, X } from 'lucide-react'
-import { useFocusTrap } from '@/hooks/useFocusTrap'
+import { Command as CommandIcon } from 'lucide-react'
 
 export default function CommandPalette() {
   const setCommandPaletteOpen = useWorkspaceStore((s) => s.setCommandPaletteOpen)
@@ -11,7 +10,6 @@ export default function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
-  const trapRef = useFocusTrap<HTMLDivElement>()
 
   let reactFlow: ReturnType<typeof useReactFlow> | null = null
   try {
@@ -24,22 +22,25 @@ export default function CommandPalette() {
     inputRef.current?.focus()
   }, [])
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
   const allCommands = useMemo(() => getCommands(reactFlow), [reactFlow])
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim()
     return allCommands.filter((cmd) => {
-      // Check visibility
       if (cmd.when && !cmd.when()) return false
       if (!q) return true
-      // Match against label and keywords
       if (cmd.label.toLowerCase().includes(q)) return true
       if (cmd.keywords?.some((kw) => kw.includes(q))) return true
       return false
     })
   }, [allCommands, query])
 
-  // Group by category in defined order
   const grouped = useMemo(() => {
     const groups: { category: Command['category']; label: string; commands: Command[] }[] = []
     for (const cat of CATEGORY_ORDER) {
@@ -51,14 +52,12 @@ export default function CommandPalette() {
     return groups
   }, [filtered])
 
-  // Flat list for keyboard navigation
   const flatList = useMemo(() => grouped.flatMap((g) => g.commands), [grouped])
 
   useEffect(() => {
     setSelectedIndex(0)
   }, [query])
 
-  // Scroll selected item into view
   useEffect(() => {
     const el = resultsRef.current?.querySelector('[data-selected="true"]')
     if (el) el.scrollIntoView({ block: 'nearest' })
@@ -89,27 +88,33 @@ export default function CommandPalette() {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center"
-      onKeyDown={handleKeyDown}
-    >
+    <>
       {/* Backdrop */}
-      <div className="absolute inset-0 panel-backdrop" onClick={close} />
-
-      {/* Dialog */}
       <div
-        ref={trapRef}
+        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'rgba(11,18,25,0.45)' }}
+        onClick={close}
+        aria-hidden="true"
+      />
+
+      {/* Shade panel — no position:fixed, no top/left/transform; inherits pill column width */}
+      <div
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="relative w-full max-w-lg rounded-[14px] border shadow-2xl"
         style={{
-          background: 'rgba(13, 17, 23, 0.96)',
-          borderColor: 'var(--color-border)',
-          boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
+          zIndex: 49,
+          background: 'rgba(13,17,23,0.97)',
+          borderTop: 'none',
+          border: '1px solid var(--color-border)',
+          borderRadius: '0 0 14px 14px',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
+          overflow: 'hidden',
+          pointerEvents: 'auto',
+          animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
         }}
+        onKeyDown={handleKeyDown}
       >
         {/* Search input */}
         <div
@@ -126,13 +131,7 @@ export default function CommandPalette() {
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--color-text-primary)' }}
           />
-          <button
-            onClick={close}
-            className="btn-icon !min-h-6 !min-w-6 !p-1"
-            aria-label="Close command palette"
-          >
-            <X size={14} />
-          </button>
+
         </div>
 
         {/* Results */}
@@ -215,7 +214,7 @@ export default function CommandPalette() {
           </span>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 

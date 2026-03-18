@@ -6,6 +6,7 @@ import { saveDSLFile, getCurrentFileHandle } from '@/lib/fileIO'
 import type { View } from '@/types/model'
 import CreateViewDialog from '@/components/views/CreateViewDialog'
 import ExportDialog from '@/components/dialogs/ExportDialog'
+import CommandPalette from '@/components/command-palette/CommandPalette'
 import {
   ChevronDown,
   ChevronRight,
@@ -15,9 +16,13 @@ import {
   Undo2,
   Redo2,
 
-  LayoutGrid,
+
   MoreHorizontal,
   TriangleAlert,
+  Plus,
+  Pencil,
+  Trash2,
+  Check,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
@@ -46,9 +51,12 @@ export default function FloatingTopPill() {
   const redo = useWorkspaceStore((s) => s.redo)
   const canUndo = useWorkspaceStore((s) => s.canUndo)
   const canRedo = useWorkspaceStore((s) => s.canRedo)
-  const toggleViewsPanel = useWorkspaceStore((s) => s.toggleViewsPanel)
+
+  const deleteView = useWorkspaceStore((s) => s.deleteView)
+  const renameView = useWorkspaceStore((s) => s.renameView)
   // Dirty state: any workspace mutation resets undoStack; treat undoStack.length > 0 as "dirty"
   const isDirty = useWorkspaceStore((s) => s.undoStack.length > 0)
+  const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
   const lastSavedUndoLength = useWorkspaceStore((s) => s.lastSavedUndoLength)
 
   const showUndoRedo = useSettingsStore((s) => s.showUndoRedo)
@@ -56,6 +64,8 @@ export default function FloatingTopPill() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [copyToast, setCopyToast] = useState<string | null>(null)
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false)
+  const [renamingViewKey, setRenamingViewKey] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
   const [showCreateView, setShowCreateView] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -171,6 +181,8 @@ export default function FloatingTopPill() {
           pointerEvents: 'none',
         }}
       >
+      {/* Column: pill on top, slide-down panels below — inherit same natural width */}
+      <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', minWidth: 0 }}>
       <div
         style={{
           pointerEvents: 'auto',
@@ -242,7 +254,7 @@ export default function FloatingTopPill() {
         {/* View switcher */}
         <div style={{ position: 'relative', flex: 1, minWidth: 0, overflow: 'visible' }}>
           <button
-            onClick={() => setViewDropdownOpen((o) => !o)}
+            onClick={() => { setViewDropdownOpen((o) => !o); setExportDialogOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }}
             style={{
               padding: '0 12px',
               height: 44,
@@ -319,123 +331,6 @@ export default function FloatingTopPill() {
             <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
           </button>
 
-          {/* View dropdown */}
-          {viewDropdownOpen && (
-            <>
-              <div
-                style={{ position: 'fixed', inset: 0, zIndex: 49 }}
-                onClick={() => setViewDropdownOpen(false)}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  zIndex: 50,
-                  marginTop: 4,
-                  minWidth: 200,
-                  background: 'var(--color-surface-1)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 10,
-                  padding: '4px 0',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
-                }}
-              >
-                {Object.entries(viewsByType).map(([type, typeViews]) => (
-                  <div key={type}>
-                    <div
-                      style={{
-                        padding: '4px 12px 2px',
-                        fontSize: 9,
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.1em',
-                        color: 'var(--color-text-muted)',
-                      }}
-                    >
-                      {VIEW_TYPE_LABELS[type] ?? type}
-                    </div>
-                    {typeViews.map((v) => (
-                      <button
-                        key={v.key}
-                        onClick={() => {
-                          setActiveView(v.key)
-                          setViewDropdownOpen(false)
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          width: '100%',
-                          padding: '6px 12px 6px 20px',
-                          fontSize: 13,
-                          color: v.key === activeViewKey ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                          background: v.key === activeViewKey ? 'var(--color-surface-3)' : 'transparent',
-                          cursor: 'pointer',
-                          transition: 'background 0.1s',
-                          boxShadow: v.key === activeViewKey ? 'inset 2px 0 0 var(--color-accent)' : 'none',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (v.key !== activeViewKey) e.currentTarget.style.background = 'var(--color-surface-2)'
-                        }}
-                        onMouseLeave={(e) => {
-                          if (v.key !== activeViewKey) e.currentTarget.style.background = 'transparent'
-                        }}
-                      >
-                        {v.title ?? v.key}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-
-                <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
-                <button
-                  onClick={() => {
-                    setViewDropdownOpen(false)
-                    toggleViewsPanel()
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                    padding: '7px 12px',
-                    fontSize: 12,
-                    color: 'var(--color-text-secondary)',
-                    background: 'transparent',
-                    cursor: 'pointer',
-                    gap: 6,
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-                >
-                  <LayoutGrid size={12} />
-                  Manage views
-                </button>
-                <button
-                  onClick={() => {
-                    setViewDropdownOpen(false)
-                    setShowCreateView(true)
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                    padding: '7px 12px',
-                    fontSize: 12,
-                    color: 'var(--color-accent)',
-                    background: 'transparent',
-                    cursor: 'pointer',
-                    gap: 6,
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-2)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-                >
-                  + New view
-                </button>
-              </div>
-            </>
-          )}
         </div>
 
         {/* Save status indicator */}
@@ -534,12 +429,12 @@ export default function FloatingTopPill() {
                     boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
                   }}
                 >
-                  <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true) }} />
+                  <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
                   <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
                   <MenuItemRow
                     icon={Command}
                     label="Command palette"
-                    onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(true) }}
+                    onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(true); setExportDialogOpen(false) }}
                   />
 
                   {showUndoRedo && (
@@ -608,7 +503,7 @@ export default function FloatingTopPill() {
 
             {/* Export */}
             <button
-              onClick={() => setExportDialogOpen(true)}
+              onClick={() => { setExportDialogOpen(o => !o); useWorkspaceStore.getState().setCommandPaletteOpen(false); setViewDropdownOpen(false) }}
               className="btn-icon"
               style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40, minHeight: 44 }}
               title="Export"
@@ -629,7 +524,7 @@ export default function FloatingTopPill() {
               }}
               title="Command palette (⌘K)"
               aria-label="Command palette"
-              onClick={() => useWorkspaceStore.getState().setCommandPaletteOpen(true)}
+              onClick={() => { const open = !useWorkspaceStore.getState().commandPaletteOpen; useWorkspaceStore.getState().setCommandPaletteOpen(open); if (open) { setExportDialogOpen(false); setViewDropdownOpen(false) } }}
             >
               <Command size={15} />
             </button>
@@ -638,10 +533,135 @@ export default function FloatingTopPill() {
           </>
         )}
       </div>
-      </div>
+      {/* Slide-down shades — siblings in the column, inherit exact pill width */}
+      {viewDropdownOpen && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 48 }} onClick={() => { setViewDropdownOpen(false); setRenamingViewKey(null) }} />
+          <div style={{
+            zIndex: 49,
+            background: 'rgba(13,17,23,0.97)',
+            border: '1px solid var(--color-border)',
+            borderTop: 'none',
+            borderRadius: '0 0 14px 14px',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
+            overflow: 'hidden',
+            pointerEvents: 'auto',
+            maxHeight: 'calc(100vh - 80px)',
+            overflowY: 'auto',
+          }}>
+            {/* Views grouped by type */}
+            <div style={{ padding: '12px 0' }}>
+              {Object.entries(viewsByType).map(([type, typeViews]) => (
+                <div key={type}>
+                  <div style={{ padding: '4px 16px 6px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-text-muted)' }}>
+                    {VIEW_TYPE_LABELS[type] ?? type}
+                  </div>
+                  {typeViews.map((v) => {
+                    const isActive = v.key === activeViewKey
+                    const isRenaming = renamingViewKey === v.key
+                    return (
+                      <div
+                        key={v.key}
+                        className="group"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0,
+                          padding: '0 8px',
+                          background: isActive ? 'rgba(88,166,255,0.08)' : 'transparent',
+                          borderLeft: isActive ? '2px solid var(--color-accent)' : '2px solid transparent',
+                          transition: 'background 0.1s',
+                        }}
+                        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+                      >
+                        {/* Level badge */}
+                        <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 5px', borderRadius: 4, background: isActive ? 'rgba(88,166,255,0.2)' : 'var(--color-surface-3)', color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)', letterSpacing: '0.05em', flexShrink: 0, marginRight: 10 }}>
+                          {LEVEL_BADGE[v.type] ?? v.type.slice(0,2).toUpperCase()}
+                        </span>
 
-      {showCreateView && <CreateViewDialog onClose={() => setShowCreateView(false)} />}
-      {showSettings && <CanvasSettingsDialog onClose={() => setShowSettings(false)} />}
+                        {/* Title / rename input */}
+                        {isRenaming ? (
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={e => setRenameValue(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { renameView(v.key, renameValue.trim() || v.title || v.key); setRenamingViewKey(null) }
+                              if (e.key === 'Escape') setRenamingViewKey(null)
+                              e.stopPropagation()
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            style={{ flex: 1, fontSize: 13, background: 'var(--color-surface-2)', border: '1px solid var(--color-accent)', borderRadius: 6, padding: '4px 8px', color: 'var(--color-text-primary)', outline: 'none', minWidth: 0, margin: '4px 0' }}
+                          />
+                        ) : (
+                          <button
+                            onClick={() => { setActiveView(v.key); setViewDropdownOpen(false); setRenamingViewKey(null) }}
+                            style={{ flex: 1, textAlign: 'left', padding: '10px 0', fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', background: 'transparent', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+                          >
+                            {v.title ?? v.key}
+                          </button>
+                        )}
+
+                        {/* Actions */}
+                        <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginLeft: 6, opacity: 0, transition: 'opacity 0.1s' }}
+                          className="view-row-actions"
+                          ref={el => {
+                            // show on row hover
+                            const row = el?.closest('[class~="group"]') as HTMLElement | null
+                            if (row) {
+                              row.onmouseenter = () => { if (el) el.style.opacity = '1' }
+                              row.onmouseleave = () => { if (el) el.style.opacity = '0' }
+                            }
+                          }}
+                        >
+                          {isRenaming ? (
+                            <button onClick={e => { e.stopPropagation(); renameView(v.key, renameValue.trim() || v.title || v.key); setRenamingViewKey(null) }}
+                              style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'rgba(34,197,94,0.15)', border: 'none', cursor: 'pointer', color: '#22c55e' }} title="Save">
+                              <Check size={13} />
+                            </button>
+                          ) : (
+                            <button onClick={e => { e.stopPropagation(); setRenamingViewKey(v.key); setRenameValue(v.title ?? v.key) }}
+                              style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-3)'; e.currentTarget.style.color = 'var(--color-text-primary)' }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
+                              title="Rename">
+                              <Pencil size={13} />
+                            </button>
+                          )}
+                          <button onClick={e => { e.stopPropagation(); if (views.length > 1) deleteView(v.key) }}
+                            disabled={views.length <= 1}
+                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1 }}
+                            onMouseEnter={e => { if (views.length > 1) { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.color = '#ef4444' } }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
+                            title={views.length <= 1 ? 'Cannot delete last view' : 'Delete view'}>
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div style={{ height: 8 }} />
+                </div>
+              ))}
+            </div>
+            {/* Footer */}
+            <div style={{ borderTop: '1px solid var(--color-border)' }}>
+              <button
+                onClick={() => { setViewDropdownOpen(false); setShowCreateView(true) }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px', fontSize: 13, color: 'var(--color-accent)', background: 'transparent', cursor: 'pointer', transition: 'background 0.1s', border: 'none' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(88,166,255,0.06)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+              >
+                <Plus size={14} /> New view
+              </button>
+            </div>
+          </div>
+        </>
+      )}
       {exportDialogOpen && (
         <ExportDialog
           onExport={handleExport}
@@ -649,6 +669,12 @@ export default function FloatingTopPill() {
           onClose={() => setExportDialogOpen(false)}
         />
       )}
+      {commandPaletteOpen && <CommandPalette />}
+      </div>{/* end column */}
+      </div>{/* end outer row */}
+
+      {showCreateView && <CreateViewDialog onClose={() => setShowCreateView(false)} />}
+      {showSettings && <CanvasSettingsDialog onClose={() => setShowSettings(false)} />}
       {copyToast && (
         <div style={{
           position: 'fixed',

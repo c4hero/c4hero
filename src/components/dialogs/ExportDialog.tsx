@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { X, Download, Copy, Check, Moon, Sun } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Download, Copy, Check, Moon, Sun } from 'lucide-react'
 import type { ExportTheme } from '@/lib/exportUtils'
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -15,6 +15,12 @@ interface ExportDialogProps {
 export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialogProps) {
   const [busy, setBusy] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
 
   async function act(key: string, fn: () => Promise<void>) {
     setBusy(key)
@@ -115,29 +121,29 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
     <>
       {/* Backdrop */}
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(11,18,25,0.5)' }}
+        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'rgba(11,18,25,0.45)' }}
         onClick={onClose}
+        aria-hidden="true"
       />
 
-      {/* Dialog */}
+      {/* Shade panel — no position:fixed; inherits pill column width */}
       <div
-        style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 201,
-          width: 420,
-          maxWidth: 'calc(100vw - 32px)',
-          background: 'rgba(13, 17, 23, 0.96)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 14,
-          boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
-          overflow: 'hidden',
-        }}
         role="dialog"
         aria-modal="true"
         aria-label="Export workspace"
+        style={{
+          zIndex: 49,
+          background: 'rgba(13,17,23,0.97)',
+          border: '1px solid var(--color-border)',
+          borderTop: 'none',
+          borderRadius: '0 0 14px 14px',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
+          overflow: 'hidden',
+          pointerEvents: 'auto',
+        }}
       >
         {/* Header */}
         <div
@@ -152,14 +158,6 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>
             Export
           </span>
-          <button
-            onClick={onClose}
-            className="btn-icon"
-            style={{ width: 28, height: 28, borderRadius: 6 }}
-            aria-label="Close"
-          >
-            <X size={14} />
-          </button>
         </div>
 
         {/* Column headers */}

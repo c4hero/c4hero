@@ -10,9 +10,10 @@ import FloatingViewsPanel from '@/components/layout/FloatingViewsPanel'
 import FloatingInspector from '@/components/layout/FloatingInspector'
 import FloatingBottomStrip from '@/components/layout/FloatingBottomStrip'
 import FloatingZoomHud from '@/components/layout/FloatingZoomHud'
+import MultiSelectBar from '@/components/layout/MultiSelectBar'
 import Canvas from '@/components/canvas/Canvas'
 import SearchDialog from '@/components/search/SearchDialog'
-import CommandPalette from '@/components/command-palette/CommandPalette'
+
 import CanvasHints from '@/components/canvas/CanvasHints'
 import WelcomeScreen from '@/components/welcome/WelcomeScreen'
 import { loadFromLocalStorage } from '@/lib/fileIO'
@@ -20,7 +21,7 @@ import { loadFromLocalStorage } from '@/lib/fileIO'
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const searchOpen = useWorkspaceStore((s) => s.searchOpen)
-  const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
+
   const presentationMode = useWorkspaceStore((s) => s.presentationMode)
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
 
@@ -74,6 +75,7 @@ export default function App() {
 
         {/* Floating chrome overlays */}
         <FloatingTopPill />
+        <MultiSelectBar />
         <FloatingToolRail />
         <FloatingViewsPanel />
         <FloatingInspector />
@@ -84,7 +86,7 @@ export default function App() {
 
       {/* Dialogs */}
       {searchOpen && <SearchDialog />}
-      {commandPaletteOpen && <CommandPalette />}
+
     </ReactFlowProvider>
   )
 }

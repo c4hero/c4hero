@@ -88,6 +88,7 @@ interface WorkspaceState extends UndoState {
   // View management
   addView: (type: ViewType, scopeId?: string, title?: string) => string
   deleteView: (key: string) => void
+  renameView: (key: string, title: string) => void
   updateNodePosition: (nodeId: string, x: number, y: number) => void
 
   // Undo/Redo
@@ -586,6 +587,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     ws.views.componentViews = ws.views.componentViews.filter(v => v.key !== key)
     const newActiveKey = s.activeViewKey === key ? getFirstViewKey(ws) : s.activeViewKey
     return { ...pushUndo(s), workspace: ws, activeViewKey: newActiveKey }
+  }),
+
+  renameView: (key, title) => set((s) => {
+    const ws = cloneWs(s)
+    if (!ws) return s
+    for (const arr of [ws.views.systemLandscapeViews, ws.views.systemContextViews, ws.views.containerViews, ws.views.componentViews] as { key: string; title?: string }[][]) {
+      const v = arr.find(v => v.key === key)
+      if (v) { v.title = title; break }
+    }
+    return { ...pushUndo(s), workspace: ws }
   }),
 
   updateNodePosition: (nodeId, x, y) => set((s) => {

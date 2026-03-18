@@ -400,6 +400,11 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slideDownFromBar {
+  from { opacity: 0; transform: translateY(-8px) scaleY(0.96); transform-origin: top center; }
+  to   { opacity: 1; transform: translateY(0)   scaleY(1);    transform-origin: top center; }
+}
+
 /* ─── Touch targets ────────────────────────────────────────── */
 
 @media (pointer: coarse) {
