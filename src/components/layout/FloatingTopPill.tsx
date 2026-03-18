@@ -1,16 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
-import { useWorkspaceStore, getAllViews, getBreadcrumb } from '@/store/workspace'
+import { useEffect, useState } from 'react'
+import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
 import { serializeDSL } from '@/lib/dsl'
-import { saveDSLFile, getCurrentFileHandle } from '@/lib/fileIO'
+import { saveDSLFile } from '@/lib/fileIO'
 import { announce } from '@/lib/announce'
-import type { View } from '@/types/model'
 import CreateViewDialog from '@/components/views/CreateViewDialog'
 import ExportDialog from '@/components/dialogs/ExportDialog'
 import CommandPalette from '@/components/command-palette/CommandPalette'
+import SaveIndicator from '@/components/layout/SaveIndicator'
+import ViewSwitcher, { ViewSwitcherPanel, LEVEL_BADGE } from '@/components/layout/ViewSwitcher'
 import {
-  ChevronDown,
-  ChevronRight,
   Download,
   Command,
 
@@ -19,68 +18,29 @@ import {
 
 
   MoreHorizontal,
-  TriangleAlert,
-  Plus,
-  Pencil,
-  Trash2,
-  Check,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
 
-const VIEW_TYPE_LABELS: Record<string, string> = {
-  systemLandscape: 'System Landscape',
-  systemContext: 'System Context',
-  container: 'Container',
-  component: 'Component',
-}
-
-const LEVEL_BADGE: Record<string, string> = {
-  systemLandscape: 'L1',
-  systemContext: 'L2',
-  container: 'L3',
-  component: 'L4',
-}
-
 export default function FloatingTopPill() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const viewHistory = useWorkspaceStore((s) => s.viewHistory)
-  const setActiveView = useWorkspaceStore((s) => s.setActiveView)
-  const navigateBack = useWorkspaceStore((s) => s.navigateBack)
   const undo = useWorkspaceStore((s) => s.undo)
   const redo = useWorkspaceStore((s) => s.redo)
   const canUndo = useWorkspaceStore((s) => s.canUndo)
   const canRedo = useWorkspaceStore((s) => s.canRedo)
 
-  const deleteView = useWorkspaceStore((s) => s.deleteView)
-  const renameView = useWorkspaceStore((s) => s.renameView)
-  // Dirty state: any workspace mutation resets undoStack; treat undoStack.length > 0 as "dirty"
-  const isDirty = useWorkspaceStore((s) => s.undoStack.length > 0)
   const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
-  const lastSavedUndoLength = useWorkspaceStore((s) => s.lastSavedUndoLength)
 
   const showUndoRedo = useSettingsStore((s) => s.showUndoRedo)
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [copyToast, setCopyToast] = useState<string | null>(null)
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false)
-  const [renamingViewKey, setRenamingViewKey] = useState<string | null>(null)
-  const [renameValue, setRenameValue] = useState('')
   const [showCreateView, setShowCreateView] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [hasFileHandle, setHasFileHandle] = useState(() => getCurrentFileHandle() !== null)
   const [hamburgerOpen, setHamburgerOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 640)
-  // Track undo stack length at last save to determine dirty state
-  const savedUndoLengthRef = useRef(0)
-  const savedFlashTimer = useRef<ReturnType<typeof setTimeout>>(null)
-
-  // Sync hasFileHandle whenever it may change
-  useEffect(() => {
-    setHasFileHandle(getCurrentFileHandle() !== null)
-  }, [saveStatus])
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth <= 640)
@@ -91,10 +51,6 @@ export default function FloatingTopPill() {
   if (!workspace) return null
 
   const views = getAllViews(workspace)
-  const breadcrumb = activeViewKey
-    ? getBreadcrumb(workspace, viewHistory, activeViewKey)
-    : []
-
   const activeView = views.find((v) => v.key === activeViewKey)
   const wsName = workspace.name ?? 'workspace'
 
@@ -108,12 +64,6 @@ export default function FloatingTopPill() {
       : [wsName]
     document.title = `${parts.join(' — ')} | c4hero`
   }, [activeView, activeViewKey, wsName])
-
-  const viewsByType = views.reduce<Record<string, View[]>>((acc, view) => {
-    if (!acc[view.type]) acc[view.type] = []
-    acc[view.type].push(view)
-    return acc
-  }, {})
 
   async function handleExport(format: 'dsl' | 'json' | 'png' | 'svg', theme: ExportTheme = 'dark') {
     if (!workspace) return
@@ -148,27 +98,6 @@ export default function FloatingTopPill() {
     setCopyToast(msg)
     announce(msg)
     setTimeout(() => setCopyToast(null), 2000)
-  }
-
-  async function handleSave() {
-    if (!workspace) return
-    setSaveStatus('saving')
-    const dsl = serializeDSL(workspace)
-    const ok = await saveDSLFile(dsl, `${wsName}.dsl`)
-    if (ok) {
-      const n = useWorkspaceStore.getState().undoStack.length
-      savedUndoLengthRef.current = n
-      useWorkspaceStore.getState().setLastSavedUndoLength(n)
-      setSaveStatus('saved')
-      announce('File saved')
-      if (savedFlashTimer.current) clearTimeout(savedFlashTimer.current)
-      savedFlashTimer.current = setTimeout(() => setSaveStatus('idle'), 2000)
-    } else {
-      setSaveStatus('error')
-      announce('Save failed')
-      if (savedFlashTimer.current) clearTimeout(savedFlashTimer.current)
-      savedFlashTimer.current = setTimeout(() => setSaveStatus('idle'), 3000)
-    }
   }
 
   return (
@@ -252,152 +181,16 @@ export default function FloatingTopPill() {
         </div>
 
         {/* View switcher */}
-        <div style={{ position: 'relative', flex: 1, minWidth: 0, overflow: 'visible' }}>
-          <button
-            onClick={() => { setViewDropdownOpen((o) => !o); setExportDialogOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }}
-            aria-expanded={viewDropdownOpen}
-            aria-haspopup="true"
-            aria-label="Switch view"
-            style={{
-              padding: '0 12px',
-              height: 44,
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              borderRight: '1px solid var(--color-border)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 700,
-              color: 'var(--color-text-primary)',
-              background: 'transparent',
-              cursor: 'pointer',
-              transition: 'background 0.12s',
-              minWidth: 0,
-              overflow: 'hidden',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-          >
-            {breadcrumb.length > 1 && (
-              <>
-                {breadcrumb.slice(0, -1).map((crumb, i) => (
-                  <span key={crumb.key} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                    {i > 0 && <ChevronRight size={10} style={{ color: 'var(--color-text-muted)' }} />}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const steps = breadcrumb.length - 1 - i
-                        for (let s = 0; s < steps; s++) navigateBack()
-                        setViewDropdownOpen(false)
-                      }}
-                      style={{
-                        fontSize: 'var(--text-sm)',
-                        color: 'var(--color-text-muted)',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {crumb.label}
-                    </button>
-                  </span>
-                ))}
-                <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-              </>
-            )}
-            <span
-              style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                maxWidth: isMobile ? 80 : 120,
-                minWidth: 0,
-              }}
-            >
-              {activeView?.title ?? activeViewKey ?? 'No view'}
-            </span>
-            {activeView && (
-              <span
-                style={{
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 800,
-                  padding: '2px 5px',
-                  borderRadius: 4,
-                  background: 'rgba(88,166,255,0.15)',
-                  color: 'var(--color-accent)',
-                  letterSpacing: '0.05em',
-                  flexShrink: 0,
-                }}
-              >
-                {LEVEL_BADGE[activeView.type] ?? ''}
-              </span>
-            )}
-            <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          </button>
-
-        </div>
+        <ViewSwitcher
+          isMobile={isMobile}
+          open={viewDropdownOpen}
+          onToggle={() => { setViewDropdownOpen((o) => !o); setExportDialogOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }}
+          onClose={() => { setViewDropdownOpen(false) }}
+          onShowCreateView={() => setShowCreateView(true)}
+        />
 
         {/* Save status indicator */}
-        {(() => {
-          const currentUndoLength = useWorkspaceStore.getState().undoStack.length
-          const isFileDirty = isDirty && currentUndoLength !== savedUndoLengthRef.current && currentUndoLength !== lastSavedUndoLength
-          const dotColor =
-            saveStatus === 'saving' ? 'var(--color-info)'
-            : saveStatus === 'saved' ? 'var(--color-success)'
-            : saveStatus === 'error' ? 'var(--color-error)'
-            : !hasFileHandle ? 'var(--color-text-muted)'
-            : isFileDirty ? 'var(--color-warning)'
-            : 'var(--color-success)'
-          const dotGlow =
-            saveStatus === 'saving' ? '0 0 6px var(--color-info)'
-            : saveStatus === 'saved' ? '0 0 6px var(--color-success)'
-            : saveStatus === 'error' ? '0 0 6px var(--color-error)'
-            : !hasFileHandle ? 'none'
-            : isFileDirty ? '0 0 6px var(--color-warning)'
-            : '0 0 6px var(--color-success)'
-          const tooltip =
-            saveStatus === 'saving' ? 'Saving…'
-            : saveStatus === 'saved' ? 'Saved to file'
-            : saveStatus === 'error' ? 'Save failed — click to retry'
-            : !hasFileHandle ? 'No file linked — click to save to a .dsl file'
-            : isFileDirty ? 'Unsaved changes — click to save'
-            : 'All changes saved'
-          const showWarningIcon = !hasFileHandle && saveStatus === 'idle'
-          return (
-            <button
-              onClick={handleSave}
-              style={{
-                width: showWarningIcon ? 40 : 36,
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                background: 'transparent',
-                border: 'none',
-                borderRight: '1px solid var(--color-border)',
-                flexShrink: 0,
-                color: showWarningIcon ? 'var(--color-warning)' : undefined,
-              }}
-              title={tooltip}
-              aria-label={tooltip}
-            >
-              {showWarningIcon ? (
-                <TriangleAlert size={14} style={{ filter: 'drop-shadow(0 0 4px var(--color-warning))' }} />
-              ) : (
-                <div
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: dotColor,
-                    boxShadow: dotGlow,
-                    transition: 'background 0.3s, box-shadow 0.3s',
-                  }}
-                />
-              )}
-            </button>
-          )
-        })()}
+        <SaveIndicator />
 
         {/* Mobile: hamburger / Desktop: action buttons */}
         {isMobile ? (
@@ -538,130 +331,10 @@ export default function FloatingTopPill() {
       </div>
       {/* Slide-down shades — siblings in the column, inherit exact pill width */}
       {viewDropdownOpen && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 48 }} onClick={() => { setViewDropdownOpen(false); setRenamingViewKey(null) }} />
-          <div
-            className="glass-panel-solid"
-            style={{
-              zIndex: 49,
-              borderTop: 'none',
-              borderRadius: '0 0 14px 14px',
-              boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
-              animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
-              overflow: 'hidden',
-              pointerEvents: 'auto',
-              maxHeight: 'calc(100vh - 80px)',
-              overflowY: 'auto',
-            }}>
-            {/* Views grouped by type */}
-            <div style={{ padding: '12px 0' }}>
-              {Object.entries(viewsByType).map(([type, typeViews]) => (
-                <div key={type}>
-                  <div className="flyout-label" style={{ padding: '4px 16px 6px', letterSpacing: '0.12em' }}>
-                    {VIEW_TYPE_LABELS[type] ?? type}
-                  </div>
-                  {typeViews.map((v) => {
-                    const isActive = v.key === activeViewKey
-                    const isRenaming = renamingViewKey === v.key
-                    return (
-                      <div
-                        key={v.key}
-                        className="group"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 0,
-                          padding: '0 8px',
-                          background: isActive ? 'rgba(88,166,255,0.08)' : 'transparent',
-                          borderLeft: isActive ? '2px solid var(--color-accent)' : '2px solid transparent',
-                          transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-                      >
-                        {/* Level badge */}
-                        <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 5px', borderRadius: 4, background: isActive ? 'rgba(88,166,255,0.2)' : 'var(--color-surface-3)', color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)', letterSpacing: '0.05em', flexShrink: 0, marginRight: 10 }}>
-                          {LEVEL_BADGE[v.type] ?? v.type.slice(0,2).toUpperCase()}
-                        </span>
-
-                        {/* Title / rename input */}
-                        {isRenaming ? (
-                          <input
-                            autoFocus
-                            value={renameValue}
-                            onChange={e => setRenameValue(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { renameView(v.key, renameValue.trim() || v.title || v.key); setRenamingViewKey(null) }
-                              if (e.key === 'Escape') setRenamingViewKey(null)
-                              e.stopPropagation()
-                            }}
-                            onClick={e => e.stopPropagation()}
-                            style={{ flex: 1, fontSize: 13, background: 'var(--color-surface-2)', border: '1px solid var(--color-accent)', borderRadius: 6, padding: '4px 8px', color: 'var(--color-text-primary)', outline: 'none', minWidth: 0, margin: '4px 0' }}
-                          />
-                        ) : (
-                          <button
-                            onClick={() => { setActiveView(v.key); setViewDropdownOpen(false); setRenamingViewKey(null) }}
-                            style={{ flex: 1, textAlign: 'left', padding: '10px 0', fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', background: 'transparent', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
-                          >
-                            {v.title ?? v.key}
-                          </button>
-                        )}
-
-                        {/* Actions */}
-                        <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginLeft: 6, opacity: 0, transition: 'opacity 0.1s' }}
-                          className="view-row-actions"
-                          ref={el => {
-                            // show on row hover
-                            const row = el?.closest('[class~="group"]') as HTMLElement | null
-                            if (row) {
-                              row.onmouseenter = () => { if (el) el.style.opacity = '1' }
-                              row.onmouseleave = () => { if (el) el.style.opacity = '0' }
-                            }
-                          }}
-                        >
-                          {isRenaming ? (
-                            <button onClick={e => { e.stopPropagation(); renameView(v.key, renameValue.trim() || v.title || v.key); setRenamingViewKey(null) }}
-                              style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'rgba(34,197,94,0.15)', border: 'none', cursor: 'pointer', color: 'var(--color-success)' }} title="Save">
-                              <Check size={13} />
-                            </button>
-                          ) : (
-                            <button onClick={e => { e.stopPropagation(); setRenamingViewKey(v.key); setRenameValue(v.title ?? v.key) }}
-                              style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
-                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-3)'; e.currentTarget.style.color = 'var(--color-text-primary)' }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
-                              title="Rename">
-                              <Pencil size={13} />
-                            </button>
-                          )}
-                          <button onClick={e => { e.stopPropagation(); if (views.length > 1) deleteView(v.key) }}
-                            disabled={views.length <= 1}
-                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1 }}
-                            onMouseEnter={e => { if (views.length > 1) { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.color = 'var(--color-error)' } }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)' }}
-                            title={views.length <= 1 ? 'Cannot delete last view' : 'Delete view'}>
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  <div style={{ height: 8 }} />
-                </div>
-              ))}
-            </div>
-            {/* Footer */}
-            <div style={{ borderTop: '1px solid var(--color-border)' }}>
-              <button
-                onClick={() => { setViewDropdownOpen(false); setShowCreateView(true) }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px', fontSize: 13, color: 'var(--color-accent)', background: 'transparent', cursor: 'pointer', transition: 'background 0.1s', border: 'none' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(88,166,255,0.06)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-              >
-                <Plus size={14} /> New view
-              </button>
-            </div>
-          </div>
-        </>
+        <ViewSwitcherPanel
+          onClose={() => { setViewDropdownOpen(false) }}
+          onShowCreateView={() => setShowCreateView(true)}
+        />
       )}
       {exportDialogOpen && (
         <ExportDialog
@@ -687,7 +360,7 @@ export default function FloatingTopPill() {
           border: '1px solid var(--color-border)',
           borderRadius: 8,
           padding: '8px 16px',
-          fontSize: 13,
+          fontSize: 'var(--text-base)',
           color: 'var(--color-text-primary)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
@@ -717,23 +390,17 @@ function MenuItemRow({
   return (
     <button
       role="menuitem"
+      className="flyout-item"
       onClick={onClick}
       disabled={disabled}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        width: '100%',
         padding: '8px 12px',
-        fontSize: 13,
+        fontSize: 'var(--text-base)',
         color: disabled ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-        background: 'transparent',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.4 : 1,
-        border: 'none',
+        borderRadius: 0,
       }}
-      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = 'var(--color-surface-3)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
       <Icon size={14} />
       {label}
