@@ -1,5 +1,4 @@
-import { forwardRef, useEffect, useRef, useState } from 'react'
-import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
+import { forwardRef, lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import type { LayoutDirection } from '@/types/model'
@@ -22,7 +21,9 @@ import {
   Settings,
 } from 'lucide-react'
 import { useArrowNav } from '@/hooks/useArrowNav'
-import AddElementPanel from '@/components/layout/AddElementPanel'
+
+const CanvasSettingsDialog = lazy(() => import('@/components/settings/CanvasSettingsDialog'))
+const AddElementPanel = lazy(() => import('@/components/layout/AddElementPanel'))
 
 const DIRECTION_ICONS: Record<LayoutDirection, React.ReactNode> = {
   TB: <ArrowDown size={14} />,
@@ -222,7 +223,9 @@ export default function FloatingToolRail() {
         />
         {addPanelOpen && (
           <div ref={addElementFlyoutRef}>
-            <AddElementPanel onClose={() => setAddPanelOpen(false)} />
+            <Suspense fallback={null}>
+              <AddElementPanel onClose={() => setAddPanelOpen(false)} />
+            </Suspense>
           </div>
         )}
       </div>
@@ -374,7 +377,7 @@ export default function FloatingToolRail() {
         onClick={() => setShowSettings(true)}
       />
     </div>
-    {showSettings && <CanvasSettingsDialog onClose={() => setShowSettings(false)} />}
+    {showSettings && <Suspense fallback={null}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
     </>
   )
 }

@@ -1,22 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useWorkspaceStore, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, View, Container, Component } from '@/types/model'
-import { Search, X, UserRound, Globe, Box, Puzzle, LayoutGrid } from 'lucide-react'
+import { Search, X, LayoutGrid } from 'lucide-react'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
-
-const TYPE_ICONS: Record<string, React.ReactNode> = {
-  person: <UserRound size={14} />,
-  softwareSystem: <Globe size={14} />,
-  container: <Box size={14} />,
-  component: <Puzzle size={14} />,
-}
-
-const TYPE_COLORS: Record<string, string> = {
-  person: 'var(--color-type-person)',
-  softwareSystem: 'var(--color-type-system)',
-  container: 'var(--color-type-container)',
-  component: 'var(--color-type-component)',
-}
+import { TYPE_ICONS, TYPE_COLORS } from '@/lib/elementMeta'
 
 const TYPE_FILTERS = [
   { type: 'person', label: 'Person' },

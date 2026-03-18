@@ -3,19 +3,18 @@ import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElemen
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, LineStyle, Location, Group } from '@/types/model'
 import { X, MoreHorizontal, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, Layers, Trash2 } from 'lucide-react'
 import { generateDescription, getAIConfig } from '@/lib/ai'
+import { TYPE_LABELS, TYPE_COLORS } from '@/lib/elementMeta'
 
-const TYPE_LABELS: Record<string, string> = {
-  person: 'Person',
-  softwareSystem: 'Software System',
-  container: 'Container',
-  component: 'Component',
-}
-
-const TYPE_COLORS: Record<string, string> = {
-  person: 'var(--color-type-person)',
-  softwareSystem: 'var(--color-type-system)',
-  container: 'var(--color-type-container)',
-  component: 'var(--color-type-component)',
+/** Returns the URL if it uses a safe protocol (http, https, or protocol-relative), otherwise null. */
+function getSafeUrl(raw: string): string | null {
+  try {
+    if (raw.startsWith('//')) return raw
+    const parsed = new URL(raw)
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return raw
+    return null
+  } catch {
+    return null
+  }
 }
 
 const STATUS_OPTIONS: ElementStatus[] = ['Live', 'Planned', 'Deprecated', 'Removed']
@@ -58,12 +57,13 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function EditableField({ value, placeholder, onCommit, onLiveChange, multiline }: {
+function EditableField({ value, placeholder, onCommit, onLiveChange, multiline, 'aria-label': ariaLabel }: {
   value: string
   placeholder?: string
   onCommit: (val: string) => void
   onLiveChange?: (val: string) => void
   multiline?: boolean
+  'aria-label'?: string
 }) {
   const [draft, setDraft] = useState(value)
   const [focused, setFocused] = useState(false)
@@ -108,6 +108,7 @@ function EditableField({ value, placeholder, onCommit, onLiveChange, multiline }
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         rows={3}
         className="w-full resize-none rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
         style={style}
@@ -124,6 +125,7 @@ function EditableField({ value, placeholder, onCommit, onLiveChange, multiline }
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       placeholder={placeholder}
+      aria-label={ariaLabel}
       className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
       style={style}
     />
@@ -213,7 +215,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
           <div className="space-y-4">
             <div>
               <FieldLabel>Name</FieldLabel>
-              <EditableField value={element.name} placeholder="Element name" onLiveChange={(v) => updateElementLive(element.id, { name: v })} onCommit={(v) => updateElement(element.id, { name: v })} />
+              <EditableField value={element.name} placeholder="Element name" aria-label="Element name" onLiveChange={(v) => updateElementLive(element.id, { name: v })} onCommit={(v) => updateElement(element.id, { name: v })} />
             </div>
             {hasLocation && (
               <div>
@@ -237,12 +239,12 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             {hasTech && (
               <div>
                 <FieldLabel>Technology</FieldLabel>
-                <EditableField value={tech ?? ''} placeholder="e.g. React, PostgreSQL..." onLiveChange={(v) => updateElementLive(element.id, { technology: v })} onCommit={(v) => updateTech(element.id, v)} />
+                <EditableField value={tech ?? ''} placeholder="e.g. React, PostgreSQL..." aria-label="Technology" onLiveChange={(v) => updateElementLive(element.id, { technology: v })} onCommit={(v) => updateTech(element.id, v)} />
               </div>
             )}
             <div>
               <FieldLabel>Description</FieldLabel>
-              <EditableField value={element.description ?? ''} placeholder="Describe this element..." onLiveChange={(v) => updateElementLive(element.id, { description: v || undefined })} onCommit={(v) => updateElement(element.id, { description: v || undefined })} multiline />
+              <EditableField value={element.description ?? ''} placeholder="Describe this element..." aria-label="Description" onLiveChange={(v) => updateElementLive(element.id, { description: v || undefined })} onCommit={(v) => updateElement(element.id, { description: v || undefined })} multiline />
               {getAIConfig() && (
                 <>
                   <button
@@ -286,7 +288,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             {/* Owner */}
             <div>
               <FieldLabel>Owner</FieldLabel>
-              <EditableField value={element.owner ?? ''} placeholder="e.g. Team Alpha" onLiveChange={(v) => updateElementLive(element.id, { owner: v || undefined })} onCommit={(v) => updateElement(element.id, { owner: v || undefined })} />
+              <EditableField value={element.owner ?? ''} placeholder="e.g. Team Alpha" aria-label="Owner" onLiveChange={(v) => updateElementLive(element.id, { owner: v || undefined })} onCommit={(v) => updateElement(element.id, { owner: v || undefined })} />
             </div>
 
             {/* URL */}
@@ -294,11 +296,11 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               <FieldLabel>URL</FieldLabel>
               <div className="flex items-center gap-1.5">
                 <div className="flex-1">
-                  <EditableField value={element.url ?? ''} placeholder="https://..." onLiveChange={(v) => updateElementLive(element.id, { url: v || undefined })} onCommit={(v) => updateElement(element.id, { url: v || undefined })} />
+                  <EditableField value={element.url ?? ''} placeholder="https://..." aria-label="URL" onLiveChange={(v) => updateElementLive(element.id, { url: v || undefined })} onCommit={(v) => updateElement(element.id, { url: v || undefined })} />
                 </div>
-                {element.url && (
+                {element.url && getSafeUrl(element.url) && (
                   <a
-                    href={element.url}
+                    href={getSafeUrl(element.url)!}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-icon !min-h-8 !min-w-8 !p-1.5 shrink-0"
@@ -374,11 +376,11 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div>
           <FieldLabel>Description</FieldLabel>
-          <EditableField value={relationship.description ?? ''} placeholder="e.g. Makes API calls to..." onCommit={(v) => updateRelationship(relationship.id, { description: v || undefined })} />
+          <EditableField value={relationship.description ?? ''} placeholder="e.g. Makes API calls to..." aria-label="Description" onCommit={(v) => updateRelationship(relationship.id, { description: v || undefined })} />
         </div>
         <div>
           <FieldLabel>Technology</FieldLabel>
-          <EditableField value={relationship.technology ?? ''} placeholder="e.g. REST/HTTP, gRPC..." onCommit={(v) => updateRelationship(relationship.id, { technology: v || undefined })} />
+          <EditableField value={relationship.technology ?? ''} placeholder="e.g. REST/HTTP, gRPC..." aria-label="Technology" onCommit={(v) => updateRelationship(relationship.id, { technology: v || undefined })} />
         </div>
         <div>
           <FieldLabel>Interaction Style</FieldLabel>
@@ -595,13 +597,6 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
     setAddSearch('')
   }
 
-  const TYPE_COLORS: Record<string, string> = {
-    person: 'var(--color-type-person)',
-    softwareSystem: 'var(--color-type-system)',
-    container: 'var(--color-type-container)',
-    component: 'var(--color-type-component)',
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* Header */}
@@ -636,6 +631,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
           <EditableField
             value={group.name}
             placeholder="Group name"
+            aria-label="Group name"
             onCommit={(val) => updateGroup(group.id, { name: val })}
           />
         </div>

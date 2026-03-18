@@ -7,11 +7,10 @@ import {
   createMonolithTemplate,
   createEventDrivenTemplate,
 } from '@/lib/templates'
-import { openDSLFile, getRecentFiles, hasFileSystemAccess } from '@/lib/fileIO'
+import { openDSLFile, getRecentFiles, hasFileSystemAccess, isWorkspaceShape } from '@/lib/fileIO'
 import { parseDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
 import { getAIConfig } from '@/lib/ai'
-import type { Workspace } from '@/types/model'
 import { FileText, Play, LayoutTemplate, Sparkles, Settings, Upload, Server, Box, Radio, Clock } from 'lucide-react'
 import AISettingsDialog from '@/components/ai/AISettingsDialog'
 import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
@@ -30,8 +29,12 @@ export default function WelcomeScreen() {
     const reader = new FileReader()
     reader.onload = () => {
       try {
-        const workspace = JSON.parse(reader.result as string) as Workspace
-        loadWorkspace(workspace)
+        const parsed = JSON.parse(reader.result as string)
+        if (!isWorkspaceShape(parsed)) {
+          alert('Invalid workspace file. The JSON does not have the expected workspace structure.')
+          return
+        }
+        loadWorkspace(parsed)
       } catch {
         alert('Failed to parse JSON file. Please check the file format.')
       }

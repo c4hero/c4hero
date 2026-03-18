@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, buildElementMap } from '@/store/workspace'
 import type { ModelElement } from '@/types/model'
+import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
 import {
   UserRound,
   Globe,
@@ -15,27 +16,6 @@ import {
   HardDrive,
   Monitor,
 } from 'lucide-react'
-
-const TYPE_ICONS: Record<string, React.ReactNode> = {
-  person: <UserRound size={14} />,
-  softwareSystem: <Globe size={14} />,
-  container: <Box size={14} />,
-  component: <Puzzle size={14} />,
-}
-
-const TYPE_COLORS: Record<string, string> = {
-  person: 'var(--color-type-person)',
-  softwareSystem: 'var(--color-type-system)',
-  container: 'var(--color-type-container)',
-  component: 'var(--color-type-component)',
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  person: 'Person',
-  softwareSystem: 'Software System',
-  container: 'Container',
-  component: 'Component',
-}
 
 const CONTAINER_SUBTYPES = [
   { key: 'web-app',  label: 'Web App',  tag: 'Web Application', icon: <Monitor size={13} /> },

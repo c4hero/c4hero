@@ -1,3 +1,4 @@
+import { useRef, useEffect, useCallback } from 'react'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 interface DialogShellProps {
@@ -10,13 +11,26 @@ interface DialogShellProps {
 
 export default function DialogShell({ onClose, ariaLabel, children, className, style }: DialogShellProps) {
   const trapRef = useFocusTrap<HTMLDivElement>()
+  const previouslyFocusedRef = useRef<Element | null>(null)
+
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement
+  }, [])
+
+  const handleClose = useCallback(() => {
+    onClose()
+    const el = previouslyFocusedRef.current
+    if (el && el instanceof HTMLElement) {
+      requestAnimationFrame(() => el.focus())
+    }
+  }, [onClose])
 
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center"
-      onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
+      onKeyDown={(e) => { if (e.key === 'Escape') handleClose() }}
     >
-      <div className="panel-backdrop absolute inset-0" onClick={onClose} />
+      <div className="panel-backdrop absolute inset-0" onClick={handleClose} />
       <div
         ref={trapRef}
         role="dialog"

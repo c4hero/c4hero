@@ -61,6 +61,7 @@ class SerializerContext {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- _name reserved for future use (e.g. name-based variable generation)
     private registerElement(id: string, _name: string): void {
         this.allElementIds.add(id)
         // If the ID is a valid identifier (not purely numeric), use it as var name

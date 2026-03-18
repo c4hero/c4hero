@@ -13,6 +13,7 @@ export default function CommandPalette() {
 
   let reactFlow: ReturnType<typeof useReactFlow> | null = null
   try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- useReactFlow is always called; the try/catch handles the throw when outside ReactFlowProvider, not a conditional call
     reactFlow = useReactFlow()
   } catch {
     // Not inside ReactFlowProvider

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -12,11 +12,12 @@ import FloatingBottomStrip from '@/components/layout/FloatingBottomStrip'
 import FloatingZoomHud from '@/components/layout/FloatingZoomHud'
 import MultiSelectBar from '@/components/layout/MultiSelectBar'
 import Canvas from '@/components/canvas/Canvas'
-import SearchDialog from '@/components/search/SearchDialog'
 
 import CanvasHints from '@/components/canvas/CanvasHints'
-import WelcomeScreen from '@/components/welcome/WelcomeScreen'
 import { loadFromLocalStorage } from '@/lib/fileIO'
+
+const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
+const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
 
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -42,7 +43,7 @@ export default function App() {
   }, [])
 
   if (!workspace) {
-    return <WelcomeScreen />
+    return <Suspense fallback={null}><WelcomeScreen /></Suspense>
   }
 
   // Presentation mode — fullscreen canvas
@@ -99,7 +100,7 @@ export default function App() {
       </div>
 
       {/* Dialogs */}
-      {searchOpen && <SearchDialog />}
+      {searchOpen && <Suspense fallback={null}><SearchDialog /></Suspense>}
 
     </ReactFlowProvider>
   )

@@ -209,7 +209,7 @@ export function saveToLocalStorage(workspace: Workspace) {
 }
 
 /** Basic shape check to validate parsed JSON looks like a Workspace */
-function isWorkspaceShape(obj: unknown): obj is Workspace {
+export function isWorkspaceShape(obj: unknown): obj is Workspace {
   if (!obj || typeof obj !== 'object') return false
   const w = obj as Record<string, unknown>
   if (!w.model || typeof w.model !== 'object') return false

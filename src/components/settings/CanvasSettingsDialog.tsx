@@ -148,6 +148,7 @@ function SegmentedControl({
 }) {
   return (
     <div
+      role="radiogroup"
       style={{
         display: 'flex',
         borderRadius: 'var(--radius-md)',
@@ -159,6 +160,8 @@ function SegmentedControl({
       {options.map((opt) => (
         <button
           key={opt.value}
+          role="radio"
+          aria-checked={value === opt.value}
           onClick={() => onChange(opt.value)}
           style={{
             padding: '5px 10px',
@@ -182,6 +185,8 @@ function SegmentedControl({
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
+      role="switch"
+      aria-checked={checked}
       onClick={() => onChange(!checked)}
       style={{
         width: 40,

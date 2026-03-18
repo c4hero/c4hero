@@ -1,12 +1,9 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile } from '@/lib/fileIO'
 import { announce } from '@/lib/announce'
-import CreateViewDialog from '@/components/views/CreateViewDialog'
-import ExportDialog from '@/components/dialogs/ExportDialog'
-import CommandPalette from '@/components/command-palette/CommandPalette'
 import SaveIndicator from '@/components/layout/SaveIndicator'
 import ViewSwitcher, { ViewSwitcherPanel, LEVEL_BADGE } from '@/components/layout/ViewSwitcher'
 import {
@@ -20,7 +17,11 @@ import {
   MoreHorizontal,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
-import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
+
+const ExportDialog = lazy(() => import('@/components/dialogs/ExportDialog'))
+const CommandPalette = lazy(() => import('@/components/command-palette/CommandPalette'))
+const CreateViewDialog = lazy(() => import('@/components/views/CreateViewDialog'))
+const CanvasSettingsDialog = lazy(() => import('@/components/settings/CanvasSettingsDialog'))
 
 export default function FloatingTopPill() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -336,18 +337,20 @@ export default function FloatingTopPill() {
         />
       )}
       {exportDialogOpen && (
-        <ExportDialog
-          onExport={handleExport}
-          onCopy={handleCopy}
-          onClose={() => setExportDialogOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <ExportDialog
+            onExport={handleExport}
+            onCopy={handleCopy}
+            onClose={() => setExportDialogOpen(false)}
+          />
+        </Suspense>
       )}
-      {commandPaletteOpen && <CommandPalette />}
+      {commandPaletteOpen && <Suspense fallback={null}><CommandPalette /></Suspense>}
       </div>{/* end column */}
       </div>{/* end outer row */}
 
-      {showCreateView && <CreateViewDialog onClose={() => setShowCreateView(false)} />}
-      {showSettings && <CanvasSettingsDialog onClose={() => setShowSettings(false)} />}
+      {showCreateView && <Suspense fallback={null}><CreateViewDialog onClose={() => setShowCreateView(false)} /></Suspense>}
+      {showSettings && <Suspense fallback={null}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
       {copyToast && (
         <div style={{
           position: 'fixed',

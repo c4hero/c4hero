@@ -56,6 +56,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   update: (patch) => {
     set(patch)
     // persist full settings after update
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructuring to exclude `update` from persisted settings
     const { update: _, ...rest } = get()
     persist(rest as AppSettings)
   },

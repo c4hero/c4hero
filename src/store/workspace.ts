@@ -5,6 +5,7 @@ import type {
   Person, SoftwareSystem, Container, Component,
   ViewType, ElementStatus,
 } from '@/types/model'
+import { announce } from '@/lib/announce'
 
 // ─── Undo History ────────────────────────────────────────────────────
 
@@ -327,6 +328,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       addToCurrentView(ws, s.activeViewKey, id, position)
       return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
     })
+    announce('Person created')
     return id
   },
 
@@ -340,6 +342,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       addToCurrentView(ws, s.activeViewKey, id, position)
       return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
     })
+    announce('System created')
     return id
   },
 
@@ -356,6 +359,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       addToCurrentView(ws, s.activeViewKey, id, position)
       return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
     })
+    announce('Container created')
     return id
   },
 
@@ -375,6 +379,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
       return s
     })
+    announce('Component created')
     return id
   },
 
@@ -400,78 +405,84 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return { ...pushUndo(s), workspace: ws }
   }),
 
-  deleteElement: (id) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    // Remove from people
-    ws.model.people = ws.model.people.filter(p => p.id !== id)
-    // Remove from systems (and their containers/components)
-    ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
-      if (sys.id === id) return false
-      sys.containers = sys.containers.filter(c => {
-        if (c.id === id) return false
-        c.components = c.components.filter(comp => comp.id !== id)
+  deleteElement: (id) => {
+    set((s) => {
+      const ws = cloneWs(s)
+      if (!ws) return s
+      // Remove from people
+      ws.model.people = ws.model.people.filter(p => p.id !== id)
+      // Remove from systems (and their containers/components)
+      ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
+        if (sys.id === id) return false
+        sys.containers = sys.containers.filter(c => {
+          if (c.id === id) return false
+          c.components = c.components.filter(comp => comp.id !== id)
+          return true
+        })
         return true
       })
-      return true
-    })
-    // Remove related relationships
-    ws.model.relationships = ws.model.relationships.filter(
-      r => r.sourceId !== id && r.destinationId !== id
-    )
-    // Remove from all views
-    forEachView(ws, (v) => {
-      v.elements = v.elements.filter(e => e.id !== id)
-      v.relationships = v.relationships.filter(r => {
-        const rel = ws.model.relationships.find(mr => mr.id === r.id)
-        return rel !== undefined
+      // Remove related relationships
+      ws.model.relationships = ws.model.relationships.filter(
+        r => r.sourceId !== id && r.destinationId !== id
+      )
+      // Remove from all views
+      forEachView(ws, (v) => {
+        v.elements = v.elements.filter(e => e.id !== id)
+        v.relationships = v.relationships.filter(r => {
+          const rel = ws.model.relationships.find(mr => mr.id === r.id)
+          return rel !== undefined
+        })
       })
+      // Remove from all groups
+      ws.model.groups = ws.model.groups.map(g => ({
+        ...g,
+        elementIds: g.elementIds.filter(eid => eid !== id),
+      }))
+      return {
+        ...pushUndo(s),
+        workspace: ws,
+        selectedElementIds: s.selectedElementIds.filter(eid => eid !== id),
+        selectedRelationshipId: null,
+      }
     })
-    // Remove from all groups
-    ws.model.groups = ws.model.groups.map(g => ({
-      ...g,
-      elementIds: g.elementIds.filter(eid => eid !== id),
-    }))
-    return {
-      ...pushUndo(s),
-      workspace: ws,
-      selectedElementIds: s.selectedElementIds.filter(eid => eid !== id),
-      selectedRelationshipId: null,
-    }
-  }),
+    announce('Element deleted')
+  },
 
-  deleteElements: (ids) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    const idSet = new Set(ids)
-    ws.model.people = ws.model.people.filter(p => !idSet.has(p.id))
-    ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
-      if (idSet.has(sys.id)) return false
-      sys.containers = sys.containers.filter(c => {
-        if (idSet.has(c.id)) return false
-        c.components = c.components.filter(comp => !idSet.has(comp.id))
+  deleteElements: (ids) => {
+    set((s) => {
+      const ws = cloneWs(s)
+      if (!ws) return s
+      const idSet = new Set(ids)
+      ws.model.people = ws.model.people.filter(p => !idSet.has(p.id))
+      ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
+        if (idSet.has(sys.id)) return false
+        sys.containers = sys.containers.filter(c => {
+          if (idSet.has(c.id)) return false
+          c.components = c.components.filter(comp => !idSet.has(comp.id))
+          return true
+        })
         return true
       })
-      return true
+      ws.model.relationships = ws.model.relationships.filter(
+        r => !idSet.has(r.sourceId) && !idSet.has(r.destinationId)
+      )
+      forEachView(ws, (v) => {
+        v.elements = v.elements.filter(e => !idSet.has(e.id))
+        v.relationships = v.relationships.filter(r => ws.model.relationships.some(mr => mr.id === r.id))
+      })
+      ws.model.groups = ws.model.groups.map(g => ({
+        ...g,
+        elementIds: g.elementIds.filter(eid => !idSet.has(eid)),
+      }))
+      return {
+        ...pushUndo(s),
+        workspace: ws,
+        selectedElementIds: [],
+        selectedRelationshipId: null,
+      }
     })
-    ws.model.relationships = ws.model.relationships.filter(
-      r => !idSet.has(r.sourceId) && !idSet.has(r.destinationId)
-    )
-    forEachView(ws, (v) => {
-      v.elements = v.elements.filter(e => !idSet.has(e.id))
-      v.relationships = v.relationships.filter(r => ws.model.relationships.some(mr => mr.id === r.id))
-    })
-    ws.model.groups = ws.model.groups.map(g => ({
-      ...g,
-      elementIds: g.elementIds.filter(eid => !idSet.has(eid)),
-    }))
-    return {
-      ...pushUndo(s),
-      workspace: ws,
-      selectedElementIds: [],
-      selectedRelationshipId: null,
-    }
-  }),
+    announce(ids.length === 1 ? 'Element deleted' : `${ids.length} elements deleted`)
+  },
 
   // ─── Group CRUD ─────────────────────────────────────────────────
 
@@ -648,21 +659,27 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   // ─── Undo / Redo ───────────────────────────────────────────────
 
-  undo: () => set((s) => {
-    if (s.undoStack.length === 0 || !s.workspace) return s
-    const undoStack = [...s.undoStack]
-    const previous = undoStack.pop()!
-    const redoStack = [...s.redoStack, structuredClone(s.workspace)]
-    return { workspace: previous, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null }
-  }),
+  undo: () => {
+    set((s) => {
+      if (s.undoStack.length === 0 || !s.workspace) return s
+      const undoStack = [...s.undoStack]
+      const previous = undoStack.pop()!
+      const redoStack = [...s.redoStack, structuredClone(s.workspace)]
+      return { workspace: previous, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null }
+    })
+    announce('Undone')
+  },
 
-  redo: () => set((s) => {
-    if (s.redoStack.length === 0 || !s.workspace) return s
-    const redoStack = [...s.redoStack]
-    const next = redoStack.pop()!
-    const undoStack = [...s.undoStack, structuredClone(s.workspace)]
-    return { workspace: next, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null }
-  }),
+  redo: () => {
+    set((s) => {
+      if (s.redoStack.length === 0 || !s.workspace) return s
+      const redoStack = [...s.redoStack]
+      const next = redoStack.pop()!
+      const undoStack = [...s.undoStack, structuredClone(s.workspace)]
+      return { workspace: next, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null }
+    })
+    announce('Redone')
+  },
 
   canUndo: () => get().undoStack.length > 0,
   canRedo: () => get().redoStack.length > 0,

@@ -8,6 +8,7 @@ import { parseSidecar, applySidecar, extractSidecar, serializeSidecar } from '@/
 export function useKeyboardShortcuts() {
   let reactFlow: ReturnType<typeof useReactFlow> | null = null
   try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- useReactFlow is always called; the try/catch handles the throw when outside ReactFlowProvider, not a conditional call
     reactFlow = useReactFlow()
   } catch {
     // Not inside ReactFlowProvider (e.g. welcome screen)
@@ -197,6 +198,5 @@ export function useKeyboardShortcuts() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   // All state is read from getState() inside the handler — only rf is a closure dependency
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rf])
 }
