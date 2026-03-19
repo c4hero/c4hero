@@ -135,7 +135,7 @@ export default function WelcomeScreen() {
         {/* Primary actions */}
         <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
           <ActionCard icon={<FileText size={22} />} label="Open .dsl file" onClick={handleOpenFile} />
-          <ActionCard icon={<LayoutTemplate size={22} />} label="Blank workspace" onClick={async () => {
+          <ActionCard icon={<LayoutTemplate size={22} />} label="New workspace (.dsl)" onClick={async () => {
             const ws = createBlankWorkspace()
             loadWorkspace(ws)
             // Prompt to pick a save location immediately so auto-save works from the start
@@ -236,6 +236,7 @@ export default function WelcomeScreen() {
 
       {showAISettings && <AISettingsDialog onClose={() => setShowAISettings(false)} />}
       {showDescribe && <DescribeSystemDialog onClose={() => setShowDescribe(false)} />}
+      <div className="commit-hash">{__COMMIT_HASH__}</div>
     </div>
   )
 }

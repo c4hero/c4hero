@@ -12,6 +12,7 @@ import FloatingInspector from '@/components/layout/FloatingInspector'
 import FloatingBottomStrip from '@/components/layout/FloatingBottomStrip'
 import FloatingZoomHud from '@/components/layout/FloatingZoomHud'
 import MultiSelectBar from '@/components/layout/MultiSelectBar'
+import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
 import Canvas from '@/components/canvas/Canvas'
 
 import CanvasHints from '@/components/canvas/CanvasHints'
@@ -23,6 +24,8 @@ const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const searchOpen = useWorkspaceStore((s) => s.searchOpen)
+  const pendingDelete = useWorkspaceStore((s) => s.pendingDelete)
+  const cancelDelete = useWorkspaceStore((s) => s.cancelDelete)
 
   const presentationMode = useWorkspaceStore((s) => s.presentationMode)
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
@@ -98,10 +101,20 @@ export default function App() {
 
         {/* Live region for announcements */}
         <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
+
+        {/* Commit hash */}
+        <div className="commit-hash">{__COMMIT_HASH__}</div>
       </div>
 
       {/* Dialogs */}
       {searchOpen && <Suspense fallback={<LoadingDot />}><SearchDialog /></Suspense>}
+      {pendingDelete && (
+        <ConfirmDeleteDialog
+          message={pendingDelete.message}
+          onConfirm={() => { pendingDelete.onConfirm(); cancelDelete() }}
+          onCancel={cancelDelete}
+        />
+      )}
 
     </ReactFlowProvider>
   )
