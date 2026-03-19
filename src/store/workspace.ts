@@ -7,6 +7,11 @@ import type {
 } from '@/types/model'
 import { announce } from '@/lib/announce'
 
+// ─── Built-in Tags ──────────────────────────────────────────────────
+
+/** Tags that always exist and whose styles cannot be removed */
+export const BUILTIN_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component'])
+
 // ─── Undo History ────────────────────────────────────────────────────
 
 const MAX_UNDO = 25
@@ -35,6 +40,9 @@ interface WorkspaceState extends UndoState {
   rightPanelOpen: boolean
   searchOpen: boolean
   commandPaletteOpen: boolean
+  pendingDelete: { message: string; onConfirm: () => void } | null
+  confirmDelete: (message: string, onConfirm: () => void) => void
+  cancelDelete: () => void
   presentationMode: boolean
   lastSavedUndoLength: number
   setLastSavedUndoLength: (n: number) => void
@@ -48,6 +56,8 @@ interface WorkspaceState extends UndoState {
   activeStatusFilter: ElementStatus | null
   minimapEnabled: boolean
   snapToGrid: boolean
+  multiSelectMode: boolean
+  setMultiSelectMode: (on: boolean) => void
 
   // Workspace lifecycle
   loadWorkspace: (workspace: Workspace) => void
@@ -243,6 +253,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   rightPanelOpen: true,
   searchOpen: false,
   commandPaletteOpen: false,
+  pendingDelete: null,
   lastSavedUndoLength: 0,
   setLastSavedUndoLength: (n) => set({ lastSavedUndoLength: n }),
   presentationMode: false,
@@ -253,6 +264,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeStatusFilter: null,
   minimapEnabled: true,
   snapToGrid: false,
+  multiSelectMode: false,
   undoStack: [],
   redoStack: [],
 
@@ -740,6 +752,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return { ...pushUndo(s), workspace: ws }
   }),
   removeElementStyle: (tag) => set((s) => {
+    if (BUILTIN_TAGS.has(tag)) return s // Built-in tag styles cannot be removed
     const ws = cloneWs(s)
     if (!ws) return s
     ws.views.configuration.styles.elements = ws.views.configuration.styles.elements.filter((es) => es.tag !== tag)
@@ -757,6 +770,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   }),
 
   removeTagGlobal: (tag) => set((s) => {
+    if (BUILTIN_TAGS.has(tag)) return s // Built-in tags cannot be removed
     const ws = cloneWs(s)
     if (!ws) return s
     forEachElement(ws, (el) => { el.tags = el.tags.filter(t => t !== tag) })
@@ -767,6 +781,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   toggleMinimap: () => set((s) => ({ minimapEnabled: !s.minimapEnabled })),
   toggleSnapToGrid: () => set((s) => ({ snapToGrid: !s.snapToGrid })),
+  setMultiSelectMode: (on) => set({ multiSelectMode: on }),
 
   // ─── Views Panel ─────────────────────────────────────────────────
 
@@ -781,6 +796,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
   setSearchOpen: (open) => set({ searchOpen: open, commandPaletteOpen: false }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
+  confirmDelete: (message, onConfirm) => set({ pendingDelete: { message, onConfirm } }),
+  cancelDelete: () => set({ pendingDelete: null }),
   setPresentationMode: (on) => set({ presentationMode: on }),
 }))
 

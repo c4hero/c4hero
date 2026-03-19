@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
 import type { ElementStatus, ElementStyle } from '@/types/model'
 import { Tag, Activity, X, Palette, Pencil, Plus, Check } from 'lucide-react'
 
@@ -576,7 +576,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           />
         </StyleField>
       </div>
-      {style && (
+      {style && !BUILTIN_TAGS.has(tag) && (
         <button
           onClick={() => { removeElementStyle(tag); onClose() }}
           className="hover-danger-text"

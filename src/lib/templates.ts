@@ -879,10 +879,10 @@ export function createBlankWorkspace(): Workspace {
       configuration: {
         styles: {
           elements: [
-            { tag: 'Person', background: '#08427b', color: '#ffffff', shape: 'Person' },
-            { tag: 'Software System', background: '#1168bd', color: '#ffffff' },
-            { tag: 'Container', background: '#438dd5', color: '#ffffff' },
-            { tag: 'Component', background: '#85bbf0', color: '#000000' },
+            { tag: 'Person', background: '#1a3a2a', color: '#86efac', stroke: '#22c55e', shape: 'Person' },
+            { tag: 'Software System', background: '#1a2f4a', color: '#93c5fd', stroke: '#3b82f6' },
+            { tag: 'Container', background: '#142540', color: '#7dd3fc', stroke: '#2563eb' },
+            { tag: 'Component', background: '#0f1f35', color: '#60a5fa', stroke: '#1d4ed8' },
           ],
           relationships: [],
         },
