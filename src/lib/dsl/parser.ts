@@ -1191,6 +1191,12 @@ class ContextAwareParser {
                 break
             }
             case 'icon': style.icon = val; break
+            case 'stroke': style.stroke = val; break
+            case 'strokewidth': {
+                const n = parseInt(val, 10)
+                if (!isNaN(n)) style.strokeWidth = n
+                break
+            }
             // Silently consume unknown properties
         }
     }

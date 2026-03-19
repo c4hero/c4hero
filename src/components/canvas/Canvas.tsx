@@ -35,7 +35,8 @@ function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
   return map
 }
 
-/** Get the best matching style for an element based on its tags */
+/** Get the best matching style for an element based on its tags.
+ *  Cascade order follows Structurizr: Element → type tag → custom tags (in order). */
 function getElementStyle(
   element: ModelElement,
   styleIndex: Map<string, ElementStyle>,
@@ -46,13 +47,18 @@ function getElementStyle(
     : element.type === 'container' ? 'Container'
     : 'Component'
 
-  // Start with type-based tag style, then layer more-specific tag styles on top
+  // 1. Start with the "Element" base tag (applies to all elements)
   let matched: ElementStyle | undefined
-  const typeStyle = styleIndex.get(typeTag)
-  if (typeStyle) matched = { ...typeStyle }
+  const baseStyle = styleIndex.get('Element')
+  if (baseStyle) matched = { ...baseStyle }
 
+  // 2. Layer type-specific tag style
+  const typeStyle = styleIndex.get(typeTag)
+  if (typeStyle) matched = { ...matched, ...typeStyle }
+
+  // 3. Layer custom tags in order — last tag wins per property
   for (const tag of element.tags) {
-    if (tag === typeTag) continue
+    if (tag === typeTag || tag === 'Element') continue
     const style = styleIndex.get(tag)
     if (style) matched = { ...matched, ...style }
   }
@@ -174,6 +180,7 @@ function buildGroupNodes(
   laidOutNodes: Node[],
 ): Node[] {
   const PADDING = 24
+  const PADDING_TOP = 52 // extra room for the group label
 
   // Build position+size map from the already-laid-out element nodes
   const nodeMap = new Map<string, { x: number; y: number; w: number; h: number }>()
@@ -204,8 +211,8 @@ function buildGroupNodes(
     groupNodes.push({
       id: `group-${group.id}`,
       type: 'group',
-      position: { x: minX - PADDING, y: minY - PADDING },
-      style: { width: (maxX - minX) + PADDING * 2, height: (maxY - minY) + PADDING * 2 },
+      position: { x: minX - PADDING, y: minY - PADDING_TOP },
+      style: { width: (maxX - minX) + PADDING * 2, height: (maxY - minY) + PADDING_TOP + PADDING, backgroundColor: 'transparent' },
       data: { label: group.name, elementCount: group.elementIds.length },
       zIndex: -1,
       selectable: true,
@@ -466,6 +473,7 @@ export default function Canvas() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const selectElements = useWorkspaceStore((s) => s.selectElements)
+  const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
@@ -574,6 +582,11 @@ export default function Canvas() {
   // after onInit fires (panZoom is initialized). useReactFlow() returns a proxy
   // that may not have panZoom attached yet when called programmatically.
   const rfInitInstance = useRef<typeof reactFlowInstance | null>(null)
+  // Keep stable refs so fitContentNodes (useCallback) always sees current values
+  const workspaceRef = useRef(workspace)
+  const viewRef = useRef(view)
+  useEffect(() => { workspaceRef.current = workspace }, [workspace])
+  useEffect(() => { viewRef.current = view }, [view])
 
   const fitContentNodes = useCallback(() => {
     if (!fitPending.current) return
@@ -594,8 +607,23 @@ export default function Canvas() {
       return
     }
 
-    // All conditions met — compute bounds and set viewport
+    // All conditions met — update group/boundary sizes with real measured dimensions, then fit
     fitPending.current = false
+
+    // Rebuild group + boundary nodes now that we have real measured sizes
+    const ws = workspaceRef.current
+    const v = viewRef.current
+    const measuredLaidOut = rf.getNodes()
+    const updatedGroups = ws ? buildGroupNodes(ws, ws.model.groups, measuredLaidOut) : []
+    const updatedBoundary = ws && v ? buildBoundaryNode(ws, v, measuredLaidOut) : null
+    setNodes((prev) => {
+      const contentOnly = prev.filter(n => !n.id.startsWith('group-') && n.id !== '__scope_boundary__')
+      const overlays: typeof prev = []
+      if (updatedBoundary) overlays.push(updatedBoundary as typeof prev[0])
+      overlays.push(...updatedGroups as typeof prev)
+      return [...contentOnly, ...overlays]
+    })
+
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
     for (const n of contentNodes) {
       const w = n.measured!.width!
@@ -654,15 +682,45 @@ export default function Canvas() {
     })
   }, [focusElementId, clearFocusElement, reactFlowInstance])
 
+  // Suppress inspector opening during drag (works on touch too).
+  // onSelectionChange fires at touch-start before any movement, so we schedule
+  // the selectElements call and cancel it if onNodeDrag fires first.
+  const isDragging = useRef(false)
+  const inspectorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const onNodeDragStart = useCallback(() => { isDragging.current = false }, [])
+  const onNodeDrag = useCallback(() => {
+    isDragging.current = true
+    if (inspectorTimer.current) {
+      clearTimeout(inspectorTimer.current)
+      inspectorTimer.current = null
+    }
+  }, [])
+
   const onSelectionChange = useCallback(
     ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
+      // In multi-select mode, onNodeClick handles selection manually — ignore RF's selection events
+      if (multiSelectModeRef.current) return
+
       const groupNodes = selectedNodes.filter(n => n.id.startsWith('group-'))
       const elementNodes = selectedNodes.filter(n => !n.id.startsWith('group-'))
 
       if (groupNodes.length > 0) {
         selectGroup(groupNodes[0].id.slice(6)) // strip 'group-' prefix
       } else if (elementNodes.length > 0) {
-        selectElements(elementNodes.map((n) => n.id))
+        const ids = elementNodes.map((n) => n.id)
+        // If multiple nodes selected (shift+click or rubber-band), apply immediately — no delay
+        if (ids.length > 1) {
+          if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
+          selectElements(ids)
+          return
+        }
+        // Single node: defer opening the inspector — cancel if a drag starts within 120ms
+        if (inspectorTimer.current) clearTimeout(inspectorTimer.current)
+        inspectorTimer.current = setTimeout(() => {
+          inspectorTimer.current = null
+          if (!isDragging.current) selectElements(ids)
+        }, 120)
       } else if (selectedEdges.length > 0) {
         const edgeData = selectedEdges[0].data as { relationship?: { id: string } } | undefined
         if (edgeData?.relationship) selectRelationship(edgeData.relationship.id)
@@ -687,6 +745,30 @@ export default function Canvas() {
     hideTimer.current = setTimeout(() => setMinimapVisible(false), 1500)
   }, [])
 
+  const multiSelectModeRef = useRef(multiSelectMode)
+  useEffect(() => { multiSelectModeRef.current = multiSelectMode }, [multiSelectMode])
+
+  const onNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      // Let shift+click go through onSelectionChange (RF handles multi-select natively)
+      if (event.shiftKey) return
+      if (!multiSelectModeRef.current) return
+      if (node.id.startsWith('group-') || node.id === '__scope_boundary__') return
+      event.stopPropagation()
+      // Toggle this node in both RF state and store
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === node.id ? { ...n, selected: !n.selected } : n
+        )
+      )
+      const current = useWorkspaceStore.getState().selectedElementIds
+      const isSelected = current.includes(node.id)
+      const next = isSelected ? current.filter((id) => id !== node.id) : [...current, node.id]
+      useWorkspaceStore.setState({ selectedElementIds: next, selectedRelationshipId: null, selectedGroupId: null })
+    },
+    [setNodes],
+  )
+
   const onNodeDoubleClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       const ws = useWorkspaceStore.getState().workspace
@@ -700,6 +782,8 @@ export default function Canvas() {
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       updateNodePosition(node.id, node.position.x, node.position.y)
+      // Reset drag flag slightly after stop so any trailing onSelectionChange is still suppressed
+      setTimeout(() => { isDragging.current = false }, 50)
     },
     [updateNodePosition],
   )
@@ -757,15 +841,22 @@ export default function Canvas() {
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
+        onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onMoveStart={onMoveStart}
         onMoveEnd={onMoveEnd}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onReconnect={onReconnect}
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
-        onPaneClick={() => { setContextMenu(null); clearSelection() }}
+        onPaneClick={() => {
+          if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
+          setContextMenu(null)
+          clearSelection()
+        }}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         proOptions={{ hideAttribution: true }}

@@ -558,12 +558,12 @@ function TagStyleEditor({ tag, style, onClose }: {
         <StyleField label="Opacity">
           <input
             type="range" min={0} max={100} step={5}
-            value={(opacity ?? 1) * 100}
-            onChange={(e) => { const val = Number(e.target.value) / 100; update({ opacity: val < 1 ? val : undefined }) }}
+            value={opacity ?? 100}
+            onChange={(e) => { const val = Number(e.target.value); update({ opacity: val < 100 ? val : undefined }) }}
             style={{ flex: 1, accentColor: 'var(--color-accent)' }}
           />
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', width: 30, textAlign: 'right' }}>
-            {Math.round((opacity ?? 1) * 100)}%
+            {opacity ?? 100}%
           </span>
         </StyleField>
         <StyleField label="Font size">
