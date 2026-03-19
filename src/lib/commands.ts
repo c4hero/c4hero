@@ -5,7 +5,7 @@ import {
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, FileText, Image, FileCode,
 } from 'lucide-react'
-import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews } from '@/store/workspace'
+import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, allViewsOf } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
@@ -137,8 +137,8 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         if (s.selectedRelationshipId) {
           s.deleteRelationship(s.selectedRelationshipId)
         }
-        for (const id of s.selectedElementIds) {
-          s.deleteElement(id)
+        if (s.selectedElementIds.length > 0) {
+          s.deleteElements(s.selectedElementIds)
         }
       },
     },
@@ -199,13 +199,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.workspace || !s.activeViewKey) return
         const ws = structuredClone(s.workspace)
-        const allViews = [
-          ...ws.views.systemLandscapeViews,
-          ...ws.views.systemContextViews,
-          ...ws.views.containerViews,
-          ...ws.views.componentViews,
-        ]
-        const v = allViews.find((v) => v.key === s.activeViewKey)
+        const v = allViewsOf(ws).find((v) => v.key === s.activeViewKey)
         if (v) {
           for (const el of v.elements) {
             el.x = undefined

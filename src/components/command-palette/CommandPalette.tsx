@@ -92,7 +92,7 @@ export default function CommandPalette() {
     <>
       {/* Backdrop */}
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'var(--color-backdrop)' }}
+        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'var(--color-backdrop)', pointerEvents: 'auto' }}
         onClick={close}
         aria-hidden="true"
       />
@@ -102,19 +102,8 @@ export default function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        style={{
-          zIndex: 49,
-          background: 'var(--glass-bg-heavy)',
-          borderTop: 'none',
-          border: '1px solid var(--color-border)',
-          borderRadius: '0 0 var(--radius-xl) var(--radius-xl)',
-          boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          overflow: 'hidden',
-          pointerEvents: 'auto',
-          animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
-        }}
+        className="shade-panel"
+        style={{ zIndex: 49 }}
         onKeyDown={handleKeyDown}
       >
         {/* Search input */}

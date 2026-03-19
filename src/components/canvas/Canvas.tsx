@@ -14,7 +14,7 @@ import {
   reconnectEdge,
 } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
-import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, canDrillInto } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, allViewsOf } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
@@ -26,35 +26,37 @@ const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
 }
 
+/** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
+function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
+  const map = new Map<string, ElementStyle>()
+  for (const style of styles) {
+    map.set(style.tag, style)
+  }
+  return map
+}
+
 /** Get the best matching style for an element based on its tags */
 function getElementStyle(
   element: ModelElement,
-  styles: ElementStyle[],
+  styleIndex: Map<string, ElementStyle>,
 ): ElementStyle | undefined {
-  // Match the most specific tag (last matching wins, like CSS)
-  let matched: ElementStyle | undefined
-  for (const style of styles) {
-    if (element.tags.includes(style.tag)) {
-      matched = { ...matched, ...style }
-    }
-  }
-  // Also check type-based tags
   const typeTag =
     element.type === 'person' ? 'Person'
     : element.type === 'softwareSystem' ? 'Software System'
     : element.type === 'container' ? 'Container'
     : 'Component'
-  for (const style of styles) {
-    if (style.tag === typeTag) {
-      matched = { ...matched, ...style }
-    }
+
+  // Start with type-based tag style, then layer more-specific tag styles on top
+  let matched: ElementStyle | undefined
+  const typeStyle = styleIndex.get(typeTag)
+  if (typeStyle) matched = { ...typeStyle }
+
+  for (const tag of element.tags) {
+    if (tag === typeTag) continue
+    const style = styleIndex.get(tag)
+    if (style) matched = { ...matched, ...style }
   }
-  // Apply more-specific tag matches on top
-  for (const style of styles) {
-    if (element.tags.includes(style.tag) && style.tag !== typeTag) {
-      matched = { ...matched, ...style }
-    }
-  }
+
   return matched
 }
 
@@ -104,6 +106,22 @@ function computeHandlePair(
   }
 }
 
+/** Pre-compute the set of element IDs that can be drilled into (have a child view).
+ *  O(V) once instead of O(N * (tree + V)) per element in buildNodes. */
+function buildDrillableSet(workspace: Workspace): Set<string> {
+  const drillable = new Set<string>()
+  for (const v of workspace.views.containerViews) {
+    if (v.softwareSystemId) drillable.add(v.softwareSystemId)
+  }
+  for (const v of workspace.views.systemContextViews) {
+    if (v.softwareSystemId) drillable.add(v.softwareSystemId)
+  }
+  for (const v of workspace.views.componentViews) {
+    if (v.containerId) drillable.add(v.containerId)
+  }
+  return drillable
+}
+
 /** Build React Flow nodes from workspace view (no edges yet — those need final positions). */
 function buildNodes(
   workspace: Workspace,
@@ -112,9 +130,10 @@ function buildNodes(
   activeTagFilter: string | null,
   activeStatusFilter: string | null,
   viewCountMap: Map<string, number>,
+  drillableIds: Set<string>,
 ): Node[] {
   const elementMap = buildElementMap(workspace)
-  const elementStyles = workspace.views.configuration.styles.elements
+  const styleIndex = buildStyleIndex(workspace.views.configuration.styles.elements)
 
   const nodes: Node[] = []
 
@@ -122,7 +141,7 @@ function buildNodes(
     const element = elementMap.get(viewEl.id)
     if (!element) continue
 
-    const style = getElementStyle(element, elementStyles)
+    const style = getElementStyle(element, styleIndex)
     const matchesTag = !activeTagFilter || element.tags.includes(activeTagFilter)
     const matchesStatus = !activeStatusFilter || element.status === activeStatusFilter
     const matchesFilter = matchesTag && matchesStatus
@@ -136,7 +155,7 @@ function buildNodes(
         element,
         style,
         childCount: getChildCount(element),
-        canDrill: canDrillInto(workspace, element.id),
+        canDrill: drillableIds.has(element.id),
         onDrillIn,
         dimmed: !matchesFilter,
         viewCount: viewCountMap.get(element.id) ?? 1,
@@ -154,30 +173,33 @@ function buildGroupNodes(
   groups: typeof workspace.model.groups,
   laidOutNodes: Node[],
 ): Node[] {
-  const NODE_W = 200
-  const NODE_H = 100
   const PADDING = 24
 
-  // Build position map from the already-laid-out element nodes
-  const posMap = new Map<string, { x: number; y: number }>()
+  // Build position+size map from the already-laid-out element nodes
+  const nodeMap = new Map<string, { x: number; y: number; w: number; h: number }>()
   for (const n of laidOutNodes) {
     if (!n.id.startsWith('group-') && n.id !== '__scope_boundary__') {
-      posMap.set(n.id, n.position)
+      nodeMap.set(n.id, {
+        x: n.position.x,
+        y: n.position.y,
+        w: n.measured?.width ?? 200,
+        h: n.measured?.height ?? 100,
+      })
     }
   }
 
   const groupNodes: Node[] = []
   for (const group of groups) {
-    const memberPositions = group.elementIds
-      .map((id) => posMap.get(id))
-      .filter((p): p is { x: number; y: number } => p !== undefined)
+    const memberNodes = group.elementIds
+      .map((id) => nodeMap.get(id))
+      .filter((p): p is { x: number; y: number; w: number; h: number } => p !== undefined)
 
-    if (memberPositions.length < 2) continue
+    if (memberNodes.length < 2) continue
 
-    const minX = Math.min(...memberPositions.map((p) => p.x))
-    const minY = Math.min(...memberPositions.map((p) => p.y))
-    const maxX = Math.max(...memberPositions.map((p) => p.x)) + NODE_W
-    const maxY = Math.max(...memberPositions.map((p) => p.y)) + NODE_H
+    const minX = Math.min(...memberNodes.map((p) => p.x))
+    const minY = Math.min(...memberNodes.map((p) => p.y))
+    const maxX = Math.max(...memberNodes.map((p) => p.x + p.w))
+    const maxY = Math.max(...memberNodes.map((p) => p.y + p.h))
 
     groupNodes.push({
       id: `group-${group.id}`,
@@ -199,15 +221,18 @@ function buildBoundaryNode(
   view: View,
   laidOutNodes: Node[],
 ): Node | null {
-  const NODE_W = 200
-  const NODE_H = 100
   const BOUNDARY_PADDING = 32
 
-  // Build position map from laid-out element nodes only
-  const posMap = new Map<string, { x: number; y: number }>()
+  // Build position+size map from laid-out element nodes only
+  const nodeMap = new Map<string, { x: number; y: number; w: number; h: number }>()
   for (const n of laidOutNodes) {
     if (!n.id.startsWith('group-') && n.id !== '__scope_boundary__') {
-      posMap.set(n.id, n.position)
+      nodeMap.set(n.id, {
+        x: n.position.x,
+        y: n.position.y,
+        w: n.measured?.width ?? 200,
+        h: n.measured?.height ?? 100,
+      })
     }
   }
 
@@ -215,15 +240,15 @@ function buildBoundaryNode(
     const scopeSystem = workspace.model.softwareSystems.find(s => s.id === view.softwareSystemId)
     if (scopeSystem) {
       const containerIds = new Set(scopeSystem.containers.map(c => c.id))
-      const internalPositions = Array.from(posMap.entries())
+      const internalPositions = Array.from(nodeMap.entries())
         .filter(([id]) => containerIds.has(id))
         .map(([, pos]) => pos)
 
       if (internalPositions.length > 0) {
         const minX = Math.min(...internalPositions.map(p => p.x))
         const minY = Math.min(...internalPositions.map(p => p.y))
-        const maxX = Math.max(...internalPositions.map(p => p.x)) + NODE_W
-        const maxY = Math.max(...internalPositions.map(p => p.y)) + NODE_H
+        const maxX = Math.max(...internalPositions.map(p => p.x + p.w))
+        const maxY = Math.max(...internalPositions.map(p => p.y + p.h))
         return {
           id: '__scope_boundary__',
           type: 'boundary',
@@ -245,15 +270,15 @@ function buildBoundaryNode(
       .find(c => c.id === view.containerId)
     if (scopeContainer) {
       const componentIds = new Set(scopeContainer.components.map(c => c.id))
-      const internalPositions = Array.from(posMap.entries())
+      const internalPositions = Array.from(nodeMap.entries())
         .filter(([id]) => componentIds.has(id))
         .map(([, pos]) => pos)
 
       if (internalPositions.length > 0) {
         const minX = Math.min(...internalPositions.map(p => p.x))
         const minY = Math.min(...internalPositions.map(p => p.y))
-        const maxX = Math.max(...internalPositions.map(p => p.x)) + NODE_W
-        const maxY = Math.max(...internalPositions.map(p => p.y)) + NODE_H
+        const maxX = Math.max(...internalPositions.map(p => p.x + p.w))
+        const maxY = Math.max(...internalPositions.map(p => p.y + p.h))
         return {
           id: '__scope_boundary__',
           type: 'boundary',
@@ -486,23 +511,16 @@ export default function Canvas() {
   // not on every workspace clone (e.g. element rename, tag change).
   const viewStructureKey = useWorkspaceStore((s) => {
     if (!s.workspace) return ''
-    const v = s.workspace.views
-    const all = [...v.systemLandscapeViews, ...v.systemContextViews, ...v.containerViews, ...v.componentViews]
+    const all = allViewsOf(s.workspace)
     // Build a fingerprint: "viewKey:elCount:el1,el2,..." for each view
     return all.map(view => `${view.key}:${view.elements.map(e => e.id).join(',')}`).join('|')
   })
   const viewCountMap = useMemo(() => {
     if (!viewStructureKey) return new Map<string, number>()
-    const views = useWorkspaceStore.getState().workspace?.views
-    if (!views) return new Map<string, number>()
-    const allViews = [
-      ...views.systemLandscapeViews,
-      ...views.systemContextViews,
-      ...views.containerViews,
-      ...views.componentViews,
-    ]
+    const ws = useWorkspaceStore.getState().workspace
+    if (!ws) return new Map<string, number>()
     const map = new Map<string, number>()
-    for (const v of allViews) {
+    for (const v of allViewsOf(ws)) {
       for (const ve of v.elements) {
         map.set(ve.id, (map.get(ve.id) ?? 0) + 1)
       }
@@ -515,7 +533,8 @@ export default function Canvas() {
     const direction = view.autoLayout?.direction ?? 'TB'
 
     // 1. Build nodes with raw positions from view
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap)
+    const drillableIds = buildDrillableSet(workspace)
+    const rawNodes = buildNodes(workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap, drillableIds)
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
     const relationshipMap = buildRelationshipMap(workspace)
@@ -671,7 +690,7 @@ export default function Canvas() {
   const onNodeDoubleClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       const ws = useWorkspaceStore.getState().workspace
-      if (ws && canDrillInto(ws, node.id)) {
+      if (ws && buildDrillableSet(ws).has(node.id)) {
         useWorkspaceStore.getState().drillInto(node.id)
       }
     },

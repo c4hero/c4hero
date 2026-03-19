@@ -61,13 +61,37 @@ class SerializerContext {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- _name reserved for future use (e.g. name-based variable generation)
-    private registerElement(id: string, _name: string): void {
+    private usedVarNames = new Set<string>()
+
+    private registerElement(id: string, name: string): void {
         this.allElementIds.add(id)
-        // If the ID is a valid identifier (not purely numeric), use it as var name
+        // If the ID is already a valid identifier, use it directly
         if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(id)) {
             this.idToVar.set(id, id)
+            this.usedVarNames.add(id)
+            return
         }
+        // Otherwise derive a clean variable name from the element name
+        const varName = this.toVarName(name)
+        this.idToVar.set(id, varName)
+        this.usedVarNames.add(varName)
+    }
+
+    /** Convert a human name to a unique valid DSL identifier */
+    private toVarName(name: string): string {
+        // Sanitize: lowercase, replace spaces/special chars with underscores, strip leading digits
+        let base = name
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, '_')
+            .replace(/^[0-9]+/, '')
+            .replace(/_+/g, '_')
+            .replace(/^_+|_+$/g, '')
+        if (!base) base = 'element'
+        // Ensure uniqueness by appending a counter if needed
+        if (!this.usedVarNames.has(base)) return base
+        let i = 2
+        while (this.usedVarNames.has(`${base}_${i}`)) i++
+        return `${base}_${i}`
     }
 
     private indent(): string {

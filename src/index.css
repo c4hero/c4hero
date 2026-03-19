@@ -122,6 +122,27 @@ body {
   box-shadow: var(--glass-shadow);
 }
 
+/* Pill bar with an open shade — square bottom corners to merge with shade */
+.glass-panel[data-shade-open="true"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+/* Shade panels that drop down from the top pill */
+.shade-panel {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  animation: slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
 /* Flyout menus that slide out from panels */
 .glass-flyout {
   background: var(--glass-bg-heavy);

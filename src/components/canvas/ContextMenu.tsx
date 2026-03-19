@@ -27,6 +27,7 @@ export default function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps)
     <>
       <div className="fixed inset-0 z-[80]" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }} />
       <div
+        role="menu"
         className="fixed z-[90] w-48 rounded-lg border py-1 shadow-xl"
         style={{
           left: x,
@@ -67,6 +68,7 @@ export default function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps)
 function MenuItem({ icon, label, danger, onClick }: { icon: React.ReactNode; label: string; danger?: boolean; onClick: () => void }) {
   return (
     <button
+      role="menuitem"
       onClick={onClick}
       className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--color-surface-3)]"
       style={{ color: danger ? 'var(--color-error)' : 'var(--color-text-primary)' }}

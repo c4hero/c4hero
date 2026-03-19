@@ -1,4 +1,4 @@
-import { Handle, Position, useNodeId, useEdges } from '@xyflow/react'
+import { Handle, Position, useNodeId, useStore } from '@xyflow/react'
 import { useMemo } from 'react'
 
 /**
@@ -41,13 +41,22 @@ function getHandleStyle(side: Side, slot: string): React.CSSProperties {
 
 export default function NodeHandles() {
   const nodeId = useNodeId()
-  const edges = useEdges()
+
+  // Only subscribe to edges connected to this node (avoids O(N*E) re-renders)
+  const connectedEdges = useStore(
+    (s) => {
+      if (!nodeId) return []
+      return s.edges.filter(
+        (e) => e.source === nodeId || e.target === nodeId,
+      )
+    },
+  )
 
   // Determine which sides have existing connections
   const occupiedSides = useMemo(() => {
     const sides = new Set<Side>()
     if (!nodeId) return sides
-    for (const edge of edges) {
+    for (const edge of connectedEdges) {
       if (edge.source === nodeId && edge.sourceHandle) {
         const side = edge.sourceHandle.split('-')[0] as Side
         if (SIDES.includes(side)) sides.add(side)
@@ -58,7 +67,7 @@ export default function NodeHandles() {
       }
     }
     return sides
-  }, [nodeId, edges])
+  }, [nodeId, connectedEdges])
 
   return (
     <>

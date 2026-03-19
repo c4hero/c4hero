@@ -49,9 +49,9 @@ export default function RightPanel() {
   )
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
   return (
-    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+    <label htmlFor={htmlFor} className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
       {children}
     </label>
   )
@@ -189,7 +189,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b px-1" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="flex border-b px-1" style={{ borderColor: 'var(--color-border)' }} role="tablist" aria-label="Element details">
         {([
           { id: 'properties' as PanelTab, label: 'Properties' },
           { id: 'relations' as PanelTab, label: 'Relations' },
@@ -197,6 +197,8 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
         ]).map(({ id, label }) => (
           <button
             key={id}
+            role="tab"
+            aria-selected={activeTab === id}
             onClick={() => setActiveTab(id)}
             className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150"
             style={{
@@ -210,7 +212,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4" role="tabpanel" aria-label={activeTab}>
         {activeTab === 'properties' && (
           <div className="space-y-4">
             <div>
@@ -219,8 +221,9 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             </div>
             {hasLocation && (
               <div>
-                <FieldLabel>Location</FieldLabel>
+                <FieldLabel htmlFor="el-location">Location</FieldLabel>
                 <select
+                  id="el-location"
                   value={location ?? 'Internal'}
                   onChange={(e) => updateElement(element.id, { location: e.target.value as Location })}
                   className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
@@ -268,8 +271,9 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
 
             {/* Status */}
             <div>
-              <FieldLabel>Status</FieldLabel>
+              <FieldLabel htmlFor="el-status">Status</FieldLabel>
               <select
+                id="el-status"
                 value={element.status ?? ''}
                 onChange={(e) => updateElement(element.id, { status: (e.target.value || undefined) as ElementStatus | undefined })}
                 className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
@@ -383,8 +387,9 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
           <EditableField value={relationship.technology ?? ''} placeholder="e.g. REST/HTTP, gRPC..." aria-label="Technology" onCommit={(v) => updateRelationship(relationship.id, { technology: v || undefined })} />
         </div>
         <div>
-          <FieldLabel>Interaction Style</FieldLabel>
+          <FieldLabel htmlFor="rel-interaction">Interaction Style</FieldLabel>
           <select
+            id="rel-interaction"
             value={relationship.interactionStyle ?? 'Synchronous'}
             onChange={(e) => updateRelationship(relationship.id, { interactionStyle: e.target.value as 'Synchronous' | 'Asynchronous' })}
             className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
@@ -399,8 +404,9 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
           </select>
         </div>
         <div>
-          <FieldLabel>Line Style</FieldLabel>
+          <FieldLabel htmlFor="rel-linestyle">Line Style</FieldLabel>
           <select
+            id="rel-linestyle"
             value={relationship.lineStyle ?? 'Curved'}
             onChange={(e) => updateRelationship(relationship.id, { lineStyle: e.target.value as LineStyle })}
             className="w-full rounded-lg border px-3 py-2 text-sm outline-none"

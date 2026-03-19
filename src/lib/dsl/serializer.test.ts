@@ -60,14 +60,16 @@ describe('Group serialization', () => {
     expect(dsl).toMatch(/group "Systems" \{[\s\S]*myApi[\s\S]*\}/)
   })
 
-  it('falls back to raw id when id is not a valid identifier', () => {
+  it('derives a var name from element name when id is not a valid identifier', () => {
     const ws = makeWorkspace()
     ws.model.people.push({ id: '1', type: 'person', name: 'Alice', tags: ['Element', 'Person'], properties: {} })
     ws.model.groups.push({ id: 'g1', name: 'Team', elementIds: ['1'] })
 
     const dsl = serializeDSL(ws)
     expect(dsl).toContain('group "Team"')
-    expect(dsl).toMatch(/group "Team" \{[\s\S]*1[\s\S]*\}/)
+    // Should use name-derived var 'alice', not raw id '1'
+    expect(dsl).toMatch(/group "Team" \{[\s\S]*alice[\s\S]*\}/)
+    expect(dsl).toContain('alice = person "Alice"')
   })
 
   it('serializes multiple groups', () => {

@@ -1233,8 +1233,32 @@ export function parse(input: string): ParseResult {
     // Combine lexer and parser errors
     const errors = [...lexResult.errors, ...result.errors]
 
+    // Post-process: populate view.relationships from model relationships.
+    // The DSL doesn't store relationship refs in views — Structurizr infers them.
+    // We do the same: for each view, include any model relationship whose source
+    // AND destination are both present in that view's element set.
+    const ws = result.workspace
+    const allViews = [
+        ...ws.views.systemLandscapeViews,
+        ...ws.views.systemContextViews,
+        ...ws.views.containerViews,
+        ...ws.views.componentViews,
+    ]
+    for (const view of allViews) {
+        const hasWildcard = view.elements.some(e => e.id === '*')
+        if (hasWildcard) {
+            // Wildcard views include all relationships
+            view.relationships = ws.model.relationships.map(r => ({ id: r.id }))
+        } else {
+            const elementIds = new Set(view.elements.map(e => e.id))
+            view.relationships = ws.model.relationships
+                .filter(r => elementIds.has(r.sourceId) && elementIds.has(r.destinationId))
+                .map(r => ({ id: r.id }))
+        }
+    }
+
     return {
-        workspace: result.workspace,
+        workspace: ws,
         errors,
     }
 }

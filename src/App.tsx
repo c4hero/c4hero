@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
+import LoadingDot from '@/components/shared/LoadingDot'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -43,7 +44,7 @@ export default function App() {
   }, [])
 
   if (!workspace) {
-    return <Suspense fallback={null}><WelcomeScreen /></Suspense>
+    return <Suspense fallback={<LoadingDot />}><WelcomeScreen /></Suspense>
   }
 
   // Presentation mode — fullscreen canvas
@@ -100,7 +101,7 @@ export default function App() {
       </div>
 
       {/* Dialogs */}
-      {searchOpen && <Suspense fallback={null}><SearchDialog /></Suspense>}
+      {searchOpen && <Suspense fallback={<LoadingDot />}><SearchDialog /></Suspense>}
 
     </ReactFlowProvider>
   )

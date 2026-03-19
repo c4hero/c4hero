@@ -92,6 +92,7 @@ interface WorkspaceState extends UndoState {
   deleteView: (key: string) => void
   renameView: (key: string, title: string) => void
   updateNodePosition: (nodeId: string, x: number, y: number) => void
+  updateNodePositions: (updates: { id: string; x: number; y: number }[]) => void
 
   // Undo/Redo
   undo: () => void
@@ -144,8 +145,8 @@ function cloneWs(s: WorkspaceState): Workspace | null {
   return s.workspace ? structuredClone(s.workspace) : null
 }
 
-/** Get flat array of all views (mutable — for use inside mutations on cloned workspace) */
-function allViewsOf(ws: Workspace): View[] {
+/** Get flat array of all views */
+export function allViewsOf(ws: Workspace): View[] {
   return [
     ...ws.views.systemLandscapeViews,
     ...ws.views.systemContextViews,
@@ -202,12 +203,14 @@ function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): void
   })
 }
 
+/** The four view-type array keys — used wherever we need to iterate or locate views by type */
+const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews'] as const
+
 /** Apply a callback to every view in the workspace (mutates views in place) */
 function forEachView(ws: Workspace, fn: (v: View) => void): void {
-  for (const v of ws.views.systemLandscapeViews) fn(v)
-  for (const v of ws.views.systemContextViews) fn(v)
-  for (const v of ws.views.containerViews) fn(v)
-  for (const v of ws.views.componentViews) fn(v)
+  for (const key of VIEW_ARRAY_KEYS) {
+    for (const v of ws.views[key]) fn(v)
+  }
 }
 
 /** Return a name that doesn't collide with any existing element name. */
@@ -406,46 +409,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   }),
 
   deleteElement: (id) => {
-    set((s) => {
-      const ws = cloneWs(s)
-      if (!ws) return s
-      // Remove from people
-      ws.model.people = ws.model.people.filter(p => p.id !== id)
-      // Remove from systems (and their containers/components)
-      ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
-        if (sys.id === id) return false
-        sys.containers = sys.containers.filter(c => {
-          if (c.id === id) return false
-          c.components = c.components.filter(comp => comp.id !== id)
-          return true
-        })
-        return true
-      })
-      // Remove related relationships
-      ws.model.relationships = ws.model.relationships.filter(
-        r => r.sourceId !== id && r.destinationId !== id
-      )
-      // Remove from all views
-      forEachView(ws, (v) => {
-        v.elements = v.elements.filter(e => e.id !== id)
-        v.relationships = v.relationships.filter(r => {
-          const rel = ws.model.relationships.find(mr => mr.id === r.id)
-          return rel !== undefined
-        })
-      })
-      // Remove from all groups
-      ws.model.groups = ws.model.groups.map(g => ({
-        ...g,
-        elementIds: g.elementIds.filter(eid => eid !== id),
-      }))
-      return {
-        ...pushUndo(s),
-        workspace: ws,
-        selectedElementIds: s.selectedElementIds.filter(eid => eid !== id),
-        selectedRelationshipId: null,
-      }
-    })
-    announce('Element deleted')
+    // Delegate to batch implementation
+    useWorkspaceStore.getState().deleteElements([id])
   },
 
   deleteElements: (ids) => {
@@ -466,9 +431,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       ws.model.relationships = ws.model.relationships.filter(
         r => !idSet.has(r.sourceId) && !idSet.has(r.destinationId)
       )
+      const survivingRelIds = new Set(ws.model.relationships.map(r => r.id))
       forEachView(ws, (v) => {
         v.elements = v.elements.filter(e => !idSet.has(e.id))
-        v.relationships = v.relationships.filter(r => ws.model.relationships.some(mr => mr.id === r.id))
+        v.relationships = v.relationships.filter(r => survivingRelIds.has(r.id))
       })
       ws.model.groups = ws.model.groups.map(g => ({
         ...g,
@@ -614,8 +580,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const ws = cloneWs(s)
     if (!ws) return s
     // Find which array contains the key and only filter that one
-    const viewArrayKeys = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews'] as const
-    for (const arrKey of viewArrayKeys) {
+    for (const arrKey of VIEW_ARRAY_KEYS) {
       const idx = ws.views[arrKey].findIndex(v => v.key === key)
       if (idx !== -1) {
         ws.views[arrKey].splice(idx, 1)
@@ -640,9 +605,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!s.workspace || !s.activeViewKey) return s
     // Shallow-clone only the view arrays and the affected view/element — avoids cloning entire workspace on every drag
     const ws = { ...s.workspace }
-    const viewArrayKeys = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews'] as const
     ws.views = { ...ws.views }
-    for (const key of viewArrayKeys) {
+    for (const key of VIEW_ARRAY_KEYS) {
       const idx = ws.views[key].findIndex(v => v.key === s.activeViewKey)
       if (idx === -1) continue
       ws.views[key] = [...ws.views[key]]
@@ -654,6 +618,26 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       break
     }
     // Don't push undo for every drag position — too noisy
+    return { workspace: ws }
+  }),
+
+  updateNodePositions: (updates) => set((s) => {
+    if (!s.workspace || !s.activeViewKey) return s
+    const updateMap = new Map(updates.map(u => [u.id, u]))
+    const ws = { ...s.workspace }
+    ws.views = { ...ws.views }
+    for (const key of VIEW_ARRAY_KEYS) {
+      const idx = ws.views[key].findIndex(v => v.key === s.activeViewKey)
+      if (idx === -1) continue
+      ws.views[key] = [...ws.views[key]]
+      const view = { ...ws.views[key][idx] }
+      view.elements = view.elements.map(e => {
+        const u = updateMap.get(e.id)
+        return u ? { ...e, x: u.x, y: u.y, pinned: true } : e
+      })
+      ws.views[key][idx] = view
+      break
+    }
     return { workspace: ws }
   }),
 

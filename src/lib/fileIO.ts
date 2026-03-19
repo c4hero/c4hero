@@ -1,4 +1,8 @@
 import type { Workspace } from '@/types/model'
+import { downloadBlob } from '@/lib/exportUtils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('fileIO')
 
 /** Max file size for DSL files: 10MB */
 const MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -23,7 +27,8 @@ export function getRecentFiles(): RecentFile[] {
     const data = localStorage.getItem(RECENT_FILES_KEY)
     if (!data) return []
     return JSON.parse(data) as RecentFile[]
-  } catch {
+  } catch (err) {
+    log.warn('Failed to read recent files from localStorage', err)
     return []
   }
 }
@@ -33,8 +38,8 @@ export function addRecentFile(name: string) {
   recent.unshift({ name, openedAt: new Date().toISOString() })
   try {
     localStorage.setItem(RECENT_FILES_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
-  } catch {
-    // localStorage full
+  } catch (err) {
+    log.warn('Failed to save recent file to localStorage', err)
   }
 }
 
@@ -51,7 +56,8 @@ export async function writeToCurrentHandle(content: string): Promise<boolean> {
     await writable.write(content)
     await writable.close()
     return true
-  } catch {
+  } catch (err) {
+    log.error('Failed to write to current file handle', err)
     return false
   }
 }
@@ -81,7 +87,8 @@ export async function writeSidecarToHandle(json: string): Promise<boolean> {
       }
     }
     return false
-  } catch {
+  } catch (err) {
+    log.error('Failed to write sidecar file', err)
     return false
   }
 }
@@ -99,14 +106,11 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
       const [handle] = await window.showOpenFilePicker({
         types: [
           {
-            description: 'Structurizr DSL',
-            accept: { 'text/plain': ['.dsl'] },
-          },
-          {
-            description: 'All files',
-            accept: { 'text/plain': ['.txt', '.dsl'] },
+            description: 'Structurizr DSL (.dsl) or text (.txt)',
+            accept: { 'text/plain': ['.dsl', '.txt'], 'application/octet-stream': ['.dsl'] },
           },
         ],
+        excludeAcceptAllOption: false,
       })
       currentFileHandle = handle
       const file = await handle.getFile()
@@ -126,13 +130,13 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
           sidecarJson = await sidecarFile.text()
         }
       } catch {
-        // No sidecar found — that's fine
+        // No sidecar file found — expected for new workspaces
         currentSidecarHandle = null
       }
 
       return { content, name: file.name, sidecarJson }
     } catch {
-      // User cancelled
+      // User cancelled the file picker — not an error
       return null
     }
   }
@@ -162,10 +166,11 @@ export async function saveDSLFile(content: string, suggestedName?: string): Prom
           suggestedName: suggestedName ?? 'workspace.dsl',
           types: [
             {
-              description: 'Structurizr DSL',
-              accept: { 'text/plain': ['.dsl'] },
+              description: 'Structurizr DSL (.dsl)',
+              accept: { 'text/plain': ['.dsl'], 'application/octet-stream': ['.dsl'] },
             },
           ],
+          excludeAcceptAllOption: false,
         })
       }
       const writable = await currentFileHandle.createWritable()
@@ -173,20 +178,13 @@ export async function saveDSLFile(content: string, suggestedName?: string): Prom
       await writable.close()
       return true
     } catch {
+      // User cancelled save picker — not an error
       return false
     }
   }
 
   // Fallback: trigger download
-  const blob = new Blob([content], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = suggestedName ?? 'workspace.dsl'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([content], { type: 'text/plain' }), suggestedName ?? 'workspace.dsl')
   return true
 }
 
@@ -203,8 +201,8 @@ export function saveToLocalStorage(workspace: Workspace) {
     }
     localStorage.setItem('c4hero_crash_recovery', json)
     localStorage.setItem('c4hero_crash_recovery_time', new Date().toISOString())
-  } catch {
-    // localStorage full or unavailable
+  } catch (err) {
+    log.warn('Failed to save crash recovery data to localStorage', err)
   }
 }
 
@@ -227,7 +225,8 @@ export function loadFromLocalStorage(): Workspace | null {
     const parsed = JSON.parse(data)
     if (!isWorkspaceShape(parsed)) return null
     return parsed
-  } catch {
+  } catch (err) {
+    log.warn('Failed to load crash recovery data from localStorage', err)
     return null
   }
 }
@@ -249,11 +248,13 @@ declare global {
   interface OpenFilePickerOptions {
     types?: FilePickerAcceptType[]
     multiple?: boolean
+    excludeAcceptAllOption?: boolean
   }
 
   interface SaveFilePickerOptions {
     suggestedName?: string
     types?: FilePickerAcceptType[]
+    excludeAcceptAllOption?: boolean
   }
 
   interface FilePickerAcceptType {

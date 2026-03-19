@@ -1,3 +1,6 @@
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai')
 const API_TIMEOUT_MS = 30_000
 
 function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
@@ -23,7 +26,8 @@ export function getAIConfig(): AIConfig | null {
     if (parsed.provider !== 'anthropic' && parsed.provider !== 'openai') return null
     if (typeof parsed.apiKey !== 'string' || !parsed.apiKey) return null
     return parsed as AIConfig
-  } catch {
+  } catch (err) {
+    log.warn('Failed to read AI config from sessionStorage', err)
     return null
   }
 }
@@ -72,7 +76,11 @@ Respond with ONLY the description text, no quotes or explanation.`
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-    if (!response.ok) throw new Error(`Anthropic API error: ${response.status}`)
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      log.error(`Anthropic API error ${response.status}`, { status: response.status })
+      throw new Error(`Anthropic API error: ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`)
+    }
     const data = await response.json()
     return data.content[0]?.text?.trim() ?? ''
   }
@@ -90,7 +98,11 @@ Respond with ONLY the description text, no quotes or explanation.`
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-    if (!response.ok) throw new Error(`OpenAI API error: ${response.status}`)
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      log.error(`OpenAI API error ${response.status}`, { status: response.status })
+      throw new Error(`OpenAI API error: ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`)
+    }
     const data = await response.json()
     return data.choices[0]?.message?.content?.trim() ?? ''
   }
@@ -132,7 +144,11 @@ Respond with ONLY the Structurizr DSL code, no explanation or markdown.`
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-    if (!response.ok) throw new Error(`Anthropic API error: ${response.status}`)
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      log.error(`Anthropic API error ${response.status}`, { status: response.status })
+      throw new Error(`Anthropic API error: ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`)
+    }
     const data = await response.json()
     return data.content[0]?.text?.trim() ?? ''
   }
@@ -150,7 +166,11 @@ Respond with ONLY the Structurizr DSL code, no explanation or markdown.`
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-    if (!response.ok) throw new Error(`OpenAI API error: ${response.status}`)
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      log.error(`OpenAI API error ${response.status}`, { status: response.status })
+      throw new Error(`OpenAI API error: ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`)
+    }
     const data = await response.json()
     return data.choices[0]?.message?.content?.trim() ?? ''
   }

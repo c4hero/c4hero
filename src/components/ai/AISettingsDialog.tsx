@@ -70,12 +70,13 @@ export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+            <label htmlFor="ai-api-key" className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
               API Key
             </label>
             <div className="relative">
               <Key size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
               <input
+                id="ai-api-key"
                 type="password"
                 value={apiKey}
                 onChange={(e) => { setApiKey(e.target.value); setSaved(false) }}

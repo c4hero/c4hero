@@ -1,4 +1,7 @@
 import { create } from 'zustand'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('settings')
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -31,7 +34,8 @@ function load(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULTS }
     return { ...DEFAULTS, ...JSON.parse(raw) }
-  } catch {
+  } catch (err) {
+    log.warn('Failed to load settings from localStorage', err)
     return { ...DEFAULTS }
   }
 }
@@ -39,8 +43,8 @@ function load(): AppSettings {
 function persist(settings: AppSettings) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings, null, 2))
-  } catch {
-    // localStorage full or unavailable — silently ignore
+  } catch (err) {
+    log.warn('Failed to persist settings to localStorage', err)
   }
 }
 

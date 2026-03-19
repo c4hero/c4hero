@@ -18,7 +18,17 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.ts', 'src/main.tsx'],
+      thresholds: {
+        statements: 50,
+        branches: 50,
+      },
+    },
   },
 })

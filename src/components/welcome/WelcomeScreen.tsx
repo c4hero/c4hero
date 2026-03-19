@@ -7,11 +7,11 @@ import {
   createMonolithTemplate,
   createEventDrivenTemplate,
 } from '@/lib/templates'
-import { openDSLFile, getRecentFiles, hasFileSystemAccess, isWorkspaceShape } from '@/lib/fileIO'
-import { parseDSL } from '@/lib/dsl'
+import { openDSLFile, getRecentFiles, hasFileSystemAccess, isWorkspaceShape, saveDSLFile } from '@/lib/fileIO'
+import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
 import { getAIConfig } from '@/lib/ai'
-import { FileText, Play, LayoutTemplate, Sparkles, Settings, Upload, Server, Box, Radio, Clock } from 'lucide-react'
+import { FileText, Play, LayoutTemplate, Sparkles, Settings, Upload, Server, Box, Radio, Clock, AlertTriangle } from 'lucide-react'
 import AISettingsDialog from '@/components/ai/AISettingsDialog'
 import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
 
@@ -20,6 +20,7 @@ export default function WelcomeScreen() {
   useEffect(() => { document.title = 'c4hero' }, [])
   const [showAISettings, setShowAISettings] = useState(false)
   const [showDescribe, setShowDescribe] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const jsonInputRef = useRef<HTMLInputElement>(null)
   const dslInputRef = useRef<HTMLInputElement>(null)
 
@@ -31,12 +32,12 @@ export default function WelcomeScreen() {
       try {
         const parsed = JSON.parse(reader.result as string)
         if (!isWorkspaceShape(parsed)) {
-          alert('Invalid workspace file. The JSON does not have the expected workspace structure.')
+          setErrorMsg('Invalid workspace file. The JSON does not have the expected workspace structure.')
           return
         }
         loadWorkspace(parsed)
       } catch {
-        alert('Failed to parse JSON file. Please check the file format.')
+        setErrorMsg('Failed to parse JSON file. Please check the file format.')
       }
     }
     reader.readAsText(file)
@@ -55,7 +56,7 @@ export default function WelcomeScreen() {
       if (!workspace.name) workspace.name = file.name.replace(/\.dsl$/, '')
       loadWorkspace(workspace)
     } else {
-      alert('Failed to parse DSL file. Check console for errors.')
+      setErrorMsg('Failed to parse DSL file. Please check the file format.')
     }
   }
 
@@ -98,6 +99,29 @@ export default function WelcomeScreen() {
       style={{ background: 'var(--color-bg-primary)', paddingTop: 'max(3rem, calc(env(safe-area-inset-top, 0px) + 1.5rem))', paddingBottom: 'max(3rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))' }}
     >
       <div className="flex w-full max-w-md flex-col items-center gap-10 sm:max-w-lg my-auto">
+        {/* Error banner */}
+        {errorMsg && (
+          <div
+            role="alert"
+            className="flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-sm"
+            style={{
+              background: 'color-mix(in srgb, var(--color-error) 8%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--color-error) 30%, transparent)',
+              color: 'var(--color-error)',
+            }}
+          >
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>{errorMsg}</span>
+            <button
+              onClick={() => setErrorMsg(null)}
+              className="text-xs underline"
+              style={{ color: 'var(--color-error)', flexShrink: 0 }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Logo + tagline */}
         <div className="flex flex-col items-center gap-4">
           <h1 className="flex flex-col items-center gap-2">
@@ -111,7 +135,14 @@ export default function WelcomeScreen() {
         {/* Primary actions */}
         <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
           <ActionCard icon={<FileText size={22} />} label="Open .dsl file" onClick={handleOpenFile} />
-          <ActionCard icon={<LayoutTemplate size={22} />} label="Blank workspace" onClick={() => loadWorkspace(createBlankWorkspace())} />
+          <ActionCard icon={<LayoutTemplate size={22} />} label="Blank workspace" onClick={async () => {
+            const ws = createBlankWorkspace()
+            loadWorkspace(ws)
+            // Prompt to pick a save location immediately so auto-save works from the start
+            if (hasFileSystemAccess()) {
+              await saveDSLFile(serializeDSL(ws), 'workspace.dsl')
+            }
+          }} />
           <ActionCard icon={<Play size={22} />} label="Explore sample" onClick={() => loadWorkspace(createBigBankSample())} />
         </div>
 

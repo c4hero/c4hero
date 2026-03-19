@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useWorkspaceStore } from '@/store/workspace'
+import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
 
 /**
  * Syncs URL path with workspace/view state:
@@ -25,12 +25,7 @@ export function useRouteSync() {
       const store = useWorkspaceStore.getState()
       if (store.workspace && viewKeyFromUrl && viewKeyFromUrl !== store.activeViewKey) {
         // Verify the view exists
-        const allViews = [
-          ...store.workspace.views.systemLandscapeViews,
-          ...store.workspace.views.systemContextViews,
-          ...store.workspace.views.containerViews,
-          ...store.workspace.views.componentViews,
-        ]
+        const allViews = allViewsOf(store.workspace)
         if (allViews.some(v => v.key === viewKeyFromUrl)) {
           setActiveView(viewKeyFromUrl)
         }
@@ -79,12 +74,7 @@ export function useRouteSync() {
 
       const viewKey = match[1] ? decodeURIComponent(match[1]) : null
       if (viewKey && viewKey !== store.activeViewKey) {
-        const allViews = [
-          ...store.workspace.views.systemLandscapeViews,
-          ...store.workspace.views.systemContextViews,
-          ...store.workspace.views.containerViews,
-          ...store.workspace.views.componentViews,
-        ]
+        const allViews = allViewsOf(store.workspace)
         if (allViews.some(v => v.key === viewKey)) {
           // Use setState directly to avoid pushing another history entry
           useWorkspaceStore.setState({

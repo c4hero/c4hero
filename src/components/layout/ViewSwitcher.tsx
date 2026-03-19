@@ -160,17 +160,11 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
 
   return (
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 48 }} onClick={() => { onClose(); setRenamingViewKey(null) }} />
+      <div style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }} onClick={() => { onClose(); setRenamingViewKey(null) }} />
       <div
-        className="glass-panel-solid"
+        className="shade-panel"
         style={{
           zIndex: 49,
-          borderTop: 'none',
-          borderRadius: `0 0 var(--radius-xl) var(--radius-xl)`,
-          boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
-          animation: 'slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
-          overflow: 'hidden',
-          pointerEvents: 'auto',
           maxHeight: 'calc(100vh - 80px)',
           overflowY: 'auto',
         }}>

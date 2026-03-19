@@ -1,4 +1,5 @@
 import { forwardRef, lazy, Suspense, useEffect, useRef, useState } from 'react'
+import LoadingDot from '@/components/shared/LoadingDot'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import type { LayoutDirection } from '@/types/model'
@@ -21,6 +22,7 @@ import {
   Settings,
 } from 'lucide-react'
 import { useArrowNav } from '@/hooks/useArrowNav'
+import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
 
 const CanvasSettingsDialog = lazy(() => import('@/components/settings/CanvasSettingsDialog'))
 const AddElementPanel = lazy(() => import('@/components/layout/AddElementPanel'))
@@ -47,7 +49,7 @@ export default function FloatingToolRail() {
   const addGroup = useWorkspaceStore((s) => s.addGroup)
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
   const deleteElements = useWorkspaceStore((s) => s.deleteElements)
-  const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
+  const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const reactFlow = useReactFlow()
   const [addPanelOpen, setAddPanelOpen] = useState(false)
   const [arrangePanelOpen, setArrangePanelOpen] = useState(false)
@@ -80,67 +82,9 @@ export default function FloatingToolRail() {
   }, [])
 
   // Focus management: move focus into flyout when opened, return to trigger when closed
-  const prevAddOpen = useRef(false)
-  const prevArrangeOpen = useRef(false)
-  const prevAlignOpen = useRef(false)
-
-  useEffect(() => {
-    if (addPanelOpen && !prevAddOpen.current) {
-      lastOpenPanel.current = 'add'
-      // Focus first focusable element inside the add element flyout
-      requestAnimationFrame(() => {
-        const container = addElementFlyoutRef.current
-        if (container) {
-          const focusable = container.querySelector<HTMLElement>(
-            'input, button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-          focusable?.focus()
-        }
-      })
-    } else if (!addPanelOpen && prevAddOpen.current && lastOpenPanel.current === 'add') {
-      addBtnRef.current?.focus()
-      lastOpenPanel.current = null
-    }
-    prevAddOpen.current = addPanelOpen
-  }, [addPanelOpen])
-
-  useEffect(() => {
-    if (arrangePanelOpen && !prevArrangeOpen.current) {
-      lastOpenPanel.current = 'arrange'
-      requestAnimationFrame(() => {
-        const container = arrangeFlyoutRef.current
-        if (container) {
-          const focusable = container.querySelector<HTMLElement>(
-            'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-          focusable?.focus()
-        }
-      })
-    } else if (!arrangePanelOpen && prevArrangeOpen.current && lastOpenPanel.current === 'arrange') {
-      arrangeBtnRef.current?.focus()
-      lastOpenPanel.current = null
-    }
-    prevArrangeOpen.current = arrangePanelOpen
-  }, [arrangePanelOpen])
-
-  useEffect(() => {
-    if (alignPanelOpen && !prevAlignOpen.current) {
-      lastOpenPanel.current = 'align'
-      requestAnimationFrame(() => {
-        const container = alignFlyoutRef.current
-        if (container) {
-          const focusable = container.querySelector<HTMLElement>(
-            'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-          focusable?.focus()
-        }
-      })
-    } else if (!alignPanelOpen && prevAlignOpen.current && lastOpenPanel.current === 'align') {
-      alignBtnRef.current?.focus()
-      lastOpenPanel.current = null
-    }
-    prevAlignOpen.current = alignPanelOpen
-  }, [alignPanelOpen])
+  useFlyoutFocus(addPanelOpen, addElementFlyoutRef, addBtnRef, lastOpenPanel, 'add')
+  useFlyoutFocus(arrangePanelOpen, arrangeFlyoutRef, arrangeBtnRef, lastOpenPanel, 'arrange')
+  useFlyoutFocus(alignPanelOpen, alignFlyoutRef, alignBtnRef, lastOpenPanel, 'align')
 
   if (!workspace) return null
 
@@ -152,38 +96,40 @@ export default function FloatingToolRail() {
     const rfNodes = reactFlow.getNodes().filter(n => selectedElementIds.includes(n.id))
     if (rfNodes.length < 2) return
 
+    let updates: { id: string; x: number; y: number }[]
     switch (mode) {
       case 'left': {
         const minX = Math.min(...rfNodes.map(n => n.position.x))
-        for (const n of rfNodes) updateNodePosition(n.id, minX, n.position.y)
+        updates = rfNodes.map(n => ({ id: n.id, x: minX, y: n.position.y }))
         break
       }
       case 'center-x': {
         const avgX = rfNodes.reduce((sum, n) => sum + n.position.x + (n.measured?.width ?? 200) / 2, 0) / rfNodes.length
-        for (const n of rfNodes) updateNodePosition(n.id, avgX - (n.measured?.width ?? 200) / 2, n.position.y)
+        updates = rfNodes.map(n => ({ id: n.id, x: avgX - (n.measured?.width ?? 200) / 2, y: n.position.y }))
         break
       }
       case 'right': {
         const maxRight = Math.max(...rfNodes.map(n => n.position.x + (n.measured?.width ?? 200)))
-        for (const n of rfNodes) updateNodePosition(n.id, maxRight - (n.measured?.width ?? 200), n.position.y)
+        updates = rfNodes.map(n => ({ id: n.id, x: maxRight - (n.measured?.width ?? 200), y: n.position.y }))
         break
       }
       case 'top': {
         const minY = Math.min(...rfNodes.map(n => n.position.y))
-        for (const n of rfNodes) updateNodePosition(n.id, n.position.x, minY)
+        updates = rfNodes.map(n => ({ id: n.id, x: n.position.x, y: minY }))
         break
       }
       case 'center-y': {
         const avgY = rfNodes.reduce((sum, n) => sum + n.position.y + (n.measured?.height ?? 100) / 2, 0) / rfNodes.length
-        for (const n of rfNodes) updateNodePosition(n.id, n.position.x, avgY - (n.measured?.height ?? 100) / 2)
+        updates = rfNodes.map(n => ({ id: n.id, x: n.position.x, y: avgY - (n.measured?.height ?? 100) / 2 }))
         break
       }
       case 'bottom': {
         const maxBottom = Math.max(...rfNodes.map(n => n.position.y + (n.measured?.height ?? 100)))
-        for (const n of rfNodes) updateNodePosition(n.id, n.position.x, maxBottom - (n.measured?.height ?? 100))
+        updates = rfNodes.map(n => ({ id: n.id, x: n.position.x, y: maxBottom - (n.measured?.height ?? 100) }))
         break
       }
     }
+    updateNodePositions(updates)
   }
 
   function handleAutoArrange(direction?: LayoutDirection) {
@@ -223,7 +169,7 @@ export default function FloatingToolRail() {
         />
         {addPanelOpen && (
           <div ref={addElementFlyoutRef}>
-            <Suspense fallback={null}>
+            <Suspense fallback={<LoadingDot />}>
               <AddElementPanel onClose={() => setAddPanelOpen(false)} />
             </Suspense>
           </div>
@@ -377,7 +323,7 @@ export default function FloatingToolRail() {
         onClick={() => setShowSettings(true)}
       />
     </div>
-    {showSettings && <Suspense fallback={null}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
+    {showSettings && <Suspense fallback={<LoadingDot />}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
     </>
   )
 }

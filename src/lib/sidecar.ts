@@ -1,5 +1,8 @@
 import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
-import { buildElementMap } from '@/store/workspace'
+import { buildElementMap, allViewsOf } from '@/store/workspace'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('sidecar')
 
 // ─── Sidecar schema ─────────────────────────────────────────────────
 // Stores c4hero-specific metadata that isn't part of the Structurizr DSL.
@@ -59,14 +62,8 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   if (Object.keys(relationships).length > 0) sidecar.relationships = relationships
 
   // Views: pinned elements
-  const allViews = [
-    ...workspace.views.systemLandscapeViews,
-    ...workspace.views.systemContextViews,
-    ...workspace.views.containerViews,
-    ...workspace.views.componentViews,
-  ]
   const views: Record<string, SidecarView> = {}
-  for (const view of allViews) {
+  for (const view of allViewsOf(workspace)) {
     const viewElements: Record<string, SidecarViewElement> = {}
     for (const el of view.elements) {
       if (el.pinned) {
@@ -132,13 +129,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
 
   // Views: pinned
   if (sidecar.views) {
-    const allViews = [
-      ...workspace.views.systemLandscapeViews,
-      ...workspace.views.systemContextViews,
-      ...workspace.views.containerViews,
-      ...workspace.views.componentViews,
-    ]
-    for (const view of allViews) {
+    for (const view of allViewsOf(workspace)) {
       const viewData = sidecar.views[view.key]
       if (!viewData?.elements) continue
       for (const el of view.elements) {
@@ -168,7 +159,8 @@ export function parseSidecar(json: string): SidecarData | null {
     if (data.relationships && typeof data.relationships !== 'object') return null
     if (data.views && typeof data.views !== 'object') return null
     return data as SidecarData
-  } catch {
+  } catch (err) {
+    log.warn('Failed to parse sidecar JSON', err)
     return null
   }
 }

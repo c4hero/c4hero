@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
+import LoadingDot from '@/components/shared/LoadingDot'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
 import { serializeDSL } from '@/lib/dsl'
@@ -41,13 +43,7 @@ export default function FloatingTopPill() {
   const [showCreateView, setShowCreateView] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [hamburgerOpen, setHamburgerOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 640)
-
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 640)
-    window.addEventListener('resize', handler)
-    return () => window.removeEventListener('resize', handler)
-  }, [])
+  const isMobile = useBreakpoint() === 'mobile'
 
   if (!workspace) return null
 
@@ -120,6 +116,7 @@ export default function FloatingTopPill() {
       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', minWidth: 0 }}>
       <div
         className="glass-panel"
+        data-shade-open={viewDropdownOpen || exportDialogOpen || commandPaletteOpen ? 'true' : undefined}
         style={{
           pointerEvents: 'auto',
           maxWidth: '100%',
@@ -337,7 +334,7 @@ export default function FloatingTopPill() {
         />
       )}
       {exportDialogOpen && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<LoadingDot />}>
           <ExportDialog
             onExport={handleExport}
             onCopy={handleCopy}
@@ -345,12 +342,12 @@ export default function FloatingTopPill() {
           />
         </Suspense>
       )}
-      {commandPaletteOpen && <Suspense fallback={null}><CommandPalette /></Suspense>}
+      {commandPaletteOpen && <Suspense fallback={<LoadingDot />}><CommandPalette /></Suspense>}
       </div>{/* end column */}
       </div>{/* end outer row */}
 
-      {showCreateView && <Suspense fallback={null}><CreateViewDialog onClose={() => setShowCreateView(false)} /></Suspense>}
-      {showSettings && <Suspense fallback={null}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
+      {showCreateView && <Suspense fallback={<LoadingDot />}><CreateViewDialog onClose={() => setShowCreateView(false)} /></Suspense>}
+      {showSettings && <Suspense fallback={<LoadingDot />}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
       {copyToast && (
         <div style={{
           position: 'fixed',

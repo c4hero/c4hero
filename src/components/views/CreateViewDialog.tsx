@@ -56,10 +56,11 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
 
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+            <label htmlFor="cv-type" className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
               Type
             </label>
             <select
+              id="cv-type"
               value={type}
               onChange={(e) => { setType(e.target.value as ViewType); setScopeId('') }}
               className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
@@ -71,10 +72,11 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
 
           {needsScope && scopeOptions.length > 0 && (
             <div>
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+              <label htmlFor="cv-scope" className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
                 Scope
               </label>
               <select
+                id="cv-scope"
                 value={scopeId}
                 onChange={(e) => setScopeId(e.target.value)}
                 className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
@@ -87,10 +89,11 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
           )}
 
           <div>
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+            <label htmlFor="cv-title" className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
               Title
             </label>
             <input
+              id="cv-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
