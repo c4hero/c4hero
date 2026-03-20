@@ -280,11 +280,34 @@ export default function WelcomeScreen() {
     } catch {
       return
     }
+    // Check if folder already exists
+    let alreadyExists = false
+    try {
+      await parentHandle.getDirectoryHandle(folderName, { create: false })
+      alreadyExists = true
+    } catch {
+      // doesn't exist — good
+    }
+
+    if (alreadyExists) {
+      // Ask user whether to open it or pick a different name
+      const proceed = window.confirm(
+        `A folder named "${folderName}" already exists here.\n\nOpen it as a collection instead?`
+      )
+      if (!proceed) {
+        // Re-open the dialog so they can pick a different name
+        setNewCollectionName(folderName)
+        setShowNewCollection(true)
+        return
+      }
+    }
+
     const newDir = await parentHandle.getDirectoryHandle(folderName, { create: true })
     const { setDirHandle } = await import('@/lib/folderIO')
     await setDirHandle(newDir)
     addRecentFolder({ name: newDir.name, path: newDir.name })
-    setFolderWorkspaces([])
+    const files = await (await import('@/lib/folderIO')).listDSLFiles()
+    setFolderWorkspaces(files.map(name => ({ name })))
     setView('collection')
   }
 
