@@ -17,7 +17,7 @@ import {
   ChevronDown,
   Plus,
   FolderSymlink,
-  FileText,
+
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 import { scopeLabel } from '@/lib/scopeValidation'
@@ -29,6 +29,7 @@ import { useNavigate } from 'react-router-dom'
 interface WsEntry {
   filename: string
   label: string
+  scope?: string
   elementCounts: { type: string; count: number }[]
   viewCount: number
 }
@@ -87,7 +88,7 @@ export default function FloatingTopPill() {
         }
         const elementCounts = Object.entries(counts).map(([type, count]) => ({ type, count }))
         const allViews = [...ws.views.systemLandscapeViews, ...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews]
-        return { filename, label, elementCounts, viewCount: allViews.length }
+        return { filename, label, scope: ws.scope, elementCounts, viewCount: allViews.length }
       } catch {
         return { filename, label, elementCounts: [], viewCount: 0 }
       }
@@ -470,48 +471,48 @@ export default function FloatingTopPill() {
 
 // ─── Workspace Switcher Panel ─────────────────────────────────────────────────
 
-const ELEMENT_COLORS: Record<string, string> = {
-  person:    '#22c55e',
-  system:    '#93c5fd',
-  container: '#14b8a6',
-  component: '#a78bfa',
+// Scope → accent color mapping
+const SCOPE_COLORS: Record<string, string> = {
+  softwaresystem: '#38bdf8', // sky blue
+  landscape:      '#a78bfa', // purple
+}
+const DEFAULT_SCOPE_COLOR = '#64748b' // slate for unscoped
+
+function scopeAccent(scope?: string): string {
+  return (scope && SCOPE_COLORS[scope]) ?? DEFAULT_SCOPE_COLOR
 }
 
-function WsThumbnail({ entry }: { entry: WsEntry }) {
-  const total = entry.elementCounts.reduce((s, e) => s + e.count, 0)
-  if (total === 0) {
+// Scope → icon SVG
+function ScopeIcon({ scope, size = 20 }: { scope?: string; size?: number }) {
+  const color = scopeAccent(scope)
+  const o = 0.45
+  if (scope === 'landscape') {
+    // Grid of 4 boxes
     return (
-      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <FileText size={16} style={{ opacity: 0.15 }} />
-      </div>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect x="2" y="2" width="8" height="8" rx="1.5" stroke={color} strokeWidth="1.5" opacity={o} />
+        <rect x="14" y="2" width="8" height="8" rx="1.5" stroke={color} strokeWidth="1.5" opacity={o} />
+        <rect x="2" y="14" width="8" height="8" rx="1.5" stroke={color} strokeWidth="1.5" opacity={o} />
+        <rect x="14" y="14" width="8" height="8" rx="1.5" stroke={color} strokeWidth="1.5" opacity={o} />
+      </svg>
     )
   }
-  // Simple node-graph schematic using SVG
-  const nodes: { cx: number; cy: number; r: number; color: string }[] = []
-  let x = 12
-  for (const { type, count } of entry.elementCounts) {
-    const color = ELEMENT_COLORS[type] ?? '#64748b'
-    const capped = Math.min(count, 5)
-    for (let i = 0; i < capped; i++) {
-      nodes.push({ cx: x, cy: 22 + (i % 2) * 8, r: 5, color })
-      x += 14
-    }
+  if (scope === 'softwaresystem') {
+    // Single box with inner detail
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="18" height="18" rx="2.5" stroke={color} strokeWidth="1.5" opacity={o} />
+        <rect x="7" y="8" width="10" height="3" rx="1" stroke={color} strokeWidth="1" opacity={o * 0.7} />
+        <rect x="7" y="14" width="10" height="3" rx="1" stroke={color} strokeWidth="1" opacity={o * 0.7} />
+      </svg>
+    )
   }
-  // Draw connecting lines between first few nodes
+  // Unscoped — simple doc icon
   return (
-    <svg width="100%" height="100%" viewBox="0 0 120 50" style={{ overflow: 'visible' }}>
-      {nodes.slice(0, -1).map((n, i) => (
-        <line key={i} x1={n.cx} y1={n.cy} x2={nodes[i+1].cx} y2={nodes[i+1].cy}
-          stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" />
-      ))}
-      {nodes.map((n, i) => (
-        <circle key={i} cx={n.cx} cy={n.cy} r={n.r} fill={n.color} opacity={0.85} />
-      ))}
-      {entry.viewCount > 0 && (
-        <text x="114" y="46" textAnchor="end" fontSize="8" fill="rgba(255,255,255,0.3)">
-          {entry.viewCount}v
-        </text>
-      )}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x="4" y="2" width="16" height="20" rx="2.5" stroke={color} strokeWidth="1.5" opacity={o} />
+      <line x1="8" y1="8" x2="16" y2="8" stroke={color} strokeWidth="1" opacity={o * 0.6} />
+      <line x1="8" y1="12" x2="14" y2="12" stroke={color} strokeWidth="1" opacity={o * 0.6} />
     </svg>
   )
 }
@@ -560,6 +561,7 @@ function WorkspaceSwitcherPanel({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
               {entries.map(entry => {
                 const isActive = entry.filename === activeFilename
+                const totalElements = entry.elementCounts.reduce((s, e) => s + e.count, 0)
                 return (
                   <button
                     key={entry.filename}
@@ -567,29 +569,38 @@ function WorkspaceSwitcherPanel({
                     style={{
                       display: 'flex', flexDirection: 'column', padding: 0,
                       borderRadius: 10, overflow: 'hidden',
-                      border: isActive ? '2px solid var(--color-accent)' : '2px solid var(--color-border)',
-                      background: isActive ? 'rgba(88,166,255,0.05)' : 'rgba(0,0,0,0.2)',
+                      border: isActive
+                        ? `2px solid ${scopeAccent(entry.scope)}`
+                        : '2px solid var(--color-border)',
+                      background: isActive
+                        ? `${scopeAccent(entry.scope)}08`
+                        : 'rgba(0,0,0,0.2)',
                       cursor: isActive ? 'default' : 'pointer',
                       transition: 'border-color 150ms, background 150ms',
                     }}
                   >
-                    {/* Thumbnail */}
+                    {/* Thumbnail — scope icon centered */}
                     <div style={{
-                      width: '100%', aspectRatio: '16/9',
+                      width: '100%', aspectRatio: '5/3',
                       background: 'rgba(0,0,0,0.4)',
                       borderBottom: '1px solid var(--color-border)',
-                      overflow: 'hidden',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      <WsThumbnail entry={entry} />
+                      <ScopeIcon scope={entry.scope} size={24} />
                     </div>
-                    {/* Label */}
+                    {/* Label + status */}
                     <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
-                        {entry.label}
-                      </span>
-                      <span style={{ fontSize: 10, color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)', textAlign: 'left' }}>
-                        {isActive ? 'Active' : entry.elementCounts.reduce((s, e) => s + e.count, 0) > 0
-                          ? `${entry.elementCounts.reduce((s, e) => s + e.count, 0)} elements`
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left', flex: 1 }}>
+                          {entry.label}
+                        </span>
+                        {isActive && (
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: scopeAccent(entry.scope), flexShrink: 0 }} />
+                        )}
+                      </div>
+                      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textAlign: 'left' }}>
+                        {totalElements > 0
+                          ? `${totalElements} element${totalElements !== 1 ? 's' : ''} · ${entry.viewCount}v`
                           : 'Empty'}
                       </span>
                     </div>
