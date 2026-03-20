@@ -67,7 +67,7 @@ const SCOPE_COLORS: Record<string, string> = {
 function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
   ws: FolderWorkspace
   onOpen: () => void
-  onRename: () => void
+  onRename: (newName: string) => void
   onDelete: () => void
 }) {
   const [showEdit, setShowEdit] = useState(false)
@@ -155,7 +155,7 @@ function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
       {showEdit && (
         <WorkspaceEditDialog
           name={label}
-          onRename={() => { setShowEdit(false); onRename() }}
+          onRename={(newName) => { setShowEdit(false); onRename(newName) }}
           onDelete={() => { setShowEdit(false); onDelete() }}
           onClose={() => setShowEdit(false)}
         />
@@ -166,10 +166,18 @@ function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
 
 function WorkspaceEditDialog({ name, onRename, onDelete, onClose }: {
   name: string
-  onRename: () => void
+  onRename: (newName: string) => void
   onDelete: () => void
   onClose: () => void
 }) {
+  const [editName, setEditName] = useState(name)
+  const dirty = editName.trim() !== name && editName.trim().length > 0
+
+  function handleSave() {
+    if (dirty) onRename(editName.trim())
+    onClose()
+  }
+
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -180,25 +188,24 @@ function WorkspaceEditDialog({ name, onRename, onDelete, onClose }: {
         onClick={e => e.stopPropagation()}
       >
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>Edit Workspace</div>
-          <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{name}</div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button
-            onClick={onRename}
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 12 }}>Edit Workspace</div>
+          <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Name</label>
+          <input
+            autoFocus
+            value={editName}
+            onChange={e => setEditName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
             style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 10,
-              border: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.03)',
-              cursor: 'pointer', textAlign: 'left',
+              width: '100%', marginTop: 6, padding: '10px 12px', borderRadius: 8,
+              border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.3)',
+              color: 'var(--color-text-primary)', fontSize: 14, outline: 'none',
             }}
-          >
-            <Pencil size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Rename</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Change the filename</div>
+          />
+          {dirty && (
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+              File: {slugifyName(editName) || 'workspace'}.dsl
             </div>
-          </button>
+          )}
         </div>
 
         {/* Danger zone */}
@@ -222,8 +229,18 @@ function WorkspaceEditDialog({ name, onRename, onDelete, onClose }: {
           </button>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button className="btn-surface" onClick={onClose} style={{ padding: '8px 18px' }}>Close</button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn-surface" onClick={onClose} style={{ padding: '8px 18px' }}>Cancel</button>
+          {dirty && (
+            <button
+              onClick={handleSave}
+              style={{
+                padding: '8px 18px', borderRadius: 8, border: 'none',
+                background: 'var(--color-accent)', color: '#fff', fontWeight: 600,
+                cursor: 'pointer', fontSize: 13,
+              }}
+            >Save</button>
+          )}
         </div>
       </div>
     </div>
@@ -569,11 +586,10 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     )
   }
 
-  async function handleRenameWorkspace(filename: string) {
-    const oldLabel = filename.replace(/\.dsl$/, '')
-    const newName = window.prompt('Rename workspace:', oldLabel)
-    if (!newName || newName.trim() === oldLabel) return
-    const finalName = newName.trim().endsWith('.dsl') ? newName.trim() : `${newName.trim()}.dsl`
+  async function handleRenameWorkspace(filename: string, newLabel?: string) {
+    if (!newLabel) return
+    const finalName = `${slugifyName(newLabel) || 'workspace'}.dsl`
+    if (finalName === filename) return
     const dir = getCurrentDirHandle()
     if (dir) {
       try {
@@ -1027,7 +1043,7 @@ function CollectionView({
   dirHandle: FileSystemDirectoryHandle | null
   workspaces: FolderWorkspace[]
   onOpenWorkspace: (name: string) => void
-  onRenameWorkspace: (name: string) => void
+  onRenameWorkspace: (oldName: string, newName: string) => void
   onDeleteWorkspace: (name: string) => void
   onBlankWorkspace: () => void
   onLoadTemplate: () => void
@@ -1077,7 +1093,7 @@ function CollectionView({
                 key={ws.name}
                 ws={ws}
                 onOpen={() => onOpenWorkspace(ws.name)}
-                onRename={() => onRenameWorkspace(ws.name)}
+                onRename={(newName) => onRenameWorkspace(ws.name, newName)}
                 onDelete={() => onDeleteWorkspace(ws.name)}
               />
             ))}
