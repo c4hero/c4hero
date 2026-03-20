@@ -45,6 +45,10 @@ const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDial
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
+interface WsThumbnailElement {
+  kind: 'person' | 'system' | 'container' | 'component' | 'external'
+}
+
 interface FolderWorkspace {
   name: string
   modifiedAt?: number
@@ -52,9 +56,84 @@ interface FolderWorkspace {
   elementCount?: number
   viewCount?: number
   editing?: boolean
+  elements?: WsThumbnailElement[]
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
+
+// Element kind → color (matches canvas node accents)
+const KIND_COLORS: Record<string, string> = {
+  person: '#22c55e',
+  system: '#93c5fd',
+  external: '#9ca3af',
+  container: '#14b8a6',
+  component: '#a855f7',
+}
+
+/** Renders a tiny SVG showing elements as positioned rectangles */
+function MiniDiagram({ elements, accent }: { elements?: WsThumbnailElement[], accent: string }) {
+  if (!elements || elements.length === 0) {
+    // Empty — show faint scope icon
+    return (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.2 }}>
+        <rect x="4" y="2" width="16" height="20" rx="2.5" stroke={accent} strokeWidth="1.5" />
+        <line x1="8" y1="8" x2="16" y2="8" stroke={accent} strokeWidth="1" opacity="0.6" />
+        <line x1="8" y1="12" x2="14" y2="12" stroke={accent} strokeWidth="1" opacity="0.6" />
+      </svg>
+    )
+  }
+
+  const viewW = 160
+  const viewH = 90
+  const pad = 12
+  const maxCols = Math.min(elements.length, 4)
+  const rows = Math.ceil(elements.length / maxCols)
+  const cellW = (viewW - pad * 2) / maxCols
+  const cellH = (viewH - pad * 2) / rows
+  const nodeW = Math.min(cellW - 4, 32)
+  const nodeH = Math.min(cellH - 4, 18)
+
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 ${viewW} ${viewH}`} style={{ opacity: 0.55 }}>
+      {elements.slice(0, 12).map((el, i) => {
+        const col = i % maxCols
+        const row = Math.floor(i / maxCols)
+        const cx = pad + col * cellW + cellW / 2
+        const cy = pad + row * cellH + cellH / 2
+        const color = KIND_COLORS[el.kind] ?? '#64748b'
+        const isPerson = el.kind === 'person'
+        return isPerson ? (
+          <g key={i}>
+            <circle cx={cx} cy={cy - 3} r={nodeH * 0.25} fill={color} opacity={0.7} />
+            <rect x={cx - nodeW / 2} y={cy} width={nodeW} height={nodeH * 0.6} rx={2} fill={color} opacity={0.5} />
+          </g>
+        ) : (
+          <rect
+            key={i}
+            x={cx - nodeW / 2} y={cy - nodeH / 2}
+            width={nodeW} height={nodeH}
+            rx={el.kind === 'component' ? 1 : 3}
+            fill={color} opacity={0.5}
+            stroke={color} strokeWidth={0.5} strokeOpacity={0.8}
+          />
+        )
+      })}
+      {/* Draw faint connection lines between adjacent elements */}
+      {elements.length > 1 && elements.slice(0, Math.min(elements.length - 1, 6)).map((_, i) => {
+        const col1 = i % maxCols
+        const row1 = Math.floor(i / maxCols)
+        const j = i + 1
+        const col2 = j % maxCols
+        const row2 = Math.floor(j / maxCols)
+        const x1 = pad + col1 * cellW + cellW / 2
+        const y1 = pad + row1 * cellH + cellH / 2
+        const x2 = pad + col2 * cellW + cellW / 2
+        const y2 = pad + row2 * cellH + cellH / 2
+        return <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+      })}
+    </svg>
+  )
+}
 
 // Scope colors (same as FloatingTopPill)
 const SCOPE_COLORS: Record<string, string> = {
@@ -88,37 +167,15 @@ function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
         }}
         className="hover-surface-card"
       >
-        {/* Thumbnail */}
+        {/* Thumbnail — mini diagram */}
         <div style={{
           width: '100%', aspectRatio: '16/9',
           background: 'rgba(0,0,0,0.3)',
           borderBottom: '1px solid var(--color-border)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          position: 'relative',
+          position: 'relative', overflow: 'hidden',
         }}>
-          {/* Scope icon */}
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.35 }}>
-            {ws.scope === 'landscape' ? (
-              <>
-                <rect x="2" y="2" width="8" height="8" rx="1.5" stroke={accent} strokeWidth="1.5" />
-                <rect x="14" y="2" width="8" height="8" rx="1.5" stroke={accent} strokeWidth="1.5" />
-                <rect x="2" y="14" width="8" height="8" rx="1.5" stroke={accent} strokeWidth="1.5" />
-                <rect x="14" y="14" width="8" height="8" rx="1.5" stroke={accent} strokeWidth="1.5" />
-              </>
-            ) : ws.scope === 'softwaresystem' ? (
-              <>
-                <rect x="3" y="3" width="18" height="18" rx="2.5" stroke={accent} strokeWidth="1.5" />
-                <rect x="7" y="8" width="10" height="3" rx="1" stroke={accent} strokeWidth="1" opacity="0.7" />
-                <rect x="7" y="14" width="10" height="3" rx="1" stroke={accent} strokeWidth="1" opacity="0.7" />
-              </>
-            ) : (
-              <>
-                <rect x="4" y="2" width="16" height="20" rx="2.5" stroke={accent} strokeWidth="1.5" />
-                <line x1="8" y1="8" x2="16" y2="8" stroke={accent} strokeWidth="1" opacity="0.6" />
-                <line x1="8" y1="12" x2="14" y2="12" stroke={accent} strokeWidth="1" opacity="0.6" />
-              </>
-            )}
-          </svg>
+          <MiniDiagram elements={ws.elements} accent={accent} />
           {/* Edit button - top right */}
           <button
             onClick={(e) => { e.stopPropagation(); setShowEdit(true) }}
@@ -436,6 +493,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
         let scope: string | undefined
         let elementCount = 0
         let viewCount = 0
+        let els: WsThumbnailElement[] | undefined
         try {
           const fh = await dir.getFileHandle(name)
           const f = await fh.getFile()
@@ -444,18 +502,25 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           const { workspace: ws } = parseDSL(content)
           if (ws) {
             scope = ws.scope
-            elementCount = ws.model.people.length
+            els = []
+            for (const p of ws.model.people) {
+              els.push({ kind: p.tags?.includes('External') ? 'external' : 'person' })
+            }
             for (const s of ws.model.softwareSystems) {
-              elementCount += 1
+              els.push({ kind: s.tags?.includes('External') ? 'external' : 'system' })
               for (const c of s.containers) {
-                elementCount += 1
-                elementCount += c.components.length
+                els.push({ kind: 'container' })
+                for (const comp of c.components) {
+                  void comp
+                  els.push({ kind: 'component' })
+                }
               }
             }
+            elementCount = els.length
             viewCount = [...ws.views.systemLandscapeViews, ...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews].length
           }
         } catch { /* ignore */ }
-        files.push({ name, modifiedAt, scope, elementCount, viewCount })
+        files.push({ name, modifiedAt, scope, elementCount, viewCount, elements: els })
       }
     }
     return files.sort((a, b) => a.name.localeCompare(b.name))
