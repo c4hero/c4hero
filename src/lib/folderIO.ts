@@ -33,6 +33,11 @@ export function getCurrentDirHandle(): FileSystemDirectoryHandle | null {
   return currentDirHandle
 }
 
+export async function setDirHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+  currentDirHandle = handle
+  await persistDirHandle()
+}
+
 /** Open a folder via showDirectoryPicker, list .dsl files within it */
 export async function openFolder(): Promise<{ dirHandle: FileSystemDirectoryHandle; dslFiles: string[] } | null> {
   if (!hasFolderAccess()) return null

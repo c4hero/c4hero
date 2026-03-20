@@ -268,7 +268,29 @@ export default function WelcomeScreen() {
 
   // ── Screen 1 handlers ───────────────────────────────────────────────
 
-  const handleCreateCollection = openFolderAndTransition
+  async function handleCreateCollection() {
+    // Pick a parent folder, then create a named subdirectory inside it
+    const name = window.prompt('Collection name:', 'my-architecture')
+    if (!name?.trim()) return
+    const folderName = name.trim().replace(/[^a-zA-Z0-9_\-. ]/g, '').trim()
+    if (!folderName) return
+    // showDirectoryPicker to choose the parent
+    let parentHandle: FileSystemDirectoryHandle
+    try {
+      parentHandle = await (window as Window & typeof globalThis & { showDirectoryPicker: (o?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({ mode: 'readwrite' })
+    } catch {
+      return // cancelled
+    }
+    // Create the new subdirectory
+    const newDir = await parentHandle.getDirectoryHandle(folderName, { create: true })
+    // Persist and transition
+    const { setDirHandle } = await import('@/lib/folderIO')
+    await setDirHandle(newDir)
+    addRecentFolder({ name: newDir.name, path: newDir.name })
+    setFolderWorkspaces([])
+    setView('collection')
+  }
+
   const handleOpenCollection = openFolderAndTransition
   const handleOpenRecent = (_path: string) => openFolderAndTransition()
 
