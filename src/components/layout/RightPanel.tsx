@@ -575,6 +575,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
   const workspace = useWorkspaceStore((s) => s.workspace)
   const updateGroup = useWorkspaceStore((s) => s.updateGroup)
   const deleteGroup = useWorkspaceStore((s) => s.deleteGroup)
+  const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const [addSearch, setAddSearch] = useState('')
 
   if (!workspace) return null
@@ -618,7 +619,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
           Group
         </span>
         <button
-          onClick={() => { deleteGroup(group.id); onClose() }}
+          onClick={() => confirmDelete(`Delete group "${group.name}"?`, () => { deleteGroup(group.id); onClose() })}
           className="btn-icon !min-h-6 !min-w-6 !p-1"
           title="Delete group"
           style={{ color: 'var(--color-text-muted)' }}

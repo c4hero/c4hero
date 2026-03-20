@@ -11,15 +11,8 @@ import {
   ArrowLeft,
   LayoutDashboard,
   Maximize2,
-  Layers,
-  Trash2,
-  AlignStartVertical,
-  AlignEndVertical,
-  AlignStartHorizontal,
-  AlignEndHorizontal,
-  AlignCenterVertical,
-  AlignCenterHorizontal,
   Settings,
+  MousePointerClick,
 } from 'lucide-react'
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
@@ -45,25 +38,23 @@ export default function FloatingToolRail() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const resetAndRelayout = useWorkspaceStore((s) => s.resetAndRelayout)
-  const selectedElementIds = useWorkspaceStore((s) => s.selectedElementIds)
-  const addGroup = useWorkspaceStore((s) => s.addGroup)
-  const selectGroup = useWorkspaceStore((s) => s.selectGroup)
-  const deleteElements = useWorkspaceStore((s) => s.deleteElements)
-  const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
+
+
+
   const reactFlow = useReactFlow()
+  const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
+  const setMultiSelectMode = useWorkspaceStore((s) => s.setMultiSelectMode)
   const [addPanelOpen, setAddPanelOpen] = useState(false)
   const [arrangePanelOpen, setArrangePanelOpen] = useState(false)
-  const [alignPanelOpen, setAlignPanelOpen] = useState(false)
+
   const [showSettings, setShowSettings] = useState(false)
 
   const arrangeFlyoutRef = useRef<HTMLDivElement>(null)
-  const alignFlyoutRef = useRef<HTMLDivElement>(null)
+
   const addElementFlyoutRef = useRef<HTMLDivElement>(null)
   const addBtnRef = useRef<HTMLButtonElement>(null)
   const arrangeBtnRef = useRef<HTMLButtonElement>(null)
-  const alignBtnRef = useRef<HTMLButtonElement>(null)
   useArrowNav(arrangeFlyoutRef)
-  useArrowNav(alignFlyoutRef)
 
   // Track which trigger to return focus to on close
   const lastOpenPanel = useRef<'add' | 'arrange' | 'align' | null>(null)
@@ -74,7 +65,7 @@ export default function FloatingToolRail() {
       if (e.key === 'Escape') {
         setAddPanelOpen(false)
         setArrangePanelOpen(false)
-        setAlignPanelOpen(false)
+
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -84,53 +75,12 @@ export default function FloatingToolRail() {
   // Focus management: move focus into flyout when opened, return to trigger when closed
   useFlyoutFocus(addPanelOpen, addElementFlyoutRef, addBtnRef, lastOpenPanel, 'add')
   useFlyoutFocus(arrangePanelOpen, arrangeFlyoutRef, arrangeBtnRef, lastOpenPanel, 'arrange')
-  useFlyoutFocus(alignPanelOpen, alignFlyoutRef, alignBtnRef, lastOpenPanel, 'align')
+
 
   if (!workspace) return null
 
   const view = activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
   const currentDirection = view?.autoLayout?.direction ?? 'TB'
-
-  function handleAlign(mode: 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom') {
-    if (selectedElementIds.length < 2) return
-    const rfNodes = reactFlow.getNodes().filter(n => selectedElementIds.includes(n.id))
-    if (rfNodes.length < 2) return
-
-    let updates: { id: string; x: number; y: number }[]
-    switch (mode) {
-      case 'left': {
-        const minX = Math.min(...rfNodes.map(n => n.position.x))
-        updates = rfNodes.map(n => ({ id: n.id, x: minX, y: n.position.y }))
-        break
-      }
-      case 'center-x': {
-        const avgX = rfNodes.reduce((sum, n) => sum + n.position.x + (n.measured?.width ?? 200) / 2, 0) / rfNodes.length
-        updates = rfNodes.map(n => ({ id: n.id, x: avgX - (n.measured?.width ?? 200) / 2, y: n.position.y }))
-        break
-      }
-      case 'right': {
-        const maxRight = Math.max(...rfNodes.map(n => n.position.x + (n.measured?.width ?? 200)))
-        updates = rfNodes.map(n => ({ id: n.id, x: maxRight - (n.measured?.width ?? 200), y: n.position.y }))
-        break
-      }
-      case 'top': {
-        const minY = Math.min(...rfNodes.map(n => n.position.y))
-        updates = rfNodes.map(n => ({ id: n.id, x: n.position.x, y: minY }))
-        break
-      }
-      case 'center-y': {
-        const avgY = rfNodes.reduce((sum, n) => sum + n.position.y + (n.measured?.height ?? 100) / 2, 0) / rfNodes.length
-        updates = rfNodes.map(n => ({ id: n.id, x: n.position.x, y: avgY - (n.measured?.height ?? 100) / 2 }))
-        break
-      }
-      case 'bottom': {
-        const maxBottom = Math.max(...rfNodes.map(n => n.position.y + (n.measured?.height ?? 100)))
-        updates = rfNodes.map(n => ({ id: n.id, x: n.position.x, y: maxBottom - (n.measured?.height ?? 100) }))
-        break
-      }
-    }
-    updateNodePositions(updates)
-  }
 
   function handleAutoArrange(direction?: LayoutDirection) {
     if (!activeViewKey) return
@@ -235,79 +185,16 @@ export default function FloatingToolRail() {
         )}
       </div>
 
-      {/* Multi-select actions */}
-      {selectedElementIds.length >= 2 && (
-        <>
-          <RailSep />
+      {/* Multi-select actions now live in the contextual MultiSelectBar */}
 
-          {/* Align */}
-          <div style={{ position: 'relative' }}>
-            <RailBtn
-              ref={alignBtnRef}
-              icon={<AlignCenterVertical size={16} />}
-              label="Align"
-              active={alignPanelOpen}
-              expanded={alignPanelOpen}
-              onClick={() => { setAlignPanelOpen((o) => !o); setAddPanelOpen(false); setArrangePanelOpen(false) }}
-            />
-            {alignPanelOpen && (
-              <>
-                <div
-                  style={{ position: 'fixed', inset: 0, zIndex: 49 }}
-                  onClick={() => setAlignPanelOpen(false)}
-                />
-                <div
-                  ref={alignFlyoutRef}
-                  role="menu"
-                  className="glass-flyout"
-                  style={{
-                    position: 'absolute',
-                    left: 56,
-                    top: 0,
-                    zIndex: 50,
-                    padding: 4,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 1,
-                    minWidth: 170,
-                  }}
-                >
-                  <div className="flyout-label">
-                    Align {selectedElementIds.length} elements
-                  </div>
-                  <AlignMenuItem icon={<AlignStartVertical size={14} />} label="Align left" onClick={() => { handleAlign('left'); setAlignPanelOpen(false) }} />
-                  <AlignMenuItem icon={<AlignCenterVertical size={14} />} label="Align center (X)" onClick={() => { handleAlign('center-x'); setAlignPanelOpen(false) }} />
-                  <AlignMenuItem icon={<AlignEndVertical size={14} />} label="Align right" onClick={() => { handleAlign('right'); setAlignPanelOpen(false) }} />
-                  <div style={{ height: 1, background: 'var(--color-border)', margin: '2px 6px' }} />
-                  <AlignMenuItem icon={<AlignStartHorizontal size={14} />} label="Align top" onClick={() => { handleAlign('top'); setAlignPanelOpen(false) }} />
-                  <AlignMenuItem icon={<AlignCenterHorizontal size={14} />} label="Align middle (Y)" onClick={() => { handleAlign('center-y'); setAlignPanelOpen(false) }} />
-                  <AlignMenuItem icon={<AlignEndHorizontal size={14} />} label="Align bottom" onClick={() => { handleAlign('bottom'); setAlignPanelOpen(false) }} />
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Group */}
-          <RailBtn
-            icon={<Layers size={16} />}
-            label={`Group ${selectedElementIds.length} elements`}
-            onClick={() => {
-              const id = addGroup('New Group', selectedElementIds)
-              selectGroup(id)
-            }}
-          />
-
-          {/* Delete */}
-          <RailBtn
-            icon={<Trash2 size={16} />}
-            label={`Delete ${selectedElementIds.length} elements`}
-            color="var(--color-error)"
-            onClick={() => {
-              deleteElements(selectedElementIds)
-            }}
-          />
-        </>
-      )}
+      {/* Multi-select mode toggle */}
+      <RailSep />
+      <RailBtn
+        icon={<MousePointerClick size={16} />}
+        label={multiSelectMode ? 'Multi-select: ON (tap to turn off)' : 'Multi-select (tap multiple nodes)'}
+        active={multiSelectMode}
+        onClick={() => setMultiSelectMode(!multiSelectMode)}
+      />
 
       {/* Zoom to fit */}
       <RailSep />
@@ -325,17 +212,6 @@ export default function FloatingToolRail() {
     </div>
     {showSettings && <Suspense fallback={<LoadingDot />}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
     </>
-  )
-}
-
-// ─── Align menu item ──────────────────────────────────────────────────
-
-function AlignMenuItem({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
-  return (
-    <button className="flyout-item" onClick={onClick}>
-      <span style={{ color: 'var(--color-text-muted)', display: 'flex' }}>{icon}</span>
-      {label}
-    </button>
   )
 }
 

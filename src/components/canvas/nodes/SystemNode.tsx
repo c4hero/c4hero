@@ -18,6 +18,7 @@ function SystemNode({ data, selected }: NodeProps & { data: C4NodeData }) {
       tint={isExternal ? 'var(--color-tint-external)' : 'var(--color-tint-system)'}
       borderStyle={isExternal ? '2px dashed var(--color-border-external)' : '2px solid var(--color-border-system)'}
       ariaPrefix={isExternal ? 'External Software System' : 'Software System'}
+      isExternal={isExternal}
     />
   )
 }

@@ -17,6 +17,7 @@ import Canvas from '@/components/canvas/Canvas'
 
 import CanvasHints from '@/components/canvas/CanvasHints'
 import { loadFromLocalStorage } from '@/lib/fileIO'
+import { restoreDirHandle } from '@/lib/folderIO'
 
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
@@ -34,6 +35,11 @@ export default function App() {
   useKeyboardShortcuts()
   useAutoSave()
   useRouteSync()
+
+  // Attempt to restore a previously-opened directory handle (silently)
+  useEffect(() => {
+    restoreDirHandle().catch(() => {})
+  }, [])
 
   // Check for crash recovery on mount — only if URL indicates a workspace was open
   useEffect(() => {

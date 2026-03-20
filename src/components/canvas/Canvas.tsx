@@ -16,6 +16,7 @@ import {
 import dagre from '@dagrejs/dagre'
 import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, allViewsOf } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
+import { THEMES } from '@/lib/themes'
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
@@ -137,9 +138,11 @@ function buildNodes(
   activeStatusFilter: string | null,
   viewCountMap: Map<string, number>,
   drillableIds: Set<string>,
+  themeStyles: ElementStyle[],
 ): Node[] {
   const elementMap = buildElementMap(workspace)
-  const styleIndex = buildStyleIndex(workspace.views.configuration.styles.elements)
+  // Theme styles form the base layer; workspace styles override them per tag
+  const styleIndex = buildStyleIndex([...themeStyles, ...workspace.views.configuration.styles.elements])
 
   const nodes: Node[] = []
 
@@ -482,8 +485,11 @@ export default function Canvas() {
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
   const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
+  const layoutVersion = useWorkspaceStore((s) => s.layoutVersion)
   const minimapMode = useSettingsStore((s) => s.minimapMode)
   const snapToGrid = useSettingsStore((s) => s.snapToGrid)
+  const colorTheme = useSettingsStore((s) => s.colorTheme)
+  const themeStyles = THEMES[colorTheme]
 
   // Stable callback refs — avoid new function references every render which would
   // invalidate expensive useMemos that depend on them.
@@ -542,7 +548,7 @@ export default function Canvas() {
 
     // 1. Build nodes with raw positions from view
     const drillableIds = buildDrillableSet(workspace)
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap, drillableIds)
+    const rawNodes = buildNodes(workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap, drillableIds, themeStyles)
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
     const relationshipMap = buildRelationshipMap(workspace)
@@ -568,7 +574,7 @@ export default function Canvas() {
     const edges = buildEdges(workspace, view, allNodes)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap])
+  }, [workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap, themeStyles])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -648,13 +654,20 @@ export default function Canvas() {
     )
   }, [reactFlowInstance])
 
-  // Sync nodes/edges when they change, then kick off fit poll
+  // Sync nodes/edges when workspace changes.
+  // Only trigger a viewport refit on structural changes: view switch, element count change,
+  // or explicit relayout (layoutVersion bump). Drag-stop position saves must NOT cause refit.
+  const lastFitSignal = useRef<string>('')
   useEffect(() => {
     setNodes(initialNodes)
     setEdges(initialEdges)
-    fitPending.current = true
-    requestAnimationFrame(fitContentNodes)
-  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes])
+    const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}`
+    if (signal !== lastFitSignal.current) {
+      lastFitSignal.current = signal
+      fitPending.current = true
+      requestAnimationFrame(fitContentNodes)
+    }
+  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, activeViewKey, view, layoutVersion])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes)

@@ -40,7 +40,7 @@ export default function FloatingBottomStrip() {
       }
     }
     for (const s of workspace.views.configuration.styles.elements) {
-      if (!DEFAULT_BUILTIN_TAGS.includes(s.tag)) tags.add(s.tag)
+      tags.add(s.tag)
     }
     return Array.from(tags).sort()
   }, [workspace])

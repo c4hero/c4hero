@@ -8,10 +8,11 @@ import {
   createEventDrivenTemplate,
 } from '@/lib/templates'
 import { openDSLFile, getRecentFiles, hasFileSystemAccess, isWorkspaceShape, saveDSLFile } from '@/lib/fileIO'
+import { openFolder, readDSLFile, writeDSLFile, hasFolderAccess } from '@/lib/folderIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
 import { getAIConfig } from '@/lib/ai'
-import { FileText, Play, LayoutTemplate, Sparkles, Settings, Upload, Server, Box, Radio, Clock, AlertTriangle } from 'lucide-react'
+import { FileText, Play, LayoutTemplate, Sparkles, Settings, Upload, Server, Box, Radio, Clock, AlertTriangle, FolderOpen, X } from 'lucide-react'
 import AISettingsDialog from '@/components/ai/AISettingsDialog'
 import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
 
@@ -21,6 +22,8 @@ export default function WelcomeScreen() {
   const [showAISettings, setShowAISettings] = useState(false)
   const [showDescribe, setShowDescribe] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [folderFiles, setFolderFiles] = useState<string[]>([])
+  const [showFolderPicker, setShowFolderPicker] = useState(false)
   const jsonInputRef = useRef<HTMLInputElement>(null)
   const dslInputRef = useRef<HTMLInputElement>(null)
 
@@ -58,6 +61,48 @@ export default function WelcomeScreen() {
     } else {
       setErrorMsg('Failed to parse DSL file. Please check the file format.')
     }
+  }
+
+  async function openFolderFile(filename: string) {
+    const file = await readDSLFile(filename)
+    if (!file) return
+    const { workspace, errors } = parseDSL(file.content)
+    if (errors.length > 0) console.warn('DSL parse warnings:', errors)
+    if (workspace) {
+      if (!workspace.name) workspace.name = filename.replace(/\.dsl$/, '')
+      if (file.sidecarJson) {
+        const sidecar = parseSidecar(file.sidecarJson)
+        if (sidecar) applySidecar(workspace, sidecar)
+      }
+      loadWorkspace(workspace)
+      useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+    } else {
+      setErrorMsg('Failed to parse DSL file. Please check the file format.')
+    }
+  }
+
+  async function handleOpenFolder() {
+    const result = await openFolder()
+    if (!result) return
+    const { dslFiles } = result
+
+    if (dslFiles.length === 0) {
+      // Empty folder — create a new workspace
+      const ws = createBlankWorkspace()
+      loadWorkspace(ws)
+      useWorkspaceStore.getState().setActiveWorkspaceFilename('workspace.dsl')
+      await writeDSLFile('workspace.dsl', serializeDSL(ws))
+      return
+    }
+
+    if (dslFiles.length === 1) {
+      await openFolderFile(dslFiles[0])
+      return
+    }
+
+    // Multiple .dsl files — show picker
+    setFolderFiles(dslFiles)
+    setShowFolderPicker(true)
   }
 
   async function handleOpenFile() {
@@ -133,7 +178,10 @@ export default function WelcomeScreen() {
         </div>
 
         {/* Primary actions */}
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className={`grid w-full gap-3 grid-cols-1 ${hasFolderAccess() ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+          {hasFolderAccess() && (
+            <ActionCard icon={<FolderOpen size={22} />} label="Open folder" onClick={handleOpenFolder} />
+          )}
           <ActionCard icon={<FileText size={22} />} label="Open .dsl file" onClick={handleOpenFile} />
           <ActionCard icon={<LayoutTemplate size={22} />} label="New workspace (.dsl)" onClick={async () => {
             const ws = createBlankWorkspace()
@@ -236,6 +284,16 @@ export default function WelcomeScreen() {
 
       {showAISettings && <AISettingsDialog onClose={() => setShowAISettings(false)} />}
       {showDescribe && <DescribeSystemDialog onClose={() => setShowDescribe(false)} />}
+      {showFolderPicker && (
+        <FolderFilePicker
+          files={folderFiles}
+          onSelect={async (filename) => {
+            setShowFolderPicker(false)
+            await openFolderFile(filename)
+          }}
+          onClose={() => setShowFolderPicker(false)}
+        />
+      )}
       <div className="commit-hash">{__COMMIT_HASH__}</div>
     </div>
   )
@@ -293,5 +351,52 @@ function TemplateItem({ icon, name, description, onClick }: { icon: React.ReactN
         <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{description}</span>
       </div>
     </button>
+  )
+}
+
+function FolderFilePicker({ files, onSelect, onClose }: { files: string[]; onSelect: (filename: string) => void; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="flex flex-col gap-4 rounded-xl border p-5 shadow-xl"
+        style={{
+          background: 'var(--color-bg-primary)',
+          borderColor: 'var(--color-border)',
+          minWidth: '280px',
+          maxWidth: '400px',
+          width: '90vw',
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+            Select a workspace
+          </h2>
+          <button
+            onClick={onClose}
+            className="rounded p-1 hover:opacity-70"
+            style={{ color: 'var(--color-text-muted)' }}
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex flex-col gap-1">
+          {files.map((filename) => (
+            <button
+              key={filename}
+              className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-3 text-left"
+              onClick={() => onSelect(filename)}
+            >
+              <FileText size={16} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+              <span className="truncate text-sm">{filename}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }

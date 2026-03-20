@@ -59,6 +59,10 @@ interface WorkspaceState extends UndoState {
   multiSelectMode: boolean
   setMultiSelectMode: (on: boolean) => void
 
+  // Active filename for folder-based workspaces (e.g. 'bigbank.dsl')
+  activeWorkspaceFilename: string | null
+  setActiveWorkspaceFilename: (name: string | null) => void
+
   // Workspace lifecycle
   loadWorkspace: (workspace: Workspace) => void
   closeWorkspace: () => void
@@ -115,6 +119,9 @@ interface WorkspaceState extends UndoState {
   setLayoutDirection: (viewKey: string, direction: 'TB' | 'BT' | 'LR' | 'RL') => void
   /** Reset all node positions and optionally change layout direction in a single undo step */
   resetAndRelayout: (viewKey: string, direction?: 'TB' | 'BT' | 'LR' | 'RL') => void
+
+  // Layout epoch — increments on explicit relayout/direction change so Canvas can refit
+  layoutVersion: number
 
   // Canvas settings
   setActiveTagFilter: (tag: string | null) => void
@@ -267,6 +274,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   multiSelectMode: false,
   undoStack: [],
   redoStack: [],
+  layoutVersion: 0,
+  activeWorkspaceFilename: null,
+  setActiveWorkspaceFilename: (name) => set({ activeWorkspaceFilename: name }),
 
   // ─── Workspace Lifecycle ────────────────────────────────────────
 
@@ -714,7 +724,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       el.y = undefined
       el.pinned = undefined
     }
-    return { ...pushUndo(s), workspace: ws }
+    return { ...pushUndo(s), workspace: ws, layoutVersion: s.layoutVersion + 1 }
   }),
 
   resetAndRelayout: (viewKey, direction) => set((s) => {
@@ -732,7 +742,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (direction) {
       view.autoLayout = { ...view.autoLayout, direction }
     }
-    return { ...pushUndo(s), workspace: ws }
+    return { ...pushUndo(s), workspace: ws, layoutVersion: s.layoutVersion + 1 }
   }),
 
   // ─── Canvas Settings ──────────────────────────────────────────

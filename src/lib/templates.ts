@@ -314,14 +314,9 @@ export function createBigBankSample(): Workspace {
       configuration: {
         styles: {
           elements: [
-            { tag: 'Person', background: '#08427b', color: '#ffffff', shape: 'Person', fontSize: 22 },
-            { tag: 'Customer', background: '#08427b', color: '#ffffff' },
-            { tag: 'Bank Staff', background: '#999999', color: '#ffffff' },
-            { tag: 'Software System', background: '#1168bd', color: '#ffffff' },
-            { tag: 'Existing System', background: '#999999', color: '#ffffff' },
-            { tag: 'Container', background: '#438dd5', color: '#ffffff' },
-            { tag: 'Database', background: '#438dd5', color: '#ffffff', shape: 'Cylinder' },
-            { tag: 'Component', background: '#85bbf0', color: '#000000' },
+            { tag: 'Bank Staff', background: '#1e2832', color: '#94a3b8', stroke: '#475569' },
+            { tag: 'Existing System', background: '#2a2018', color: '#d4a96a', stroke: '#a37032' },
+            { tag: 'Database', background: '#1e1a40', color: '#c4b5fd', stroke: '#7c3aed', shape: 'Cylinder' },
           ],
           relationships: [],
         },
@@ -493,12 +488,8 @@ export function createMicroservicesTemplate(): Workspace {
       configuration: {
         styles: {
           elements: [
-            { tag: 'Person', background: '#08427b', color: '#ffffff', shape: 'Person', fontSize: 22 },
-            { tag: 'Customer', background: '#08427b', color: '#ffffff' },
-            { tag: 'Software System', background: '#1168bd', color: '#ffffff' },
-            { tag: 'Container', background: '#438dd5', color: '#ffffff' },
-            { tag: 'Database', background: '#438dd5', color: '#ffffff', shape: 'Cylinder' },
-            { tag: 'Queue', background: '#f5a623', color: '#ffffff', shape: 'Pipe' },
+            { tag: 'Database', background: '#1e1a40', color: '#c4b5fd', stroke: '#7c3aed', shape: 'Cylinder' },
+            { tag: 'Queue', background: '#2d1f0d', color: '#fdba74', stroke: '#f97316' },
           ],
           relationships: [],
         },
@@ -644,13 +635,9 @@ export function createMonolithTemplate(): Workspace {
       configuration: {
         styles: {
           elements: [
-            { tag: 'Person', background: '#08427b', color: '#ffffff', shape: 'Person', fontSize: 22 },
-            { tag: 'Customer', background: '#08427b', color: '#ffffff' },
-            { tag: 'Staff', background: '#999999', color: '#ffffff' },
-            { tag: 'Software System', background: '#1168bd', color: '#ffffff' },
-            { tag: 'External System', background: '#999999', color: '#ffffff' },
-            { tag: 'Container', background: '#438dd5', color: '#ffffff' },
-            { tag: 'Database', background: '#438dd5', color: '#ffffff', shape: 'Cylinder' },
+            { tag: 'Staff', background: '#1e2832', color: '#94a3b8', stroke: '#475569' },
+            { tag: 'External System', background: '#201c28', color: '#c084fc', stroke: '#9333ea' },
+            { tag: 'Database', background: '#1e1a40', color: '#c4b5fd', stroke: '#7c3aed', shape: 'Cylinder' },
           ],
           relationships: [],
         },
@@ -834,15 +821,12 @@ export function createEventDrivenTemplate(): Workspace {
       configuration: {
         styles: {
           elements: [
-            { tag: 'Person', background: '#08427b', color: '#ffffff', shape: 'Person', fontSize: 22 },
-            { tag: 'Staff', background: '#08427b', color: '#ffffff' },
-            { tag: 'Software System', background: '#1168bd', color: '#ffffff' },
-            { tag: 'External System', background: '#999999', color: '#ffffff' },
-            { tag: 'Container', background: '#438dd5', color: '#ffffff' },
-            { tag: 'Producer', background: '#2e7d32', color: '#ffffff' },
-            { tag: 'Consumer', background: '#c62828', color: '#ffffff' },
-            { tag: 'Queue', background: '#f5a623', color: '#ffffff', shape: 'Pipe' },
-            { tag: 'Database', background: '#438dd5', color: '#ffffff', shape: 'Cylinder' },
+            { tag: 'Staff', background: '#1e2832', color: '#94a3b8', stroke: '#475569' },
+            { tag: 'External System', background: '#201c28', color: '#c084fc', stroke: '#9333ea' },
+            { tag: 'Producer', background: '#0e2a1a', color: '#6ee7b7', stroke: '#059669' },
+            { tag: 'Consumer', background: '#2d0f0f', color: '#fca5a5', stroke: '#ef4444' },
+            { tag: 'Queue', background: '#2d1f0d', color: '#fdba74', stroke: '#f97316' },
+            { tag: 'Database', background: '#1e1a40', color: '#c4b5fd', stroke: '#7c3aed', shape: 'Cylinder' },
           ],
           relationships: [],
         },
@@ -878,12 +862,7 @@ export function createBlankWorkspace(): Workspace {
       componentViews: [],
       configuration: {
         styles: {
-          elements: [
-            { tag: 'Person', background: '#1a3a2a', color: '#86efac', stroke: '#22c55e', shape: 'Person' },
-            { tag: 'Software System', background: '#1a2f4a', color: '#93c5fd', stroke: '#3b82f6' },
-            { tag: 'Container', background: '#142540', color: '#7dd3fc', stroke: '#2563eb' },
-            { tag: 'Component', background: '#0f1f35', color: '#60a5fa', stroke: '#1d4ed8' },
-          ],
+          elements: [],
           relationships: [],
         },
       },

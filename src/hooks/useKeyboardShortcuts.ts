@@ -71,8 +71,17 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     }
   },
   'Delete': (store) => {
-    if (store.selectedRelationshipId) { store.deleteRelationship(store.selectedRelationshipId); return }
-    if (store.selectedElementIds.length > 0) store.deleteElements(store.selectedElementIds)
+    if (store.selectedRelationshipId) {
+      store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
+      return
+    }
+    if (store.selectedElementIds.length > 0) {
+      const count = store.selectedElementIds.length
+      store.confirmDelete(
+        count === 1 ? 'Delete this element?' : `Delete ${count} elements?`,
+        () => store.deleteElements(store.selectedElementIds)
+      )
+    }
   },
   'shift+G': (store) => {
     if (store.selectedElementIds.length > 0) store.addGroup('New Group', store.selectedElementIds)
@@ -143,8 +152,15 @@ export function useKeyboardShortcuts() {
       // Backspace with selection → delete (special case: also matches 'Backspace' nav)
       if (e.key === 'Backspace' && !mod && store.selectedElementIds.length > 0) {
         e.preventDefault()
-        if (store.selectedRelationshipId) { store.deleteRelationship(store.selectedRelationshipId); return }
-        store.deleteElements(store.selectedElementIds)
+        if (store.selectedRelationshipId) {
+          store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
+          return
+        }
+        const count = store.selectedElementIds.length
+        store.confirmDelete(
+          count === 1 ? 'Delete this element?' : `Delete ${count} elements?`,
+          () => store.deleteElements(store.selectedElementIds)
+        )
         return
       }
 

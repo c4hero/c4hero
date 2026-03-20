@@ -143,6 +143,7 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   const deleteView = useWorkspaceStore((s) => s.deleteView)
+  const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const renameView = useWorkspaceStore((s) => s.renameView)
 
   const [renamingViewKey, setRenamingViewKey] = useState<string | null>(null)
@@ -238,7 +239,7 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                           <Pencil size={13} />
                         </button>
                       )}
-                      <button onClick={e => { e.stopPropagation(); if (views.length > 1) deleteView(v.key) }}
+                      <button onClick={e => { e.stopPropagation(); if (views.length > 1) confirmDelete(`Delete view "${v.title || v.key}"?`, () => deleteView(v.key)) }}
                         disabled={views.length <= 1}
                         className="hover-danger"
                         style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1, transition: 'background 0.12s, color 0.12s' }}
