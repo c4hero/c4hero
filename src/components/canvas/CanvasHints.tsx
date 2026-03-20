@@ -34,14 +34,7 @@ export default function CanvasHints() {
 
   if (!workspace || !view) return null
 
-  // Empty canvas hint
-  if (isEmpty && !dismissed.has('empty-canvas')) {
-    return (
-      <Hint id="empty-canvas" onDismiss={handleDismiss}>
-        Press <Kbd>Shift+S</Kbd> to add a system, or use the toolbar on the left
-      </Hint>
-    )
-  }
+  // Empty canvas hint suppressed — covered by the canvas empty state overlay
 
   // First element added — connection hint
   if (view.elements.length >= 2 && view.relationships.length === 0 && !dismissed.has('connect-hint')) {
