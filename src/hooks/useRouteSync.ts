@@ -6,7 +6,7 @@ import { getCurrentDirHandle } from '@/lib/folderIO'
 /**
  * Syncs URL path ↔ workspace/view state via React Router:
  *   /                    → startup
- *   /collection          → collection home
+ *   /collection/:slug    → collection home
  *   /workspace/:viewKey  → canvas, specific view
  */
 export function useRouteSync() {
@@ -92,7 +92,8 @@ export function useRefreshRedirect() {
       // Give crash recovery a moment, then redirect if still no workspace
       const timer = setTimeout(() => {
         if (!useWorkspaceStore.getState().workspace) {
-          navigate(getCurrentDirHandle() ? '/collection' : '/', { replace: true })
+          const slug = getCurrentDirHandle()?.name
+          navigate(slug ? `/collection/${slug}` : '/', { replace: true })
         }
       }, 300)
       return () => clearTimeout(timer)

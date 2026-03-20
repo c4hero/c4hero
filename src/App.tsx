@@ -91,6 +91,11 @@ export default function App() {
       } />
 
       {/* Collection home — folder open, pick/create workspace */}
+      <Route path="/collection/:slug" element={
+        <Suspense fallback={<LoadingDot />}>
+          <WelcomeScreen initialView="collection" />
+        </Suspense>
+      } />
       <Route path="/collection" element={
         <Suspense fallback={<LoadingDot />}>
           <WelcomeScreen initialView="collection" />

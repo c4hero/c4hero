@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, lazy, Suspense } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
 import {
@@ -256,20 +256,42 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const navigate = useNavigate()
   const location = useLocation()
+  const { slug: urlSlug } = useParams<{ slug?: string }>()
   useEffect(() => { document.title = 'c4hero' }, [])
 
   // Auto-open scope picker when navigated here with ?new=1
   useEffect(() => {
     if (location.search.includes('new=1')) {
       setShowScopePicker(true)
-      navigate('/collection', { replace: true })
+      const dirHandle = getCurrentDirHandle()
+      navigate(dirHandle ? `/collection/${dirHandle.name}` : '/collection', { replace: true })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search])
 
+  // If we have a slug in URL but no dir handle, try to restore
+  useEffect(() => {
+    if (urlSlug && !getCurrentDirHandle()) {
+      restoreDirHandleByName(urlSlug).then(async (handle) => {
+        if (handle) {
+          const files = await listDSLFiles()
+          setFolderWorkspaces(files.map(f => ({ name: f })))
+        } else {
+          navigate('/', { replace: true })
+        }
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSlug])
+
   const view = initialView ?? (getCurrentDirHandle() !== null ? 'collection' : 'startup')
-  function setView(v: 'startup' | 'collection') {
-    navigate(v === 'collection' ? '/collection' : '/', { replace: true })
+  function setView(v: 'startup' | 'collection', slug?: string) {
+    if (v === 'collection') {
+      const s = slug ?? getCurrentDirHandle()?.name ?? urlSlug ?? ''
+      navigate(s ? `/collection/${s}` : '/collection', { replace: true })
+    } else {
+      navigate('/', { replace: true })
+    }
   }
   const [folderWorkspaces, setFolderWorkspaces] = useState<FolderWorkspace[]>([])
   const [renamingFile, setRenamingFile] = useState<string | null>(null)

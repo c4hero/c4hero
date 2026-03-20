@@ -116,8 +116,9 @@ export default function FloatingTopPill() {
 
   const handleManageWorkspaces = useCallback(() => {
     setWsPickerOpen(false)
+    const slug = getCurrentDirHandle()?.name ?? ''
     useWorkspaceStore.getState().closeWorkspace()
-    navigate('/collection', { replace: true })
+    navigate(slug ? `/collection/${slug}` : '/collection', { replace: true })
   }, [navigate])
 
   const handleChangeCollection = useCallback(() => {
