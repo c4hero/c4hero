@@ -114,10 +114,16 @@ export default function FloatingTopPill() {
     useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
   }, [loadWorkspace])
 
-  const handleChangeCollection = useCallback(() => {
+  const handleManageWorkspaces = useCallback(() => {
     setWsPickerOpen(false)
     useWorkspaceStore.getState().closeWorkspace()
     navigate('/collection', { replace: true })
+  }, [navigate])
+
+  const handleChangeCollection = useCallback(() => {
+    setWsPickerOpen(false)
+    useWorkspaceStore.getState().closeWorkspace()
+    navigate('/', { replace: true })
   }, [navigate])
 
   if (!workspace) return null
@@ -421,7 +427,7 @@ export default function FloatingTopPill() {
           activeFilename={activeFilename}
           onSelect={handleSwitchWorkspace}
           onNewWorkspace={() => { setWsPickerOpen(false); setShowNewWorkspace(true) }}
-          onManageWorkspaces={handleChangeCollection}
+          onManageWorkspaces={handleManageWorkspaces}
           onChangeCollection={handleChangeCollection}
           onClose={() => setWsPickerOpen(false)}
         />
