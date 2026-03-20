@@ -70,8 +70,10 @@ export async function openFolder(): Promise<{ dirHandle: FileSystemDirectoryHand
     await persistDirHandle()
     return { dirHandle, dslFiles }
   } catch (err) {
-    // User cancelled (AbortError) or permission denied — not an error
-    log.warn('openFolder cancelled or failed', err)
+    // AbortError = user cancelled — silence it; log anything unexpected
+    if (err instanceof Error && err.name !== 'AbortError') {
+      log.warn('openFolder failed', err)
+    }
     return null
   }
 }
