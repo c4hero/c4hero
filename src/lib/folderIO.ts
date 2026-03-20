@@ -188,3 +188,62 @@ async function listDSLFilesIn(dirHandle: FileSystemDirectoryHandle): Promise<str
   }
   return files.sort()
 }
+
+// ─── Collection settings (.c4hero/settings.json) ─────────────────────────────
+
+export interface CollectionSettings {
+  name?: string          // Display name override for the collection
+  defaultScope?: string  // Default scope for new workspaces
+  createdAt?: string     // ISO timestamp
+  [key: string]: unknown // Forward-compatible — unknown keys are preserved
+}
+
+const C4HERO_DIR = '.c4hero'
+const SETTINGS_FILE = 'settings.json'
+
+async function getC4HeroDir(create = false): Promise<FileSystemDirectoryHandle | null> {
+  if (!currentDirHandle) return null
+  try {
+    return await currentDirHandle.getDirectoryHandle(C4HERO_DIR, { create })
+  } catch {
+    return null
+  }
+}
+
+export async function readCollectionSettings(): Promise<CollectionSettings | null> {
+  try {
+    const dir = await getC4HeroDir(false)
+    if (!dir) return null
+    const fileHandle = await dir.getFileHandle(SETTINGS_FILE)
+    const file = await fileHandle.getFile()
+    const text = await file.text()
+    return JSON.parse(text) as CollectionSettings
+  } catch {
+    return null
+  }
+}
+
+export async function writeCollectionSettings(settings: CollectionSettings): Promise<boolean> {
+  try {
+    const dir = await getC4HeroDir(true)
+    if (!dir) return false
+    const fileHandle = await dir.getFileHandle(SETTINGS_FILE, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(JSON.stringify(settings, null, 2))
+    await writable.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function initCollectionSettings(name: string): Promise<CollectionSettings> {
+  const existing = await readCollectionSettings()
+  if (existing) return existing
+  const settings: CollectionSettings = {
+    name,
+    createdAt: new Date().toISOString(),
+  }
+  await writeCollectionSettings(settings)
+  return settings
+}

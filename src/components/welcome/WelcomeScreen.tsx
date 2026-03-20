@@ -18,6 +18,7 @@ import {
   hasFolderAccess,
   getCurrentDirHandle,
   restoreDirHandleByName,
+  initCollectionSettings,
 } from '@/lib/folderIO'
 import { getRecentFolders, addRecentFolder } from '@/lib/fileIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
@@ -271,6 +272,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const result = await openFolder()
     if (!result) return
     addRecentFolder({ name: result.dirHandle.name, path: result.dirHandle.name })
+    await initCollectionSettings(result.dirHandle.name)
     const workspaces = result.dslFiles.map((name) => ({ name }))
     setFolderWorkspaces(workspaces)
     setView('collection')
@@ -314,7 +316,8 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const { setDirHandle } = await import('@/lib/folderIO')
     await setDirHandle(newDir)
     addRecentFolder({ name: newDir.name, path: newDir.name })
-    const files = await (await import('@/lib/folderIO')).listDSLFiles()
+    await initCollectionSettings(newDir.name)
+    const files = await listDSLFiles()
     setFolderWorkspaces(files.map(name => ({ name })))
     setView('collection')
   }
