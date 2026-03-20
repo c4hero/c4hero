@@ -26,6 +26,13 @@ import { parseDSL, serializeDSL as _serializeDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
 import { useNavigate } from 'react-router-dom'
 
+interface WsEntry {
+  filename: string
+  label: string
+  elementCounts: { type: string; count: number }[]
+  viewCount: number
+}
+
 const ExportDialog = lazy(() => import('@/components/dialogs/ExportDialog'))
 const CommandPalette = lazy(() => import('@/components/command-palette/CommandPalette'))
 const CreateViewDialog = lazy(() => import('@/components/views/CreateViewDialog'))
@@ -50,21 +57,45 @@ export default function FloatingTopPill() {
   const [showSettings, setShowSettings] = useState(false)
   const [hamburgerOpen, setHamburgerOpen] = useState(false)
   const [wsPickerOpen, setWsPickerOpen] = useState(false)
-  const [wsFiles, setWsFiles] = useState<string[]>([])
+  const [wsFiles, setWsFiles] = useState<WsEntry[]>([])
   const isMobile = useBreakpoint() === 'mobile'
   const navigate = useNavigate()
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const activeFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
 
   const openWsPicker = useCallback(async () => {
-    const files = await listDSLFiles()
-    setWsFiles(files)
+    const filenames = await listDSLFiles()
     setWsPickerOpen(true)
     setViewDropdownOpen(false)
     setExportDialogOpen(false)
+    // Load entries with basic stats (non-blocking per file)
+    const entries = await Promise.all(filenames.map(async (filename): Promise<WsEntry> => {
+      const label = filename.replace(/\.dsl$/, '')
+      try {
+        const file = await readDSLFile(filename)
+        if (!file) return { filename, label, elementCounts: [], viewCount: 0 }
+        const { workspace: ws } = parseDSL(file.content)
+        if (!ws) return { filename, label, elementCounts: [], viewCount: 0 }
+        const counts: Record<string, number> = {}
+        counts['person'] = ws.model.people.length
+        for (const s of ws.model.softwareSystems) {
+          counts['system'] = (counts['system'] ?? 0) + 1
+          for (const c of s.containers) {
+            counts['container'] = (counts['container'] ?? 0) + 1
+            for (const _ of c.components) counts['component'] = (counts['component'] ?? 0) + 1
+          }
+        }
+        const elementCounts = Object.entries(counts).map(([type, count]) => ({ type, count }))
+        const allViews = [...ws.views.systemLandscapeViews, ...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews]
+        return { filename, label, elementCounts, viewCount: allViews.length }
+      } catch {
+        return { filename, label, elementCounts: [], viewCount: 0 }
+      }
+    }))
+    setWsFiles(entries)
   }, [])
 
-  const handleSwitchWorkspace = useCallback(async (filename: string) => {
+  const handleSwitchWorkspace = useCallback(async (filename: string): Promise<void> => {
     setWsPickerOpen(false)
     const file = await readDSLFile(filename)
     if (!file) return
@@ -387,10 +418,10 @@ export default function FloatingTopPill() {
       )}
       {wsPickerOpen && (
         <WorkspaceSwitcherPanel
-          files={wsFiles}
+          entries={wsFiles}
           activeFilename={activeFilename}
           onSelect={handleSwitchWorkspace}
-          onNewWorkspace={() => { setWsPickerOpen(false); /* TODO: trigger new workspace flow */ }}
+          onNewWorkspace={() => { setWsPickerOpen(false); navigate('/collection?new=1') }}
           onChangeCollection={handleChangeCollection}
           onClose={() => setWsPickerOpen(false)}
         />
@@ -439,17 +470,63 @@ export default function FloatingTopPill() {
 
 // ─── Workspace Switcher Panel ─────────────────────────────────────────────────
 
+const ELEMENT_COLORS: Record<string, string> = {
+  person:    '#22c55e',
+  system:    '#93c5fd',
+  container: '#14b8a6',
+  component: '#a78bfa',
+}
+
+function WsThumbnail({ entry }: { entry: WsEntry }) {
+  const total = entry.elementCounts.reduce((s, e) => s + e.count, 0)
+  if (total === 0) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <FileText size={16} style={{ opacity: 0.15 }} />
+      </div>
+    )
+  }
+  // Simple node-graph schematic using SVG
+  const nodes: { cx: number; cy: number; r: number; color: string }[] = []
+  let x = 12
+  for (const { type, count } of entry.elementCounts) {
+    const color = ELEMENT_COLORS[type] ?? '#64748b'
+    const capped = Math.min(count, 5)
+    for (let i = 0; i < capped; i++) {
+      nodes.push({ cx: x, cy: 22 + (i % 2) * 8, r: 5, color })
+      x += 14
+    }
+  }
+  // Draw connecting lines between first few nodes
+  return (
+    <svg width="100%" height="100%" viewBox="0 0 120 50" style={{ overflow: 'visible' }}>
+      {nodes.slice(0, -1).map((n, i) => (
+        <line key={i} x1={n.cx} y1={n.cy} x2={nodes[i+1].cx} y2={nodes[i+1].cy}
+          stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" />
+      ))}
+      {nodes.map((n, i) => (
+        <circle key={i} cx={n.cx} cy={n.cy} r={n.r} fill={n.color} opacity={0.85} />
+      ))}
+      {entry.viewCount > 0 && (
+        <text x="114" y="46" textAnchor="end" fontSize="8" fill="rgba(255,255,255,0.3)">
+          {entry.viewCount}v
+        </text>
+      )}
+    </svg>
+  )
+}
+
 function WorkspaceSwitcherPanel({
-  files,
+  entries,
   activeFilename,
   onSelect,
   onNewWorkspace,
   onChangeCollection,
   onClose,
 }: {
-  files: string[]
+  entries: WsEntry[]
   activeFilename: string | null
-  onSelect: (filename: string) => void
+  onSelect: (filename: string) => Promise<void>
   onNewWorkspace: () => void
   onChangeCollection: () => void
   onClose: () => void
@@ -459,65 +536,72 @@ function WorkspaceSwitcherPanel({
   return (
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 48 }} onClick={onClose} />
-      <div
-        className="shade-panel"
-        style={{ padding: '16px 16px 0', minWidth: 280, maxWidth: 400, zIndex: 49 }}
-      >
+      <div className="shade-panel" style={{ zIndex: 49, display: 'flex', flexDirection: 'column' }}>
+
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>
-            Workspaces {files.length > 0 && <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 99, padding: '1px 6px', marginLeft: 4 }}>{files.length}</span>}
+        <div style={{ display: 'flex', alignItems: 'center', padding: '14px 16px 10px' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', flex: 1 }}>
+            Workspaces
+            {entries.length > 0 && (
+              <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 99, padding: '1px 7px', marginLeft: 6, fontWeight: 600 }}>
+                {entries.length}
+              </span>
+            )}
           </span>
         </div>
 
-        {/* Workspace cards grid */}
-        {files.length === 0 ? (
-          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>
-            No workspaces in this collection
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, marginBottom: 4 }}>
-            {files.map(filename => {
-              const isActive = filename === activeFilename
-              const label = filename.replace(/\.dsl$/, '')
-              return (
-                <button
-                  key={filename}
-                  onClick={() => onSelect(filename)}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-                    gap: 8, padding: 0, borderRadius: 10, overflow: 'hidden',
-                    border: isActive ? '2px solid var(--color-accent)' : '2px solid var(--color-border)',
-                    background: 'transparent', cursor: 'pointer',
-                    transition: 'border-color 150ms',
-                  }}
-                >
-                  {/* Thumbnail area */}
-                  <div style={{
-                    width: '100%', aspectRatio: '16/9',
-                    background: 'rgba(0,0,0,0.35)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderBottom: '1px solid var(--color-border)',
-                  }}>
-                    <FileText size={20} style={{ opacity: 0.2, color: 'var(--color-text-primary)' }} />
-                  </div>
-                  {/* Label */}
-                  <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {label}
-                    </span>
-                    {isActive && (
-                      <span style={{ fontSize: 10, color: 'var(--color-accent)', fontWeight: 600 }}>Active</span>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        )}
+        {/* Scrollable card grid — max ~3 rows before scrolling */}
+        <div style={{ overflowY: 'auto', maxHeight: 280, padding: '0 14px 14px' }}>
+          {entries.length === 0 ? (
+            <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>
+              No workspaces in this collection
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+              {entries.map(entry => {
+                const isActive = entry.filename === activeFilename
+                return (
+                  <button
+                    key={entry.filename}
+                    onClick={() => { void onSelect(entry.filename) }}
+                    style={{
+                      display: 'flex', flexDirection: 'column', padding: 0,
+                      borderRadius: 10, overflow: 'hidden',
+                      border: isActive ? '2px solid var(--color-accent)' : '2px solid var(--color-border)',
+                      background: isActive ? 'rgba(88,166,255,0.05)' : 'rgba(0,0,0,0.2)',
+                      cursor: isActive ? 'default' : 'pointer',
+                      transition: 'border-color 150ms, background 150ms',
+                    }}
+                  >
+                    {/* Thumbnail */}
+                    <div style={{
+                      width: '100%', aspectRatio: '16/9',
+                      background: 'rgba(0,0,0,0.4)',
+                      borderBottom: '1px solid var(--color-border)',
+                      overflow: 'hidden',
+                    }}>
+                      <WsThumbnail entry={entry} />
+                    </div>
+                    {/* Label */}
+                    <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                        {entry.label}
+                      </span>
+                      <span style={{ fontSize: 10, color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)', textAlign: 'left' }}>
+                        {isActive ? 'Active' : entry.elementCounts.reduce((s, e) => s + e.count, 0) > 0
+                          ? `${entry.elementCounts.reduce((s, e) => s + e.count, 0)} elements`
+                          : 'Empty'}
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
-        {/* Divider + footer actions */}
-        <div style={{ borderTop: '1px solid var(--color-border)', display: 'flex', gap: 0 }}>
+        {/* Footer actions */}
+        <div style={{ borderTop: '1px solid var(--color-border)', display: 'flex' }}>
           <button
             onClick={onNewWorkspace}
             className="hover-subtle"

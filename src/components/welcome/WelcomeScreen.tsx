@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, lazy, Suspense } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
 import {
@@ -229,7 +229,17 @@ function TemplateDialog({
 export default function WelcomeScreen({ initialView }: { initialView?: 'startup' | 'collection' }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const navigate = useNavigate()
+  const location = useLocation()
   useEffect(() => { document.title = 'c4hero' }, [])
+
+  // Auto-open scope picker when navigated here with ?new=1
+  useEffect(() => {
+    if (location.search.includes('new=1')) {
+      setShowScopePicker(true)
+      navigate('/collection', { replace: true })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search])
 
   const view = initialView ?? (getCurrentDirHandle() !== null ? 'collection' : 'startup')
   function setView(v: 'startup' | 'collection') {
@@ -239,10 +249,10 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const [renamingFile, setRenamingFile] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
+  const [showScopePicker, setShowScopePicker] = useState(false)
   const [showAISettings, setShowAISettings] = useState(false)
   const [showDescribe, setShowDescribe] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
-  const [showScopePicker, setShowScopePicker] = useState(false)
   const [showNewCollection, setShowNewCollection] = useState(false)
   const [newCollectionName, setNewCollectionName] = useState('My Architecture')
   const [duplicateConfirm, setDuplicateConfirm] = useState<{ slug: string; displayName: string; parentHandle: FileSystemDirectoryHandle } | null>(null)
