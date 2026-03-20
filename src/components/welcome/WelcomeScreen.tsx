@@ -489,7 +489,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     setShowScopePicker(true)
   }
 
-  async function handleBlankWorkspaceFromPicker(scope: WorkspaceScope, name: string) {
+  async function handleBlankWorkspaceFromPicker(scope: WorkspaceScope, name: string, _openAfter: boolean = true) {
     setShowScopePicker(false)
     const ws = createBlankWorkspace()
     ws.name = name.trim() || 'workspace'

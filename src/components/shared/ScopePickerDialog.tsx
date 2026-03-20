@@ -123,7 +123,7 @@ export default function ScopePickerDialog({
   onConfirm,
   onCancel,
 }: {
-  onConfirm: (scope: WorkspaceScope, name: string) => void
+  onConfirm: (scope: WorkspaceScope, name: string, openAfter: boolean) => void
   onCancel: () => void
 }) {
   const [scope, setScope] = useState<'softwaresystem' | 'landscape'>('softwaresystem')
@@ -140,7 +140,7 @@ export default function ScopePickerDialog({
 
   function handleCreate() {
     if (!canSubmit) return
-    onConfirm(scope, name.trim())
+    onConfirm(scope, name.trim(), openAfter)
   }
 
   return (

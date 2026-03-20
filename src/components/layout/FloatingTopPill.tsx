@@ -444,20 +444,20 @@ export default function FloatingTopPill() {
       {showNewWorkspace && (
         <Suspense fallback={<LoadingDot />}>
           <ScopePickerDialog
-            onConfirm={async (scope, name) => {
+            onConfirm={async (scope, name, openAfter) => {
               setShowNewWorkspace(false)
               const filename = `${slugifyName(name) || 'workspace'}.dsl`
-              // Build minimal DSL content
               const scopeLine = scope !== 'none' ? `\n    configuration {\n        scope ${scope}\n    }\n` : ''
               const dsl = `workspace "${name}" {\n    model {\n    }\n    views {${scopeLine}\n    }\n}`
               const ok = await writeDSLFile(filename, dsl)
               if (!ok) return
-              // Parse and load the new workspace
-              const { workspace: ws } = parseDSL(dsl)
-              if (ws) {
-                if (!ws.name) ws.name = name
-                loadWorkspace(ws)
-                useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+              if (openAfter) {
+                const { workspace: ws } = parseDSL(dsl)
+                if (ws) {
+                  if (!ws.name) ws.name = name
+                  loadWorkspace(ws)
+                  useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+                }
               }
             }}
             onCancel={() => setShowNewWorkspace(false)}
