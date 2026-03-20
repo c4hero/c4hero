@@ -16,8 +16,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
         borderRadius: 'var(--radius-xl)',
         border: '1px solid var(--color-border)',
         background: 'var(--glass-bg-heavy)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+
         boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
       }}
     >

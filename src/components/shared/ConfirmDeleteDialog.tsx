@@ -24,7 +24,7 @@ export default function ConfirmDeleteDialog({ message, onConfirm, onCancel }: Pr
     <>
       {/* Backdrop */}
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}
+        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)' }}
         onClick={onCancel}
       />
       {/* Dialog */}

@@ -73,7 +73,7 @@ export default function App() {
               background: 'rgba(13, 17, 23, 0.9)',
               borderColor: 'var(--color-border)',
               color: 'var(--color-text-muted)',
-              backdropFilter: 'blur(8px)',
+
             }}
           >
             Press <kbd className="mx-1 rounded border px-1" style={{ borderColor: 'var(--color-border)' }}>Esc</kbd> or <kbd className="mx-1 rounded border px-1" style={{ borderColor: 'var(--color-border)' }}>F</kbd> to exit

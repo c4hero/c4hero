@@ -68,7 +68,7 @@
   --radius-xl: 14px;
 
   /* Backdrop */
-  --color-backdrop: rgba(11, 18, 25, 0.5);
+  --color-backdrop: rgba(0, 0, 0, 0.65);
 
   /* Font size scale */
   --text-xxs: 9px;
