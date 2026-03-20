@@ -222,6 +222,8 @@ export default function WelcomeScreen() {
   const [showAISettings, setShowAISettings] = useState(false)
   const [showDescribe, setShowDescribe] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showNewCollection, setShowNewCollection] = useState(false)
+  const [newCollectionName, setNewCollectionName] = useState('my-architecture')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const jsonInputRef = useRef<HTMLInputElement>(null)
@@ -268,27 +270,27 @@ export default function WelcomeScreen() {
 
   // ── Screen 1 handlers ───────────────────────────────────────────────
 
-  async function handleCreateCollection() {
-    // Pick a parent folder, then create a named subdirectory inside it
-    const name = window.prompt('Collection name:', 'my-architecture')
-    if (!name?.trim()) return
+  async function commitCreateCollection(name: string) {
+    setShowNewCollection(false)
     const folderName = name.trim().replace(/[^a-zA-Z0-9_\-. ]/g, '').trim()
     if (!folderName) return
-    // showDirectoryPicker to choose the parent
     let parentHandle: FileSystemDirectoryHandle
     try {
       parentHandle = await (window as Window & typeof globalThis & { showDirectoryPicker: (o?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({ mode: 'readwrite' })
     } catch {
-      return // cancelled
+      return
     }
-    // Create the new subdirectory
     const newDir = await parentHandle.getDirectoryHandle(folderName, { create: true })
-    // Persist and transition
     const { setDirHandle } = await import('@/lib/folderIO')
     await setDirHandle(newDir)
     addRecentFolder({ name: newDir.name, path: newDir.name })
     setFolderWorkspaces([])
     setView('collection')
+  }
+
+  function handleCreateCollection() {
+    setNewCollectionName('my-architecture')
+    setShowNewCollection(true)
   }
 
   const handleOpenCollection = openFolderAndTransition
@@ -539,6 +541,14 @@ export default function WelcomeScreen() {
         />
       </div>
 
+      {showNewCollection && (
+        <NewCollectionDialog
+          value={newCollectionName}
+          onChange={setNewCollectionName}
+          onConfirm={() => commitCreateCollection(newCollectionName)}
+          onCancel={() => setShowNewCollection(false)}
+        />
+      )}
       {showAISettings && <AISettingsDialog onClose={() => setShowAISettings(false)} />}
       {showDescribe && <DescribeSystemDialog onClose={() => setShowDescribe(false)} />}
       {showTemplates && (
@@ -899,3 +909,100 @@ function SectionDivider({ label, muted }: { label: string; muted?: boolean }) {
 // Keep unused icon imports from triggering lint errors
 void Server
 void Radio
+
+// ─── New Collection Dialog ────────────────────────────────────────────────────
+
+function NewCollectionDialog({
+  value,
+  onChange,
+  onConfirm,
+  onCancel,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    setTimeout(() => inputRef.current?.select(), 50)
+  }, [])
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onCancel}
+    >
+      <div
+        style={{
+          width: 360, borderRadius: 16,
+          background: 'var(--color-bg-panel, #0f1923)',
+          border: '1px solid var(--color-border)',
+          padding: '28px 28px 24px',
+          display: 'flex', flexDirection: 'column', gap: 20,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+            New collection
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            A folder will be created with this name. You'll choose where to put it next.
+          </span>
+        </div>
+
+        {/* Input */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>
+            Collection name
+          </label>
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') onConfirm()
+              if (e.key === 'Escape') onCancel()
+            }}
+            placeholder="my-architecture"
+            style={{
+              width: '100%', padding: '10px 14px',
+              borderRadius: 10, fontSize: 14, fontWeight: 500,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid var(--color-border-hover, rgba(88,166,255,0.25))',
+              color: 'var(--color-text-primary)',
+              outline: 'none',
+            }}
+          />
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn-surface" onClick={onCancel} style={{ padding: '8px 18px' }}>
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!value.trim()}
+            style={{
+              padding: '8px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+              background: value.trim() ? 'var(--color-accent)' : 'rgba(88,166,255,0.2)',
+              color: value.trim() ? '#0d1117' : 'var(--color-text-muted)',
+              border: 'none', cursor: value.trim() ? 'pointer' : 'default',
+              transition: 'background 150ms',
+            }}
+          >
+            Choose location →
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
