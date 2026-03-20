@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Download, Copy, Check, Moon, Sun } from 'lucide-react'
+import { Download, Copy, Check } from 'lucide-react'
 import type { ExportTheme } from '@/lib/exportUtils'
 
 interface ExportDialogProps {

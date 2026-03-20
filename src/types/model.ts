@@ -108,6 +108,8 @@ export interface ElementStyle {
   border?: string
   opacity?: number
   icon?: string
+  stroke?: string
+  strokeWidth?: number
 }
 
 export interface RelationshipStyle {

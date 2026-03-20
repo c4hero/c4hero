@@ -1,0 +1,213 @@
+import { describe, it, expect } from 'vitest'
+import { extractSidecar, applySidecar, parseSidecar, serializeSidecar, sidecarName } from './sidecar'
+import type { Workspace } from '@/types/model'
+
+function makeWorkspace(): Workspace {
+  return {
+    name: 'Test',
+    model: {
+      people: [
+        { id: 'alice', type: 'person', name: 'Alice', tags: ['Element', 'Person'], properties: {} },
+      ],
+      softwareSystems: [],
+      relationships: [
+        {
+          id: 'rel-1',
+          sourceId: 'alice',
+          destinationId: 'sys1',
+          description: 'uses',
+          tags: ['Relationship'],
+          properties: {},
+        },
+      ],
+      groups: [],
+    },
+    views: {
+      systemLandscapeViews: [
+        {
+          type: 'systemLandscape',
+          key: 'sl1',
+          title: 'Landscape',
+          elements: [{ id: 'alice' }],
+          relationships: [],
+        },
+      ],
+      systemContextViews: [],
+      containerViews: [],
+      componentViews: [],
+      configuration: { styles: { elements: [], relationships: [] } },
+    },
+  }
+}
+
+// ─── extractSidecar ──────────────────────────────────────────────────
+
+describe('extractSidecar', () => {
+  it('returns null when workspace has no sidecar data', () => {
+    const ws = makeWorkspace()
+    const result = extractSidecar(ws)
+    expect(result).toBeNull()
+  })
+
+  it('returns sidecar data when a person has status set', () => {
+    const ws = makeWorkspace()
+    ws.model.people[0].status = 'Live'
+    const result = extractSidecar(ws)
+    expect(result).not.toBeNull()
+    expect(result!.elements?.['alice']?.status).toBe('Live')
+  })
+
+  it('captures relationship lineStyle', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships[0].lineStyle = 'Curved'
+    const result = extractSidecar(ws)
+    expect(result).not.toBeNull()
+    expect(result!.relationships?.['rel-1']?.lineStyle).toBe('Curved')
+  })
+
+  it('captures pinned view elements', () => {
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews[0].elements[0].pinned = true
+    const result = extractSidecar(ws)
+    expect(result).not.toBeNull()
+    expect(result!.views?.['sl1']?.elements?.['alice']?.pinned).toBe(true)
+  })
+
+  it('version is always 1', () => {
+    const ws = makeWorkspace()
+    ws.model.people[0].status = 'Planned'
+    const result = extractSidecar(ws)
+    expect(result!.version).toBe(1)
+  })
+})
+
+// ─── applySidecar ────────────────────────────────────────────────────
+
+describe('applySidecar', () => {
+  it('applies status to a person', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, { version: 1, elements: { alice: { status: 'Deprecated' } } })
+    expect(ws.model.people[0].status).toBe('Deprecated')
+  })
+
+  it('applies lineStyle to a relationship', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, { version: 1, relationships: { 'rel-1': { lineStyle: 'Orthogonal' } } })
+    expect(ws.model.relationships[0].lineStyle).toBe('Orthogonal')
+  })
+
+  it('applies pinned flag to a view element', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: true } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].elements[0].pinned).toBe(true)
+  })
+
+  it('is a no-op when version !== 1', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, { version: 99 as 1, elements: { alice: { status: 'Removed' } } })
+    // Status should NOT be applied
+    expect(ws.model.people[0].status).toBeUndefined()
+  })
+
+  it('does not apply unknown/disallowed element keys', () => {
+    const ws = makeWorkspace()
+    const sidecar = {
+      version: 1 as const,
+      elements: {
+        alice: {
+          status: 'Live' as const,
+          // @ts-expect-error — testing runtime protection against extra keys
+          maliciousKey: 'injected',
+        },
+      },
+    }
+    applySidecar(ws, sidecar)
+    expect(ws.model.people[0].status).toBe('Live')
+    // @ts-expect-error — confirming maliciousKey was not applied
+    expect(ws.model.people[0].maliciousKey).toBeUndefined()
+  })
+})
+
+// ─── parseSidecar ────────────────────────────────────────────────────
+
+describe('parseSidecar', () => {
+  it('returns null for invalid JSON', () => {
+    const result = parseSidecar('not valid json {')
+    expect(result).toBeNull()
+  })
+
+  it('returns null when version is not 1', () => {
+    const json = JSON.stringify({ version: 2, elements: {} })
+    expect(parseSidecar(json)).toBeNull()
+  })
+
+  it('returns null for null/missing version', () => {
+    expect(parseSidecar(JSON.stringify({ elements: {} }))).toBeNull()
+  })
+
+  it('returns null for empty string', () => {
+    expect(parseSidecar('')).toBeNull()
+  })
+
+  it('returns a valid SidecarData for correct JSON', () => {
+    const data = { version: 1, elements: { alice: { status: 'Live' } } }
+    const result = parseSidecar(JSON.stringify(data))
+    expect(result).not.toBeNull()
+    expect(result!.version).toBe(1)
+    expect(result!.elements?.['alice']?.status).toBe('Live')
+  })
+})
+
+// ─── serializeSidecar / parseSidecar round-trip ───────────────────────
+
+describe('serializeSidecar / parseSidecar round-trip', () => {
+  it('serializes and deserializes sidecar data correctly', () => {
+    const ws = makeWorkspace()
+    ws.model.people[0].status = 'Planned'
+    ws.model.relationships[0].lineStyle = 'Straight'
+    ws.views.systemLandscapeViews[0].elements[0].pinned = true
+
+    const sidecar = extractSidecar(ws)!
+    const json = serializeSidecar(sidecar)
+    const parsed = parseSidecar(json)
+
+    expect(parsed).not.toBeNull()
+    expect(parsed!.version).toBe(1)
+    expect(parsed!.elements?.['alice']?.status).toBe('Planned')
+    expect(parsed!.relationships?.['rel-1']?.lineStyle).toBe('Straight')
+    expect(parsed!.views?.['sl1']?.elements?.['alice']?.pinned).toBe(true)
+  })
+
+  it('produces valid JSON string', () => {
+    const data = extractSidecar(makeWorkspace())
+    // Nothing to serialize → null, so use manual data
+    const json = serializeSidecar({ version: 1, elements: { alice: { status: 'Live' } } })
+    expect(typeof json).toBe('string')
+    expect(() => JSON.parse(json)).not.toThrow()
+  })
+})
+
+// ─── sidecarName ────────────────────────────────────────────────────
+
+describe('sidecarName', () => {
+  it('converts diagram.dsl → diagram.c4hero.json', () => {
+    expect(sidecarName('diagram.dsl')).toBe('diagram.c4hero.json')
+  })
+
+  it('converts workspace.dsl → workspace.c4hero.json', () => {
+    expect(sidecarName('workspace.dsl')).toBe('workspace.c4hero.json')
+  })
+
+  it('handles names without .dsl extension gracefully', () => {
+    const result = sidecarName('myfile.txt')
+    // Should not crash; appends .c4hero.json
+    expect(typeof result).toBe('string')
+  })
+
+  it('handles just .dsl extension', () => {
+    expect(sidecarName('.dsl')).toBe('.c4hero.json')
+  })
+})

@@ -357,6 +357,10 @@ body {
   display: none !important;
 }
 
+.react-flow__node-group {
+  background: transparent !important;
+}
+
 .react-flow__node.selected {
   filter: drop-shadow(0 0 12px rgba(88, 166, 255, 0.25));
 }
@@ -377,7 +381,7 @@ body {
 }
 
 .c4-node.selected {
-  box-shadow: 0 0 0 3px var(--color-accent), 0 4px 24px rgba(88, 166, 255, 0.2);
+  box-shadow: 0 0 0 3px var(--color-accent), 0 0 0 6px rgba(88, 166, 255, 0.25), 0 4px 24px rgba(88, 166, 255, 0.35);
 }
 
 .c4-node-type {
@@ -676,6 +680,20 @@ textarea:focus-visible {
   .react-flow__edge path {
     stroke: ButtonText !important;
   }
+}
+
+/* ─── Commit hash ────────────────────────────────────────── */
+
+.commit-hash {
+  position: fixed;
+  bottom: 6px;
+  right: 8px;
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  z-index: 9999;
+  user-select: none;
 }
 
 /* ─── Reduced motion ──────────────────────────────────────── */

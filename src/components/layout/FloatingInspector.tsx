@@ -6,8 +6,9 @@ export default function FloatingInspector() {
   const selectedIds = useWorkspaceStore((s) => s.selectedElementIds)
   const selectedRelId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const selectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
+  const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
 
-  if (!workspace) return null
+  if (!workspace || multiSelectMode) return null
 
   const hasElement = selectedIds.length > 0 && getSelectedElement(workspace, selectedIds) !== undefined
   const hasRelationship = selectedRelId !== null && getRelationshipById(workspace, selectedRelId) !== undefined

@@ -98,18 +98,17 @@ export function hasFileSystemAccess(): boolean {
   return 'showOpenFilePicker' in window
 }
 
+/** Check if the directory picker (showDirectoryPicker) is available */
+export function hasDirectoryAccess(): boolean {
+  return 'showDirectoryPicker' in window
+}
+
 /** Open a .dsl file using File System Access API or fallback.
  *  Also attempts to load a .c4hero.json sidecar from the same directory. */
 export async function openDSLFile(): Promise<{ content: string; name: string; sidecarJson?: string } | null> {
   if (hasFileSystemAccess()) {
     try {
       const [handle] = await window.showOpenFilePicker({
-        types: [
-          {
-            description: 'Structurizr DSL (.dsl) or text (.txt)',
-            accept: { 'text/plain': ['.dsl', '.txt'], 'application/octet-stream': ['.dsl'] },
-          },
-        ],
         excludeAcceptAllOption: false,
       })
       currentFileHandle = handle
@@ -265,5 +264,15 @@ declare global {
   // Chrome-only extension: getParent() on FileSystemFileHandle
   interface FileSystemFileHandle {
     getParent?(): Promise<FileSystemDirectoryHandle>
+  }
+
+  interface Window {
+    showDirectoryPicker: (options?: { mode?: 'read' | 'readwrite'; startIn?: string }) => Promise<FileSystemDirectoryHandle>
+  }
+
+  interface FileSystemDirectoryHandle {
+    entries(): AsyncIterableIterator<[string, FileSystemFileHandle | FileSystemDirectoryHandle]>
+    queryPermission(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>
+    getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>
   }
 }

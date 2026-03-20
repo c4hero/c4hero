@@ -12,6 +12,7 @@ export default function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const deleteElement = useWorkspaceStore((s) => s.deleteElement)
+  const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const drillInto = useWorkspaceStore((s) => s.drillInto)
   const addPerson = useWorkspaceStore((s) => s.addPerson)
   const addSoftwareSystem = useWorkspaceStore((s) => s.addSoftwareSystem)
@@ -42,7 +43,7 @@ export default function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps)
               <MenuItem icon={<ZoomIn size={14} />} label="Drill into" onClick={() => { drillInto(nodeId); onClose() }} />
             )}
             <div className="my-1 border-t" style={{ borderColor: 'var(--color-border)' }} />
-            <MenuItem icon={<Trash2 size={14} />} label="Delete" danger onClick={() => { deleteElement(nodeId); onClose() }} />
+            <MenuItem icon={<Trash2 size={14} />} label="Delete" danger onClick={() => { onClose(); confirmDelete('Delete this element?', () => deleteElement(nodeId)) }} />
           </>
         ) : (
           <>

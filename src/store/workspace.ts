@@ -7,6 +7,11 @@ import type {
 } from '@/types/model'
 import { announce } from '@/lib/announce'
 
+// ─── Built-in Tags ──────────────────────────────────────────────────
+
+/** Tags that always exist and whose styles cannot be removed */
+export const BUILTIN_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component'])
+
 // ─── Undo History ────────────────────────────────────────────────────
 
 const MAX_UNDO = 25
@@ -35,6 +40,9 @@ interface WorkspaceState extends UndoState {
   rightPanelOpen: boolean
   searchOpen: boolean
   commandPaletteOpen: boolean
+  pendingDelete: { message: string; onConfirm: () => void } | null
+  confirmDelete: (message: string, onConfirm: () => void) => void
+  cancelDelete: () => void
   presentationMode: boolean
   lastSavedUndoLength: number
   setLastSavedUndoLength: (n: number) => void
@@ -48,6 +56,12 @@ interface WorkspaceState extends UndoState {
   activeStatusFilter: ElementStatus | null
   minimapEnabled: boolean
   snapToGrid: boolean
+  multiSelectMode: boolean
+  setMultiSelectMode: (on: boolean) => void
+
+  // Active filename for folder-based workspaces (e.g. 'bigbank.dsl')
+  activeWorkspaceFilename: string | null
+  setActiveWorkspaceFilename: (name: string | null) => void
 
   // Workspace lifecycle
   loadWorkspace: (workspace: Workspace) => void
@@ -105,6 +119,9 @@ interface WorkspaceState extends UndoState {
   setLayoutDirection: (viewKey: string, direction: 'TB' | 'BT' | 'LR' | 'RL') => void
   /** Reset all node positions and optionally change layout direction in a single undo step */
   resetAndRelayout: (viewKey: string, direction?: 'TB' | 'BT' | 'LR' | 'RL') => void
+
+  // Layout epoch — increments on explicit relayout/direction change so Canvas can refit
+  layoutVersion: number
 
   // Canvas settings
   setActiveTagFilter: (tag: string | null) => void
@@ -243,6 +260,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   rightPanelOpen: true,
   searchOpen: false,
   commandPaletteOpen: false,
+  pendingDelete: null,
   lastSavedUndoLength: 0,
   setLastSavedUndoLength: (n) => set({ lastSavedUndoLength: n }),
   presentationMode: false,
@@ -253,8 +271,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeStatusFilter: null,
   minimapEnabled: true,
   snapToGrid: false,
+  multiSelectMode: false,
   undoStack: [],
   redoStack: [],
+  layoutVersion: 0,
+  activeWorkspaceFilename: null,
+  setActiveWorkspaceFilename: (name) => set({ activeWorkspaceFilename: name }),
 
   // ─── Workspace Lifecycle ────────────────────────────────────────
 
@@ -702,7 +724,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       el.y = undefined
       el.pinned = undefined
     }
-    return { ...pushUndo(s), workspace: ws }
+    return { ...pushUndo(s), workspace: ws, layoutVersion: s.layoutVersion + 1 }
   }),
 
   resetAndRelayout: (viewKey, direction) => set((s) => {
@@ -720,7 +742,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (direction) {
       view.autoLayout = { ...view.autoLayout, direction }
     }
-    return { ...pushUndo(s), workspace: ws }
+    return { ...pushUndo(s), workspace: ws, layoutVersion: s.layoutVersion + 1 }
   }),
 
   // ─── Canvas Settings ──────────────────────────────────────────
@@ -740,6 +762,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return { ...pushUndo(s), workspace: ws }
   }),
   removeElementStyle: (tag) => set((s) => {
+    if (BUILTIN_TAGS.has(tag)) return s // Built-in tag styles cannot be removed
     const ws = cloneWs(s)
     if (!ws) return s
     ws.views.configuration.styles.elements = ws.views.configuration.styles.elements.filter((es) => es.tag !== tag)
@@ -757,6 +780,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   }),
 
   removeTagGlobal: (tag) => set((s) => {
+    if (BUILTIN_TAGS.has(tag)) return s // Built-in tags cannot be removed
     const ws = cloneWs(s)
     if (!ws) return s
     forEachElement(ws, (el) => { el.tags = el.tags.filter(t => t !== tag) })
@@ -767,6 +791,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   toggleMinimap: () => set((s) => ({ minimapEnabled: !s.minimapEnabled })),
   toggleSnapToGrid: () => set((s) => ({ snapToGrid: !s.snapToGrid })),
+  setMultiSelectMode: (on) => set({ multiSelectMode: on }),
 
   // ─── Views Panel ─────────────────────────────────────────────────
 
@@ -781,6 +806,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
   setSearchOpen: (open) => set({ searchOpen: open, commandPaletteOpen: false }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
+  confirmDelete: (message, onConfirm) => set({ pendingDelete: { message, onConfirm } }),
+  cancelDelete: () => set({ pendingDelete: null }),
   setPresentationMode: (on) => set({ presentationMode: on }),
 }))
 

@@ -6,12 +6,14 @@ const log = createLogger('settings')
 // ─── Types ──────────────────────────────────────────────────────────
 
 export type MinimapMode = 'always' | 'auto' | 'never'
+export type ColorTheme = 'readability' | 'structurizr'
 
 export interface AppSettings {
   minimapMode: MinimapMode
   showUndoRedo: boolean
   showZoomControls: boolean
   snapToGrid: boolean
+  colorTheme: ColorTheme
 }
 
 function isMobile(): boolean {
@@ -23,6 +25,7 @@ const DEFAULTS: AppSettings = {
   showUndoRedo: false,
   showZoomControls: false,
   snapToGrid: false,
+  colorTheme: 'readability',
 }
 
 const STORAGE_KEY = 'c4hero.json'

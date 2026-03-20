@@ -18,6 +18,7 @@ function PersonNode({ data, selected }: NodeProps & { data: C4NodeData }) {
       tint={isExternal ? 'var(--color-tint-external)' : 'var(--color-tint-person)'}
       borderStyle={isExternal ? '2px dashed var(--color-border-external)' : '2px solid var(--color-border-person)'}
       ariaPrefix={isExternal ? 'External Person' : 'Person'}
+      isExternal={isExternal}
     />
   )
 }

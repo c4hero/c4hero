@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
 import type { ElementStatus, ElementStyle } from '@/types/model'
 import { Tag, Activity, X, Palette, Pencil, Plus, Check } from 'lucide-react'
 
@@ -40,7 +40,7 @@ export default function FloatingBottomStrip() {
       }
     }
     for (const s of workspace.views.configuration.styles.elements) {
-      if (!DEFAULT_BUILTIN_TAGS.includes(s.tag)) tags.add(s.tag)
+      tags.add(s.tag)
     }
     return Array.from(tags).sort()
   }, [workspace])
@@ -558,12 +558,12 @@ function TagStyleEditor({ tag, style, onClose }: {
         <StyleField label="Opacity">
           <input
             type="range" min={0} max={100} step={5}
-            value={(opacity ?? 1) * 100}
-            onChange={(e) => { const val = Number(e.target.value) / 100; update({ opacity: val < 1 ? val : undefined }) }}
+            value={opacity ?? 100}
+            onChange={(e) => { const val = Number(e.target.value); update({ opacity: val < 100 ? val : undefined }) }}
             style={{ flex: 1, accentColor: 'var(--color-accent)' }}
           />
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', width: 30, textAlign: 'right' }}>
-            {Math.round((opacity ?? 1) * 100)}%
+            {opacity ?? 100}%
           </span>
         </StyleField>
         <StyleField label="Font size">
@@ -576,7 +576,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           />
         </StyleField>
       </div>
-      {style && (
+      {style && !BUILTIN_TAGS.has(tag) && (
         <button
           onClick={() => { removeElementStyle(tag); onClose() }}
           className="hover-danger-text"

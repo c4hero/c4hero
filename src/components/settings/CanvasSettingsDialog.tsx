@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useSettingsStore, type MinimapMode } from '@/store/settings'
+import { useSettingsStore, type MinimapMode, type ColorTheme } from '@/store/settings'
 import DialogShell from '@/components/shared/DialogShell'
 
 export default function CanvasSettingsDialog({ onClose }: { onClose: () => void }) {
@@ -46,6 +46,21 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
 
         {/* Settings */}
         <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Color theme */}
+          <SettingRow
+            label="Color theme"
+            description="Default palette for new workspaces and templates"
+          >
+            <SegmentedControl
+              options={[
+                { value: 'readability', label: 'Readable' },
+                { value: 'structurizr', label: 'Structurizr' },
+              ]}
+              value={settings.colorTheme}
+              onChange={(v) => settings.update({ colorTheme: v as ColorTheme })}
+            />
+          </SettingRow>
+
           {/* Minimap */}
           <SettingRow
             label="Minimap"

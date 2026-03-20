@@ -16,23 +16,24 @@ export function useRouteSync() {
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   const isInitialSync = useRef(true)
 
-  // On mount: if URL has a view key, apply it to state
+  // On mount AND whenever workspace becomes available: apply view key from URL
+  // This handles the refresh case where crash recovery loads the workspace
+  // after the initial mount effect has already run.
   useEffect(() => {
+    if (!workspace) return
     const path = window.location.pathname
     const match = path.match(/^\/workspace(?:\/(.+))?$/)
-    if (match) {
-      const viewKeyFromUrl = match[1] ? decodeURIComponent(match[1]) : null
-      const store = useWorkspaceStore.getState()
-      if (store.workspace && viewKeyFromUrl && viewKeyFromUrl !== store.activeViewKey) {
-        // Verify the view exists
-        const allViews = allViewsOf(store.workspace)
-        if (allViews.some(v => v.key === viewKeyFromUrl)) {
-          setActiveView(viewKeyFromUrl)
-        }
+    if (!match) return
+    const viewKeyFromUrl = match[1] ? decodeURIComponent(match[1]) : null
+    if (viewKeyFromUrl && viewKeyFromUrl !== activeViewKey) {
+      const allViews = allViewsOf(workspace)
+      if (allViews.some(v => v.key === viewKeyFromUrl)) {
+        setActiveView(viewKeyFromUrl)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Only run when workspace first becomes available (mount + workspace load)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace])
 
   // Sync state → URL
   useEffect(() => {

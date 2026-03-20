@@ -466,6 +466,8 @@ class SerializerContext {
         if (style.border !== undefined) this.emit(`border ${style.border}`)
         if (style.opacity !== undefined) this.emit(`opacity ${style.opacity}`)
         if (style.icon !== undefined) this.emit(`icon ${style.icon}`)
+        if (style.stroke !== undefined) this.emit(`stroke ${style.stroke}`)
+        if (style.strokeWidth !== undefined) this.emit(`strokeWidth ${style.strokeWidth}`)
 
         this.depth--
         this.emit('}')

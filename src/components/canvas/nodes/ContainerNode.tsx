@@ -10,7 +10,7 @@ function ContainerNode({ data, selected }: NodeProps & { data: C4NodeData }) {
   const tags = container.tags
 
   const Icon =
-    data.style?.shape === 'Cylinder' || tags.includes('Database') ? Database
+    tags.includes('Database') ? Database
     : tags.includes('Web Application') ? Monitor
     : tags.includes('Service') ? Zap
     : tags.includes('Queue') ? GitMerge
