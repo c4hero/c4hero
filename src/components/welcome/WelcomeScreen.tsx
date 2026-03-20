@@ -569,13 +569,59 @@ function StartupView({
         <div className="flex flex-col gap-3 w-full">
           <div className="flex gap-3 w-full">
             <StartupActionCard
-              icon={<FolderOpen size={24} />}
+              icon={
+                <svg width="52" height="48" viewBox="0 0 52 48" fill="none">
+                  {/* folder back */}
+                  <path d="M4 14C4 11.8 5.8 10 8 10H18L22 14H44C46.2 14 48 15.8 48 18V38C48 40.2 46.2 42 44 42H8C5.8 42 4 40.2 4 38V14Z" fill="rgba(88,166,255,0.12)" stroke="rgba(88,166,255,0.5)" strokeWidth="1.5"/>
+                  {/* folder open flap */}
+                  <path d="M4 20H48L44 42H8L4 20Z" fill="rgba(88,166,255,0.08)" stroke="rgba(88,166,255,0.4)" strokeWidth="1.5"/>
+                  {/* doc 1 — flying up-right */}
+                  <g transform="translate(28,4) rotate(12)">
+                    <rect width="13" height="16" rx="2" fill="rgba(88,166,255,0.2)" stroke="#58a6ff" strokeWidth="1.2"/>
+                    <line x1="3" y1="6" x2="10" y2="6" stroke="#58a6ff" strokeWidth="1" strokeOpacity="0.6"/>
+                    <line x1="3" y1="9" x2="10" y2="9" stroke="#58a6ff" strokeWidth="1" strokeOpacity="0.4"/>
+                    <line x1="3" y1="12" x2="7" y2="12" stroke="#58a6ff" strokeWidth="1" strokeOpacity="0.3"/>
+                  </g>
+                  {/* doc 2 — flying up-left */}
+                  <g transform="translate(8,2) rotate(-10)">
+                    <rect width="11" height="14" rx="2" fill="rgba(34,197,94,0.15)" stroke="rgba(34,197,94,0.6)" strokeWidth="1.2"/>
+                    <line x1="2.5" y1="5" x2="8.5" y2="5" stroke="rgba(34,197,94,0.7)" strokeWidth="1"/>
+                    <line x1="2.5" y1="8" x2="8.5" y2="8" stroke="rgba(34,197,94,0.5)" strokeWidth="1"/>
+                  </g>
+                </svg>
+              }
               label="Open collection"
               description="Choose an existing folder on your machine"
               onClick={onOpenCollection}
             />
             <StartupActionCard
-              icon={<Plus size={24} />}
+              icon={
+                <svg width="52" height="48" viewBox="0 0 52 48" fill="none">
+                  {/* canvas/board */}
+                  <rect x="4" y="8" width="44" height="34" rx="5" fill="rgba(88,166,255,0.07)" stroke="rgba(88,166,255,0.35)" strokeWidth="1.5"/>
+                  {/* node 1 */}
+                  <rect x="10" y="15" width="14" height="10" rx="3" fill="rgba(88,166,255,0.2)" stroke="#58a6ff" strokeWidth="1.3"/>
+                  <text x="17" y="22" fontSize="5" fill="#93c5fd" textAnchor="middle" fontFamily="monospace">API</text>
+                  {/* arrow */}
+                  <line x1="24" y1="20" x2="30" y2="20" stroke="rgba(88,166,255,0.5)" strokeWidth="1.2"/>
+                  <polygon points="30,17.5 34,20 30,22.5" fill="rgba(88,166,255,0.6)"/>
+                  {/* node 2 — dashed/being drawn */}
+                  <rect x="34" y="14" width="12" height="10" rx="3" fill="rgba(168,85,247,0.1)" stroke="rgba(168,85,247,0.6)" strokeWidth="1.3" strokeDasharray="3,2"/>
+                  <text x="40" y="21" fontSize="5" fill="#c4b5fd" textAnchor="middle" fontFamily="monospace">DB</text>
+                  {/* sparkle top-right */}
+                  <g transform="translate(38,6)">
+                    <line x1="4" y1="0" x2="4" y2="8" stroke="#fbbf24" strokeWidth="1.2"/>
+                    <line x1="0" y1="4" x2="8" y2="4" stroke="#fbbf24" strokeWidth="1.2"/>
+                    <line x1="1.2" y1="1.2" x2="6.8" y2="6.8" stroke="#fbbf24" strokeWidth="0.8" strokeOpacity="0.6"/>
+                    <line x1="6.8" y1="1.2" x2="1.2" y2="6.8" stroke="#fbbf24" strokeWidth="0.8" strokeOpacity="0.6"/>
+                  </g>
+                  {/* pencil */}
+                  <g transform="translate(8,29)">
+                    <path d="M0 8L6 2L10 6L4 12L0 12L0 8Z" fill="rgba(88,166,255,0.2)" stroke="#58a6ff" strokeWidth="1.1"/>
+                    <line x1="5" y1="3" x2="9" y2="7" stroke="#58a6ff" strokeWidth="0.9"/>
+                  </g>
+                </svg>
+              }
               label="New collection"
               description="Pick a folder and start from scratch"
               onClick={onCreateCollection}
@@ -764,16 +810,7 @@ function StartupActionCard({
       style={{ flex: 1 }}
       onClick={onClick}
     >
-      <span
-        style={{
-          color: 'var(--color-accent)',
-          padding: '10px',
-          borderRadius: '10px',
-          background: 'rgba(88,166,255,0.08)',
-          border: '1px solid rgba(88,166,255,0.15)',
-          display: 'flex',
-        }}
-      >
+      <span style={{ display: 'flex' }}>
         {icon}
       </span>
       <div className="flex flex-col gap-1">
