@@ -18,7 +18,6 @@ import {
 import { getRecentFolders, addRecentFolder } from '@/lib/fileIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar, sidecarName } from '@/lib/sidecar'
-import { getAIConfig } from '@/lib/ai'
 import {
   FolderOpen,
   FileText,
@@ -30,10 +29,7 @@ import {
   ChevronRight,
   X,
   AlertTriangle,
-  Settings,
-  Sparkles,
   Server,
-  Box,
   Radio,
 } from 'lucide-react'
 import AISettingsDialog from '@/components/ai/AISettingsDialog'
@@ -439,15 +435,6 @@ export default function WelcomeScreen() {
     }
   }
 
-  function handleDescribeClick() {
-    const config = getAIConfig()
-    if (!config) {
-      setShowAISettings(true)
-    } else {
-      setShowDescribe(true)
-    }
-  }
-
   const dirHandle = getCurrentDirHandle()
   const recentFolders = getRecentFolders()
 
@@ -492,8 +479,6 @@ export default function WelcomeScreen() {
             onOpenCollection={handleOpenCollection}
             onOpenRecent={handleOpenRecent}
             onOpenFile={handleOpenFile}
-            onDescribe={handleDescribeClick}
-            onAISettings={() => setShowAISettings(true)}
             recentFolders={recentFolders}
           />
         ) : (
@@ -552,16 +537,12 @@ function StartupView({
   onOpenCollection,
   onOpenRecent,
   onOpenFile,
-  onDescribe,
-  onAISettings,
   recentFolders,
 }: {
   onCreateCollection: () => void
   onOpenCollection: () => void
   onOpenRecent: (path: string) => void
   onOpenFile: () => void
-  onDescribe: () => void
-  onAISettings: () => void
   recentFolders: { name: string; path: string }[]
 }) {
   return (
@@ -586,18 +567,20 @@ function StartupView({
       {/* Collection actions */}
       {hasFolderAccess() ? (
         <div className="flex flex-col gap-3 w-full">
-          <StartupActionCard
-            icon={<FolderOpen size={22} />}
-            label="Create new collection"
-            description="Create a new c4hero collection under a folder"
-            onClick={onCreateCollection}
-          />
-          <StartupActionCard
-            icon={<Box size={22} />}
-            label="Open folder as collection"
-            description="Choose an existing collection folder"
-            onClick={onOpenCollection}
-          />
+          <div className="flex gap-3 w-full">
+            <StartupActionCard
+              icon={<FolderOpen size={24} />}
+              label="Open collection"
+              description="Choose an existing folder on your machine"
+              onClick={onOpenCollection}
+            />
+            <StartupActionCard
+              icon={<Plus size={24} />}
+              label="New collection"
+              description="Pick a folder and start from scratch"
+              onClick={onCreateCollection}
+            />
+          </div>
 
           {/* Recent folders */}
           {recentFolders.length > 0 && (
@@ -635,23 +618,7 @@ function StartupView({
         </div>
       )}
 
-      {/* AI action */}
-      <div className="flex w-full gap-2 mt-2">
-        <button
-          className="btn-surface flex-1 justify-center py-3.5"
-          onClick={onDescribe}
-        >
-          <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
-          <span>Describe your system with AI</span>
-        </button>
-        <button
-          className="btn-surface !px-3"
-          onClick={onAISettings}
-          title="AI Settings"
-        >
-          <Settings size={16} />
-        </button>
-      </div>
+
 
       {/* Footer */}
       <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
@@ -793,17 +760,28 @@ function StartupActionCard({
 }) {
   return (
     <button
-      className="btn-surface w-full items-center gap-4 rounded-xl px-5 py-5 text-left"
+      className="btn-surface flex-col items-start gap-4 rounded-xl p-6 text-left"
+      style={{ flex: 1 }}
       onClick={onClick}
     >
-      <span style={{ color: 'var(--color-accent)', flexShrink: 0 }}>{icon}</span>
-      <div className="flex flex-col flex-1 min-w-0">
+      <span
+        style={{
+          color: 'var(--color-accent)',
+          padding: '10px',
+          borderRadius: '10px',
+          background: 'rgba(88,166,255,0.08)',
+          border: '1px solid rgba(88,166,255,0.15)',
+          display: 'flex',
+        }}
+      >
+        {icon}
+      </span>
+      <div className="flex flex-col gap-1">
         <span className="text-sm font-semibold">{label}</span>
-        <span className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {description}
         </span>
       </div>
-      <ChevronRight size={16} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
     </button>
   )
 }
