@@ -25,7 +25,6 @@ export default function CanvasHints() {
   const [dismissed, setDismissed] = useState(getDismissed)
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
-  const isEmpty = view && view.elements.length === 0
 
   function handleDismiss(id: string) {
     dismiss(id)
@@ -77,13 +76,4 @@ function Hint({ id, children, onDismiss }: { id: string; children: React.ReactNo
   )
 }
 
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd
-      className="mx-0.5 inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium"
-      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
-    >
-      {children}
-    </kbd>
-  )
-}
+
