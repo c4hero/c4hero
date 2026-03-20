@@ -19,6 +19,7 @@ import {
   getCurrentDirHandle,
   restoreDirHandleByName,
   initCollectionSettings,
+  readCollectionSettings,
   slugifyName,
   folderExists,
 } from '@/lib/folderIO'
@@ -130,13 +131,17 @@ function WorkspaceRow({
 
 function RecentRow({
   name,
+  displayName,
   path,
   onClick,
 }: {
   name: string
+  displayName?: string
   path: string
   onClick: () => void
 }) {
+  const label = displayName || name
+  const showSlug = displayName && displayName !== name
   return (
     <button
       className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left"
@@ -146,8 +151,10 @@ function RecentRow({
         size={14}
         style={{ color: 'var(--color-accent)', opacity: 0.7, flexShrink: 0 }}
       />
-      <span className="flex-1 text-sm font-medium">{name}</span>
-      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{path}</span>
+      <span className="flex-1 text-sm font-medium">{label}</span>
+      {showSlug && (
+        <span className="text-xs" style={{ color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>{path}</span>
+      )}
     </button>
   )
 }
@@ -274,8 +281,8 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   async function openFolderAndTransition() {
     const result = await openFolder()
     if (!result) return
-    addRecentFolder({ name: result.dirHandle.name, path: result.dirHandle.name })
-    await initCollectionSettings(result.dirHandle.name)
+    const settings = await initCollectionSettings(result.dirHandle.name)
+    addRecentFolder({ name: result.dirHandle.name, path: result.dirHandle.name, displayName: settings.name })
     const workspaces = result.dslFiles.map((name) => ({ name }))
     setFolderWorkspaces(workspaces)
     setView('collection')
@@ -304,9 +311,9 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const newDir = await parentHandle.getDirectoryHandle(slug, { create: true })
     const { setDirHandle } = await import('@/lib/folderIO')
     await setDirHandle(newDir)
-    addRecentFolder({ name: newDir.name, path: newDir.name })
-    // Store the friendly display name in settings
-    await initCollectionSettings(displayName.trim() || slug)
+    const friendlyName = displayName.trim() || slug
+    await initCollectionSettings(friendlyName)
+    addRecentFolder({ name: newDir.name, path: newDir.name, displayName: friendlyName })
     const files = await listDSLFiles()
     setFolderWorkspaces(files.map(n => ({ name: n })))
     setView('collection')
@@ -319,8 +326,9 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const newDir = await parentHandle.getDirectoryHandle(slug, { create: false })
     const { setDirHandle } = await import('@/lib/folderIO')
     await setDirHandle(newDir)
-    addRecentFolder({ name: newDir.name, path: newDir.name })
-    await initCollectionSettings(displayName.trim() || slug)
+    const friendlyName = displayName.trim() || slug
+    const settings = await initCollectionSettings(friendlyName)
+    addRecentFolder({ name: newDir.name, path: newDir.name, displayName: settings.name ?? friendlyName })
     const files = await listDSLFiles()
     setFolderWorkspaces(files.map(n => ({ name: n })))
     setView('collection')
@@ -344,7 +352,8 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const handle = await restoreDirHandleByName(name)
     if (handle) {
       const files = await listDSLFiles()
-      addRecentFolder({ name: handle.name, path: handle.name })
+      const settings = await readCollectionSettings()
+      addRecentFolder({ name: handle.name, path: handle.name, displayName: settings?.name })
       setFolderWorkspaces(files.map(f => ({ name: f })))
       setView('collection')
     } else {
@@ -657,7 +666,7 @@ function StartupView({
   onOpenCollection: () => void
   onOpenRecent: (path: string) => void
   onOpenFile: () => void
-  recentFolders: { name: string; path: string }[]
+  recentFolders: { name: string; path: string; displayName?: string }[]
 }) {
   return (
     <>
@@ -751,8 +760,9 @@ function StartupView({
                   <RecentRow
                     key={folder.path}
                     name={folder.name}
+                    displayName={folder.displayName}
                     path={folder.path}
-                    onClick={() => onOpenRecent(folder.path)}
+                    onClick={() => onOpenRecent(folder.name)}
                   />
                 ))}
               </div>

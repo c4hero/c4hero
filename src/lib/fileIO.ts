@@ -24,8 +24,9 @@ export interface RecentFile {
 }
 
 export interface RecentFolder {
-  name: string
-  path: string
+  name: string        // slug (folder name on disk)
+  path: string        // same as name for now
+  displayName?: string // friendly name from .c4hero/settings.json
   openedAt: string
 }
 
@@ -61,9 +62,9 @@ export function getRecentFolders(): RecentFolder[] {
   }
 }
 
-export function addRecentFolder({ name, path }: { name: string; path: string }) {
+export function addRecentFolder({ name, path, displayName }: { name: string; path: string; displayName?: string }) {
   const recent = getRecentFolders().filter(f => f.path !== path)
-  recent.unshift({ name, path, openedAt: new Date().toISOString() })
+  recent.unshift({ name, path, displayName, openedAt: new Date().toISOString() })
   try {
     localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
   } catch (err) {
