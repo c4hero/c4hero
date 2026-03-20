@@ -609,19 +609,22 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     setShowScopePicker(true)
   }
 
-  async function handleBlankWorkspaceFromPicker(scope: WorkspaceScope, name: string, _openAfter: boolean = true) {
+  async function handleBlankWorkspaceFromPicker(scope: WorkspaceScope, name: string, openAfter: boolean = true) {
     setShowScopePicker(false)
     const ws = createBlankWorkspace()
     ws.name = name.trim() || 'workspace'
     ws.scope = scope
-    const filename = `${(ws.name).replace(/[^a-zA-Z0-9_\-. ]/g, '').trim() || 'workspace'}.dsl`
+    const filename = `${slugifyName(ws.name) || 'workspace'}.dsl`
     const dir = getCurrentDirHandle()
     if (dir) {
       await writeDSLFile(filename, serializeDSL(ws))
       useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
-      setFolderWorkspaces(prev => [...prev, { name: filename }])
+      // Refresh the workspace list with stats
+      listCurrentDSLFiles().then(setFolderWorkspaces)
     }
-    loadWorkspace(ws)
+    if (openAfter) {
+      loadWorkspace(ws)
+    }
   }
 
   function handleLoadTemplate() {
@@ -1092,7 +1095,7 @@ function CollectionView({
             onClick={onBlankWorkspace}
           >
             <Plus size={14} />
-            <span>Blank workspace</span>
+            <span>New Workspace</span>
           </button>
           <button
             className="btn-surface items-center gap-2 rounded-lg px-4 py-2.5 text-sm"

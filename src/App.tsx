@@ -134,7 +134,9 @@ export default function App() {
             )}
           </ReactFlowProvider>
         ) : (
-          <Navigate to="/" replace />
+          <Suspense fallback={<LoadingDot />}>
+            <LoadingDot />
+          </Suspense>
         )
       } />
 
