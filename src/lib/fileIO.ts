@@ -15,10 +15,17 @@ let currentSidecarHandle: FileSystemFileHandle | null = null
 // ─── Recent Files ────────────────────────────────────────────────────
 
 const RECENT_FILES_KEY = 'c4hero_recent_files'
+const RECENT_FOLDERS_KEY = 'c4hero_recent_folders'
 const MAX_RECENT = 10
 
 export interface RecentFile {
   name: string
+  openedAt: string
+}
+
+export interface RecentFolder {
+  name: string
+  path: string
   openedAt: string
 }
 
@@ -40,6 +47,27 @@ export function addRecentFile(name: string) {
     localStorage.setItem(RECENT_FILES_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
   } catch (err) {
     log.warn('Failed to save recent file to localStorage', err)
+  }
+}
+
+export function getRecentFolders(): RecentFolder[] {
+  try {
+    const data = localStorage.getItem(RECENT_FOLDERS_KEY)
+    if (!data) return []
+    return JSON.parse(data) as RecentFolder[]
+  } catch (err) {
+    log.warn('Failed to read recent folders from localStorage', err)
+    return []
+  }
+}
+
+export function addRecentFolder({ name, path }: { name: string; path: string }) {
+  const recent = getRecentFolders().filter(f => f.path !== path)
+  recent.unshift({ name, path, openedAt: new Date().toISOString() })
+  try {
+    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
+  } catch (err) {
+    log.warn('Failed to save recent folder to localStorage', err)
   }
 }
 

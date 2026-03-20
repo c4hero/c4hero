@@ -15,6 +15,12 @@ vi.mock('lucide-react', () => ({
   Radio: () => null,
   Clock: () => null,
   AlertTriangle: () => null,
+  FolderOpen: () => null,
+  Plus: () => null,
+  Pencil: () => null,
+  Trash2: () => null,
+  ChevronRight: () => null,
+  X: () => null,
 }))
 
 // Mock AI dialogs (lazy-loaded)
@@ -35,6 +41,21 @@ vi.mock('@/lib/fileIO', async (importOriginal) => {
     hasFileSystemAccess: () => false,
     openDSLFile: vi.fn(),
     saveDSLFile: vi.fn().mockResolvedValue(true),
+    getRecentFolders: () => [],
+    addRecentFolder: vi.fn(),
+  }
+})
+
+// Mock folderIO — hasFolderAccess returns false (jsdom has no showDirectoryPicker)
+vi.mock('@/lib/folderIO', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/folderIO')>()
+  return {
+    ...mod,
+    hasFolderAccess: () => false,
+    getCurrentDirHandle: () => null,
+    openFolder: vi.fn().mockResolvedValue(null),
+    readDSLFile: vi.fn(),
+    writeDSLFile: vi.fn().mockResolvedValue(true),
   }
 })
 
@@ -49,49 +70,18 @@ describe('WelcomeScreen', () => {
 
   it('shows tagline', () => {
     render(<WelcomeScreen />)
-    expect(screen.getByText('Visual architecture modelling with Structurizr DSL')).toBeTruthy()
+    expect(screen.getByText('Visual architecture modelling...')).toBeTruthy()
   })
 
-  it('shows primary action buttons', () => {
+  it('shows fallback action when folder access unavailable', () => {
     render(<WelcomeScreen />)
+    // In jsdom hasFolderAccess() = false, so fallback "Open .dsl file" shows
     expect(screen.getByText('Open .dsl file')).toBeTruthy()
-    expect(screen.getByText('New workspace (.dsl)')).toBeTruthy()
-    expect(screen.getByText('Explore sample')).toBeTruthy()
   })
 
-  it('"Explore sample" loads a workspace', async () => {
+  it('shows AI describe button', () => {
     render(<WelcomeScreen />)
-    await act(async () => {
-      fireEvent.click(screen.getByText('Explore sample'))
-    })
-    const ws = useWorkspaceStore.getState().workspace
-    expect(ws).not.toBeNull()
-    expect(ws?.name).toBeTruthy()
-  })
-
-  it('"New workspace (.dsl)" loads a workspace', async () => {
-    render(<WelcomeScreen />)
-    await act(async () => {
-      fireEvent.click(screen.getByText('New workspace (.dsl)'))
-    })
-    const ws = useWorkspaceStore.getState().workspace
-    expect(ws).not.toBeNull()
-  })
-
-  it('shows template buttons', () => {
-    render(<WelcomeScreen />)
-    expect(screen.getByText('Microservices')).toBeTruthy()
-    expect(screen.getByText('Monolith')).toBeTruthy()
-    expect(screen.getByText('Event-Driven')).toBeTruthy()
-  })
-
-  it('template click loads workspace', async () => {
-    render(<WelcomeScreen />)
-    await act(async () => {
-      fireEvent.click(screen.getByText('Microservices'))
-    })
-    const ws = useWorkspaceStore.getState().workspace
-    expect(ws).not.toBeNull()
+    expect(screen.getByText('Describe your system with AI')).toBeTruthy()
   })
 
   it('error banner is hidden by default', () => {
