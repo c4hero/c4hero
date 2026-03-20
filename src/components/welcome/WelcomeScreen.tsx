@@ -23,7 +23,7 @@ import {
   slugifyName,
   folderExists,
 } from '@/lib/folderIO'
-import { getRecentFolders, addRecentFolder } from '@/lib/fileIO'
+import { getRecentFolders, addRecentFolder, pruneRecentFolders } from '@/lib/fileIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar, sidecarName } from '@/lib/sidecar'
 import {
@@ -535,7 +535,22 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   }
 
   const dirHandle = getCurrentDirHandle()
-  const recentFolders = getRecentFolders()
+  const [recentFolders, setRecentFolders] = useState(getRecentFolders)
+
+  // On mount: filter out recents whose IDB handle no longer exists
+  useEffect(() => {
+    import('@/lib/folderIO').then(({ filterValidRecentFolders }) => {
+      const all = getRecentFolders()
+      filterValidRecentFolders(all.map(f => f.name)).then(validNames => {
+        const validSet = new Set(validNames)
+        const filtered = all.filter(f => validSet.has(f.name))
+        if (filtered.length !== all.length) {
+          pruneRecentFolders(validNames)
+          setRecentFolders(filtered)
+        }
+      })
+    })
+  }, [])
 
   // ── Render ───────────────────────────────────────────────────────────
 

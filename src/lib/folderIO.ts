@@ -269,3 +269,28 @@ export async function initCollectionSettings(name: string): Promise<CollectionSe
   await writeCollectionSettings(settings)
   return settings
 }
+
+/** Check if a stored handle exists in IDB (regardless of permission state) */
+export async function handleExistsInIDB(name: string): Promise<boolean> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const handle: FileSystemDirectoryHandle = await new Promise((resolve, reject) => {
+      const req = tx.objectStore(STORE_NAME).get(`folder:${name}`)
+      req.onsuccess = () => resolve(req.result as FileSystemDirectoryHandle)
+      req.onerror = () => reject(req.error)
+    })
+    return !!handle
+  } catch {
+    return false
+  }
+}
+
+/** Filter a list of recent folder names to only those we have a stored handle for */
+export async function filterValidRecentFolders(names: string[]): Promise<string[]> {
+  const results = await Promise.all(names.map(async name => ({
+    name,
+    valid: await handleExistsInIDB(name),
+  })))
+  return results.filter(r => r.valid).map(r => r.name)
+}
