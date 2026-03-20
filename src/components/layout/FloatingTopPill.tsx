@@ -184,7 +184,7 @@ export default function FloatingTopPill() {
         }}
       >
       {/* Column: pill on top, slide-down panels below — inherit same natural width */}
-      <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', minWidth: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', minWidth: 0, width: 'fit-content' }}>
       <div
         className="glass-panel"
         data-shade-open={viewDropdownOpen || exportDialogOpen || commandPaletteOpen || wsPickerOpen ? 'true' : undefined}
@@ -536,7 +536,7 @@ function WorkspaceSwitcherPanel({
   return (
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 48 }} onClick={onClose} />
-      <div className="shade-panel" style={{ zIndex: 49, display: 'flex', flexDirection: 'column' }}>
+      <div className="shade-panel" style={{ zIndex: 49, display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', padding: '14px 16px 10px' }}>
