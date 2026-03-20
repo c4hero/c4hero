@@ -673,7 +673,7 @@ function StartupView({
       <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
           Architecture diagrams that{' '}
-          <span style={{ color: 'var(--color-accent)' }}>live with your code.</span>
+          <span style={{ color: 'var(--color-accent)', whiteSpace: 'nowrap' }}>live with your code.</span>
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '7px' }}>
           {[
