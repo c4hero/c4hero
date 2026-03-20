@@ -75,7 +75,6 @@ function WorkspaceRow({
   onRenameCommit: (name: string) => void
   onRenameCancel: () => void
 }) {
-  const [hovered, setHovered] = useState(false)
   const isRenaming = renamingFile === name
 
   return (
@@ -85,8 +84,6 @@ function WorkspaceRow({
       className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-3 text-left"
       onClick={() => !isRenaming && onOpen(name)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isRenaming && onOpen(name) } }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       <FileText
         size={15}
@@ -109,22 +106,33 @@ function WorkspaceRow({
       ) : (
         <span className="flex-1 text-sm font-semibold truncate">{name}</span>
       )}
-      {(hovered && !isRenaming) && (
-        <div style={{ display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+      {!isRenaming && (
+        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
           <button
-            className="btn-surface !px-2 !py-1 text-xs"
             onClick={(e) => { e.stopPropagation(); onRename(name) }}
+            title="Rename"
+            style={{
+              width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 6, border: 'none', background: 'transparent',
+              color: 'var(--color-text-muted)', cursor: 'pointer',
+              transition: 'color 120ms, background 120ms',
+            }}
+            className="hover-subtle"
           >
-            <Pencil size={11} />
-            <span>Rename</span>
+            <Pencil size={12} />
           </button>
           <button
-            className="btn-surface !px-2 !py-1 text-xs"
-            style={{ color: 'var(--color-error)' }}
             onClick={(e) => { e.stopPropagation(); onDelete(name) }}
+            title="Delete"
+            style={{
+              width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 6, border: 'none', background: 'transparent',
+              color: 'var(--color-text-muted)', cursor: 'pointer',
+              transition: 'color 120ms, background 120ms',
+            }}
+            className="hover-danger"
           >
-            <Trash2 size={11} />
-            <span>Delete</span>
+            <Trash2 size={12} />
           </button>
         </div>
       )}
