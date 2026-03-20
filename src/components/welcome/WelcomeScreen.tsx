@@ -14,8 +14,10 @@ import {
   openFolder,
   readDSLFile,
   writeDSLFile,
+  listDSLFiles,
   hasFolderAccess,
   getCurrentDirHandle,
+  restoreDirHandleByName,
 } from '@/lib/folderIO'
 import { getRecentFolders, addRecentFolder } from '@/lib/fileIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
@@ -324,18 +326,14 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
 
   const handleOpenCollection = openFolderAndTransition
   async function handleOpenRecent(name: string) {
-    // Try to restore the handle from IndexedDB without re-prompting
-    const { restoreDirHandleByName } = await import('@/lib/folderIO')
     const handle = await restoreDirHandleByName(name)
     if (handle) {
-      // Handle restored silently — list files and navigate
-      const { listDSLFiles } = await import('@/lib/folderIO')
       const files = await listDSLFiles()
       addRecentFolder({ name: handle.name, path: handle.name })
       setFolderWorkspaces(files.map(f => ({ name: f })))
       setView('collection')
     } else {
-      // Permission revoked or handle not found — fall back to picker
+      // Permission revoked — fall back to manual picker
       openFolderAndTransition()
     }
   }
