@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 
-import { listDSLFiles, readDSLFile, getCurrentDirHandle } from '@/lib/folderIO'
+import { listDSLFiles, readDSLFile, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/folderIO'
 import { parseDSL, serializeDSL as _serializeDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
 import { useNavigate } from 'react-router-dom'
@@ -39,6 +39,7 @@ const ExportDialog = lazy(() => import('@/components/dialogs/ExportDialog'))
 const CommandPalette = lazy(() => import('@/components/command-palette/CommandPalette'))
 const CreateViewDialog = lazy(() => import('@/components/views/CreateViewDialog'))
 const CanvasSettingsDialog = lazy(() => import('@/components/settings/CanvasSettingsDialog'))
+const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDialog'))
 
 export default function FloatingTopPill() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -57,6 +58,7 @@ export default function FloatingTopPill() {
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false)
   const [showCreateView, setShowCreateView] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showNewWorkspace, setShowNewWorkspace] = useState(false)
   const [hamburgerOpen, setHamburgerOpen] = useState(false)
   const [wsPickerOpen, setWsPickerOpen] = useState(false)
   const [wsFiles, setWsFiles] = useState<WsEntry[]>([])
@@ -418,7 +420,7 @@ export default function FloatingTopPill() {
           entries={wsFiles}
           activeFilename={activeFilename}
           onSelect={handleSwitchWorkspace}
-          onNewWorkspace={() => { setWsPickerOpen(false); navigate('/collection?new=1') }}
+          onNewWorkspace={() => { setWsPickerOpen(false); setShowNewWorkspace(true) }}
           onManageWorkspaces={handleChangeCollection}
           onChangeCollection={handleChangeCollection}
           onClose={() => setWsPickerOpen(false)}
@@ -439,6 +441,29 @@ export default function FloatingTopPill() {
 
       {showCreateView && <Suspense fallback={<LoadingDot />}><CreateViewDialog onClose={() => setShowCreateView(false)} /></Suspense>}
       {showSettings && <Suspense fallback={<LoadingDot />}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
+      {showNewWorkspace && (
+        <Suspense fallback={<LoadingDot />}>
+          <ScopePickerDialog
+            onConfirm={async (scope, name) => {
+              setShowNewWorkspace(false)
+              const filename = `${slugifyName(name) || 'workspace'}.dsl`
+              // Build minimal DSL content
+              const scopeLine = scope !== 'none' ? `\n    configuration {\n        scope ${scope}\n    }\n` : ''
+              const dsl = `workspace "${name}" {\n    model {\n    }\n    views {${scopeLine}\n    }\n}`
+              const ok = await writeDSLFile(filename, dsl)
+              if (!ok) return
+              // Parse and load the new workspace
+              const { workspace: ws } = parseDSL(dsl)
+              if (ws) {
+                if (!ws.name) ws.name = name
+                loadWorkspace(ws)
+                useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+              }
+            }}
+            onCancel={() => setShowNewWorkspace(false)}
+          />
+        </Suspense>
+      )}
       {copyToast && (
         <div style={{
           position: 'fixed',
