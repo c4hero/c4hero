@@ -20,7 +20,7 @@ import {
 
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
-import { scopeLabel } from '@/lib/scopeValidation'
+
 import { listDSLFiles, readDSLFile, getCurrentDirHandle } from '@/lib/folderIO'
 import { parseDSL, serializeDSL as _serializeDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
@@ -253,11 +253,6 @@ export default function FloatingTopPill() {
           >
             {wsName}
           </span>
-          {workspace.scope && workspace.scope !== 'none' && (
-            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--color-accent)', background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.2)', padding: '2px 7px', borderRadius: '99px', flexShrink: 0 }}>
-              {scopeLabel(workspace.scope)}
-            </span>
-          )}
           <ChevronDown size={12} style={{ opacity: 0.5, flexShrink: 0, transform: wsPickerOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
         </button>
 
