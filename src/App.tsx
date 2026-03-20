@@ -5,7 +5,7 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useAutoSave } from '@/hooks/useAutoSave'
-import { useRouteSync } from '@/hooks/useRouteSync'
+import { useRouteSync, useRefreshRedirect } from '@/hooks/useRouteSync'
 import FloatingTopPill from '@/components/layout/FloatingTopPill'
 import FloatingToolRail from '@/components/layout/FloatingToolRail'
 import FloatingViewsPanel from '@/components/layout/FloatingViewsPanel'
@@ -17,7 +17,7 @@ import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
 import Canvas from '@/components/canvas/Canvas'
 import CanvasHints from '@/components/canvas/CanvasHints'
 import { loadFromLocalStorage } from '@/lib/fileIO'
-import { restoreDirHandle, getCurrentDirHandle } from '@/lib/folderIO'
+import { restoreDirHandle } from '@/lib/folderIO'
 
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
@@ -35,6 +35,7 @@ export default function App() {
   useKeyboardShortcuts()
   useAutoSave()
   useRouteSync()
+  useRefreshRedirect()
 
   // Restore persisted dir handle on mount
   useEffect(() => {
@@ -49,13 +50,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Sync workspace state → URL
+    // When workspace loads while not on a canvas route, navigate there
+  // (useRouteSync handles workspace→URL sync within /workspace/*)
   useEffect(() => {
     if (workspace && !location.pathname.startsWith('/workspace')) {
       navigate('/workspace', { replace: true })
-    } else if (!workspace && location.pathname.startsWith('/workspace')) {
-      // Go back to collection if we have a dir handle, otherwise startup
-      navigate(getCurrentDirHandle() ? '/collection' : '/', { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace])
