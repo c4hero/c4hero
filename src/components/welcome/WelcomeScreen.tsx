@@ -79,9 +79,12 @@ function WorkspaceRow({
   const isRenaming = renamingFile === name
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-3 text-left"
       onClick={() => !isRenaming && onOpen(name)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isRenaming && onOpen(name) } }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -125,7 +128,7 @@ function WorkspaceRow({
           </button>
         </div>
       )}
-    </button>
+    </div>
   )
 }
 
