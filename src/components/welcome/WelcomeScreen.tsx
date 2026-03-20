@@ -633,7 +633,7 @@ function StartupView({
             <div className="w-full mt-2">
               <SectionDivider label="Recent" />
               <div className="flex flex-col gap-1 mt-2">
-                {recentFolders.slice(0, 5).map((folder) => (
+                {recentFolders.slice(0, 3).map((folder) => (
                   <RecentRow
                     key={folder.path}
                     name={folder.name}
