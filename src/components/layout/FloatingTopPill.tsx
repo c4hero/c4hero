@@ -263,7 +263,7 @@ export default function FloatingTopPill() {
         <ViewSwitcher
           isMobile={isMobile}
           open={viewDropdownOpen}
-          onToggle={() => { setViewDropdownOpen((o) => !o); setExportDialogOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }}
+          onToggle={() => { setViewDropdownOpen((o) => !o); setExportDialogOpen(false); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }}
           onClose={() => { setViewDropdownOpen(false) }}
           onShowCreateView={() => setShowCreateView(true)}
         />
@@ -304,7 +304,7 @@ export default function FloatingTopPill() {
                     padding: '4px 0',
                   }}
                 >
-                  <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
+                  <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
                   <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
                   <MenuItemRow
                     icon={Command}
@@ -378,7 +378,7 @@ export default function FloatingTopPill() {
 
             {/* Export */}
             <button
-              onClick={() => { setExportDialogOpen(o => !o); useWorkspaceStore.getState().setCommandPaletteOpen(false); setViewDropdownOpen(false) }}
+              onClick={() => { setExportDialogOpen(o => !o); useWorkspaceStore.getState().setCommandPaletteOpen(false); setViewDropdownOpen(false); setWsPickerOpen(false) }}
               className="btn-icon"
               style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40, minHeight: 44 }}
               title="Export"
@@ -399,7 +399,7 @@ export default function FloatingTopPill() {
               }}
               title="Command palette (⌘K)"
               aria-label="Command palette"
-              onClick={() => { const open = !useWorkspaceStore.getState().commandPaletteOpen; useWorkspaceStore.getState().setCommandPaletteOpen(open); if (open) { setExportDialogOpen(false); setViewDropdownOpen(false) } }}
+              onClick={() => { const open = !useWorkspaceStore.getState().commandPaletteOpen; useWorkspaceStore.getState().setCommandPaletteOpen(open); if (open) { setExportDialogOpen(false); setViewDropdownOpen(false); setWsPickerOpen(false) } }}
             >
               <Command size={15} />
             </button>
