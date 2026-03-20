@@ -672,8 +672,8 @@ function StartupView({
       {/* Tagline + capability pills */}
       <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
-          Architecture diagrams that live<br />
-          <span style={{ color: 'var(--color-accent)' }}>with your code, not a SaaS.</span>
+          Architecture diagrams that{' '}
+          <span style={{ color: 'var(--color-accent)' }}>live with your code.</span>
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '7px' }}>
           {[
