@@ -176,10 +176,13 @@ function WorkspaceEditDialog({ name, onRename, onDelete, onClose }: {
     onClose()
   }
 
+  const mouseDownOnBackdrop = useRef(false)
+
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onClose}
+      onMouseDown={(e) => { mouseDownOnBackdrop.current = e.target === e.currentTarget }}
+      onClick={(e) => { if (e.target === e.currentTarget && mouseDownOnBackdrop.current) onClose() }}
     >
       <div
         style={{ width: 360, borderRadius: 16, background: 'var(--color-bg-panel,#0f1923)', border: '1px solid var(--color-border)', padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}
