@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, useCallback } from 'react'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import LoadingDot from '@/components/shared/LoadingDot'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
@@ -11,15 +11,20 @@ import ViewSwitcher, { ViewSwitcherPanel, LEVEL_BADGE } from '@/components/layou
 import {
   Download,
   Command,
-
   Undo2,
   Redo2,
-
-
   MoreHorizontal,
+  ChevronDown,
+  Plus,
+  FolderSymlink,
+  FileText,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 import { scopeLabel } from '@/lib/scopeValidation'
+import { listDSLFiles, readDSLFile, getCurrentDirHandle } from '@/lib/folderIO'
+import { parseDSL, serializeDSL as _serializeDSL } from '@/lib/dsl'
+import { parseSidecar, applySidecar } from '@/lib/sidecar'
+import { useNavigate } from 'react-router-dom'
 
 const ExportDialog = lazy(() => import('@/components/dialogs/ExportDialog'))
 const CommandPalette = lazy(() => import('@/components/command-palette/CommandPalette'))
@@ -44,7 +49,41 @@ export default function FloatingTopPill() {
   const [showCreateView, setShowCreateView] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [hamburgerOpen, setHamburgerOpen] = useState(false)
+  const [wsPickerOpen, setWsPickerOpen] = useState(false)
+  const [wsFiles, setWsFiles] = useState<string[]>([])
   const isMobile = useBreakpoint() === 'mobile'
+  const navigate = useNavigate()
+  const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
+  const activeFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
+
+  const openWsPicker = useCallback(async () => {
+    const files = await listDSLFiles()
+    setWsFiles(files)
+    setWsPickerOpen(true)
+    setViewDropdownOpen(false)
+    setExportDialogOpen(false)
+  }, [])
+
+  const handleSwitchWorkspace = useCallback(async (filename: string) => {
+    setWsPickerOpen(false)
+    const file = await readDSLFile(filename)
+    if (!file) return
+    const { workspace } = parseDSL(file.content)
+    if (!workspace) return
+    if (!workspace.name) workspace.name = filename.replace(/\.dsl$/, '')
+    if (file.sidecarJson) {
+      const sidecar = parseSidecar(file.sidecarJson)
+      if (sidecar) applySidecar(workspace, sidecar)
+    }
+    loadWorkspace(workspace)
+    useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+  }, [loadWorkspace])
+
+  const handleChangeCollection = useCallback(() => {
+    setWsPickerOpen(false)
+    useWorkspaceStore.getState().closeWorkspace()
+    navigate('/collection', { replace: true })
+  }, [navigate])
 
   if (!workspace) return null
 
@@ -117,7 +156,7 @@ export default function FloatingTopPill() {
       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', minWidth: 0 }}>
       <div
         className="glass-panel"
-        data-shade-open={viewDropdownOpen || exportDialogOpen || commandPaletteOpen ? 'true' : undefined}
+        data-shade-open={viewDropdownOpen || exportDialogOpen || commandPaletteOpen || wsPickerOpen ? 'true' : undefined}
         style={{
           pointerEvents: 'auto',
           maxWidth: '100%',
@@ -150,17 +189,23 @@ export default function FloatingTopPill() {
           <img src="/c4-logo.svg" alt="c4hero" style={{ width: 24, height: 24 }} />
         </button>
 
-        {/* Workspace name */}
-        <div
+        {/* Workspace name — click to open switcher */}
+        <button
+          onClick={() => wsPickerOpen ? setWsPickerOpen(false) : openWsPicker()}
+          className="hover-subtle"
           style={{
             padding: '0 10px',
             height: '100%',
             display: 'flex',
             alignItems: 'center',
+            gap: 6,
             borderRight: '1px solid var(--color-border)',
             minWidth: 0,
             overflow: 'hidden',
             flexShrink: 1,
+            background: wsPickerOpen ? 'rgba(255,255,255,0.04)' : 'transparent',
+            border: 'none',
+            cursor: 'pointer',
           }}
         >
           <span
@@ -181,7 +226,8 @@ export default function FloatingTopPill() {
               {scopeLabel(workspace.scope)}
             </span>
           )}
-        </div>
+          <ChevronDown size={12} style={{ opacity: 0.5, flexShrink: 0, transform: wsPickerOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
+        </button>
 
         {/* View switcher */}
         <ViewSwitcher
@@ -339,6 +385,16 @@ export default function FloatingTopPill() {
           onShowCreateView={() => setShowCreateView(true)}
         />
       )}
+      {wsPickerOpen && (
+        <WorkspaceSwitcherPanel
+          files={wsFiles}
+          activeFilename={activeFilename}
+          onSelect={handleSwitchWorkspace}
+          onNewWorkspace={() => { setWsPickerOpen(false); /* TODO: trigger new workspace flow */ }}
+          onChangeCollection={handleChangeCollection}
+          onClose={() => setWsPickerOpen(false)}
+        />
+      )}
       {exportDialogOpen && (
         <Suspense fallback={<LoadingDot />}>
           <ExportDialog
@@ -380,6 +436,122 @@ export default function FloatingTopPill() {
 }
 
 
+
+// ─── Workspace Switcher Panel ─────────────────────────────────────────────────
+
+function WorkspaceSwitcherPanel({
+  files,
+  activeFilename,
+  onSelect,
+  onNewWorkspace,
+  onChangeCollection,
+  onClose,
+}: {
+  files: string[]
+  activeFilename: string | null
+  onSelect: (filename: string) => void
+  onNewWorkspace: () => void
+  onChangeCollection: () => void
+  onClose: () => void
+}) {
+  const hasFolderHandle = !!getCurrentDirHandle()
+
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 48 }} onClick={onClose} />
+      <div
+        className="shade-panel"
+        style={{ padding: '16px 16px 0', minWidth: 280, maxWidth: 400, zIndex: 49 }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>
+            Workspaces {files.length > 0 && <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 99, padding: '1px 6px', marginLeft: 4 }}>{files.length}</span>}
+          </span>
+        </div>
+
+        {/* Workspace cards grid */}
+        {files.length === 0 ? (
+          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>
+            No workspaces in this collection
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, marginBottom: 4 }}>
+            {files.map(filename => {
+              const isActive = filename === activeFilename
+              const label = filename.replace(/\.dsl$/, '')
+              return (
+                <button
+                  key={filename}
+                  onClick={() => onSelect(filename)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                    gap: 8, padding: 0, borderRadius: 10, overflow: 'hidden',
+                    border: isActive ? '2px solid var(--color-accent)' : '2px solid var(--color-border)',
+                    background: 'transparent', cursor: 'pointer',
+                    transition: 'border-color 150ms',
+                  }}
+                >
+                  {/* Thumbnail area */}
+                  <div style={{
+                    width: '100%', aspectRatio: '16/9',
+                    background: 'rgba(0,0,0,0.35)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderBottom: '1px solid var(--color-border)',
+                  }}>
+                    <FileText size={20} style={{ opacity: 0.2, color: 'var(--color-text-primary)' }} />
+                  </div>
+                  {/* Label */}
+                  <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {label}
+                    </span>
+                    {isActive && (
+                      <span style={{ fontSize: 10, color: 'var(--color-accent)', fontWeight: 600 }}>Active</span>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Divider + footer actions */}
+        <div style={{ borderTop: '1px solid var(--color-border)', display: 'flex', gap: 0 }}>
+          <button
+            onClick={onNewWorkspace}
+            className="hover-subtle"
+            style={{
+              flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 7,
+              fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+            }}
+          >
+            <Plus size={14} />
+            New Workspace
+          </button>
+          {hasFolderHandle && (
+            <>
+              <div style={{ width: 1, background: 'var(--color-border)', margin: '8px 0' }} />
+              <button
+                onClick={onChangeCollection}
+                className="hover-subtle"
+                style={{
+                  flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 7,
+                  fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)',
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                }}
+              >
+                <FolderSymlink size={14} />
+                Change Collection
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
 
 function MenuItemRow({
   icon: Icon,
