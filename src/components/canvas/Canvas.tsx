@@ -795,10 +795,19 @@ export default function Canvas() {
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       updateNodePosition(node.id, node.position.x, node.position.y)
+      // Rebuild group nodes to fit dragged children
+      const ws = workspaceRef.current
+      if (ws) {
+        setNodes(prev => {
+          const nonGroup = prev.filter(n => n.type !== 'group' && n.type !== 'boundary')
+          const updatedGroups = buildGroupNodes(ws, ws.model.groups, nonGroup)
+          return [...nonGroup, ...updatedGroups]
+        })
+      }
       // Reset drag flag slightly after stop so any trailing onSelectionChange is still suppressed
       setTimeout(() => { isDragging.current = false }, 50)
     },
-    [updateNodePosition],
+    [updateNodePosition, setNodes],
   )
 
   const onNodeContextMenu = useCallback(
