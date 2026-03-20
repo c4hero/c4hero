@@ -1,45 +1,52 @@
 import { useEffect, useRef } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
 import { getCurrentDirHandle } from '@/lib/folderIO'
 
 /**
- * Syncs URL path ↔ workspace/view state via React Router:
- *   /                    → startup
- *   /collection/:slug    → collection home
- *   /workspace/:viewKey  → canvas, specific view
+ * URL pattern:
+ *   /                                       → startup
+ *   /collection/:slug                       → collection home
+ *   /collection/:slug/:workspaceSlug        → canvas (first view)
+ *   /collection/:slug/:workspaceSlug/:view  → canvas (specific view)
  */
+
+function buildCanvasPath(viewKey?: string | null): string {
+  const collectionSlug = getCurrentDirHandle()?.name ?? 'workspace'
+  const wsFilename = useWorkspaceStore.getState().activeWorkspaceFilename ?? 'workspace'
+  const wsSlug = wsFilename.replace(/\.dsl$/, '')
+  const base = `/collection/${collectionSlug}/${wsSlug}`
+  return viewKey ? `${base}/${encodeURIComponent(viewKey)}` : base
+}
+
 export function useRouteSync() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   const navigate = useNavigate()
   const location = useLocation()
+  const { viewKey: urlViewKey } = useParams<{ viewKey?: string }>()
   const isInitialSync = useRef(true)
 
-  // On mount / when workspace becomes available: read view key from URL and apply it
+  // On mount / workspace load: apply view key from URL
   useEffect(() => {
     if (!workspace) return
-    const match = location.pathname.match(/^\/workspace(?:\/(.+))?$/)
-    if (!match) return
-    const viewKeyFromUrl = match[1] ? decodeURIComponent(match[1]) : null
-    if (viewKeyFromUrl && viewKeyFromUrl !== activeViewKey) {
-      const allViews = allViewsOf(workspace)
-      if (allViews.some(v => v.key === viewKeyFromUrl)) {
-        setActiveView(viewKeyFromUrl)
+    if (urlViewKey) {
+      const decoded = decodeURIComponent(urlViewKey)
+      if (decoded !== activeViewKey) {
+        const allViews = allViewsOf(workspace)
+        if (allViews.some(v => v.key === decoded)) {
+          setActiveView(decoded)
+        }
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace])
 
-  // Sync state → URL whenever workspace or active view changes
+  // Sync state → URL when view changes
   useEffect(() => {
-    if (!workspace) return // App.tsx handles the no-workspace redirect
-
-    const targetPath = activeViewKey
-      ? `/workspace/${encodeURIComponent(activeViewKey)}`
-      : '/workspace'
-
+    if (!workspace) return
+    const targetPath = buildCanvasPath(activeViewKey)
     if (location.pathname !== targetPath) {
       if (isInitialSync.current) {
         navigate(targetPath, { replace: true })
@@ -51,23 +58,24 @@ export function useRouteSync() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace, activeViewKey])
 
-  // Browser back/forward: react-router fires location changes, read the new path
+  // React to location changes (browser back/forward)
   useEffect(() => {
     if (!workspace) return
-    const match = location.pathname.match(/^\/workspace(?:\/(.+))?$/)
 
+    // Check if we navigated away from canvas
+    const match = location.pathname.match(/^\/collection\/[^/]+\/[^/]+(?:\/(.+))?$/)
     if (!match) {
-      // Navigated back to / or /collection — close workspace
+      // Navigated to / or /collection/:slug — close workspace
       useWorkspaceStore.getState().closeWorkspace()
       return
     }
 
-    const viewKey = match[1] ? decodeURIComponent(match[1]) : null
-    if (viewKey && viewKey !== activeViewKey) {
+    const viewFromUrl = match[1] ? decodeURIComponent(match[1]) : null
+    if (viewFromUrl && viewFromUrl !== activeViewKey) {
       const allViews = allViewsOf(workspace)
-      if (allViews.some(v => v.key === viewKey)) {
+      if (allViews.some(v => v.key === viewFromUrl)) {
         useWorkspaceStore.setState({
-          activeViewKey: viewKey,
+          activeViewKey: viewFromUrl,
           selectedElementIds: [],
           selectedRelationshipId: null,
         })
@@ -78,9 +86,8 @@ export function useRouteSync() {
 }
 
 /**
- * On a hard refresh of /workspace/:viewKey, the workspace won't be in memory.
- * App.tsx handles crash recovery, but we also need to redirect back to collection
- * or startup if no workspace can be recovered.
+ * On hard refresh at a canvas URL, the workspace won't be in memory yet.
+ * Redirect back to collection or startup after a brief wait.
  */
 export function useRefreshRedirect() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -88,8 +95,8 @@ export function useRefreshRedirect() {
   const location = useLocation()
 
   useEffect(() => {
-    if (location.pathname.startsWith('/workspace') && !workspace) {
-      // Give crash recovery a moment, then redirect if still no workspace
+    const isCanvasPath = location.pathname.match(/^\/collection\/[^/]+\/[^/]+/)
+    if (isCanvasPath && !workspace) {
       const timer = setTimeout(() => {
         if (!useWorkspaceStore.getState().workspace) {
           const slug = getCurrentDirHandle()?.name

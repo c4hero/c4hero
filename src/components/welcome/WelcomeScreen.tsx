@@ -50,95 +50,186 @@ const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDial
 interface FolderWorkspace {
   name: string
   modifiedAt?: number
+  scope?: string
+  elementCount?: number
+  viewCount?: number
+  editing?: boolean
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function WorkspaceRow({
-  name,
-  renamingFile,
-  renameValue,
-  onOpen,
-  onRename,
-  onDelete,
-  onRenameValueChange,
-  onRenameCommit,
-  onRenameCancel,
-}: {
-  name: string
-  renamingFile: string | null
-  renameValue: string
-  onOpen: (name: string) => void
-  onRename: (name: string) => void
-  onDelete: (name: string) => void
-  onRenameValueChange: (val: string) => void
-  onRenameCommit: (name: string) => void
-  onRenameCancel: () => void
+// Scope colors (same as FloatingTopPill)
+const SCOPE_COLORS: Record<string, string> = {
+  softwaresystem: '#38bdf8',
+  landscape: '#a78bfa',
+}
+
+function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
+  ws: FolderWorkspace
+  onOpen: () => void
+  onRename: () => void
+  onDelete: () => void
 }) {
-  const isRenaming = renamingFile === name
+  const [showEdit, setShowEdit] = useState(false)
+  const label = ws.name.replace(/\.dsl$/, '')
+  const accent = (ws.scope && SCOPE_COLORS[ws.scope]) ?? '#64748b'
+  const scopeLabel = ws.scope === 'landscape' ? 'Landscape' : ws.scope === 'softwaresystem' ? 'System' : 'Unscoped'
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-3 text-left"
-      onClick={() => !isRenaming && onOpen(name)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isRenaming && onOpen(name) } }}
-    >
-      <FileText
-        size={15}
-        style={{ color: 'var(--color-accent)', flexShrink: 0, opacity: 0.7 }}
-      />
-      {isRenaming ? (
-        <input
-          autoFocus
-          value={renameValue}
-          onChange={(e) => onRenameValueChange(e.target.value)}
-          onBlur={() => onRenameCommit(name)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') onRenameCommit(name)
-            if (e.key === 'Escape') onRenameCancel()
-          }}
-          className="text-sm bg-transparent border-b outline-none flex-1"
-          style={{ borderColor: 'var(--color-accent)' }}
-          onClick={(e) => e.stopPropagation()}
-        />
-      ) : (
-        <span className="flex-1 text-sm font-semibold truncate">{name}</span>
-      )}
-      {!isRenaming && (
-        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => { if (e.key === 'Enter') onOpen() }}
+        style={{
+          display: 'flex', flexDirection: 'column', borderRadius: 12, overflow: 'hidden',
+          border: `1px solid var(--color-border)`,
+          background: 'rgba(0,0,0,0.15)', cursor: 'pointer',
+          transition: 'border-color 150ms, background 150ms',
+        }}
+        className="hover-surface-card"
+      >
+        {/* Thumbnail */}
+        <div style={{
+          width: '100%', aspectRatio: '16/9',
+          background: 'rgba(0,0,0,0.3)',
+          borderBottom: '1px solid var(--color-border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative',
+        }}>
+          {/* Scope icon */}
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.35 }}>
+            {ws.scope === 'landscape' ? (
+              <>
+                <rect x="2" y="2" width="8" height="8" rx="1.5" stroke={accent} strokeWidth="1.5" />
+                <rect x="14" y="2" width="8" height="8" rx="1.5" stroke={accent} strokeWidth="1.5" />
+                <rect x="2" y="14" width="8" height="8" rx="1.5" stroke={accent} strokeWidth="1.5" />
+                <rect x="14" y="14" width="8" height="8" rx="1.5" stroke={accent} strokeWidth="1.5" />
+              </>
+            ) : ws.scope === 'softwaresystem' ? (
+              <>
+                <rect x="3" y="3" width="18" height="18" rx="2.5" stroke={accent} strokeWidth="1.5" />
+                <rect x="7" y="8" width="10" height="3" rx="1" stroke={accent} strokeWidth="1" opacity="0.7" />
+                <rect x="7" y="14" width="10" height="3" rx="1" stroke={accent} strokeWidth="1" opacity="0.7" />
+              </>
+            ) : (
+              <>
+                <rect x="4" y="2" width="16" height="20" rx="2.5" stroke={accent} strokeWidth="1.5" />
+                <line x1="8" y1="8" x2="16" y2="8" stroke={accent} strokeWidth="1" opacity="0.6" />
+                <line x1="8" y1="12" x2="14" y2="12" stroke={accent} strokeWidth="1" opacity="0.6" />
+              </>
+            )}
+          </svg>
+          {/* Edit button - top right */}
           <button
-            onClick={(e) => { e.stopPropagation(); onRename(name) }}
-            title="Rename"
+            onClick={(e) => { e.stopPropagation(); setShowEdit(true) }}
+            title="Edit workspace"
             style={{
-              width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 6, border: 'none', background: 'transparent',
-              color: 'var(--color-text-muted)', cursor: 'pointer',
-              transition: 'color 120ms, background 120ms',
+              position: 'absolute', top: 6, right: 6,
+              width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 6, border: 'none',
+              background: 'rgba(0,0,0,0.5)', color: 'var(--color-text-muted)',
+              cursor: 'pointer', opacity: 0.7,
+              transition: 'opacity 120ms',
             }}
-            className="hover-subtle"
           >
-            <Pencil size={12} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(name) }}
-            title="Delete"
-            style={{
-              width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 6, border: 'none', background: 'transparent',
-              color: 'var(--color-text-muted)', cursor: 'pointer',
-              transition: 'color 120ms, background 120ms',
-            }}
-            className="hover-danger"
-          >
-            <Trash2 size={12} />
+            <Pencil size={11} />
           </button>
         </div>
+
+        {/* Label + meta */}
+        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {label}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--color-text-muted)' }}>
+            <span style={{ color: accent, fontWeight: 600 }}>{scopeLabel}</span>
+            {(ws.elementCount ?? 0) > 0 && <span>· {ws.elementCount} el</span>}
+            {(ws.viewCount ?? 0) > 0 && <span>· {ws.viewCount}v</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Edit dialog */}
+      {showEdit && (
+        <WorkspaceEditDialog
+          name={label}
+          onRename={() => { setShowEdit(false); onRename() }}
+          onDelete={() => { setShowEdit(false); onDelete() }}
+          onClose={() => setShowEdit(false)}
+        />
       )}
+    </>
+  )
+}
+
+function WorkspaceEditDialog({ name, onRename, onDelete, onClose }: {
+  name: string
+  onRename: () => void
+  onDelete: () => void
+  onClose: () => void
+}) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ width: 360, borderRadius: 16, background: 'var(--color-bg-panel,#0f1923)', border: '1px solid var(--color-border)', padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>Edit Workspace</div>
+          <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{name}</div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button
+            onClick={onRename}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 10,
+              border: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.03)',
+              cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            <Pencil size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Rename</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Change the filename</div>
+            </div>
+          </button>
+        </div>
+
+        {/* Danger zone */}
+        <div style={{ borderTop: '1px solid rgba(239,68,68,0.2)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#ef4444' }}>
+            Danger Zone
+          </span>
+          <button
+            onClick={onDelete}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 10,
+              border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)',
+              cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            <Trash2 size={14} style={{ color: '#ef4444', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }}>Delete workspace</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Permanently remove this .dsl file</div>
+            </div>
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button className="btn-surface" onClick={onClose} style={{ padding: '8px 18px' }}>Close</button>
+        </div>
+      </div>
     </div>
   )
 }
+
 
 function RecentRow({
   name,
@@ -294,8 +385,6 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     }
   }
   const [folderWorkspaces, setFolderWorkspaces] = useState<FolderWorkspace[]>([])
-  const [renamingFile, setRenamingFile] = useState<string | null>(null)
-  const [renameValue, setRenameValue] = useState('')
 
   const [showScopePicker, setShowScopePicker] = useState(false)
   const [showAISettings, setShowAISettings] = useState(false)
@@ -326,12 +415,29 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     for await (const [name, entry] of dir.entries()) {
       if (entry.kind === 'file' && name.endsWith('.dsl')) {
         let modifiedAt: number | undefined
+        let scope: string | undefined
+        let elementCount = 0
+        let viewCount = 0
         try {
           const fh = await dir.getFileHandle(name)
           const f = await fh.getFile()
           modifiedAt = f.lastModified
+          const content = await f.text()
+          const { workspace: ws } = parseDSL(content)
+          if (ws) {
+            scope = ws.scope
+            elementCount = ws.model.people.length
+            for (const s of ws.model.softwareSystems) {
+              elementCount += 1
+              for (const c of s.containers) {
+                elementCount += 1
+                elementCount += c.components.length
+              }
+            }
+            viewCount = [...ws.views.systemLandscapeViews, ...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews].length
+          }
         } catch { /* ignore */ }
-        files.push({ name, modifiedAt })
+        files.push({ name, modifiedAt, scope, elementCount, viewCount })
       }
     }
     return files.sort((a, b) => a.name.localeCompare(b.name))
@@ -463,48 +569,40 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     )
   }
 
-  function handleRenameWorkspace(filename: string) {
-    setRenamingFile(filename)
-    setRenameValue(filename.replace(/\.dsl$/, ''))
-  }
-
-  async function commitRename(oldName: string) {
-    const newName = renameValue.trim()
-    if (!newName || newName === oldName.replace(/\.dsl$/, '')) {
-      setRenamingFile(null)
-      return
-    }
-    const finalName = newName.endsWith('.dsl') ? newName : `${newName}.dsl`
+  async function handleRenameWorkspace(filename: string) {
+    const oldLabel = filename.replace(/\.dsl$/, '')
+    const newName = window.prompt('Rename workspace:', oldLabel)
+    if (!newName || newName.trim() === oldLabel) return
+    const finalName = newName.trim().endsWith('.dsl') ? newName.trim() : `${newName.trim()}.dsl`
     const dir = getCurrentDirHandle()
     if (dir) {
       try {
-        const handle = await dir.getFileHandle(oldName)
+        const handle = await dir.getFileHandle(filename)
         const file = await handle.getFile()
         const content = await file.text()
         const newHandle = await dir.getFileHandle(finalName, { create: true })
         const writable = await newHandle.createWritable()
         await writable.write(content)
         await writable.close()
-        await dir.removeEntry(oldName).catch(() => {})
+        await dir.removeEntry(filename).catch(() => {})
         // Rename sidecar too
         try {
-          const oldSidecar = await dir.getFileHandle(sidecarName(oldName))
+          const oldSidecar = await dir.getFileHandle(sidecarName(filename))
           const sidecarFile = await oldSidecar.getFile()
           const sidecarContent = await sidecarFile.text()
           const newSidecarHandle = await dir.getFileHandle(sidecarName(finalName), { create: true })
           const sw = await newSidecarHandle.createWritable()
           await sw.write(sidecarContent)
           await sw.close()
-          await dir.removeEntry(sidecarName(oldName)).catch(() => {})
+          await dir.removeEntry(sidecarName(filename)).catch(() => {})
         } catch { /* no sidecar */ }
       } catch (err) {
         console.error('Rename failed:', err)
       }
     }
     setFolderWorkspaces((prev) =>
-      prev.map((f) => (f.name === oldName ? { ...f, name: finalName } : f))
+      prev.map((f) => (f.name === filename ? { ...f, name: finalName } : f))
     )
-    setRenamingFile(null)
   }
 
   function handleBlankWorkspace() {
@@ -666,14 +764,9 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           <CollectionView
             dirHandle={dirHandle}
             workspaces={folderWorkspaces}
-            renamingFile={renamingFile}
-            renameValue={renameValue}
             onOpenWorkspace={handleOpenWorkspace}
             onRenameWorkspace={handleRenameWorkspace}
             onDeleteWorkspace={handleDeleteWorkspace}
-            onRenameValueChange={setRenameValue}
-            onRenameCommit={commitRename}
-            onRenameCancel={() => setRenamingFile(null)}
             onBlankWorkspace={handleBlankWorkspace}
             onLoadTemplate={handleLoadTemplate}
             onImportJSON={() => jsonInputRef.current?.click()}
@@ -920,14 +1013,9 @@ function StartupView({
 function CollectionView({
   dirHandle,
   workspaces,
-  renamingFile,
-  renameValue,
   onOpenWorkspace,
   onRenameWorkspace,
   onDeleteWorkspace,
-  onRenameValueChange,
-  onRenameCommit,
-  onRenameCancel,
   onBlankWorkspace,
   onLoadTemplate,
   onImportJSON,
@@ -935,14 +1023,9 @@ function CollectionView({
 }: {
   dirHandle: FileSystemDirectoryHandle | null
   workspaces: FolderWorkspace[]
-  renamingFile: string | null
-  renameValue: string
   onOpenWorkspace: (name: string) => void
   onRenameWorkspace: (name: string) => void
   onDeleteWorkspace: (name: string) => void
-  onRenameValueChange: (val: string) => void
-  onRenameCommit: (name: string) => void
-  onRenameCancel: () => void
   onBlankWorkspace: () => void
   onLoadTemplate: () => void
   onImportJSON: () => void
@@ -977,31 +1060,26 @@ function CollectionView({
         </div>
       </div>
 
-      {/* Workspaces section — PRIMARY */}
+      {/* Workspaces grid */}
       <div className="w-full">
         <SectionDivider label="Workspaces" />
-        <div className="flex flex-col gap-1 mt-2">
-          {workspaces.length === 0 ? (
-            <p className="text-sm px-4 py-3" style={{ color: 'var(--color-text-muted)' }}>
-              No workspaces yet — create one below.
-            </p>
-          ) : (
-            workspaces.map((ws) => (
-              <WorkspaceRow
+        {workspaces.length === 0 ? (
+          <p className="text-sm px-4 py-3" style={{ color: 'var(--color-text-muted)' }}>
+            No workspaces yet — create one below.
+          </p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginTop: 10 }}>
+            {workspaces.map((ws) => (
+              <WorkspaceCard
                 key={ws.name}
-                name={ws.name}
-                renamingFile={renamingFile}
-                renameValue={renameValue}
-                onOpen={onOpenWorkspace}
-                onRename={onRenameWorkspace}
-                onDelete={onDeleteWorkspace}
-                onRenameValueChange={onRenameValueChange}
-                onRenameCommit={onRenameCommit}
-                onRenameCancel={onRenameCancel}
+                ws={ws}
+                onOpen={() => onOpenWorkspace(ws.name)}
+                onRename={() => onRenameWorkspace(ws.name)}
+                onDelete={() => onDeleteWorkspace(ws.name)}
               />
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Add workspace section — SECONDARY */}

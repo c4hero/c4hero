@@ -17,7 +17,7 @@ import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
 import Canvas from '@/components/canvas/Canvas'
 import CanvasHints from '@/components/canvas/CanvasHints'
 import { loadFromLocalStorage } from '@/lib/fileIO'
-import { restoreDirHandle } from '@/lib/folderIO'
+import { restoreDirHandle, getCurrentDirHandle } from '@/lib/folderIO'
 
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
@@ -51,10 +51,12 @@ export default function App() {
   }, [])
 
     // When workspace loads while not on a canvas route, navigate there
-  // (useRouteSync handles workspace→URL sync within /workspace/*)
   useEffect(() => {
-    if (workspace && !location.pathname.startsWith('/workspace')) {
-      navigate('/workspace', { replace: true })
+    if (workspace && !location.pathname.match(/\/collection\/[^/]+\/[^/]+/)) {
+      const slug = getCurrentDirHandle()?.name ?? 'workspace'
+      const wsFilename = useWorkspaceStore.getState().activeWorkspaceFilename ?? 'workspace'
+      const wsSlug = wsFilename.replace(/\.dsl$/, '')
+      navigate(`/collection/${slug}/${wsSlug}`, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace])
@@ -102,8 +104,8 @@ export default function App() {
         </Suspense>
       } />
 
-      {/* Canvas */}
-      <Route path="/workspace/*" element={
+      {/* Canvas — collection/workspace/view (viewKey optional) */}
+      <Route path="/collection/:collectionSlug/:workspaceSlug/:viewKey?" element={
         workspace ? (
           <ReactFlowProvider>
             <a href="#c4hero-canvas" className="sr-only">Skip to main content</a>
