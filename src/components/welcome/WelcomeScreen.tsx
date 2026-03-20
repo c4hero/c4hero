@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
@@ -36,7 +36,8 @@ import {
 } from 'lucide-react'
 import AISettingsDialog from '@/components/ai/AISettingsDialog'
 import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
-import ScopePickerDialog from '@/components/shared/ScopePickerDialog'
+
+const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDialog'))
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -322,7 +323,22 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   }
 
   const handleOpenCollection = openFolderAndTransition
-  const handleOpenRecent = (_path: string) => openFolderAndTransition()
+  async function handleOpenRecent(name: string) {
+    // Try to restore the handle from IndexedDB without re-prompting
+    const { restoreDirHandleByName } = await import('@/lib/folderIO')
+    const handle = await restoreDirHandleByName(name)
+    if (handle) {
+      // Handle restored silently — list files and navigate
+      const { listDSLFiles } = await import('@/lib/folderIO')
+      const files = await listDSLFiles()
+      addRecentFolder({ name: handle.name, path: handle.name })
+      setFolderWorkspaces(files.map(f => ({ name: f })))
+      setView('collection')
+    } else {
+      // Permission revoked or handle not found — fall back to picker
+      openFolderAndTransition()
+    }
+  }
 
   // ── Screen 2 handlers ───────────────────────────────────────────────
 
@@ -587,10 +603,12 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
         />
       )}
       {showScopePicker && (
-        <ScopePickerDialog
-          onConfirm={handleBlankWorkspaceFromPicker}
-          onCancel={() => setShowScopePicker(false)}
-        />
+        <Suspense fallback={null}>
+          <ScopePickerDialog
+            onConfirm={handleBlankWorkspaceFromPicker}
+            onCancel={() => setShowScopePicker(false)}
+          />
+        </Suspense>
       )}
       {showAISettings && <AISettingsDialog onClose={() => setShowAISettings(false)} />}
       {showDescribe && <DescribeSystemDialog onClose={() => setShowDescribe(false)} />}

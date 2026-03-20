@@ -116,15 +116,42 @@ export async function listDSLFiles(): Promise<string[]> {
   return listDSLFilesIn(currentDirHandle)
 }
 
-/** Persist the current directory handle to IndexedDB for cross-session restore */
+/** Persist a directory handle to IndexedDB keyed by folder name */
 export async function persistDirHandle(): Promise<void> {
   if (!currentDirHandle) return
   try {
     const db = await openDB()
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    tx.objectStore(STORE_NAME).put(currentDirHandle, 'dirHandle')
+    const store = tx.objectStore(STORE_NAME)
+    // Always update the "last" handle for quick restore on startup
+    store.put(currentDirHandle, 'dirHandle')
+    // Also key by folder name so recents can be restored without re-prompting
+    store.put(currentDirHandle, `folder:${currentDirHandle.name}`)
   } catch (err) {
     log.warn('persistDirHandle failed', err)
+  }
+}
+
+/** Try to restore a handle by folder name (for recents). Returns null if permission not granted. */
+export async function restoreDirHandleByName(name: string): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const handle: FileSystemDirectoryHandle = await new Promise((resolve, reject) => {
+      const req = tx.objectStore(STORE_NAME).get(`folder:${name}`)
+      req.onsuccess = () => resolve(req.result as FileSystemDirectoryHandle)
+      req.onerror = () => reject(req.error)
+    })
+    if (!handle) return null
+    const perm = await handle.queryPermission({ mode: 'readwrite' })
+    if (perm === 'granted') {
+      currentDirHandle = handle
+      return handle
+    }
+    // Permission not granted — need to re-prompt (browser security requirement)
+    return null
+  } catch {
+    return null
   }
 }
 
