@@ -234,7 +234,8 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const [showTemplates, setShowTemplates] = useState(false)
   const [showScopePicker, setShowScopePicker] = useState(false)
   const [showNewCollection, setShowNewCollection] = useState(false)
-  const [newCollectionName, setNewCollectionName] = useState('my-architecture')
+  const [newCollectionName, setNewCollectionName] = useState('My Architecture')
+  const [duplicateConfirm, setDuplicateConfirm] = useState<{ slug: string; displayName: string; parentHandle: FileSystemDirectoryHandle } | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const jsonInputRef = useRef<HTMLInputElement>(null)
@@ -296,14 +297,8 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
 
     const exists = await folderExists(parentHandle, slug)
     if (exists) {
-      const proceed = window.confirm(
-        `A folder named "${slug}" already exists here.\n\nOpen it as a collection instead?`
-      )
-      if (!proceed) {
-        setNewCollectionName(displayName)
-        setShowNewCollection(true)
-        return
-      }
+      setDuplicateConfirm({ slug, displayName, parentHandle })
+      return
     }
 
     const newDir = await parentHandle.getDirectoryHandle(slug, { create: true })
@@ -315,6 +310,28 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const files = await listDSLFiles()
     setFolderWorkspaces(files.map(n => ({ name: n })))
     setView('collection')
+  }
+
+  async function handleDuplicateConfirmOpen() {
+    if (!duplicateConfirm) return
+    const { slug, displayName, parentHandle } = duplicateConfirm
+    setDuplicateConfirm(null)
+    const newDir = await parentHandle.getDirectoryHandle(slug, { create: false })
+    const { setDirHandle } = await import('@/lib/folderIO')
+    await setDirHandle(newDir)
+    addRecentFolder({ name: newDir.name, path: newDir.name })
+    await initCollectionSettings(displayName.trim() || slug)
+    const files = await listDSLFiles()
+    setFolderWorkspaces(files.map(n => ({ name: n })))
+    setView('collection')
+  }
+
+  function handleDuplicateConfirmRename() {
+    if (!duplicateConfirm) return
+    const { displayName } = duplicateConfirm
+    setDuplicateConfirm(null)
+    setNewCollectionName(displayName)
+    setShowNewCollection(true)
   }
 
   function handleCreateCollection() {
@@ -596,6 +613,14 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           onChange={setNewCollectionName}
           onConfirm={() => commitCreateCollection(newCollectionName)}
           onCancel={() => setShowNewCollection(false)}
+        />
+      )}
+      {duplicateConfirm && (
+        <DuplicateCollectionDialog
+          slug={duplicateConfirm.slug}
+          onOpen={handleDuplicateConfirmOpen}
+          onRename={handleDuplicateConfirmRename}
+          onCancel={() => setDuplicateConfirm(null)}
         />
       )}
       {showScopePicker && (
@@ -967,6 +992,62 @@ function SectionDivider({ label, muted }: { label: string; muted?: boolean }) {
         className="flex-1 border-t"
         style={{ borderColor: 'var(--color-border)' }}
       />
+    </div>
+  )
+}
+
+// ─── Duplicate Collection Dialog ─────────────────────────────────────────────
+
+function DuplicateCollectionDialog({
+  slug,
+  onOpen,
+  onRename,
+  onCancel,
+}: {
+  slug: string
+  onOpen: () => void
+  onRename: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div
+      style={{ position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center' }}
+      onClick={onCancel}
+    >
+      <div
+        style={{ width:380,borderRadius:16,background:'var(--color-bg-panel,#0f1923)',border:'1px solid var(--color-border)',padding:'28px 28px 24px',display:'flex',flexDirection:'column',gap:20,boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
+          <span style={{ fontSize:16,fontWeight:700,color:'var(--color-text-primary)' }}>
+            Folder already exists
+          </span>
+          <span style={{ fontSize:13,color:'var(--color-text-muted)',lineHeight:1.5 }}>
+            A folder named <code style={{ fontSize:12,padding:'1px 6px',borderRadius:5,background:'rgba(255,255,255,0.06)',border:'1px solid var(--color-border)',color:'var(--color-accent)',fontFamily:'monospace' }}>{slug}</code> already exists in that location.
+          </span>
+        </div>
+
+        <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
+          <button
+            onClick={onOpen}
+            style={{ padding:'12px 16px',borderRadius:12,border:'1px solid var(--color-border)',background:'rgba(88,166,255,0.07)',cursor:'pointer',textAlign:'left',display:'flex',flexDirection:'column',gap:3 }}
+          >
+            <span style={{ fontSize:13,fontWeight:600,color:'var(--color-text-primary)' }}>Open existing collection</span>
+            <span style={{ fontSize:11,color:'var(--color-text-muted)' }}>Use the folder that's already there</span>
+          </button>
+          <button
+            onClick={onRename}
+            style={{ padding:'12px 16px',borderRadius:12,border:'1px solid var(--color-border)',background:'rgba(255,255,255,0.02)',cursor:'pointer',textAlign:'left',display:'flex',flexDirection:'column',gap:3 }}
+          >
+            <span style={{ fontSize:13,fontWeight:600,color:'var(--color-text-primary)' }}>Choose a different name</span>
+            <span style={{ fontSize:11,color:'var(--color-text-muted)' }}>Go back and pick another name</span>
+          </button>
+        </div>
+
+        <div style={{ display:'flex',justifyContent:'flex-end' }}>
+          <button className="btn-surface" onClick={onCancel} style={{ padding:'8px 18px' }}>Cancel</button>
+        </div>
+      </div>
     </div>
   )
 }
