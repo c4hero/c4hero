@@ -23,7 +23,7 @@ import {
   slugifyName,
   folderExists,
 } from '@/lib/folderIO'
-import { getRecentFolders, addRecentFolder, pruneRecentFolders } from '@/lib/fileIO'
+import { getRecentFolders, addRecentFolder, pruneRecentFolders, removeRecentFolder } from '@/lib/fileIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar, sidecarName } from '@/lib/sidecar'
 import {
@@ -145,18 +145,23 @@ function RecentRow({
   displayName,
   path,
   onClick,
+  onRemove,
 }: {
   name: string
   displayName?: string
   path: string
   onClick: () => void
+  onRemove: () => void
 }) {
   const label = displayName || name
   const showSlug = displayName && displayName !== name
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left"
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
     >
       <FolderOpen
         size={14}
@@ -166,7 +171,20 @@ function RecentRow({
       {showSlug && (
         <span className="text-xs" style={{ color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>{path}</span>
       )}
-    </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove() }}
+        title="Remove from recents"
+        className="hover-danger"
+        style={{
+          width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: 6, border: 'none', background: 'transparent',
+          color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0,
+          transition: 'color 120ms, background 120ms',
+        }}
+      >
+        <X size={12} />
+      </button>
+    </div>
   )
 }
 
@@ -369,6 +387,11 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   }
 
   const handleOpenCollection = openFolderAndTransition
+  function handleRemoveRecent(name: string) {
+    removeRecentFolder(name)
+    setRecentFolders(prev => prev.filter(f => f.name !== name))
+  }
+
   async function handleOpenRecent(name: string) {
     const handle = await restoreDirHandleByName(name)
     if (handle) {
@@ -613,6 +636,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
             onCreateCollection={handleCreateCollection}
             onOpenCollection={handleOpenCollection}
             onOpenRecent={handleOpenRecent}
+            onRemoveRecent={handleRemoveRecent}
             onOpenFile={handleOpenFile}
             recentFolders={recentFolders}
           />
@@ -695,12 +719,14 @@ function StartupView({
   onCreateCollection,
   onOpenCollection,
   onOpenRecent,
+  onRemoveRecent,
   onOpenFile,
   recentFolders,
 }: {
   onCreateCollection: () => void
   onOpenCollection: () => void
   onOpenRecent: (path: string) => void
+  onRemoveRecent: (name: string) => void
   onOpenFile: () => void
   recentFolders: { name: string; path: string; displayName?: string }[]
 }) {
@@ -799,6 +825,7 @@ function StartupView({
                     displayName={folder.displayName}
                     path={folder.path}
                     onClick={() => onOpenRecent(folder.name)}
+                    onRemove={() => onRemoveRecent(folder.name)}
                   />
                 ))}
               </div>

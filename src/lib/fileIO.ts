@@ -62,6 +62,13 @@ export function getRecentFolders(): RecentFolder[] {
   }
 }
 
+export function removeRecentFolder(name: string): void {
+  const filtered = getRecentFolders().filter(f => f.name !== name)
+  try {
+    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(filtered))
+  } catch { /* ignore */ }
+}
+
 export function pruneRecentFolders(validNames: string[]): void {
   const validSet = new Set(validNames)
   const filtered = getRecentFolders().filter(f => validSet.has(f.name))
