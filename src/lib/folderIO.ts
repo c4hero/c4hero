@@ -154,7 +154,11 @@ export async function persistDirHandle(): Promise<void> {
   }
 }
 
-/** Try to restore a handle by folder name (for recents). Returns null if permission not granted. */
+/** Try to restore a handle by folder name (for recents).
+ *  - If permission is granted: restores silently.
+ *  - If permission is 'prompt': requests permission scoped to that folder (no generic picker).
+ *  - If folder is gone or permission denied: returns null.
+ */
 export async function restoreDirHandleByName(name: string): Promise<FileSystemDirectoryHandle | null> {
   try {
     const db = await openDB()
@@ -165,13 +169,27 @@ export async function restoreDirHandleByName(name: string): Promise<FileSystemDi
       req.onerror = () => reject(req.error)
     })
     if (!handle) return null
-    const perm = await handle.queryPermission({ mode: 'readwrite' })
-    if (perm === 'granted') {
-      currentDirHandle = handle
-      return handle
+
+    let perm = await handle.queryPermission({ mode: 'readwrite' })
+
+    // If permission needs re-confirmation, request it scoped to this folder
+    if (perm === 'prompt') {
+      perm = await handle.requestPermission({ mode: 'readwrite' })
     }
-    // Permission not granted — need to re-prompt (browser security requirement)
-    return null
+
+    if (perm !== 'granted') return null
+
+    // Verify folder is still accessible (handles deleted/moved folders)
+    try {
+      // Attempt a benign read — iterating 0 entries is enough to detect a missing folder
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _ of handle.entries()) { break }
+    } catch {
+      return null // Folder no longer exists or was moved
+    }
+
+    currentDirHandle = handle
+    return handle
   } catch {
     return null
   }
