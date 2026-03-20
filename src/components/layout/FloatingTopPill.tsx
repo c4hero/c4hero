@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
+import { scopeLabel } from '@/lib/scopeValidation'
 
 const ExportDialog = lazy(() => import('@/components/dialogs/ExportDialog'))
 const CommandPalette = lazy(() => import('@/components/command-palette/CommandPalette'))
@@ -175,6 +176,11 @@ export default function FloatingTopPill() {
           >
             {wsName}
           </span>
+          {workspace.scope && workspace.scope !== 'none' && (
+            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--color-accent)', background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.2)', padding: '2px 7px', borderRadius: '99px', flexShrink: 0 }}>
+              {scopeLabel(workspace.scope)}
+            </span>
+          )}
         </div>
 
         {/* View switcher */}

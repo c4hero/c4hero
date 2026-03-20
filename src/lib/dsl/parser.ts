@@ -275,7 +275,15 @@ class ContextAwareParser {
                     }
                 } else if (token.value.startsWith('!')) {
                     this.advance()
-                } else if (kw === 'configuration' || kw === 'properties') {
+                } else if (kw === 'configuration') {
+                    this.advance()
+                    this.skipNewlines()
+                    if (this.match('LBRACE')) {
+                        this.parseWorkspaceConfiguration(workspace)
+                        this.skipNewlines()
+                        this.expect('RBRACE')
+                    }
+                } else if (kw === 'properties') {
                     this.advance()
                     this.skipNewlines()
                     this.skipBraceBlock()
@@ -285,6 +293,28 @@ class ContextAwareParser {
                 }
             } else {
                 this.advance()
+            }
+        }
+    }
+
+    private parseWorkspaceConfiguration(workspace: Workspace): void {
+        while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
+            this.skipNewlines()
+            if (this.check('RBRACE') || this.peekType() === 'EOF') break
+            const token = this.peek()
+            if (token.type === 'KEYWORD' && token.value.toLowerCase() === 'scope') {
+                this.advance()
+                const val = this.peek()
+                if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD') {
+                    this.advance()
+                    const s = val.value.toLowerCase()
+                    if (s === 'softwaresystem') workspace.scope = 'softwaresystem'
+                    else if (s === 'landscape') workspace.scope = 'landscape'
+                    else workspace.scope = 'none'
+                }
+            } else {
+                this.advance()
+                this.skipToNextLine()
             }
         }
     }

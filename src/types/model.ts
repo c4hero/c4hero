@@ -140,9 +140,12 @@ export interface Model {
 
 // ─── Workspace ───────────────────────────────────────────────────────
 
+export type WorkspaceScope = 'softwaresystem' | 'landscape' | 'none'
+
 export interface Workspace {
   name?: string
   description?: string
+  scope?: WorkspaceScope
   model: Model
   views: {
     systemLandscapeViews: View[]

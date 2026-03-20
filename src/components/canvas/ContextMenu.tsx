@@ -1,5 +1,6 @@
 import { useWorkspaceStore, canDrillInto, getCreatableTypes } from '@/store/workspace'
 import { Trash2, ZoomIn, UserRound, Globe, Box, Puzzle } from 'lucide-react'
+import { scopeAllowsContainers } from '@/lib/scopeValidation'
 
 interface ContextMenuProps {
   x: number
@@ -23,6 +24,7 @@ export default function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps)
 
   const canDrill = nodeId ? canDrillInto(workspace, nodeId) : false
   const creatableTypes = getCreatableTypes(workspace, activeViewKey)
+  const containersAllowed = scopeAllowsContainers(workspace.scope)
 
   return (
     <>
@@ -54,10 +56,22 @@ export default function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps)
               <MenuItem icon={<Globe size={14} />} label="Add System" onClick={() => { addSoftwareSystem('New System'); onClose() }} />
             )}
             {creatableTypes.canCreateContainer && (
-              <MenuItem icon={<Box size={14} />} label="Add Container" onClick={() => { addContainer(creatableTypes.canCreateContainer!, 'New Container'); onClose() }} />
+              <MenuItem
+                icon={<Box size={14} />}
+                label="Add Container"
+                disabled={!containersAllowed}
+                title={!containersAllowed ? 'Not available in landscape-scoped workspaces' : undefined}
+                onClick={() => { if (containersAllowed) { addContainer(creatableTypes.canCreateContainer!, 'New Container'); onClose() } }}
+              />
             )}
             {creatableTypes.canCreateComponent && (
-              <MenuItem icon={<Puzzle size={14} />} label="Add Component" onClick={() => { addComponent(creatableTypes.canCreateComponent!, 'New Component'); onClose() }} />
+              <MenuItem
+                icon={<Puzzle size={14} />}
+                label="Add Component"
+                disabled={!containersAllowed}
+                title={!containersAllowed ? 'Not available in landscape-scoped workspaces' : undefined}
+                onClick={() => { if (containersAllowed) { addComponent(creatableTypes.canCreateComponent!, 'New Component'); onClose() } }}
+              />
             )}
           </>
         )}
@@ -66,13 +80,15 @@ export default function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps)
   )
 }
 
-function MenuItem({ icon, label, danger, onClick }: { icon: React.ReactNode; label: string; danger?: boolean; onClick: () => void }) {
+function MenuItem({ icon, label, danger, disabled, title, onClick }: { icon: React.ReactNode; label: string; danger?: boolean; disabled?: boolean; title?: string; onClick: () => void }) {
   return (
     <button
       role="menuitem"
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--color-surface-3)]"
-      style={{ color: danger ? 'var(--color-error)' : 'var(--color-text-primary)' }}
+      style={{ color: disabled ? 'var(--color-text-muted)' : danger ? 'var(--color-error)' : 'var(--color-text-primary)', opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
     >
       {icon}
       {label}

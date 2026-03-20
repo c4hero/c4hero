@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
+import type { WorkspaceScope } from '@/types/model'
 import {
   createBigBankSample,
   createBlankWorkspace,
@@ -35,6 +36,7 @@ import {
 } from 'lucide-react'
 import AISettingsDialog from '@/components/ai/AISettingsDialog'
 import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
+import ScopePickerDialog from '@/components/shared/ScopePickerDialog'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -224,6 +226,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const [showAISettings, setShowAISettings] = useState(false)
   const [showDescribe, setShowDescribe] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showScopePicker, setShowScopePicker] = useState(false)
   const [showNewCollection, setShowNewCollection] = useState(false)
   const [newCollectionName, setNewCollectionName] = useState('my-architecture')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -400,14 +403,23 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     setRenamingFile(null)
   }
 
-  async function handleBlankWorkspace() {
-    const name = prompt('Workspace name:') || 'workspace'
-    const filename = name.endsWith('.dsl') ? name : `${name}.dsl`
+  function handleBlankWorkspace() {
+    setShowScopePicker(true)
+  }
+
+  async function handleBlankWorkspaceFromPicker(scope: WorkspaceScope, name: string) {
+    setShowScopePicker(false)
     const ws = createBlankWorkspace()
-    ws.name = name
-    await writeDSLFile(filename, serializeDSL(ws))
+    ws.name = name.trim() || 'workspace'
+    ws.scope = scope
+    const filename = `${(ws.name).replace(/[^a-zA-Z0-9_\-. ]/g, '').trim() || 'workspace'}.dsl`
+    const dir = getCurrentDirHandle()
+    if (dir) {
+      await writeDSLFile(filename, serializeDSL(ws))
+      useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+      setFolderWorkspaces(prev => [...prev, { name: filename }])
+    }
     loadWorkspace(ws)
-    useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
   }
 
   function handleLoadTemplate() {
@@ -572,6 +584,12 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           onChange={setNewCollectionName}
           onConfirm={() => commitCreateCollection(newCollectionName)}
           onCancel={() => setShowNewCollection(false)}
+        />
+      )}
+      {showScopePicker && (
+        <ScopePickerDialog
+          onConfirm={handleBlankWorkspaceFromPicker}
+          onCancel={() => setShowScopePicker(false)}
         />
       )}
       {showAISettings && <AISettingsDialog onClose={() => setShowAISettings(false)} />}
@@ -798,6 +816,15 @@ function CollectionView({
 }) {
   return (
     <>
+      {/* Logo */}
+      <div className="flex flex-col items-center gap-1 mb-2">
+        <img
+          src="/c4-logo.svg"
+          alt="c4hero"
+          className="h-8 sm:h-10"
+        />
+      </div>
+
       {/* Collection header */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
@@ -805,7 +832,7 @@ function CollectionView({
             onClick={onBack}
             className="rounded p-1 hover:opacity-70 -ml-1"
             style={{ color: 'var(--color-text-muted)' }}
-            title="Back"
+            title="Back to startup"
           >
             <ChevronRight size={16} style={{ transform: 'rotate(180deg)' }} />
           </button>
@@ -814,9 +841,6 @@ function CollectionView({
             {dirHandle?.name ?? 'Collection'}
           </span>
         </div>
-        <span className="text-xs ml-8" style={{ color: 'var(--color-text-muted)' }}>
-          {dirHandle?.name ?? ''}
-        </span>
       </div>
 
       {/* Workspaces section — PRIMARY */}

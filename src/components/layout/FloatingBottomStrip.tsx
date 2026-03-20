@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { useWorkspaceStore, getActiveView, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
 import type { ElementStatus, ElementStyle } from '@/types/model'
-import { Tag, Activity, X, Palette, Pencil, Plus, Check } from 'lucide-react'
+import { Tag, Activity, X, Palette, Pencil, Plus, Check, AlertTriangle } from 'lucide-react'
+import type { ScopeViolation } from '@/lib/scopeValidation'
 
 type Mode = 'tags' | 'status'
 
@@ -22,6 +23,7 @@ export default function FloatingBottomStrip() {
   const setActiveTagFilter = useWorkspaceStore((s) => s.setActiveTagFilter)
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
   const setActiveStatusFilter = useWorkspaceStore((s) => s.setActiveStatusFilter)
+  const scopeViolations = useWorkspaceStore((s) => s.scopeViolations)
 
 
   const [mode, setMode] = useState<Mode>('tags')
@@ -77,6 +79,9 @@ export default function FloatingBottomStrip() {
 
   return (
     <>
+      {scopeViolations.length > 0 && (
+        <ScopeViolationBanner violations={scopeViolations} />
+      )}
       <div
         style={{
           position: 'fixed',
@@ -640,6 +645,22 @@ function ColorPicker({ value, onChange, presets }: {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+
+function ScopeViolationBanner({ violations }: { violations: ScopeViolation[] }) {
+  return (
+    <div style={{
+      position: 'fixed', bottom: 48, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
+      background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)',
+      borderRadius: 10, padding: '8px 16px', fontSize: 12, color: '#fca5a5',
+      display: 'flex', alignItems: 'center', gap: 8, maxWidth: 500, pointerEvents: 'auto',
+    }}>
+      <AlertTriangle size={14} />
+      <span>{violations[0].message}</span>
+      {violations.length > 1 && <span style={{ opacity: 0.7 }}>+{violations.length - 1} more</span>}
     </div>
   )
 }
