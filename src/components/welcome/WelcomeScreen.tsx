@@ -1065,6 +1065,9 @@ function CollectionView({
             {dirHandle?.name ?? 'Collection'}
           </span>
         </div>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.5, marginTop: 4 }}>
+          Each workspace is a Structurizr file containing your architecture model and diagrams. Open one to start editing, or create a new workspace below.
+        </p>
       </div>
 
       {/* Workspaces grid */}
