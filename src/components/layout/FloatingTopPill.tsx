@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Plus,
   FolderSymlink,
+  LayoutGrid,
 
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
@@ -418,6 +419,7 @@ export default function FloatingTopPill() {
           activeFilename={activeFilename}
           onSelect={handleSwitchWorkspace}
           onNewWorkspace={() => { setWsPickerOpen(false); navigate('/collection?new=1') }}
+          onManageWorkspaces={handleChangeCollection}
           onChangeCollection={handleChangeCollection}
           onClose={() => setWsPickerOpen(false)}
         />
@@ -517,6 +519,7 @@ function WorkspaceSwitcherPanel({
   activeFilename,
   onSelect,
   onNewWorkspace,
+  onManageWorkspaces,
   onChangeCollection,
   onClose,
 }: {
@@ -524,6 +527,7 @@ function WorkspaceSwitcherPanel({
   activeFilename: string | null
   onSelect: (filename: string) => Promise<void>
   onNewWorkspace: () => void
+  onManageWorkspaces: () => void
   onChangeCollection: () => void
   onClose: () => void
 }) {
@@ -619,6 +623,19 @@ function WorkspaceSwitcherPanel({
           >
             <Plus size={14} />
             New Workspace
+          </button>
+          <div style={{ width: 1, background: 'var(--color-border)', margin: '8px 0' }} />
+          <button
+            onClick={onManageWorkspaces}
+            className="hover-subtle"
+            style={{
+              flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 7,
+              fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+            }}
+          >
+            <LayoutGrid size={14} />
+            Manage
           </button>
           {hasFolderHandle && (
             <>
