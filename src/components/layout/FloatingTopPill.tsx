@@ -211,7 +211,7 @@ export default function FloatingTopPill() {
       >
         {/* Logo — click to go home */}
         <button
-          onClick={() => useWorkspaceStore.getState().closeWorkspace()}
+          onClick={() => { useWorkspaceStore.getState().closeWorkspace(); navigate('/', { replace: true }) }}
           title="Close workspace"
           aria-label="Close workspace"
           className="hover-subtle"
