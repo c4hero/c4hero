@@ -30,8 +30,6 @@ import {
   FolderOpen,
   FileText,
   Plus,
-  Play,
-  Upload,
   Pencil,
   Trash2,
   ChevronRight,
@@ -643,10 +641,6 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     }
   }
 
-  function handleLoadTemplate() {
-    setShowTemplates(true)
-  }
-
   async function handleTemplateSelect(
     ws: ReturnType<typeof createBigBankSample>,
     filename: string
@@ -787,8 +781,6 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
             onRenameWorkspace={handleRenameWorkspace}
             onDeleteWorkspace={handleDeleteWorkspace}
             onBlankWorkspace={handleBlankWorkspace}
-            onLoadTemplate={handleLoadTemplate}
-            onImportJSON={() => jsonInputRef.current?.click()}
             onBack={() => setView('startup')}
           />
         )}
@@ -1036,8 +1028,6 @@ function CollectionView({
   onRenameWorkspace,
   onDeleteWorkspace,
   onBlankWorkspace,
-  onLoadTemplate,
-  onImportJSON,
   onBack,
 }: {
   dirHandle: FileSystemDirectoryHandle | null
@@ -1046,8 +1036,6 @@ function CollectionView({
   onRenameWorkspace: (oldName: string, newName: string) => void
   onDeleteWorkspace: (name: string) => void
   onBlankWorkspace: () => void
-  onLoadTemplate: () => void
-  onImportJSON: () => void
   onBack: () => void
 }) {
   return (
@@ -1101,35 +1089,16 @@ function CollectionView({
         )}
       </div>
 
-      {/* Add workspace section — SECONDARY */}
-      <div className="w-full">
-        <SectionDivider label="Add workspace" muted />
-        <div className="flex flex-wrap gap-2 mt-2">
-          <button
-            className="btn-surface items-center gap-2 rounded-lg px-4 py-2.5 text-sm"
-            style={{ color: 'var(--color-text-muted)' }}
-            onClick={onBlankWorkspace}
-          >
-            <Plus size={14} />
-            <span>New Workspace</span>
-          </button>
-          <button
-            className="btn-surface items-center gap-2 rounded-lg px-4 py-2.5 text-sm"
-            style={{ color: 'var(--color-text-muted)' }}
-            onClick={onLoadTemplate}
-          >
-            <Play size={14} />
-            <span>Load example / template</span>
-          </button>
-          <button
-            className="btn-surface items-center gap-2 rounded-lg px-4 py-2.5 text-sm"
-            style={{ color: 'var(--color-text-muted)' }}
-            onClick={onImportJSON}
-          >
-            <Upload size={14} />
-            <span>Import JSON</span>
-          </button>
-        </div>
+      {/* Add workspace */}
+      <div className="w-full mt-2">
+        <button
+          className="btn-surface items-center gap-2 rounded-lg px-4 py-2.5 text-sm"
+          style={{ color: 'var(--color-text-muted)' }}
+          onClick={onBlankWorkspace}
+        >
+          <Plus size={14} />
+          <span>New Workspace</span>
+        </button>
       </div>
     </>
   )
