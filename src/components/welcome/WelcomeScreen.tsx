@@ -19,6 +19,8 @@ import {
   getCurrentDirHandle,
   restoreDirHandleByName,
   initCollectionSettings,
+  slugifyName,
+  folderExists,
 } from '@/lib/folderIO'
 import { getRecentFolders, addRecentFolder } from '@/lib/fileIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
@@ -280,50 +282,43 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
 
   // ── Screen 1 handlers ───────────────────────────────────────────────
 
-  async function commitCreateCollection(name: string) {
+  async function commitCreateCollection(displayName: string) {
     setShowNewCollection(false)
-    const folderName = name.trim().replace(/[^a-zA-Z0-9_\-. ]/g, '').trim()
-    if (!folderName) return
+    const slug = slugifyName(displayName)
+    if (!slug) return
+
     let parentHandle: FileSystemDirectoryHandle
     try {
       parentHandle = await (window as Window & typeof globalThis & { showDirectoryPicker: (o?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({ mode: 'readwrite' })
     } catch {
-      return
-    }
-    // Check if folder already exists
-    let alreadyExists = false
-    try {
-      await parentHandle.getDirectoryHandle(folderName, { create: false })
-      alreadyExists = true
-    } catch {
-      // doesn't exist — good
+      return // cancelled
     }
 
-    if (alreadyExists) {
-      // Ask user whether to open it or pick a different name
+    const exists = await folderExists(parentHandle, slug)
+    if (exists) {
       const proceed = window.confirm(
-        `A folder named "${folderName}" already exists here.\n\nOpen it as a collection instead?`
+        `A folder named "${slug}" already exists here.\n\nOpen it as a collection instead?`
       )
       if (!proceed) {
-        // Re-open the dialog so they can pick a different name
-        setNewCollectionName(folderName)
+        setNewCollectionName(displayName)
         setShowNewCollection(true)
         return
       }
     }
 
-    const newDir = await parentHandle.getDirectoryHandle(folderName, { create: true })
+    const newDir = await parentHandle.getDirectoryHandle(slug, { create: true })
     const { setDirHandle } = await import('@/lib/folderIO')
     await setDirHandle(newDir)
     addRecentFolder({ name: newDir.name, path: newDir.name })
-    await initCollectionSettings(newDir.name)
+    // Store the friendly display name in settings
+    await initCollectionSettings(displayName.trim() || slug)
     const files = await listDSLFiles()
-    setFolderWorkspaces(files.map(name => ({ name })))
+    setFolderWorkspaces(files.map(n => ({ name: n })))
     setView('collection')
   }
 
   function handleCreateCollection() {
-    setNewCollectionName('my-architecture')
+    setNewCollectionName('My Architecture')
     setShowNewCollection(true)
   }
 
@@ -998,6 +993,9 @@ function NewCollectionDialog({
     setTimeout(() => inputRef.current?.select(), 50)
   }, [])
 
+  const slug = slugifyName(value)
+  const canSubmit = value.trim().length > 0
+
   return (
     <div
       style={{
@@ -1009,7 +1007,7 @@ function NewCollectionDialog({
     >
       <div
         style={{
-          width: 360, borderRadius: 16,
+          width: 380, borderRadius: 16,
           background: 'var(--color-bg-panel, #0f1923)',
           border: '1px solid var(--color-border)',
           padding: '28px 28px 24px',
@@ -1024,24 +1022,24 @@ function NewCollectionDialog({
             New collection
           </span>
           <span style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-            A folder will be created with this name. You'll choose where to put it next.
+            Choose a friendly name — the folder will be created using the slug below.
           </span>
         </div>
 
-        {/* Input */}
+        {/* Name input */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>
-            Collection name
+            Display name
           </label>
           <input
             ref={inputRef}
             value={value}
             onChange={e => onChange(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter') onConfirm()
+              if (e.key === 'Enter' && canSubmit) onConfirm()
               if (e.key === 'Escape') onCancel()
             }}
-            placeholder="my-architecture"
+            placeholder="My Architecture"
             style={{
               width: '100%', padding: '10px 14px',
               borderRadius: 10, fontSize: 14, fontWeight: 500,
@@ -1051,6 +1049,19 @@ function NewCollectionDialog({
               outline: 'none',
             }}
           />
+          {/* Live slug preview */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Folder:</span>
+            <code style={{
+              fontSize: 11, padding: '2px 8px', borderRadius: 6,
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid var(--color-border)',
+              color: canSubmit ? 'var(--color-accent)' : 'var(--color-text-muted)',
+              fontFamily: 'monospace',
+            }}>
+              {canSubmit ? slug : 'collection'}
+            </code>
+          </div>
         </div>
 
         {/* Actions */}
@@ -1060,12 +1071,12 @@ function NewCollectionDialog({
           </button>
           <button
             onClick={onConfirm}
-            disabled={!value.trim()}
+            disabled={!canSubmit}
             style={{
               padding: '8px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: value.trim() ? 'var(--color-accent)' : 'rgba(88,166,255,0.2)',
-              color: value.trim() ? '#0d1117' : 'var(--color-text-muted)',
-              border: 'none', cursor: value.trim() ? 'pointer' : 'default',
+              background: canSubmit ? 'var(--color-accent)' : 'rgba(88,166,255,0.2)',
+              color: canSubmit ? '#0d1117' : 'var(--color-text-muted)',
+              border: 'none', cursor: canSubmit ? 'pointer' : 'default',
               transition: 'background 150ms',
             }}
           >

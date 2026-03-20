@@ -24,6 +24,28 @@ async function openDB(): Promise<IDBDatabase> {
 // ─── Public API ───────────────────────────────────────────────────────
 
 /** Check if the File System Access API directory picker is available */
+/** Convert a friendly display name to a filesystem-safe slug */
+export function slugifyName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')           // spaces → hyphens
+    .replace(/[^a-z0-9\-_.]/g, '') // remove invalid chars
+    .replace(/-+/g, '-')            // collapse multiple hyphens
+    .replace(/^[-_.]+|[-_.]+$/g, '') // trim leading/trailing
+    || 'collection'
+}
+
+/** Check if a folder name already exists in the given parent handle */
+export async function folderExists(parent: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+  try {
+    await parent.getDirectoryHandle(name, { create: false })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function hasFolderAccess(): boolean {
   return 'showDirectoryPicker' in window
 }
