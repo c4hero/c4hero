@@ -63,7 +63,7 @@ export function useRouteSync() {
       const path = window.location.pathname
       const store = useWorkspaceStore.getState()
 
-      if (path === '/') {
+      if (path === '/' || path === '/collection') {
         if (store.workspace) {
           store.closeWorkspace()
         }

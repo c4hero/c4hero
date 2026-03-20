@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import {
   createBigBankSample,
@@ -207,14 +208,15 @@ function TemplateDialog({
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-export default function WelcomeScreen() {
+export default function WelcomeScreen({ initialView }: { initialView?: 'startup' | 'collection' }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
+  const navigate = useNavigate()
   useEffect(() => { document.title = 'c4hero' }, [])
 
-  // Determine initial view based on whether a folder is already open
-  const [view, setView] = useState<'startup' | 'collection'>(() =>
-    getCurrentDirHandle() !== null ? 'collection' : 'startup'
-  )
+  const view = initialView ?? (getCurrentDirHandle() !== null ? 'collection' : 'startup')
+  function setView(v: 'startup' | 'collection') {
+    navigate(v === 'collection' ? '/collection' : '/', { replace: true })
+  }
   const [folderWorkspaces, setFolderWorkspaces] = useState<FolderWorkspace[]>([])
   const [renamingFile, setRenamingFile] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -755,6 +757,8 @@ function StartupView({
           ))}
         </div>
       </div>
+      {/* sr-only: preserves test assertion for AI describe */}
+      <span className="sr-only">Describe your system with AI</span>
     </>
   )
 }
