@@ -666,10 +666,40 @@ function StartupView({
 
 
 
-      {/* Footer */}
-      <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-        Open-source &middot; MIT License &middot; No account required
-      </p>
+      {/* Divider */}
+      <div style={{ width: '100%', borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+
+      {/* Tagline + capability pills */}
+      <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
+          Architecture diagrams that live<br />
+          <span style={{ color: 'var(--color-accent)' }}>with your code, not a SaaS.</span>
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '7px' }}>
+          {[
+            { icon: <FileText size={11} />, label: '.dsl files' },
+            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>, label: 'Git-friendly' },
+            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>, label: 'C4 model' },
+            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>, label: 'Visual canvas' },
+            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>, label: 'Export PNG/SVG' },
+            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>, label: 'Open-source · MIT' },
+          ].map(({ icon, label }) => (
+            <span
+              key={label}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                fontSize: '11px', fontWeight: 500, color: 'var(--color-text-secondary)',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--color-border)',
+                padding: '5px 12px', borderRadius: '99px',
+              }}
+            >
+              <span style={{ color: 'var(--color-accent)', display: 'flex' }}>{icon}</span>
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
     </>
   )
 }
