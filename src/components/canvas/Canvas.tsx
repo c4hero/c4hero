@@ -842,8 +842,42 @@ export default function Canvas() {
     [reconnectRelationship, setEdges],
   )
 
+  // Empty state — no content nodes in this view
+  const hasContentNodes = nodes.some(n => n.type !== 'group' && n.type !== 'boundary')
+
   return (
     <div className="h-full w-full">
+      {!hasContentNodes && (
+        <div
+          style={{
+            position: 'absolute', inset: 0, zIndex: 10,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            pointerEvents: 'none', userSelect: 'none',
+          }}
+        >
+          {/* Icon */}
+          <svg width="48" height="40" viewBox="0 0 48 40" fill="none" style={{ opacity: 0.18, marginBottom: 16 }}>
+            <rect x="1" y="1" width="20" height="14" rx="3" stroke="currentColor" strokeWidth="2"/>
+            <rect x="27" y="1" width="20" height="14" rx="3" stroke="currentColor" strokeWidth="2"/>
+            <rect x="1" y="25" width="20" height="14" rx="3" stroke="currentColor" strokeWidth="2"/>
+            <rect x="27" y="25" width="20" height="14" rx="3" stroke="currentColor" strokeWidth="2"/>
+            <line x1="21" y1="8" x2="27" y2="8" stroke="currentColor" strokeWidth="2"/>
+            <line x1="21" y1="32" x2="27" y2="32" stroke="currentColor" strokeWidth="2"/>
+            <line x1="24" y1="15" x2="24" y2="25" stroke="currentColor" strokeWidth="2"/>
+          </svg>
+          <span style={{ fontSize: 17, fontWeight: 600, color: 'var(--color-text-primary)', opacity: 0.55, marginBottom: 10 }}>
+            Start building your diagram
+          </span>
+          <span style={{ fontSize: 13, color: 'var(--color-text-muted)', opacity: 0.7, display: 'flex', alignItems: 'center', gap: 6 }}>
+            Press
+            <kbd style={{ padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: '18px' }}>A</kbd>
+            to add an element
+            <span style={{ opacity: 0.5 }}>·</span>
+            <kbd style={{ padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: '18px' }}>?</kbd>
+            for shortcuts
+          </span>
+        </div>
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}
