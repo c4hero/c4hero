@@ -7,7 +7,7 @@
   --color-surface-1: #161b22;
   --color-surface-2: #1c2128;
   --color-surface-3: #21262d;
-  --color-border: rgba(88, 166, 255, 0.10);
+  --color-border: rgba(88, 166, 255, 0.16);
   --color-border-hover: rgba(88, 166, 255, 0.25);
   --color-accent: #58a6ff;
   --color-accent-hover: #79b8ff;
@@ -56,10 +56,10 @@
   --color-edge: #484f58;
 
   /* Glass panel opacity levels */
-  --glass-bg: rgba(13, 17, 23, 0.88);
-  --glass-bg-heavy: rgba(13, 17, 23, 0.95);
-  --glass-blur: 16px;
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 255, 255, 0.03);
+  --glass-bg: rgba(30, 38, 50, 0.97);
+  --glass-bg-heavy: rgba(26, 34, 46, 0.99);
+  --glass-blur: 20px;
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(255, 255, 255, 0.06);
 
   /* Radius scale */
   --radius-sm: 6px;
@@ -68,7 +68,7 @@
   --radius-xl: 14px;
 
   /* Backdrop */
-  --color-backdrop: rgba(11, 18, 25, 0.5);
+  --color-backdrop: rgba(0, 0, 0, 0.65);
 
   /* Font size scale */
   --text-xxs: 9px;

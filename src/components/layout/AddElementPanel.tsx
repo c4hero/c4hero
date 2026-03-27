@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, buildElementMap } from '@/store/workspace'
 import type { ModelElement } from '@/types/model'
+import { scopeAllowsContainers } from '@/lib/scopeValidation'
 import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
 import {
   UserRound,
@@ -35,6 +36,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   if (!workspace || !activeViewKey) return null
 
   const creatableTypes = getCreatableTypes(workspace, activeViewKey)
+  const containersAllowed = scopeAllowsContainers(workspace.scope)
   const view = getActiveView(workspace, activeViewKey)
   const viewElementIds = new Set(view?.elements.map((e) => e.id) ?? [])
 
@@ -105,7 +107,10 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
       icon: <Box size={20} />,
       label: 'Container',
       color: 'var(--color-type-container)',
+      disabled: !containersAllowed,
+      disabledTitle: 'Not available in landscape-scoped workspaces',
       onClick: () => {
+        if (!containersAllowed) return
         useWorkspaceStore.getState().addContainer(creatableTypes.canCreateContainer!, 'New Container')
         onClose()
       },
@@ -115,12 +120,15 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
       icon: <Puzzle size={20} />,
       label: 'Component',
       color: 'var(--color-type-component)',
+      disabled: !containersAllowed,
+      disabledTitle: 'Not available in landscape-scoped workspaces',
       onClick: () => {
+        if (!containersAllowed) return
         useWorkspaceStore.getState().addComponent(creatableTypes.canCreateComponent!, 'New Component')
         onClose()
       },
     },
-  ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string; color: string; dashed?: boolean; onClick: () => void }[]
+  ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string; color: string; dashed?: boolean; disabled?: boolean; disabledTitle?: string; onClick: () => void }[]
 
   return (
     <>
@@ -155,11 +163,13 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
                 label={card.label}
                 color={card.color}
                 dashed={card.dashed}
+                disabled={card.disabled}
+                disabledTitle={card.disabledTitle}
                 onClick={card.onClick}
               />
             ))}
           </div>
-          {creatableTypes.canCreateContainer !== null && (
+          {creatableTypes.canCreateContainer !== null && containersAllowed && (
             <div style={{ marginTop: 8 }}>
               <div
                 className="flyout-label"
@@ -323,17 +333,23 @@ function CreateChip({
   label,
   color,
   dashed,
+  disabled,
+  disabledTitle,
   onClick,
 }: {
   icon: React.ReactNode
   label: string
   color: string
   dashed?: boolean
+  disabled?: boolean
+  disabledTitle?: string
   onClick: () => void
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
+      title={disabled ? disabledTitle : undefined}
       className="hover-chip"
       style={{
         '--hover-border-color': color,
@@ -344,11 +360,12 @@ function CreateChip({
         borderRadius: 'var(--radius-sm)',
         border: dashed ? '1px dashed var(--color-border)' : '1px solid var(--color-border)',
         background: 'var(--color-surface-2)',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'background 0.12s, border-color 0.12s',
         fontSize: 'var(--text-xs-plus)',
         fontWeight: 600,
         color: 'var(--color-text-secondary)',
+        opacity: disabled ? 0.4 : 1,
       } as React.CSSProperties}
     >
       <span style={{ color, display: 'flex' }}>{icon}</span>

@@ -1,93 +1,110 @@
 import { useEffect, useRef } from 'react'
+import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
+import { getCurrentDirHandle } from '@/lib/folderIO'
 
 /**
- * Syncs URL path with workspace/view state:
- *   /                    → welcome screen
- *   /workspace           → canvas, first view
- *   /workspace/:viewKey  → canvas, specific view
- *
- * - Pushing URL on view change (replaceState for initial load, pushState for user navigation)
- * - Listening to popstate for browser back/forward
+ * URL pattern:
+ *   /                                       → startup
+ *   /collection/:slug                       → collection home
+ *   /collection/:slug/:workspaceSlug        → canvas (first view)
+ *   /collection/:slug/:workspaceSlug/:view  → canvas (specific view)
  */
+
+function buildCanvasPath(viewKey?: string | null): string {
+  const collectionSlug = getCurrentDirHandle()?.name ?? 'workspace'
+  const wsFilename = useWorkspaceStore.getState().activeWorkspaceFilename ?? 'workspace'
+  const wsSlug = wsFilename.replace(/\.dsl$/, '')
+  const base = `/collection/${collectionSlug}/${wsSlug}`
+  return viewKey ? `${base}/${encodeURIComponent(viewKey)}` : base
+}
+
 export function useRouteSync() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { viewKey: urlViewKey } = useParams<{ viewKey?: string }>()
   const isInitialSync = useRef(true)
 
-  // On mount AND whenever workspace becomes available: apply view key from URL
-  // This handles the refresh case where crash recovery loads the workspace
-  // after the initial mount effect has already run.
+  // On mount / workspace load: apply view key from URL
   useEffect(() => {
     if (!workspace) return
-    const path = window.location.pathname
-    const match = path.match(/^\/workspace(?:\/(.+))?$/)
-    if (!match) return
-    const viewKeyFromUrl = match[1] ? decodeURIComponent(match[1]) : null
-    if (viewKeyFromUrl && viewKeyFromUrl !== activeViewKey) {
-      const allViews = allViewsOf(workspace)
-      if (allViews.some(v => v.key === viewKeyFromUrl)) {
-        setActiveView(viewKeyFromUrl)
+    if (urlViewKey) {
+      const decoded = decodeURIComponent(urlViewKey)
+      if (decoded !== activeViewKey) {
+        const allViews = allViewsOf(workspace)
+        if (allViews.some(v => v.key === decoded)) {
+          setActiveView(decoded)
+        }
       }
     }
-  // Only run when workspace first becomes available (mount + workspace load)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace])
 
-  // Sync state → URL
+  // Sync state → URL when view changes
   useEffect(() => {
-    let targetPath: string
-
-    if (!workspace) {
-      targetPath = '/'
-    } else if (activeViewKey) {
-      targetPath = `/workspace/${encodeURIComponent(activeViewKey)}`
-    } else {
-      targetPath = '/workspace'
-    }
-
-    if (window.location.pathname !== targetPath) {
+    if (!workspace) return
+    const targetPath = buildCanvasPath(activeViewKey)
+    if (location.pathname !== targetPath) {
       if (isInitialSync.current) {
-        window.history.replaceState(null, '', targetPath)
+        navigate(targetPath, { replace: true })
       } else {
-        window.history.pushState(null, '', targetPath)
+        navigate(targetPath)
       }
     }
     isInitialSync.current = false
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace, activeViewKey])
 
-  // Listen to popstate (browser back/forward)
+  // React to location changes (browser back/forward)
   useEffect(() => {
-    function handlePopState() {
-      const path = window.location.pathname
-      const store = useWorkspaceStore.getState()
+    if (!workspace) return
 
-      if (path === '/') {
-        if (store.workspace) {
-          store.closeWorkspace()
-        }
-        return
-      }
-
-      const match = path.match(/^\/workspace(?:\/(.+))?$/)
-      if (!match || !store.workspace) return
-
-      const viewKey = match[1] ? decodeURIComponent(match[1]) : null
-      if (viewKey && viewKey !== store.activeViewKey) {
-        const allViews = allViewsOf(store.workspace)
-        if (allViews.some(v => v.key === viewKey)) {
-          // Use setState directly to avoid pushing another history entry
-          useWorkspaceStore.setState({
-            activeViewKey: viewKey,
-            selectedElementIds: [],
-            selectedRelationshipId: null,
-          })
-        }
-      }
+    // Check if we navigated away from canvas
+    const match = location.pathname.match(/^\/collection\/[^/]+\/[^/]+(?:\/(.+))?$/)
+    if (!match) {
+      // Navigated to / or /collection/:slug — close workspace
+      useWorkspaceStore.getState().closeWorkspace()
+      return
     }
 
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
+    const viewFromUrl = match[1] ? decodeURIComponent(match[1]) : null
+    if (viewFromUrl && viewFromUrl !== activeViewKey) {
+      const allViews = allViewsOf(workspace)
+      if (allViews.some(v => v.key === viewFromUrl)) {
+        useWorkspaceStore.setState({
+          activeViewKey: viewFromUrl,
+          selectedElementIds: [],
+          selectedRelationshipId: null,
+        })
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
+}
+
+/**
+ * On hard refresh at a canvas URL, the workspace won't be in memory yet.
+ * Redirect back to collection or startup after a brief wait.
+ */
+export function useRefreshRedirect() {
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  useEffect(() => {
+    const isCanvasPath = location.pathname.match(/^\/collection\/[^/]+\/[^/]+/)
+    if (isCanvasPath && !workspace) {
+      const timer = setTimeout(() => {
+        if (!useWorkspaceStore.getState().workspace) {
+          const slug = getCurrentDirHandle()?.name
+          navigate(slug ? `/collection/${slug}` : '/', { replace: true })
+        }
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 }

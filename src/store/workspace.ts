@@ -6,6 +6,8 @@ import type {
   ViewType, ElementStatus,
 } from '@/types/model'
 import { announce } from '@/lib/announce'
+import { validateScope } from '@/lib/scopeValidation'
+import type { ScopeViolation } from '@/lib/scopeValidation'
 
 // ─── Built-in Tags ──────────────────────────────────────────────────
 
@@ -62,6 +64,10 @@ interface WorkspaceState extends UndoState {
   // Active filename for folder-based workspaces (e.g. 'bigbank.dsl')
   activeWorkspaceFilename: string | null
   setActiveWorkspaceFilename: (name: string | null) => void
+
+  // Scope validation
+  scopeViolations: ScopeViolation[]
+  revalidateScope: () => void
 
   // Workspace lifecycle
   loadWorkspace: (workspace: Workspace) => void
@@ -278,6 +284,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeWorkspaceFilename: null,
   setActiveWorkspaceFilename: (name) => set({ activeWorkspaceFilename: name }),
 
+  // ─── Scope Validation ───────────────────────────────────────────
+
+  scopeViolations: [],
+  revalidateScope: () => set(s => ({
+    scopeViolations: s.workspace ? validateScope(s.workspace) : [],
+  })),
+
   // ─── Workspace Lifecycle ────────────────────────────────────────
 
   loadWorkspace: (workspace) => {
@@ -291,6 +304,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedGroupId: null,
       undoStack: [],
       redoStack: [],
+      scopeViolations: validateScope(workspace),
     })
   },
 
@@ -367,6 +381,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       addToCurrentView(ws, s.activeViewKey, id, position)
       return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
     })
+    get().revalidateScope()
     announce('System created')
     return id
   },
@@ -384,6 +399,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       addToCurrentView(ws, s.activeViewKey, id, position)
       return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
     })
+    get().revalidateScope()
     announce('Container created')
     return id
   },

@@ -25,7 +25,6 @@ export default function CanvasHints() {
   const [dismissed, setDismissed] = useState(getDismissed)
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
-  const isEmpty = view && view.elements.length === 0
 
   function handleDismiss(id: string) {
     dismiss(id)
@@ -34,14 +33,7 @@ export default function CanvasHints() {
 
   if (!workspace || !view) return null
 
-  // Empty canvas hint
-  if (isEmpty && !dismissed.has('empty-canvas')) {
-    return (
-      <Hint id="empty-canvas" onDismiss={handleDismiss}>
-        Press <Kbd>Shift+S</Kbd> to add a system, or use the toolbar on the left
-      </Hint>
-    )
-  }
+  // Empty canvas hint suppressed — covered by the canvas empty state overlay
 
   // First element added — connection hint
   if (view.elements.length >= 2 && view.relationships.length === 0 && !dismissed.has('connect-hint')) {
@@ -84,13 +76,4 @@ function Hint({ id, children, onDismiss }: { id: string; children: React.ReactNo
   )
 }
 
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd
-      className="mx-0.5 inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium"
-      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
-    >
-      {children}
-    </kbd>
-  )
-}
+

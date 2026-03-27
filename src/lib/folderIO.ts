@@ -24,6 +24,28 @@ async function openDB(): Promise<IDBDatabase> {
 // ─── Public API ───────────────────────────────────────────────────────
 
 /** Check if the File System Access API directory picker is available */
+/** Convert a friendly display name to a filesystem-safe slug */
+export function slugifyName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')           // spaces → hyphens
+    .replace(/[^a-z0-9\-_.]/g, '') // remove invalid chars
+    .replace(/-+/g, '-')            // collapse multiple hyphens
+    .replace(/^[-_.]+|[-_.]+$/g, '') // trim leading/trailing
+    || 'collection'
+}
+
+/** Check if a folder name already exists in the given parent handle */
+export async function folderExists(parent: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+  try {
+    await parent.getDirectoryHandle(name, { create: false })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function hasFolderAccess(): boolean {
   return 'showDirectoryPicker' in window
 }
@@ -31,6 +53,11 @@ export function hasFolderAccess(): boolean {
 /** Get the currently active directory handle */
 export function getCurrentDirHandle(): FileSystemDirectoryHandle | null {
   return currentDirHandle
+}
+
+export async function setDirHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+  currentDirHandle = handle
+  await persistDirHandle()
 }
 
 /** Open a folder via showDirectoryPicker, list .dsl files within it */
@@ -43,8 +70,10 @@ export async function openFolder(): Promise<{ dirHandle: FileSystemDirectoryHand
     await persistDirHandle()
     return { dirHandle, dslFiles }
   } catch (err) {
-    // User cancelled (AbortError) or permission denied — not an error
-    log.warn('openFolder cancelled or failed', err)
+    // AbortError = user cancelled — silence it; log anything unexpected
+    if (err instanceof Error && err.name !== 'AbortError') {
+      log.warn('openFolder failed', err)
+    }
     return null
   }
 }
@@ -111,15 +140,60 @@ export async function listDSLFiles(): Promise<string[]> {
   return listDSLFilesIn(currentDirHandle)
 }
 
-/** Persist the current directory handle to IndexedDB for cross-session restore */
+/** Persist a directory handle to IndexedDB keyed by folder name */
 export async function persistDirHandle(): Promise<void> {
   if (!currentDirHandle) return
   try {
     const db = await openDB()
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    tx.objectStore(STORE_NAME).put(currentDirHandle, 'dirHandle')
+    const store = tx.objectStore(STORE_NAME)
+    // Always update the "last" handle for quick restore on startup
+    store.put(currentDirHandle, 'dirHandle')
+    // Also key by folder name so recents can be restored without re-prompting
+    store.put(currentDirHandle, `folder:${currentDirHandle.name}`)
   } catch (err) {
     log.warn('persistDirHandle failed', err)
+  }
+}
+
+/** Try to restore a handle by folder name (for recents).
+ *  - If permission is granted: restores silently.
+ *  - If permission is 'prompt': requests permission scoped to that folder (no generic picker).
+ *  - If folder is gone or permission denied: returns null.
+ */
+export async function restoreDirHandleByName(name: string): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const handle: FileSystemDirectoryHandle = await new Promise((resolve, reject) => {
+      const req = tx.objectStore(STORE_NAME).get(`folder:${name}`)
+      req.onsuccess = () => resolve(req.result as FileSystemDirectoryHandle)
+      req.onerror = () => reject(req.error)
+    })
+    if (!handle) return null
+
+    let perm = await handle.queryPermission({ mode: 'readwrite' })
+
+    // If permission needs re-confirmation, request it scoped to this folder
+    if (perm === 'prompt') {
+      perm = await handle.requestPermission({ mode: 'readwrite' })
+    }
+
+    if (perm !== 'granted') return null
+
+    // Verify folder is still accessible (handles deleted/moved folders)
+    try {
+      // Attempt a benign read — iterating 0 entries is enough to detect a missing folder
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _ of handle.entries()) { break }
+    } catch {
+      return null // Folder no longer exists or was moved
+    }
+
+    currentDirHandle = handle
+    return handle
+  } catch {
+    return null
   }
 }
 
@@ -155,4 +229,88 @@ async function listDSLFilesIn(dirHandle: FileSystemDirectoryHandle): Promise<str
     }
   }
   return files.sort()
+}
+
+// ─── Collection settings (.c4hero/settings.json) ─────────────────────────────
+
+export interface CollectionSettings {
+  name?: string          // Display name override for the collection
+  defaultScope?: string  // Default scope for new workspaces
+  createdAt?: string     // ISO timestamp
+  [key: string]: unknown // Forward-compatible — unknown keys are preserved
+}
+
+const C4HERO_DIR = '.c4hero'
+const SETTINGS_FILE = 'settings.json'
+
+async function getC4HeroDir(create = false): Promise<FileSystemDirectoryHandle | null> {
+  if (!currentDirHandle) return null
+  try {
+    return await currentDirHandle.getDirectoryHandle(C4HERO_DIR, { create })
+  } catch {
+    return null
+  }
+}
+
+export async function readCollectionSettings(): Promise<CollectionSettings | null> {
+  try {
+    const dir = await getC4HeroDir(false)
+    if (!dir) return null
+    const fileHandle = await dir.getFileHandle(SETTINGS_FILE)
+    const file = await fileHandle.getFile()
+    const text = await file.text()
+    return JSON.parse(text) as CollectionSettings
+  } catch {
+    return null
+  }
+}
+
+export async function writeCollectionSettings(settings: CollectionSettings): Promise<boolean> {
+  try {
+    const dir = await getC4HeroDir(true)
+    if (!dir) return false
+    const fileHandle = await dir.getFileHandle(SETTINGS_FILE, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(JSON.stringify(settings, null, 2))
+    await writable.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function initCollectionSettings(name: string): Promise<CollectionSettings> {
+  const existing = await readCollectionSettings()
+  if (existing) return existing
+  const settings: CollectionSettings = {
+    name,
+    createdAt: new Date().toISOString(),
+  }
+  await writeCollectionSettings(settings)
+  return settings
+}
+
+/** Check if a stored handle exists in IDB (regardless of permission state) */
+export async function handleExistsInIDB(name: string): Promise<boolean> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const handle: FileSystemDirectoryHandle = await new Promise((resolve, reject) => {
+      const req = tx.objectStore(STORE_NAME).get(`folder:${name}`)
+      req.onsuccess = () => resolve(req.result as FileSystemDirectoryHandle)
+      req.onerror = () => reject(req.error)
+    })
+    return !!handle
+  } catch {
+    return false
+  }
+}
+
+/** Filter a list of recent folder names to only those we have a stored handle for */
+export async function filterValidRecentFolders(names: string[]): Promise<string[]> {
+  const results = await Promise.all(names.map(async name => ({
+    name,
+    valid: await handleExistsInIDB(name),
+  })))
+  return results.filter(r => r.valid).map(r => r.name)
 }

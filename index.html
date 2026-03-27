@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/c4-logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.anthropic.com https://api.openai.com; font-src 'self'; object-src 'none'; child-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+    <!-- Suppress Cloudflare Tunnel beacon injection -->
+    <meta name="cf-beacon" content='{"token": ""}' />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss: https://api.anthropic.com https://api.openai.com; font-src 'self'; object-src 'none'; worker-src blob:; base-uri 'self';" />
     <title>c4hero</title>
   </head>
   <body>

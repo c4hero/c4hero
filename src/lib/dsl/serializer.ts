@@ -130,6 +130,16 @@ class SerializerContext {
         this.serializeModel()
         this.emitBlank()
         this.serializeViews()
+
+        if (ws.scope && ws.scope !== 'none') {
+            this.emitBlank()
+            this.emit('configuration {')
+            this.depth++
+            this.emit(`scope ${ws.scope}`)
+            this.depth--
+            this.emit('}')
+        }
+
         this.emitBlank()
 
         this.depth--
