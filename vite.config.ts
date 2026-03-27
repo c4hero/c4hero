@@ -17,9 +17,11 @@ export default defineConfig({
     },
   },
   server: {
+    port: 3007,
     allowedHosts: ['appv2.c4hero.com'],
     hmr: {
       clientPort: 443,
+      protocol: 'wss',
     },
   },
   test: {
