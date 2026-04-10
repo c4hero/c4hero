@@ -401,6 +401,8 @@ export default function FloatingTopPill() {
                 width: 40,
                 height: 44,
                 borderRadius: 0,
+                borderTopRightRadius: 'var(--radius-lg)',
+                borderBottomRightRadius: 'var(--radius-lg)',
                 minWidth: 40,
                 minHeight: 44,
               }}

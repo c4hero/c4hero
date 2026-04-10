@@ -365,7 +365,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const person: Person = { id, type: 'person', name: uniqueElementName(name, ws), tags: ['Person'], properties: {}, location: location ?? 'Internal' }
       ws.model.people.push(person)
       addToCurrentView(ws, s.activeViewKey, id, position)
-      return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
+      return { ...pushUndo(s), workspace: ws, focusElementId: id }
     })
     announce('Person created')
     return id
@@ -379,7 +379,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const system: SoftwareSystem = { id, type: 'softwareSystem', name: uniqueElementName(name, ws), tags: ['Software System'], properties: {}, containers: [], location: location ?? 'Internal' }
       ws.model.softwareSystems.push(system)
       addToCurrentView(ws, s.activeViewKey, id, position)
-      return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
+      return { ...pushUndo(s), workspace: ws, focusElementId: id }
     })
     get().revalidateScope()
     announce('System created')
@@ -397,7 +397,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
       system.containers.push(container)
       addToCurrentView(ws, s.activeViewKey, id, position)
-      return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
+      return { ...pushUndo(s), workspace: ws, focusElementId: id }
     })
     get().revalidateScope()
     announce('Container created')
@@ -415,7 +415,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Component'], properties: {} }
           container.components.push(comp)
           addToCurrentView(ws, s.activeViewKey, id, position)
-          return { ...pushUndo(s), workspace: ws, selectedElementIds: [id], selectedRelationshipId: null, focusElementId: id }
+          return { ...pushUndo(s), workspace: ws, focusElementId: id }
         }
       }
       return s
