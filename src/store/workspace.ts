@@ -1169,7 +1169,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const styles = ws.views.configuration.styles.elements
     const idx = styles.findIndex((es) => es.tag === style.tag)
     if (idx >= 0) {
-      styles[idx] = { ...styles[idx], ...style }
+      // No-op guard: if every incoming field already matches, skip the undo push
+      const existing = styles[idx]
+      const keys = Object.keys(style) as (keyof typeof style)[]
+      const changed = keys.some(k => k !== 'tag' && style[k] !== existing[k])
+      if (!changed) return s
+      styles[idx] = { ...existing, ...style }
     } else {
       styles.push(style)
     }

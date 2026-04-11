@@ -2502,6 +2502,30 @@ describe('updateElementStyle and removeElementStyle', () => {
     useWorkspaceStore.getState().removeElementStyle('NonExistentTag')
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
   })
+
+  it('updateElementStyle is a no-op (no undo) when all incoming fields already match', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    // Re-apply the exact same background — nothing changes
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('updateElementStyle is NOT a no-op when a field value changes', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#00ff00' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+    const styles = useWorkspaceStore.getState().workspace!.views.configuration.styles.elements
+    expect(styles[0].background).toBe('#00ff00')
+  })
+
+  it('updateElementStyle is NOT a no-op when a new field is added to existing style', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', color: '#ffffff' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+  })
 })
 
 describe('setActiveTagFilter and setActiveStatusFilter', () => {
