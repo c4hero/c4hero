@@ -392,7 +392,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => {
       const ws = cloneWs(s)
       if (!ws) return s
-      const person: Person = { id, type: 'person', name: uniqueElementName(name, ws), tags: ['Person'], properties: {}, location: location ?? 'Internal' }
+      const person: Person = { id, type: 'person', name: uniqueElementName(name, ws), tags: ['Element', 'Person'], properties: {}, location: location ?? 'Internal' }
       ws.model.people.push(person)
       addToCurrentView(ws, s.activeViewKey, id, position)
       // Auto-add to all system landscape views (they display every person/system)
@@ -412,7 +412,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => {
       const ws = cloneWs(s)
       if (!ws) return s
-      const system: SoftwareSystem = { id, type: 'softwareSystem', name: uniqueElementName(name, ws), tags: ['Software System'], properties: {}, containers: [], location: location ?? 'Internal' }
+      const system: SoftwareSystem = { id, type: 'softwareSystem', name: uniqueElementName(name, ws), tags: ['Element', 'Software System'], properties: {}, containers: [], location: location ?? 'Internal' }
       ws.model.softwareSystems.push(system)
       addToCurrentView(ws, s.activeViewKey, id, position)
       // Auto-add to all system landscape views (they display every person/system)
@@ -435,7 +435,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (!ws) return s
       const system = ws.model.softwareSystems.find(sys => sys.id === systemId)
       if (!system) return s
-      const tags = extraTag ? ['Container', extraTag] : ['Container']
+      const tags = extraTag ? ['Element', 'Container', extraTag] : ['Element', 'Container']
       const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
       system.containers.push(container)
       addToCurrentView(ws, s.activeViewKey, id, position)
@@ -460,7 +460,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       for (const sys of ws.model.softwareSystems) {
         const container = sys.containers.find(c => c.id === containerId)
         if (container) {
-          const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Component'], properties: {} }
+          const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Element', 'Component'], properties: {} }
           container.components.push(comp)
           addToCurrentView(ws, s.activeViewKey, id, position)
           // Also auto-add to all other component views scoped to the same container

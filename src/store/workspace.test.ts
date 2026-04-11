@@ -884,6 +884,41 @@ describe('Element CRUD', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
   })
 
+  it('addPerson seeds Element and Person built-in tags', () => {
+    // Regression: parser always adds 'Element'; store must match so tag filtering
+    // and style cascade are consistent before the first save+reload.
+    const id = useWorkspaceStore.getState().addPerson('Bob')
+    const ws = useWorkspaceStore.getState().workspace!
+    const person = ws.model.people.find(p => p.id === id)!
+    expect(person.tags).toContain('Element')
+    expect(person.tags).toContain('Person')
+  })
+
+  it('addSoftwareSystem seeds Element and Software System built-in tags', () => {
+    const id = useWorkspaceStore.getState().addSoftwareSystem('MyApp')
+    const ws = useWorkspaceStore.getState().workspace!
+    const sys = ws.model.softwareSystems.find(s => s.id === id)!
+    expect(sys.tags).toContain('Element')
+    expect(sys.tags).toContain('Software System')
+  })
+
+  it('addContainer seeds Element and Container built-in tags', () => {
+    const id = useWorkspaceStore.getState().addContainer('api', 'API GW')
+    const ws = useWorkspaceStore.getState().workspace!
+    const container = ws.model.softwareSystems.find(s => s.id === 'api')!.containers.find(c => c.id === id)!
+    expect(container.tags).toContain('Element')
+    expect(container.tags).toContain('Container')
+  })
+
+  it('addComponent seeds Element and Component built-in tags', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'API GW')
+    const id = useWorkspaceStore.getState().addComponent(containerId, 'Handler')
+    const ws = useWorkspaceStore.getState().workspace!
+    const comp = ws.model.softwareSystems.find(s => s.id === 'api')!.containers.find(c => c.id === containerId)!.components.find(c => c.id === id)!
+    expect(comp.tags).toContain('Element')
+    expect(comp.tags).toContain('Component')
+  })
+
   it('addPerson creates a person and selects it', () => {
     const id = useWorkspaceStore.getState().addPerson('Bob')
     const ws = useWorkspaceStore.getState().workspace!
