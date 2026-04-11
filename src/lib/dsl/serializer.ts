@@ -65,14 +65,21 @@ class SerializerContext {
 
     private registerElement(id: string, name: string): void {
         this.allElementIds.add(id)
-        // If the ID is already a valid identifier, use it directly
-        if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(id)) {
-            this.idToVar.set(id, id)
-            this.usedVarNames.add(id)
-            return
+        // Prefer the element's own ID as the DSL variable name so that IDs
+        // survive a serialize → parse roundtrip (critical for sidecar data).
+        // Sanitize to make it a valid identifier:
+        //   - replace hyphens and other invalid chars with underscores
+        //   - prepend 'e' if the first character is a digit
+        const sanitized = id
+            .replace(/[^a-zA-Z0-9_]/g, '_')
+            .replace(/^([0-9])/, 'e$1')
+        // Ensure uniqueness (rare: two distinct IDs with the same sanitized form)
+        let varName = sanitized || 'element'
+        if (this.usedVarNames.has(varName)) {
+            let i = 2
+            while (this.usedVarNames.has(`${sanitized}_${i}`)) i++
+            varName = `${sanitized}_${i}`
         }
-        // Otherwise derive a clean variable name from the element name
-        const varName = this.toVarName(name)
         this.idToVar.set(id, varName)
         this.usedVarNames.add(varName)
     }

@@ -60,16 +60,16 @@ describe('Group serialization', () => {
     expect(dsl).toMatch(/group "Systems" \{[\s\S]*myApi[\s\S]*\}/)
   })
 
-  it('derives a var name from element name when id is not a valid identifier', () => {
+  it('sanitizes an invalid identifier ID to produce a valid var name', () => {
     const ws = makeWorkspace()
     ws.model.people.push({ id: '1', type: 'person', name: 'Alice', tags: ['Element', 'Person'], properties: {} })
     ws.model.groups.push({ id: 'g1', name: 'Team', elementIds: ['1'] })
 
     const dsl = serializeDSL(ws)
     expect(dsl).toContain('group "Team"')
-    // Should use name-derived var 'alice', not raw id '1'
-    expect(dsl).toMatch(/group "Team" \{[\s\S]*alice[\s\S]*\}/)
-    expect(dsl).toContain('alice = person "Alice"')
+    // id '1' starts with a digit → gets sanitized to 'e1'
+    expect(dsl).toMatch(/group "Team" \{[\s\S]*e1[\s\S]*\}/)
+    expect(dsl).toContain('e1 = person "Alice"')
   })
 
   it('serializes multiple groups', () => {
@@ -189,16 +189,30 @@ describe('Serializer — escaping special characters', () => {
 })
 
 describe('Serializer — var name deduplication', () => {
-  it('generates unique var names for two people with the same name', () => {
+  it('generates unique var names for two people with the same sanitized ID prefix', () => {
     const ws = makeWorkspace()
     ws.model.people.push(
+      // IDs '1' and '2' sanitize to 'e1' and 'e2' — already distinct, no dedup needed
       { id: '1', type: 'person', name: 'User', tags: ['Element', 'Person'], properties: {} },
       { id: '2', type: 'person', name: 'User', tags: ['Element', 'Person'], properties: {} },
     )
     const dsl = serializeDSL(ws)
-    // Both should appear; var names must be distinct
-    expect(dsl).toContain('user = person "User"')
-    expect(dsl).toContain('user_2 = person "User"')
+    // Both should appear with distinct var names derived from their IDs
+    expect(dsl).toContain('e1 = person "User"')
+    expect(dsl).toContain('e2 = person "User"')
+  })
+
+  it('handles collision when two IDs sanitize to the same var name', () => {
+    const ws = makeWorkspace()
+    ws.model.people.push(
+      // IDs 'ab-cd' and 'ab_cd' both sanitize to 'ab_cd' → collision
+      { id: 'ab-cd', type: 'person', name: 'A', tags: ['Element', 'Person'], properties: {} },
+      { id: 'ab_cd', type: 'person', name: 'B', tags: ['Element', 'Person'], properties: {} },
+    )
+    const dsl = serializeDSL(ws)
+    // One gets 'ab_cd', the other gets 'ab_cd_2'
+    expect(dsl).toContain('ab_cd = person')
+    expect(dsl).toContain('ab_cd_2 = person')
   })
 })
 
