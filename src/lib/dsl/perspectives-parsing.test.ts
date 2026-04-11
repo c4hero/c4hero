@@ -378,3 +378,44 @@ workspace {
     expect(view.elements.length).toBeGreaterThan(0)
   })
 })
+
+describe('unknown keyword with brace block in model body does not eat subsequent elements', () => {
+  it('unknown keyword with brace block on next line in model body does not drop subsequent softwareSystems', () => {
+    // Before the fix: the inner `}` of the unknown block terminated parseModelBody,
+    // causing all elements defined after it to be silently lost.
+    const dsl = `
+workspace {
+  model {
+    unknownExtension
+    {
+      key "value"
+    }
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(workspace.model.people.find(p => p.name === 'Alice')).toBeDefined()
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+
+  it('unknown keyword with inline brace block in model body does not drop subsequent elements', () => {
+    const dsl = `
+workspace {
+  model {
+    unknownPlugin "config" { key "value" }
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(workspace.model.people.find(p => p.name === 'Alice')).toBeDefined()
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+})

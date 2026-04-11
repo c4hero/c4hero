@@ -505,6 +505,8 @@ class ContextAwareParser {
 
                 this.advance()
                 this.skipToNextLine()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
             }
 
@@ -551,6 +553,8 @@ class ContextAwareParser {
                 this.pos = saved
                 this.advance()
                 this.skipToNextLine()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
             }
 
