@@ -1,5 +1,9 @@
 import { create } from 'zustand'
-import { nanoid } from 'nanoid'
+import { customAlphabet } from 'nanoid'
+
+// IDs must not contain hyphens: the DSL serializer sanitizes `-` → `_`, which
+// would change the ID on first serialize→parse roundtrip, breaking references.
+const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', 8)
 import type {
   Workspace, ModelElement, Relationship, View, Group,
   Person, SoftwareSystem, Container, Component,
