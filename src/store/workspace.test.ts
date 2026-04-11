@@ -1492,6 +1492,33 @@ describe('duplicateElements', () => {
     // No new relationship: api is not in the selection, so the relationship is not cloned
     expect(ws.model.relationships).toHaveLength(relsBefore)
   })
+
+  it('duplicates a container and preserves its components', () => {
+    // Add a container with two components to the api system
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Frontend')
+    useWorkspaceStore.getState().addComponent(containerId, 'Login')
+    useWorkspaceStore.getState().addComponent(containerId, 'Dashboard')
+    useWorkspaceStore.getState().toggleElementInView(viewKey, containerId)
+
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const originalContainer = ws0.model.softwareSystems[0].containers.find(c => c.id === containerId)!
+    expect(originalContainer.components).toHaveLength(2)
+
+    const newIds = useWorkspaceStore.getState().duplicateElements([containerId])
+    expect(newIds).toHaveLength(1)
+
+    const ws = useWorkspaceStore.getState().workspace!
+    const api = ws.model.softwareSystems[0]
+    const clone = api.containers.find(c => c.id === newIds[0])
+    expect(clone).toBeDefined()
+    expect(clone?.name).toContain('copy')
+    // Components should be cloned with new IDs, not cleared
+    expect(clone?.components).toHaveLength(2)
+    expect(clone?.components[0].id).not.toBe(originalContainer.components[0].id)
+    expect(clone?.components[1].id).not.toBe(originalContainer.components[1].id)
+    expect(clone?.components[0].name).toBe('Login')
+    expect(clone?.components[1].name).toBe('Dashboard')
+  })
 })
 
 // ─── drillInto & navigateBack ────────────────────────────────────────

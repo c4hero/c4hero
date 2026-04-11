@@ -855,17 +855,17 @@ export default function Canvas() {
   )
 
   // Track recent connections to prevent duplicates from multiple handle matches.
-  // Store a Set of both A→B and B→A keys so neither direction slips through twice.
+  // ReactFlow can fire onConnect several times for the same drag when a node has
+  // multiple handles — dedup only on the exact same direction (source→target).
+  // We intentionally allow B→A right after A→B so bidirectional relationships work.
   const recentConnect = useRef<Set<string>>(new Set())
   const onConnect = useCallback(
     (connection: Connection) => {
       if (connection.source && connection.target && connection.source !== connection.target) {
         const key = `${connection.source}->${connection.target}`
-        const reverseKey = `${connection.target}->${connection.source}`
-        if (recentConnect.current.has(key) || recentConnect.current.has(reverseKey)) return
+        if (recentConnect.current.has(key)) return
         recentConnect.current.add(key)
-        recentConnect.current.add(reverseKey)
-        setTimeout(() => { recentConnect.current.delete(key); recentConnect.current.delete(reverseKey) }, 300)
+        setTimeout(() => { recentConnect.current.delete(key) }, 300)
         addRelationship(connection.source, connection.target)
       }
     },

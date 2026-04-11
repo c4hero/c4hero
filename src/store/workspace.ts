@@ -590,7 +590,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
               ...structuredClone(element),
               id: newId,
               name: uniqueElementName(`${element.name} copy`, ws),
-              components: [],
+              components: element.components.map(comp => ({ ...structuredClone(comp), id: nanoid(8) })),
             })
           }
         } else if (element.type === 'component') {
