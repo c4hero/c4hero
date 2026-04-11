@@ -537,10 +537,23 @@ class ContextAwareParser {
                             const sys = this.parseSoftwareSystem(varName, model)
                             if (sys) model.softwareSystems.push(sys)
                         } else {
-                            this.skipToNextLine()
+                            // Unknown element type (e.g. deploymentEnvironment) — skip inline
+                            // args (stopping before any `{`) then skip any following brace block.
+                            while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                                this.advance()
+                            }
+                            if (this.peekType() === 'NEWLINE') this.advance()
+                            this.skipNewlines()
+                            if (this.check('LBRACE')) this.skipBraceBlock()
                         }
                     } else {
-                        this.skipToNextLine()
+                        // After `=`, the value is not a keyword — skip inline args and any block.
+                        while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                            this.advance()
+                        }
+                        if (this.peekType() === 'NEWLINE') this.advance()
+                        this.skipNewlines()
+                        if (this.check('LBRACE')) this.skipBraceBlock()
                     }
                     continue
                 }
@@ -698,10 +711,23 @@ class ContextAwareParser {
                             const container = this.parseContainer(vn, model)
                             if (container) sys.containers.push(container)
                         } else {
-                            this.skipToNextLine()
+                            // Unknown element type inside softwareSystem body — skip inline
+                            // args (stopping before `{`) then skip any following brace block.
+                            while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                                this.advance()
+                            }
+                            if (this.peekType() === 'NEWLINE') this.advance()
+                            this.skipNewlines()
+                            if (this.check('LBRACE')) this.skipBraceBlock()
                         }
                     } else {
-                        this.skipToNextLine()
+                        // After `=`, value is not a keyword — skip inline args and any block.
+                        while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                            this.advance()
+                        }
+                        if (this.peekType() === 'NEWLINE') this.advance()
+                        this.skipNewlines()
+                        if (this.check('LBRACE')) this.skipBraceBlock()
                     }
                     continue
                 }
@@ -833,7 +859,14 @@ class ContextAwareParser {
                         const comp = this.parseComponent(vn)
                         if (comp) container.components.push(comp)
                     } else {
-                        this.skipToNextLine()
+                        // Unknown element type inside container body — skip inline
+                        // args (stopping before `{`) then skip any following brace block.
+                        while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                            this.advance()
+                        }
+                        if (this.peekType() === 'NEWLINE') this.advance()
+                        this.skipNewlines()
+                        if (this.check('LBRACE')) this.skipBraceBlock()
                     }
                     continue
                 }

@@ -568,3 +568,118 @@ workspace {
     expect(rel.tags).toContain('Critical')
   })
 })
+
+describe('IDENTIFIER = unknownKeyword { block } does not eat subsequent model elements', () => {
+  it('deploymentEnvironment with inline brace block does not drop subsequent elements', () => {
+    // Before fix: `foo = deploymentEnvironment "Prod" {` — after consuming `=`, the parser was
+    // at `deploymentEnvironment` (a KEYWORD). Since it's not 'person' or 'softwareSystem',
+    // it called skipToNextLine() which consumed `deploymentEnvironment "Prod" {`.
+    // The block content then polluted the model parse loop, and the closing `}` prematurely
+    // ended parseModelBody, silently dropping alice and api.
+    const dsl = `
+workspace {
+  model {
+    prod = deploymentEnvironment "Production" {
+      deploymentNode "AWS" {
+        containerInstance appContainer
+      }
+    }
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace } = parseDSL(dsl)
+    expect(workspace.model.people.find(p => p.name === 'Alice')).toBeDefined()
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+
+  it('nested brace block assigned to unknown keyword in model body does not drop subsequent elements', () => {
+    const dsl = `
+workspace {
+  model {
+    env = unknownElement "Env" {
+      child = nestedThing "Child" {
+        leafProperty "value"
+      }
+    }
+    alice = person "Alice"
+  }
+  views {}
+}
+`
+    const { workspace } = parseDSL(dsl)
+    expect(workspace.model.people.find(p => p.name === 'Alice')).toBeDefined()
+  })
+
+  it('IDENTIFIER = nonKeyword value { block } in model body does not drop subsequent elements', () => {
+    // After `=`, the next token is not a KEYWORD — falls into the else branch at line 543.
+    const dsl = `
+workspace {
+  model {
+    foo = someValue "arg" {
+      someProperty "val"
+    }
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace } = parseDSL(dsl)
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+})
+
+describe('IDENTIFIER = unknownKeyword { block } inside softwareSystem body does not eat siblings', () => {
+  it('unknown element type with brace block inside softwareSystem does not drop subsequent containers', () => {
+    // In parseSoftwareSystemBody: `x = unknownKeyword { ... }` used skipToNextLine()
+    // which consumed the `{`, letting the block content pollute the outer loop.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      foo = deploymentNode "FooNode" {
+        someProperty "value"
+      }
+      db = container "Database"
+      api = container "API"
+    }
+  }
+  views {}
+}
+`
+    const { workspace } = parseDSL(dsl)
+    const sys = workspace.model.softwareSystems.find(s => s.name === 'Sys')
+    expect(sys).toBeDefined()
+    expect(sys?.containers.find(c => c.name === 'Database')).toBeDefined()
+    expect(sys?.containers.find(c => c.name === 'API')).toBeDefined()
+  })
+
+  it('unknown element type with multiline brace block inside container body does not drop subsequent components', () => {
+    // A multiline block is the critical case: skipToNextLine() consumes the `{` but not `}`,
+    // so the closing `}` of the inner block terminates the outer parseContainerBody loop early,
+    // dropping auth and gateway.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      app = container "App" {
+        ext = unknownThing "ext" {
+          key "val"
+        }
+        auth = component "Auth Service"
+        gateway = component "Gateway"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace } = parseDSL(dsl)
+    const sys = workspace.model.softwareSystems.find(s => s.name === 'Sys')
+    const app = sys?.containers.find(c => c.name === 'App')
+    expect(app?.components.find(c => c.name === 'Auth Service')).toBeDefined()
+    expect(app?.components.find(c => c.name === 'Gateway')).toBeDefined()
+  })
+})
