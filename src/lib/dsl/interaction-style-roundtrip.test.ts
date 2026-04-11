@@ -101,3 +101,58 @@ describe('relationship url roundtrip', () => {
     expect(dsl).toMatch(/user -> api "Uses" "REST"/)
   })
 })
+
+describe('relationship lineStyle roundtrip', () => {
+  it('Curved serializes and parses back', () => {
+    const ws = makeWs({ lineStyle: 'Curved' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('lineStyle Curved')
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.lineStyle).toBe('Curved')
+  })
+
+  it('Orthogonal serializes and parses back', () => {
+    const ws = makeWs({ lineStyle: 'Orthogonal' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('lineStyle Orthogonal')
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.lineStyle).toBe('Orthogonal')
+  })
+
+  it('Straight serializes and parses back', () => {
+    const ws = makeWs({ lineStyle: 'Straight' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('lineStyle Straight')
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.lineStyle).toBe('Straight')
+  })
+
+  it('undefined lineStyle emits no block (stays inline)', () => {
+    const ws = makeWs()
+    const dsl = serializeDSL(ws)
+    expect(dsl).not.toContain('lineStyle')
+    expect(dsl).toMatch(/user -> api "Uses" "REST"/)
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.lineStyle).toBeUndefined()
+  })
+
+  it('lineStyle and interactionStyle both survive roundtrip', () => {
+    const ws = makeWs({ lineStyle: 'Curved', interactionStyle: 'Asynchronous' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('lineStyle Curved')
+    expect(dsl).toContain('interactionStyle Asynchronous')
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.lineStyle).toBe('Curved')
+    expect(rel?.interactionStyle).toBe('Asynchronous')
+  })
+})

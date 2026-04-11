@@ -19,6 +19,7 @@ import type {
     RelationshipStyle,
     ViewConfiguration,
     ElementInView,
+    LineStyle,
 } from '@/types/model'
 import { lex } from './lexer'
 import type { Token, TokenType } from './lexer'
@@ -1005,6 +1006,19 @@ class ContextAwareParser {
                 if (this.peekType() === 'KEYWORD' && this.peekValue().toLowerCase() === 'url') {
                     this.advance()
                     if (this.peekType() === 'STRING') rel.url = this.advance().value
+                    continue
+                }
+                // 'lineStyle' in relationship body (Curved | Straight | Orthogonal)
+                if ((this.peekType() === 'IDENTIFIER' || this.peekType() === 'KEYWORD') &&
+                    this.peekValue().toLowerCase() === 'linestyle') {
+                    this.advance()
+                    const valTok = this.peek()
+                    if (valTok.type === 'IDENTIFIER' || valTok.type === 'KEYWORD') {
+                        const raw = this.advance().value
+                        if (raw === 'Curved' || raw === 'Straight' || raw === 'Orthogonal') {
+                            rel.lineStyle = raw as LineStyle
+                        }
+                    }
                     continue
                 }
                 this.advance()
