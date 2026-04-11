@@ -46,8 +46,8 @@ export default function FloatingTopPill() {
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const undo = useWorkspaceStore((s) => s.undo)
   const redo = useWorkspaceStore((s) => s.redo)
-  const canUndo = useWorkspaceStore((s) => s.canUndo)
-  const canRedo = useWorkspaceStore((s) => s.canRedo)
+  const canUndo = useWorkspaceStore((s) => s.undoStack.length > 0)
+  const canRedo = useWorkspaceStore((s) => s.redoStack.length > 0)
 
   const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
   const showUndoRedo = useSettingsStore((s) => s.showUndoRedo)
@@ -332,13 +332,13 @@ export default function FloatingTopPill() {
                         icon={Undo2}
                         label="Undo"
                         onClick={() => { setHamburgerOpen(false); undo() }}
-                        disabled={!canUndo()}
+                        disabled={!canUndo}
                       />
                       <MenuItemRow
                         icon={Redo2}
                         label="Redo"
                         onClick={() => { setHamburgerOpen(false); redo() }}
-                        disabled={!canRedo()}
+                        disabled={!canRedo}
                       />
                     </>
                   )}
@@ -353,7 +353,7 @@ export default function FloatingTopPill() {
               <>
                 <button
                   onClick={undo}
-                  disabled={!canUndo()}
+                  disabled={!canUndo}
                   className="btn-icon"
                   style={{
                     width: 36,
@@ -361,7 +361,7 @@ export default function FloatingTopPill() {
                     borderRadius: 0,
                     minWidth: 36,
                     minHeight: 44,
-                    opacity: canUndo() ? 1 : 0.3,
+                    opacity: canUndo ? 1 : 0.3,
                   }}
                   title="Undo (Ctrl+Z)"
                   aria-label="Undo"
@@ -370,7 +370,7 @@ export default function FloatingTopPill() {
                 </button>
                 <button
                   onClick={redo}
-                  disabled={!canRedo()}
+                  disabled={!canRedo}
                   className="btn-icon"
                   style={{
                     width: 36,
@@ -378,7 +378,7 @@ export default function FloatingTopPill() {
                     borderRadius: 0,
                     minWidth: 36,
                     minHeight: 44,
-                    opacity: canRedo() ? 1 : 0.3,
+                    opacity: canRedo ? 1 : 0.3,
                     borderRight: '1px solid var(--color-border)',
                   }}
                   title="Redo (Ctrl+Shift+Z)"
