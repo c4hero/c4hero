@@ -537,6 +537,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         selectedRelationshipId: null,
       }
     })
+    get().revalidateScope()
     announce(ids.length === 1 ? 'Element deleted' : `${ids.length} elements deleted`)
   },
 
