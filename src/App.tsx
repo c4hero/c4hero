@@ -16,6 +16,7 @@ import MultiSelectBar from '@/components/layout/MultiSelectBar'
 import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
 import Canvas from '@/components/canvas/Canvas'
 import CanvasHints from '@/components/canvas/CanvasHints'
+import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import { loadFromLocalStorage } from '@/lib/fileIO'
 import { restoreDirHandle, getCurrentDirHandle } from '@/lib/folderIO'
 
@@ -66,7 +67,9 @@ export default function App() {
     return (
       <ReactFlowProvider>
         <div className="h-full w-full" style={{ background: 'var(--color-bg-primary)' }}>
-          <Canvas />
+          <ErrorBoundary label="Canvas error" onHome={() => useWorkspaceStore.getState().closeWorkspace()}>
+            <Canvas />
+          </ErrorBoundary>
           <div
             className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-3 py-1.5 text-xs"
             style={{
@@ -112,7 +115,9 @@ export default function App() {
               <a href="#c4hero-canvas" className="sr-only">Skip to main content</a>
               <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
                 <main id="c4hero-canvas" aria-label="Architecture diagram canvas" style={{ position: 'absolute', inset: 0 }}>
-                  <Canvas />
+                  <ErrorBoundary label="Canvas error" onHome={() => useWorkspaceStore.getState().closeWorkspace()}>
+                    <Canvas />
+                  </ErrorBoundary>
                 </main>
                 <nav aria-label="Workspace navigation"><FloatingTopPill /></nav>
                 <MultiSelectBar />
