@@ -1146,6 +1146,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   removeTagGlobal: (tag) => set((s) => {
     if (BUILTIN_TAGS.has(tag)) return s // Built-in tags cannot be removed
+    if (!s.workspace) return s
+    // Quick existence check on the pre-clone workspace to avoid unnecessary cloning
+    const src = s.workspace
+    let exists = src.views.configuration.styles.elements.some(es => es.tag === tag)
+      || src.views.configuration.styles.relationships.some(rs => rs.tag === tag)
+      || src.model.relationships.some(r => r.tags.includes(tag))
+    if (!exists) forEachElement(src, (el) => { if (el.tags.includes(tag)) { exists = true; return true } })
+    if (!exists) return s
     const ws = cloneWs(s)
     if (!ws) return s
     forEachElement(ws, (el) => { el.tags = el.tags.filter(t => t !== tag) })

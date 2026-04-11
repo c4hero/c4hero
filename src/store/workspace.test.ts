@@ -2070,6 +2070,12 @@ describe('removeTagGlobal', () => {
     const ws = useWorkspaceStore.getState().workspace!
     expect(ws.model.people[0].tags).toContain('VIP')
   })
+
+  it('is a no-op (no undo) when tag does not exist anywhere', () => {
+    const prevUndoLength = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().removeTagGlobal('NonExistentTag99')
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(prevUndoLength)
+  })
 })
 
 // ─── Canvas position and layout actions ─────────────────────────────────────
