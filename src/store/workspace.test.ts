@@ -3220,3 +3220,96 @@ describe('renameTag — nested elements (containers and components)', () => {
     expect(component.tags).not.toContain('Legacy')
   })
 })
+
+// ─── undo/redo — viewHistory purging ──────────────────────────────────
+
+describe('undo/redo — viewHistory purging', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('undo purges viewHistory entries that no longer exist in the restored workspace', () => {
+    // Create two views; keyB ends up active
+    useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View A')
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View B')
+    // Simulate: user navigated through B so it appears in history (e.g., drillInto from B)
+    useWorkspaceStore.setState({ viewHistory: [keyB] })
+    // Undo the addition of view B — the restored workspace has only view A
+    useWorkspaceStore.getState().undo()
+    // viewHistory must no longer contain keyB (it was purged since B no longer exists)
+    expect(useWorkspaceStore.getState().viewHistory).not.toContain(keyB)
+  })
+
+  it('redo purges viewHistory entries that do not exist in the redo target workspace', () => {
+    // Add view A and undo it so redo stack has {A}
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View A')
+    useWorkspaceStore.getState().undo()
+    // Inject a stale key into viewHistory (pretend keyA was in history before undo)
+    useWorkspaceStore.setState({ viewHistory: ['stale-key-that-never-existed'] })
+    // Redo restores workspace with view A; stale key is still not present → purge
+    useWorkspaceStore.getState().redo()
+    expect(useWorkspaceStore.getState().viewHistory).not.toContain('stale-key-that-never-existed')
+    // The valid key A was added back to the workspace via redo
+    expect(useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0].key).toBe(keyA)
+  })
+
+  it('undo is a no-op when undoStack is empty', () => {
+    // Fresh workspace — undo stack is empty
+    const wsBefore = JSON.stringify(useWorkspaceStore.getState().workspace)
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(0)
+    useWorkspaceStore.getState().undo()
+    expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(wsBefore)
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(0)
+  })
+
+  it('redo is a no-op when redoStack is empty', () => {
+    // No undo performed, so redo stack is empty
+    const viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'My View')
+    const wsBefore = JSON.stringify(useWorkspaceStore.getState().workspace)
+    expect(useWorkspaceStore.getState().redoStack).toHaveLength(0)
+    useWorkspaceStore.getState().redo()
+    expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(wsBefore)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(viewKey)
+  })
+})
+
+// ─── loadWorkspace — edge cases ───────────────────────────────────────
+
+describe('loadWorkspace — edge cases', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().closeWorkspace()
+  })
+
+  it('loadWorkspace with a workspace that has no views sets activeViewKey to null', () => {
+    const ws = makeWorkspace() // makeWorkspace has no views by default
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    expect(useWorkspaceStore.getState().activeViewKey).toBeNull()
+  })
+
+  it('loadWorkspace with a workspace that has views sets activeViewKey to the first view', () => {
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews.push({
+      key: 'landscape1',
+      type: 'systemLandscape',
+      title: 'Landscape',
+      elements: [],
+      relationships: [],
+      autoLayout: { direction: 'TB' },
+    })
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('landscape1')
+  })
+
+  it('loadWorkspace resets undo and redo stacks', () => {
+    // Populate stacks from a previous session
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    useWorkspaceStore.getState().addGroup('Temp')
+    expect(useWorkspaceStore.getState().undoStack.length).toBeGreaterThan(0)
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().redoStack.length).toBeGreaterThan(0)
+    // Load a fresh workspace — stacks must reset
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(0)
+    expect(useWorkspaceStore.getState().redoStack).toHaveLength(0)
+  })
+})
