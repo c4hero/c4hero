@@ -55,6 +55,64 @@ workspace {
     expect(ws2.views.systemContextViews[0].description).toBe('Context for the API system.')
   })
 
+  it('container view description survives serialize → parse', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      webApp = container "Web App"
+    }
+  }
+  views {
+    container sys "containers1" "System Containers" {
+      description "All containers in the system."
+      include webApp
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(workspace.views.containerViews[0].description).toBe('All containers in the system.')
+
+    const dsl2 = serialize(workspace)
+    expect(dsl2).toContain('description "All containers in the system."')
+
+    const { workspace: ws2, errors: errors2 } = parseDSL(dsl2)
+    expect(errors2).toEqual([])
+    expect(ws2.views.containerViews[0].description).toBe('All containers in the system.')
+  })
+
+  it('component view description survives serialize → parse', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      api = container "API" {
+        auth = component "Auth Service"
+      }
+    }
+  }
+  views {
+    component api "apiComponents" "API Components" {
+      description "Internal components of the API container."
+      include auth
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(workspace.views.componentViews[0].description).toBe('Internal components of the API container.')
+
+    const dsl2 = serialize(workspace)
+    expect(dsl2).toContain('description "Internal components of the API container."')
+
+    const { workspace: ws2, errors: errors2 } = parseDSL(dsl2)
+    expect(errors2).toEqual([])
+    expect(ws2.views.componentViews[0].description).toBe('Internal components of the API container.')
+  })
+
   it('view without description does not emit description block', () => {
     const dsl = `
 workspace {
