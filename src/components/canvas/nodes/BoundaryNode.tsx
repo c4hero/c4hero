@@ -13,8 +13,8 @@ function BoundaryNode({ data }: NodeProps & { data: BoundaryNodeData }) {
         width: '100%',
         height: '100%',
         borderRadius: 'var(--radius-lg)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.015)',
+        border: '1px solid var(--glass-overlay-sm)',
+        background: 'var(--glass-overlay-xxs)',
         pointerEvents: 'none',
         userSelect: 'none',
       }}
@@ -24,7 +24,7 @@ function BoundaryNode({ data }: NodeProps & { data: BoundaryNodeData }) {
         <span style={{
           fontSize: 'var(--text-xs-plus)',
           fontWeight: 700,
-          color: 'rgba(255,255,255,0.35)',
+          color: 'var(--color-text-dim)',
           letterSpacing: '0.02em',
           whiteSpace: 'nowrap',
         }}>
@@ -33,7 +33,7 @@ function BoundaryNode({ data }: NodeProps & { data: BoundaryNodeData }) {
         <span style={{
           fontSize: 'var(--text-xxs)',
           fontWeight: 500,
-          color: 'rgba(255,255,255,0.18)',
+          color: 'var(--color-text-ghost)',
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
         }}>

@@ -67,8 +67,13 @@
   --glass-blur: 20px;
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(255, 255, 255, 0.06);
   /* Subtle white glass overlays for input backgrounds and badges */
+  --glass-overlay-xxs: rgba(255, 255, 255, 0.015);
   --glass-overlay-xs: rgba(255, 255, 255, 0.04);
   --glass-overlay-sm: rgba(255, 255, 255, 0.08);
+
+  /* Transparent text colors — for elements rendered directly on canvas */
+  --color-text-dim: rgba(255, 255, 255, 0.35);
+  --color-text-ghost: rgba(255, 255, 255, 0.18);
 
   /* Radius scale */
   --radius-sm: 6px;

@@ -3,7 +3,7 @@ import {
   UserRound, Globe, Box, Puzzle, Layers, Undo2, Redo2, Trash2,
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
-  Presentation, FolderOpen, FileText, Image, FileCode,
+  Presentation, FolderOpen, FileText, Image, FileCode, Copy,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, allViewsOf } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
@@ -125,6 +125,16 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       execute: () => store().redo(),
     },
     {
+      id: 'duplicate-selected',
+      label: 'Duplicate Selected',
+      category: 'edit',
+      icon: Copy,
+      shortcut: `${mod}D`,
+      keywords: ['duplicate', 'copy', 'clone'],
+      when: () => store().selectedElementIds.length > 0,
+      execute: () => { store().duplicateElements(store().selectedElementIds) },
+    },
+    {
       id: 'delete-selected',
       label: 'Delete Selected',
       category: 'edit',
@@ -135,10 +145,15 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       execute: () => {
         const s = store()
         if (s.selectedRelationshipId) {
-          s.deleteRelationship(s.selectedRelationshipId)
+          s.confirmDelete('Delete this relationship?', () => s.deleteRelationship(s.selectedRelationshipId!))
+          return
         }
         if (s.selectedElementIds.length > 0) {
-          s.deleteElements(s.selectedElementIds)
+          const count = s.selectedElementIds.length
+          s.confirmDelete(
+            count === 1 ? 'Delete this element?' : `Delete ${count} elements?`,
+            () => s.deleteElements(s.selectedElementIds),
+          )
         }
       },
     },

@@ -495,6 +495,49 @@ describe('Element CRUD', () => {
     useWorkspaceStore.getState().undo()
     expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')).toBeDefined()
   })
+
+  it('deleteElements clears selectedElementIds', () => {
+    useWorkspaceStore.getState().selectElements(['alice', 'api'])
+    useWorkspaceStore.getState().deleteElements(['alice', 'api'])
+    expect(useWorkspaceStore.getState().selectedElementIds).toHaveLength(0)
+  })
+
+  it('deleteElements removes elements from all views', () => {
+    const viewKey = useWorkspaceStore.getState().addView('systemContext', 'api', 'Context')
+    useWorkspaceStore.getState().setActiveView(viewKey)
+    // addPerson places the element into the active view
+    const newId = useWorkspaceStore.getState().addPerson('Visitor')
+    const ws1 = useWorkspaceStore.getState().workspace!
+    const view1 = ws1.views.systemContextViews.find(v => v.key === viewKey)!
+    expect(view1.elements.some(e => e.id === newId)).toBe(true)
+
+    useWorkspaceStore.getState().deleteElements([newId])
+    const ws2 = useWorkspaceStore.getState().workspace!
+    const view2 = ws2.views.systemContextViews.find(v => v.key === viewKey)!
+    expect(view2.elements.some(e => e.id === newId)).toBe(false)
+  })
+
+  it('deleteElements removes relationships referencing any deleted element', () => {
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'uses')
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(1)
+    useWorkspaceStore.getState().deleteElements(['alice'])
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
+  })
+
+  it('deleteElements removes group memberships for deleted elements', () => {
+    useWorkspaceStore.getState().addGroup('Team', ['alice', 'api'])
+    useWorkspaceStore.getState().deleteElements(['alice'])
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.groups[0].elementIds).toEqual(['api'])
+  })
+
+  it('undo after deleteElements restores all deleted elements', () => {
+    useWorkspaceStore.getState().deleteElements(['alice', 'api'])
+    useWorkspaceStore.getState().undo()
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.people.find(p => p.id === 'alice')).toBeDefined()
+    expect(ws.model.softwareSystems.find(s => s.id === 'api')).toBeDefined()
+  })
 })
 
 // ─── UI Toggles ──────────────────────────────────────────────────────
