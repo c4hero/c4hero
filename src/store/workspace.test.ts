@@ -358,6 +358,16 @@ describe('multiSelectMode', () => {
     useWorkspaceStore.getState().setActiveView(viewKey)
     expect(useWorkspaceStore.getState().selectedElementIds).toHaveLength(0)
   })
+
+  it('loadWorkspace clears activeTagFilter and activeStatusFilter', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    useWorkspaceStore.setState({ activeTagFilter: 'Database', activeStatusFilter: 'Live' })
+    expect(useWorkspaceStore.getState().activeTagFilter).toBe('Database')
+    // Load a fresh workspace — filters should reset
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    expect(useWorkspaceStore.getState().activeTagFilter).toBeNull()
+    expect(useWorkspaceStore.getState().activeStatusFilter).toBeNull()
+  })
 })
 
 // ─── activeWorkspaceFilename ─────────────────────────────────────────

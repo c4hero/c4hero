@@ -313,6 +313,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedGroupId: null,
       undoStack: [],
       redoStack: [],
+      // Clear view filters so they don't bleed from a previous workspace
+      activeTagFilter: null,
+      activeStatusFilter: null,
       scopeViolations: validateScope(workspace),
     })
   },
