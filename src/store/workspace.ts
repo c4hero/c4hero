@@ -602,8 +602,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         const offsetX = (inView?.x ?? 200) + 60
         const offsetY = (inView?.y ?? 200) + 30
         const newId = nanoid(8)
-        idMapping.set(id, newId)
-        newIds.push(newId)
+
+        // Create the model clone first; only register the new ID if the clone succeeds.
+        let cloned = false
 
         if (element.type === 'person') {
           ws.model.people.push({
@@ -611,6 +612,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             id: newId,
             name: uniqueElementName(`${element.name} copy`, ws),
           })
+          cloned = true
         } else if (element.type === 'softwareSystem') {
           const clonedContainers = element.containers.map(c => ({
             ...structuredClone(c),
@@ -623,6 +625,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             name: uniqueElementName(`${element.name} copy`, ws),
             containers: clonedContainers,
           })
+          cloned = true
         } else if (element.type === 'container') {
           const parent = ws.model.softwareSystems.find(sys => sys.containers.some(c => c.id === id))
           if (parent) {
@@ -632,6 +635,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
               name: uniqueElementName(`${element.name} copy`, ws),
               components: element.components.map(comp => ({ ...structuredClone(comp), id: nanoid(8) })),
             })
+            cloned = true
           }
         } else if (element.type === 'component') {
           outer: for (const sys of ws.model.softwareSystems) {
@@ -642,12 +646,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
                   id: newId,
                   name: uniqueElementName(`${element.name} copy`, ws),
                 })
+                cloned = true
                 break outer
               }
             }
           }
         }
 
+        if (!cloned) continue
+        idMapping.set(id, newId)
+        newIds.push(newId)
         view.elements.push({ id: newId, x: offsetX, y: offsetY })
       }
 
