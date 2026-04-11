@@ -1675,13 +1675,20 @@ export function parse(input: string): ParseResult {
                 .filter(r => expandedIds.has(r.sourceId) && expandedIds.has(r.destinationId))
                 .map(r => ({ id: r.id }))
         } else {
-            // Apply `exclude` directives for explicit includes
+            // Apply `exclude` directives and deduplicate for explicit includes
             let elements = view.elements
             if (excluded.size > 0) {
                 elements = elements.filter(e => !excluded.has(e.id))
-                view.elements = elements
             }
-            const elementIds = new Set(elements.map(e => e.id))
+            // Deduplicate: DSL may include the same element twice (e.g. two separate `include alice` lines)
+            const seen = new Set<string>()
+            elements = elements.filter(e => {
+                if (seen.has(e.id)) return false
+                seen.add(e.id)
+                return true
+            })
+            view.elements = elements
+            const elementIds = seen
             view.relationships = ws.model.relationships
                 .filter(r => elementIds.has(r.sourceId) && elementIds.has(r.destinationId))
                 .map(r => ({ id: r.id }))

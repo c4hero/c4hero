@@ -905,4 +905,31 @@ workspace {
     expect(container.name).toBe('API')
     expect(container.technology).toBe('Node.js')
   })
+
+  it('duplicate include of the same element produces exactly one element in view', () => {
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {
+    systemLandscape "overview" {
+      include alice
+      include alice
+      include api
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = workspace.views.systemLandscapeViews[0]
+    const aliceId = workspace.model.people[0].id
+    const apiId = workspace.model.softwareSystems[0].id
+    // alice should appear exactly once despite being included twice
+    expect(view.elements.filter(e => e.id === aliceId)).toHaveLength(1)
+    expect(view.elements.filter(e => e.id === apiId)).toHaveLength(1)
+    expect(view.elements).toHaveLength(2)
+  })
 })
