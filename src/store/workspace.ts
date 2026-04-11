@@ -920,10 +920,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   renameView: (key, title) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
+    let found = false
     for (const arr of [ws.views.systemLandscapeViews, ws.views.systemContextViews, ws.views.containerViews, ws.views.componentViews] as { key: string; title?: string }[][]) {
       const v = arr.find(v => v.key === key)
-      if (v) { v.title = title; break }
+      if (v) { v.title = title; found = true; break }
     }
+    if (!found) return s
     return { ...pushUndo(s), workspace: ws }
   }),
 
