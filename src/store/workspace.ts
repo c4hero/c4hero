@@ -770,21 +770,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const ws = cloneWs(s)
     if (!ws) return s
     const rel = ws.model.relationships.find(r => r.id === id)
-    if (rel) {
-      rel.sourceId = newSourceId
-      rel.destinationId = newTargetId
-      // Sync view.relationships: keep only in views where both new endpoints exist
-      forEachView(ws, (v) => {
-        const elIds = new Set(v.elements.map(e => e.id))
-        const hasRel = v.relationships.some(r => r.id === id)
-        const bothPresent = elIds.has(newSourceId) && elIds.has(newTargetId)
-        if (hasRel && !bothPresent) {
-          v.relationships = v.relationships.filter(r => r.id !== id)
-        } else if (!hasRel && bothPresent) {
-          v.relationships.push({ id })
-        }
-      })
-    }
+    if (!rel) return s
+    if (rel.sourceId === newSourceId && rel.destinationId === newTargetId) return s
+    rel.sourceId = newSourceId
+    rel.destinationId = newTargetId
+    // Sync view.relationships: keep only in views where both new endpoints exist
+    forEachView(ws, (v) => {
+      const elIds = new Set(v.elements.map(e => e.id))
+      const hasRel = v.relationships.some(r => r.id === id)
+      const bothPresent = elIds.has(newSourceId) && elIds.has(newTargetId)
+      if (hasRel && !bothPresent) {
+        v.relationships = v.relationships.filter(r => r.id !== id)
+      } else if (!hasRel && bothPresent) {
+        v.relationships.push({ id })
+      }
+    })
     return { ...pushUndo(s), workspace: ws }
   }),
 

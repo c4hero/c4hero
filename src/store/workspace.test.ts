@@ -276,6 +276,20 @@ describe('Relationship and container mutations', () => {
     expect(vA.relationships.some(r => r.id === relId)).toBe(true)
   })
 
+  it('reconnectRelationship is a no-op (no undo) when endpoints are unchanged', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    // Reconnect to the same endpoints — should not push undo
+    useWorkspaceStore.getState().reconnectRelationship(relId, 'alice', 'api')
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('reconnectRelationship is a no-op when relationship id does not exist', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().reconnectRelationship('nonexistent', 'alice', 'api')
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
   it('deleteRelationship removes it from model', () => {
     const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
     useWorkspaceStore.getState().deleteRelationship(relId)
