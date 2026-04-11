@@ -28,6 +28,42 @@ function makeWs(): Workspace {
   }
 }
 
+describe('native location keyword parsing', () => {
+  it('person block with location External is parsed correctly', () => {
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice" {
+      location External
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const alice = workspace.model.people.find(p => p.name === 'Alice')
+    expect(alice?.location).toBe('External')
+  })
+
+  it('softwareSystem block with location External is parsed correctly', () => {
+    const dsl = `
+workspace {
+  model {
+    ext = softwareSystem "External Payments" {
+      location External
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const ext = workspace.model.softwareSystems.find(s => s.name === 'External Payments')
+    expect(ext?.location).toBe('External')
+  })
+})
+
 describe('External location roundtrip', () => {
   it('External person survives serialize → parse', () => {
     const ws = makeWs()

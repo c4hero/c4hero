@@ -565,7 +565,7 @@ class ContextAwareParser {
                     continue
                 }
 
-                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives') {
+                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'location') {
                     this.parseElementPropertyOnElement(sys, kw)
                     continue
                 }
@@ -778,7 +778,7 @@ class ContextAwareParser {
 
             if (token.type === 'KEYWORD') {
                 const kw = token.value.toLowerCase()
-                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives') {
+                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'location') {
                     this.parseElementPropertyOnElement(element, kw)
                     continue
                 }
@@ -812,6 +812,15 @@ class ContextAwareParser {
         } else if (keyword === 'url') {
             const val = this.readOptionalString()
             if (val !== undefined) element.url = val
+        } else if (keyword === 'location') {
+            const val = this.peek()
+            if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD') {
+                const loc = this.advance().value
+                if (element.type === 'person' || element.type === 'softwareSystem') {
+                    if (loc === 'External') (element as Person | SoftwareSystem).location = 'External'
+                    else if (loc === 'Internal') (element as Person | SoftwareSystem).location = 'Internal'
+                }
+            }
         } else if (keyword === 'properties') {
             this.skipNewlines()
             if (this.match('LBRACE')) {

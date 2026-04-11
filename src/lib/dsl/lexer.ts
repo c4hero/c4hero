@@ -70,6 +70,7 @@ const KEYWORDS = new Set([
     'containerInstance',
     'healthCheck',
     'default',
+    'location',
 ])
 
 // Directives that start opaque pass-through blocks
