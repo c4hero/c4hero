@@ -191,6 +191,79 @@ workspace "Test" {
     expect(view.elements.some(e => e.id === apiId)).toBe(true)
   })
 
+  it('container include * includes containers from other systems that are directly related', () => {
+    // When a container in the scoped system calls a container in another system,
+    // the external container should appear in the view (not just the parent system).
+    const dsl = `
+workspace "Test" {
+  model {
+    myApp = softwareSystem "My App" {
+      api = container "API"
+    }
+    otherApp = softwareSystem "Other App" {
+      db = container "Database"
+    }
+    api -> db "reads"
+  }
+  views {
+    container myApp "myAppContainers" {
+      include *
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = workspace.views.containerViews[0]
+    expect(view.elements.some(e => e.id === '*')).toBe(false)
+    const apiId = workspace.model.softwareSystems.find(s => s.name === 'My App')!.containers[0].id
+    const dbId = workspace.model.softwareSystems.find(s => s.name === 'Other App')!.containers[0].id
+    // The scoped container should appear
+    expect(view.elements.some(e => e.id === apiId)).toBe(true)
+    // The related container from the other system should also appear
+    expect(view.elements.some(e => e.id === dbId)).toBe(true)
+  })
+
+  it('component include * shows parent container as boundary for related components in other containers', () => {
+    // When ComponentA calls ComponentB (which lives in ContainerY), ContainerY should
+    // appear in the view as a C4 boundary element, not ComponentB directly.
+    const dsl = `
+workspace "Test" {
+  model {
+    sys = softwareSystem "System" {
+      frontendCont = container "Frontend" {
+        loginComp = component "Login"
+      }
+      backendCont = container "Backend" {
+        authComp = component "Auth"
+      }
+    }
+    loginComp -> authComp "verifies"
+  }
+  views {
+    component frontendCont "frontendComponents" {
+      include *
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = workspace.views.componentViews[0]
+    expect(view.elements.some(e => e.id === '*')).toBe(false)
+    const sys = workspace.model.softwareSystems[0]
+    const frontend = sys.containers.find(c => c.name === 'Frontend')!
+    const backend = sys.containers.find(c => c.name === 'Backend')!
+    const loginId = frontend.components[0].id
+    const authId = backend.components[0].id
+    // Login component (in scoped container) should appear
+    expect(view.elements.some(e => e.id === loginId)).toBe(true)
+    // Backend container (parent of auth) should appear as the C4 boundary
+    expect(view.elements.some(e => e.id === backend.id)).toBe(true)
+    // The internal auth component itself should NOT appear (it lives behind the boundary)
+    expect(view.elements.some(e => e.id === authId)).toBe(false)
+  })
+
   it('exclude removes explicitly included elements', () => {
     const dsl = `
 workspace "Test" {

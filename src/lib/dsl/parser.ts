@@ -66,6 +66,10 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
         for (const p of model.people) { if (relatedIds.has(p.id)) addId(p.id) }
         for (const s of model.softwareSystems) {
             if (s.id !== view.softwareSystemId && relatedIds.has(s.id)) addId(s.id)
+            // Also include containers from other systems that are directly related
+            for (const c of s.containers) {
+                if (relatedIds.has(c.id)) addId(c.id)
+            }
         }
     } else if (view.type === 'component' && view.containerId) {
         // Component view: components of the scoped container + directly related elements.
@@ -87,6 +91,8 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
             if (relatedToComponents.has(s.id)) addId(s.id)
             for (const c of s.containers) {
                 if (c.id !== containerId && relatedToComponents.has(c.id)) addId(c.id)
+                // If a component in another container is related, show that container as the C4 boundary
+                else if (c.id !== containerId && c.components.some(comp => relatedToComponents.has(comp.id))) addId(c.id)
             }
         }
     }

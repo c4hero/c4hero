@@ -990,6 +990,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           if (relatedToComponents.has(otherSys.id)) initialElements.push({ id: otherSys.id })
           for (const c of otherSys.containers) {
             if (c.id !== scopeId && relatedToComponents.has(c.id)) initialElements.push({ id: c.id })
+            // If a component in another container is related, show that container as the C4 boundary
+            else if (c.id !== scopeId && c.components.some(comp => relatedToComponents.has(comp.id))) initialElements.push({ id: c.id })
           }
         }
       }
