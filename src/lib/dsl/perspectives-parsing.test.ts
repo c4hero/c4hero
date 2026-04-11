@@ -40,6 +40,51 @@ workspace "Test" {
   })
 })
 
+describe('preprocessor directive handling', () => {
+  it('!include at workspace level is skipped without consuming next element', () => {
+    const dsl = `
+workspace {
+  !include "config.dsl"
+  model {
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    // Parser cannot evaluate !include, but must not crash or misparse what follows
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+
+  it('!const in model body is skipped without consuming next element', () => {
+    const dsl = `
+workspace {
+  model {
+    !const MY_TAG "CustomTag"
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+
+  it('!identifiers at workspace level is skipped', () => {
+    const dsl = `
+workspace {
+  !identifiers hierarchical
+  model {
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+})
+
 describe('perspectives block parsing', () => {
   it('perspectives block in softwareSystem body is skipped without errors', () => {
     const dsl = `

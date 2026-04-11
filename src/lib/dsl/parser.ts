@@ -322,7 +322,9 @@ class ContextAwareParser {
                         this.expect('RBRACE')
                     }
                 } else if (token.value.startsWith('!')) {
+                    // Preprocessor directive — consume keyword + inline args on this line
                     this.advance()
+                    this.skipToNextLine()
                 } else if (kw === 'configuration') {
                     this.advance()
                     this.skipNewlines()
@@ -387,7 +389,11 @@ class ContextAwareParser {
             const token = this.peek()
 
             if (token.type === 'KEYWORD' && token.value.startsWith('!')) {
+                // Preprocessor directives (!include, !const, !var, !identifiers, !docs, !adrs).
+                // c4hero doesn't evaluate them, but must consume the keyword plus any inline
+                // arguments on the same line to avoid mis-parsing them as model elements.
                 this.advance()
+                this.skipToNextLine()
                 continue
             }
 
@@ -589,7 +595,7 @@ class ContextAwareParser {
             const token = this.peek()
 
             if (token.type === 'COMMENT') { this.advance(); continue }
-            if (token.type === 'KEYWORD' && token.value.startsWith('!')) { this.advance(); continue }
+            if (token.type === 'KEYWORD' && token.value.startsWith('!')) { this.advance(); this.skipToNextLine(); continue }
 
             if (token.type === 'KEYWORD') {
                 const kw = token.value.toLowerCase()
@@ -710,7 +716,7 @@ class ContextAwareParser {
             const token = this.peek()
 
             if (token.type === 'COMMENT') { this.advance(); continue }
-            if (token.type === 'KEYWORD' && token.value.startsWith('!')) { this.advance(); continue }
+            if (token.type === 'KEYWORD' && token.value.startsWith('!')) { this.advance(); this.skipToNextLine(); continue }
 
             if (token.type === 'KEYWORD') {
                 const kw = token.value.toLowerCase()
