@@ -1095,6 +1095,24 @@ describe('Element CRUD', () => {
     // Component view scoped to the now-gone container should also be removed
     expect(ws.views.componentViews.some(v => v.key === compViewKey)).toBe(false)
   })
+
+  it('deleteElements falls back activeViewKey when the active view is removed', () => {
+    // Create a landscape view and a container view scoped to 'api'
+    const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    const containerViewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+
+    // Make the container view active
+    useWorkspaceStore.getState().setActiveView(containerViewKey)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(containerViewKey)
+
+    // Delete the system — container view is orphaned and removed
+    useWorkspaceStore.getState().deleteElements(['api'])
+
+    // activeViewKey should have fallen back to the landscape view (or any surviving view)
+    const newActive = useWorkspaceStore.getState().activeViewKey
+    expect(newActive).not.toBe(containerViewKey)
+    expect(newActive).toBe(landscapeKey)
+  })
 })
 
 // ─── UI Toggles ──────────────────────────────────────────────────────

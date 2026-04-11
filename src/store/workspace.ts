@@ -553,11 +553,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         ...g,
         elementIds: g.elementIds.filter(eid => !idSet.has(eid)),
       }))
+      // If the active view was among the ones just removed, fall back to the first remaining view
+      const activeStillExists = s.activeViewKey ? !!findView(ws, s.activeViewKey) : false
+      const newActiveKey = activeStillExists ? s.activeViewKey : getFirstViewKey(ws)
       return {
         ...pushUndo(s),
         workspace: ws,
         selectedElementIds: [],
         selectedRelationshipId: null,
+        activeViewKey: newActiveKey,
       }
     })
     get().revalidateScope()
