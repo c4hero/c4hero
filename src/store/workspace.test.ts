@@ -3125,3 +3125,98 @@ describe('duplicateElements — softwareSystem with containers', () => {
     expect(sibling.elements.some(e => e.id === newIds[0])).toBe(true)
   })
 })
+
+// ─── updateElement — url field ────────────────────────────────────────────────
+
+describe('updateElement — url', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('updateElement sets url on an element', () => {
+    useWorkspaceStore.getState().updateElement('alice', { url: 'https://example.com/alice' })
+    expect(useWorkspaceStore.getState().workspace!.model.people[0].url).toBe('https://example.com/alice')
+  })
+
+  it('updateElement url change supports undo', () => {
+    useWorkspaceStore.getState().updateElement('alice', { url: 'https://example.com/alice' })
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().workspace!.model.people[0].url).toBeUndefined()
+  })
+
+  it('updateElement clears url when passed undefined', () => {
+    useWorkspaceStore.getState().updateElement('alice', { url: 'https://example.com' })
+    useWorkspaceStore.getState().updateElement('alice', { url: undefined })
+    expect(useWorkspaceStore.getState().workspace!.model.people[0].url).toBeUndefined()
+  })
+
+  it('updateElement is a no-op (no undo) when url is already undefined and patch passes undefined', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElement('alice', { url: undefined })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+})
+
+// ─── updateElementLive — technology ──────────────────────────────────────────
+
+describe('updateElementLive — technology', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('updateElementLive sets technology on a container without pushing undo', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElementLive(containerId, { technology: 'React' })
+    const container = useWorkspaceStore.getState().workspace!.model.softwareSystems[0].containers.find(c => c.id === containerId)!
+    expect(container.technology).toBe('React')
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('updateElementLive technology has no effect on persons (not applicable)', () => {
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElementLive('alice', { technology: 'React' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+    // alice (person) has no technology field — workspace should be unchanged
+    expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(JSON.stringify(ws0))
+  })
+})
+
+// ─── renameTag — containers and components ────────────────────────────────────
+
+describe('renameTag — nested elements (containers and components)', () => {
+  let containerId: string
+
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    // Use a non-built-in custom tag 'Legacy' so renameTag is not blocked
+    containerId = useWorkspaceStore.getState().addContainer('api', 'DB', undefined, 'Legacy')
+    useWorkspaceStore.getState().addComponent(containerId, 'Schema')
+    // Give the component the same custom tag by patching the workspace
+    useWorkspaceStore.setState((s) => {
+      const ws = s.workspace ? { ...s.workspace, model: structuredClone(s.workspace.model) } : s.workspace
+      if (!ws) return s
+      const sys = ws.model.softwareSystems.find(sys => sys.id === 'api')!
+      const comp = sys.containers.find(c => c.id === containerId)!.components[0]
+      comp.tags = ['Element', 'Component', 'Legacy']
+      return { workspace: ws }
+    })
+  })
+
+  it('renameTag renames tag on containers', () => {
+    useWorkspaceStore.getState().renameTag('Legacy', 'Archive')
+    const ws = useWorkspaceStore.getState().workspace!
+    const container = ws.model.softwareSystems[0].containers[0]
+    expect(container.tags).toContain('Archive')
+    expect(container.tags).not.toContain('Legacy')
+  })
+
+  it('renameTag renames tag on components', () => {
+    useWorkspaceStore.getState().renameTag('Legacy', 'Archive')
+    const ws = useWorkspaceStore.getState().workspace!
+    const component = ws.model.softwareSystems[0].containers[0].components[0]
+    expect(component.tags).toContain('Archive')
+    expect(component.tags).not.toContain('Legacy')
+  })
+})
