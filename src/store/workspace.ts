@@ -541,7 +541,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         v.elements = v.elements.filter(e => !idSet.has(e.id))
         v.relationships = v.relationships.filter(r => survivingRelIds.has(r.id))
       })
-      // Remove container views scoped to deleted systems
+      // Remove scoped views whose scope element was deleted
+      ws.views.systemContextViews = ws.views.systemContextViews.filter(
+        v => !v.softwareSystemId || !idSet.has(v.softwareSystemId)
+      )
       ws.views.containerViews = ws.views.containerViews.filter(
         v => !v.softwareSystemId || !idSet.has(v.softwareSystemId)
       )

@@ -1072,6 +1072,17 @@ describe('Element CRUD', () => {
     expect(ws.model.softwareSystems.find(s => s.id === 'api')).toBeDefined()
   })
 
+  it('deleteElements removes systemContext views scoped to deleted software system', () => {
+    const viewKey = useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    expect(ws0.views.systemContextViews.some(v => v.key === viewKey)).toBe(true)
+
+    useWorkspaceStore.getState().deleteElements(['api'])
+    const ws = useWorkspaceStore.getState().workspace!
+    // The systemContext view should be gone — its scope is the deleted system
+    expect(ws.views.systemContextViews.some(v => v.key === viewKey)).toBe(false)
+  })
+
   it('deleteElements removes container views scoped to deleted software system', () => {
     // Create a container view scoped to 'api'
     const viewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
