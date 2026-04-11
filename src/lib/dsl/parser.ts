@@ -925,7 +925,21 @@ class ContextAwareParser {
                 if (this.peekType() === 'KEYWORD' && this.peekValue().toLowerCase() === 'properties') {
                     this.advance()
                     this.skipNewlines()
-                    this.skipBraceBlock()
+                    if (this.check('LBRACE')) {
+                        this.advance()
+                        while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
+                            this.skipNewlines()
+                            if (this.check('RBRACE') || this.peekType() === 'EOF') break
+                            if (this.peekType() === 'COMMENT') { this.advance(); continue }
+                            if (this.peek().type !== 'STRING' && this.peek().type !== 'IDENTIFIER') { this.advance(); continue }
+                            const key = this.advance().value
+                            const valTok = this.peek()
+                            if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
+                                rel.properties[key] = this.advance().value
+                            }
+                        }
+                        if (this.check('RBRACE')) this.advance()
+                    }
                     continue
                 }
                 // 'interactionStyle' is not a reserved keyword so it arrives as IDENTIFIER

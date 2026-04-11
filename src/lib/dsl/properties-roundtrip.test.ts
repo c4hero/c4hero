@@ -45,6 +45,40 @@ function makeWsWithProperties(): Workspace {
   }
 }
 
+describe('relationship properties roundtrip', () => {
+  it('relationship properties survive serialize → parse', () => {
+    const ws: Workspace = {
+      name: 'Test',
+      model: {
+        people: [{ id: 'alice', type: 'person', name: 'Alice', tags: ['Person'], properties: {} }],
+        softwareSystems: [{ id: 'api', type: 'softwareSystem', name: 'API', tags: ['Software System'], properties: {}, containers: [] }],
+        relationships: [
+          {
+            id: 'rel1', sourceId: 'alice', destinationId: 'api',
+            description: 'calls', tags: ['Relationship'],
+            properties: { 'protocol': 'HTTPS', 'sla': '99.9%' },
+          },
+        ],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('"protocol" "HTTPS"')
+    const parsed = parseDSL(dsl)
+    expect(parsed.errors).toEqual([])
+    const rel = parsed.workspace?.model.relationships[0]
+    expect(rel?.properties['protocol']).toBe('HTTPS')
+    expect(rel?.properties['sla']).toBe('99.9%')
+  })
+})
+
 describe('element properties roundtrip', () => {
   it('person properties survive serialize → parse', () => {
     const ws = makeWsWithProperties()

@@ -361,13 +361,15 @@ class SerializerContext {
         if (rel.technology) parts.push(`"${this.escapeString(rel.technology)}"`)
 
         const extraTags = this.getExtraTags(rel.tags, ['Relationship'])
-        const needsBlock = !!rel.interactionStyle
+        const hasProperties = Object.keys(rel.properties).length > 0
+        const needsBlock = !!rel.interactionStyle || hasProperties
 
         if (needsBlock) {
-            // Use block form when interactionStyle is present; put tags in block too
+            // Use block form when interactionStyle or properties are present; put tags in block too
             this.emit(`${parts.join(' ')} {`)
             this.depth++
-            this.emit(`interactionStyle ${rel.interactionStyle}`)
+            if (rel.interactionStyle) this.emit(`interactionStyle ${rel.interactionStyle}`)
+            if (hasProperties) this.serializeProperties(rel.properties)
             if (extraTags) this.emit(`tags "${extraTags}"`)
             this.depth--
             this.emit('}')
