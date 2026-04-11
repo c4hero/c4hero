@@ -1366,8 +1366,25 @@ class ContextAwareParser {
                     continue
                 }
 
+                // Unknown keyword: consume it and any inline args, then skip any brace
+                // block so the view's closing RBRACE is not consumed as the block's.
                 this.advance()
                 this.skipToNextLine()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
+                continue
+            }
+
+            // Unknown identifier (non-keyword directive): consume it and any inline args,
+            // then skip any following brace block for the same reason as the KEYWORD path.
+            if (token.type === 'IDENTIFIER') {
+                this.advance()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
             }
 

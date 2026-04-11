@@ -326,3 +326,55 @@ workspace {
     expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
   })
 })
+
+describe('unknown brace block in view body does not eat the view closing RBRACE', () => {
+  it('unknown keyword with brace block in systemLandscape view body does not terminate view early', () => {
+    // Before the fix: unknown keyword + brace block on next line caused the inner `}`
+    // to terminate the view body loop, cutting off any subsequent include/autolayout directives.
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {
+    systemLandscape "sl" {
+      unknownDirective
+      {
+        key "value"
+      }
+      include *
+    }
+  }
+}
+`
+    const { workspace } = parseDSL(dsl)
+    const view = workspace.views.systemLandscapeViews[0]
+    expect(view).toBeDefined()
+    // include * after the unknown block must still be processed
+    expect(view.elements.length).toBeGreaterThan(0)
+  })
+
+  it('unknown keyword with inline brace block in systemContext view body does not eat siblings', () => {
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api "uses"
+  }
+  views {
+    systemContext api "ctx" {
+      unknownPlugin "config" { key "value" }
+      include *
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const view = workspace.views.systemContextViews[0]
+    expect(view).toBeDefined()
+    expect(view.elements.length).toBeGreaterThan(0)
+  })
+})
