@@ -387,6 +387,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const person: Person = { id, type: 'person', name: uniqueElementName(name, ws), tags: ['Person'], properties: {}, location: location ?? 'Internal' }
       ws.model.people.push(person)
       addToCurrentView(ws, s.activeViewKey, id, position)
+      // Auto-add to all system landscape views (they display every person/system)
+      for (const v of ws.views.systemLandscapeViews) {
+        if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === id)) {
+          v.elements.push({ id })
+        }
+      }
       return { ...pushUndo(s), workspace: ws, focusElementId: id, selectedElementIds: [id], selectedRelationshipId: null, selectedGroupId: null }
     })
     announce('Person created')
@@ -401,6 +407,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const system: SoftwareSystem = { id, type: 'softwareSystem', name: uniqueElementName(name, ws), tags: ['Software System'], properties: {}, containers: [], location: location ?? 'Internal' }
       ws.model.softwareSystems.push(system)
       addToCurrentView(ws, s.activeViewKey, id, position)
+      // Auto-add to all system landscape views (they display every person/system)
+      for (const v of ws.views.systemLandscapeViews) {
+        if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === id)) {
+          v.elements.push({ id })
+        }
+      }
       return { ...pushUndo(s), workspace: ws, focusElementId: id, selectedElementIds: [id], selectedRelationshipId: null, selectedGroupId: null }
     })
     get().revalidateScope()
@@ -670,7 +682,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         properties: {},
       }
       ws.model.relationships.push(rel)
-      // Add to every view that already contains both endpoints
+      // For systemContext views: if one endpoint is the scoped system, auto-add
+      // the other endpoint (external actor) to the view so the context diagram stays
+      // consistent — a person/system related to the scope should appear in its context view.
+      for (const v of ws.views.systemContextViews) {
+        if (!v.softwareSystemId) continue
+        const scopeId = v.softwareSystemId
+        const sourceIsScope = sourceId === scopeId
+        const destIsScope = destinationId === scopeId
+        if (sourceIsScope || destIsScope) {
+          const actorId = sourceIsScope ? destinationId : sourceId
+          if (!v.elements.some(e => e.id === actorId)) {
+            v.elements.push({ id: actorId })
+          }
+        }
+      }
+      // Add relationship ref to every view that now has both endpoints
       for (const view of allViewsOf(ws)) {
         const viewElIds = new Set(view.elements.map(e => e.id))
         if (viewElIds.has(sourceId) && viewElIds.has(destinationId)) {

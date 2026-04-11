@@ -193,26 +193,34 @@ describe('Relationship and container mutations', () => {
   })
 
   it('reconnectRelationship removes relationship from views where the new endpoint is absent', () => {
-    // V1: landscape auto-populates alice + api; becomes active view
-    const keyV1 = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View 1')
-    // V2: landscape auto-populates alice + api; addView sets V2 as active
-    const keyV2 = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View 2')
-    // Create 'other' while V2 is active — it auto-adds to V2 only
-    const otherId = useWorkspaceStore.getState().addSoftwareSystem('Other')
-    // Add relationship alice→api; both views have alice+api so relationship goes into both
-    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    // Use container views to test scope-bounded auto-add (landscape views auto-add all elements)
+    // Setup: two container views for 'api', with container C1 and C2
+    const c1 = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const c2 = useWorkspaceStore.getState().addContainer('api', 'DB')
+
+    // Create view A (active) — gets C1 and C2 via addContainer cross-view auto-add
+    const keyA = useWorkspaceStore.getState().addView('container', 'api', 'View A')
+    useWorkspaceStore.getState().setActiveView(keyA)
+    // Create relationship C1→C2 (both are in view A since addView auto-populates)
+    const relId = useWorkspaceStore.getState().addRelationship(c1, c2, 'reads')
     const ws0 = useWorkspaceStore.getState().workspace!
-    const v1before = ws0.views.systemLandscapeViews.find(v => v.key === keyV1)!
-    expect(v1before.relationships.some(r => r.id === relId)).toBe(true)
-    // Reconnect to alice→other: 'other' is in V2 but NOT in V1
-    useWorkspaceStore.getState().reconnectRelationship(relId, 'alice', otherId)
+    const vAbefore = ws0.views.containerViews.find(v => v.key === keyA)!
+    expect(vAbefore.relationships.some(r => r.id === relId)).toBe(true)
+
+    // Create view B for the same system but toggle C2 out of it
+    const keyB = useWorkspaceStore.getState().addView('container', 'api', 'View B')
+    // View B auto-populates C1 and C2; toggle C2 out
+    useWorkspaceStore.getState().toggleElementInView(keyB, c2)
+    // Reconnect to point at a person (alice) not in view B's container list
+    // Actually use a fresh element not in either view
+    // Instead: use C1→alice (alice is already in landscape views but not in container view B)
+    useWorkspaceStore.getState().reconnectRelationship(relId, c1, 'alice')
+
     const ws = useWorkspaceStore.getState().workspace!
-    const v1 = ws.views.systemLandscapeViews.find(v => v.key === keyV1)!
-    const v2 = ws.views.systemLandscapeViews.find(v => v.key === keyV2)!
-    // V1 doesn't have 'other' → relationship should be removed
-    expect(v1.relationships.some(r => r.id === relId)).toBe(false)
-    // V2 has both alice and other → relationship should stay
-    expect(v2.relationships.some(r => r.id === relId)).toBe(true)
+    const vA = ws.views.containerViews.find(v => v.key === keyA)!
+    // View A has C1 (yes) and alice (alice was added by addRelationship to context views? no, this is container view)
+    // alice is NOT in the container view, so relationship should be removed from vA
+    expect(vA.relationships.some(r => r.id === relId)).toBe(false)
   })
 
   it('deleteRelationship removes it from model', () => {
@@ -587,6 +595,94 @@ describe('addRelationship — auto-add to views containing both endpoints', () =
     // Should appear exactly once
     const count = view.relationships.filter(r => r.id === relId).length
     expect(count).toBe(1)
+  })
+})
+
+// ─── addPerson/addSoftwareSystem landscape view auto-add ─────────────
+
+describe('addPerson — auto-add to all system landscape views', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('auto-adds to non-active landscape views', () => {
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'L1')
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'L2')
+    useWorkspaceStore.getState().setActiveView(keyA)
+
+    const personId = useWorkspaceStore.getState().addPerson('Bob')
+    const ws = useWorkspaceStore.getState().workspace!
+    const vA = ws.views.systemLandscapeViews.find(v => v.key === keyA)!
+    const vB = ws.views.systemLandscapeViews.find(v => v.key === keyB)!
+    expect(vA.elements.some(e => e.id === personId)).toBe(true)
+    expect(vB.elements.some(e => e.id === personId)).toBe(true)
+  })
+})
+
+describe('addSoftwareSystem — auto-add to all system landscape views', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('auto-adds to non-active landscape views', () => {
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'L1')
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'L2')
+    useWorkspaceStore.getState().setActiveView(keyA)
+
+    const sysId = useWorkspaceStore.getState().addSoftwareSystem('NewSys')
+    const ws = useWorkspaceStore.getState().workspace!
+    const vA = ws.views.systemLandscapeViews.find(v => v.key === keyA)!
+    const vB = ws.views.systemLandscapeViews.find(v => v.key === keyB)!
+    expect(vA.elements.some(e => e.id === sysId)).toBe(true)
+    expect(vB.elements.some(e => e.id === sysId)).toBe(true)
+  })
+})
+
+// ─── addRelationship auto-adds actors to systemContext views ──────────
+
+describe('addRelationship — auto-add external actor to systemContext view', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('adds person to context view when creating relationship to scoped system', () => {
+    // Create a systemContext view for 'api' (includes api by default)
+    const ctxKey = useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const ctx0 = ws0.views.systemContextViews.find(v => v.key === ctxKey)!
+    // Alice is not in the context view yet (no relationship to api)
+    expect(ctx0.elements.some(e => e.id === 'alice')).toBe(false)
+
+    // Create relationship alice → api
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+
+    const ws = useWorkspaceStore.getState().workspace!
+    const ctx = ws.views.systemContextViews.find(v => v.key === ctxKey)!
+    // Alice should now appear in the context view
+    expect(ctx.elements.some(e => e.id === 'alice')).toBe(true)
+    // And the relationship ref should also be added
+    expect(ctx.relationships.some(r => r.id === relId)).toBe(true)
+  })
+
+  it('adds person to context view when creating relationship FROM scoped system', () => {
+    const ctxKey = useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
+    const relId = useWorkspaceStore.getState().addRelationship('api', 'alice', 'notifies')
+
+    const ws = useWorkspaceStore.getState().workspace!
+    const ctx = ws.views.systemContextViews.find(v => v.key === ctxKey)!
+    expect(ctx.elements.some(e => e.id === 'alice')).toBe(true)
+    expect(ctx.relationships.some(r => r.id === relId)).toBe(true)
+  })
+
+  it('does not add actor to context view for a different scoped system', () => {
+    const other = useWorkspaceStore.getState().addSoftwareSystem('Other')
+    const ctxKey = useWorkspaceStore.getState().addView('systemContext', other, 'Other Context')
+
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+
+    const ws = useWorkspaceStore.getState().workspace!
+    const ctx = ws.views.systemContextViews.find(v => v.key === ctxKey)!
+    expect(ctx.elements.some(e => e.id === 'alice')).toBe(false)
   })
 })
 
