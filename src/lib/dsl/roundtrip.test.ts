@@ -73,6 +73,42 @@ describe('DSL relationship round-trip', () => {
     expect(modelRel!.sourceId).toBe(personId)
     expect(modelRel!.destinationId).toBe(sysId)
   })
+
+  it('interactionStyle Synchronous survives roundtrip', () => {
+    const ws = makeWs()
+    ws.model.relationships[0].interactionStyle = 'Synchronous'
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.relationships[0].interactionStyle).toBe('Synchronous')
+  })
+
+  it('interactionStyle Asynchronous survives roundtrip', () => {
+    const ws = makeWs()
+    ws.model.relationships[0].interactionStyle = 'Asynchronous'
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.relationships[0].interactionStyle).toBe('Asynchronous')
+  })
+
+  it('lineStyle Curved survives roundtrip', () => {
+    const ws = makeWs()
+    ws.model.relationships[0].lineStyle = 'Curved'
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.relationships[0].lineStyle).toBe('Curved')
+  })
+
+  it('lineStyle Orthogonal survives roundtrip', () => {
+    const ws = makeWs()
+    ws.model.relationships[0].lineStyle = 'Orthogonal'
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.relationships[0].lineStyle).toBe('Orthogonal')
+  })
 })
 
 // ─── Big Bank Round-trip ──────────────────────────────────────────────
