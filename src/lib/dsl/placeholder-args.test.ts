@@ -135,4 +135,32 @@ workspace {
     expect(container.description).toBe('Stores user data')
     expect(container.technology).toBe('PostgreSQL')
   })
+
+  it('workspace "" name placeholder is normalized to undefined', () => {
+    // workspace "" "My Description" — empty name should not become name:""
+    const dsl = `
+workspace "" "My Description" {
+  model {}
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(workspace.name).toBeUndefined()
+    expect(workspace.description).toBe('My Description')
+  })
+
+  it('workspace "" description placeholder is normalized to undefined', () => {
+    // workspace "My Workspace" "" — empty description should not become description:""
+    const dsl = `
+workspace "My Workspace" "" {
+  model {}
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(workspace.name).toBe('My Workspace')
+    expect(workspace.description).toBeUndefined()
+  })
 })
