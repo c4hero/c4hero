@@ -3126,6 +3126,67 @@ describe('duplicateElements — softwareSystem with containers', () => {
   })
 })
 
+// ─── duplicateElements — container and component sibling view auto-add ────────
+
+describe('duplicateElements — container and component sibling view auto-add', () => {
+  let containerViewKey: string
+  let containerId: string
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+      viewHistory: [],
+    })
+    // Create two container views for 'api' so there is a sibling to auto-add into
+    containerViewKey = useWorkspaceStore.getState().addView('container', 'api', 'Containers A')
+    useWorkspaceStore.getState().addView('container', 'api', 'Containers B')
+    useWorkspaceStore.getState().setActiveView(containerViewKey)
+    containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+  })
+
+  it('duplicated container is auto-added to sibling container views scoped to the same system', () => {
+    // containerViewKey is active; there is also Containers B (a sibling container view for 'api')
+    const newIds = useWorkspaceStore.getState().duplicateElements([containerId])
+    expect(newIds).toHaveLength(1)
+    const ws = useWorkspaceStore.getState().workspace!
+    // All container views for 'api' should have the clone
+    const siblingViewB = ws.views.containerViews.find(v => v.title === 'Containers B')!
+    expect(siblingViewB.elements.some(e => e.id === newIds[0])).toBe(true)
+  })
+
+  it('duplicated container is NOT auto-added to container views for a different system', () => {
+    const otherId = useWorkspaceStore.getState().addSoftwareSystem('Other')
+    useWorkspaceStore.getState().addView('container', otherId, 'Other Containers')
+    // Reset active view back to Containers A before duplicating so 'Other Containers' is not the active view
+    useWorkspaceStore.getState().setActiveView(containerViewKey)
+    const newIds = useWorkspaceStore.getState().duplicateElements([containerId])
+    expect(newIds).toHaveLength(1)
+    const ws = useWorkspaceStore.getState().workspace!
+    const otherView = ws.views.containerViews.find(v => v.title === 'Other Containers')!
+    expect(otherView.elements.some(e => e.id === newIds[0])).toBe(false)
+  })
+
+  it('duplicated component is auto-added to sibling component views scoped to the same container', () => {
+    // Create two component views for 'containerId'
+    const compViewA = useWorkspaceStore.getState().addView('component', containerId, 'Components A')
+    useWorkspaceStore.getState().addView('component', containerId, 'Components B')
+    useWorkspaceStore.getState().setActiveView(compViewA)
+    const compId = useWorkspaceStore.getState().addComponent(containerId, 'Auth')
+    // Duplicate the component while Components A is active
+    const newIds = useWorkspaceStore.getState().duplicateElements([compId])
+    expect(newIds).toHaveLength(1)
+    const ws = useWorkspaceStore.getState().workspace!
+    const siblingViewB = ws.views.componentViews.find(v => v.title === 'Components B')!
+    expect(siblingViewB.elements.some(e => e.id === newIds[0])).toBe(true)
+  })
+})
+
 // ─── updateElement — url field ────────────────────────────────────────────────
 
 describe('updateElement — url', () => {
