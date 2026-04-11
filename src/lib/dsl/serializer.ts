@@ -229,7 +229,7 @@ class SerializerContext {
         const extraTags = this.getExtraTags(person.tags, ['Element', 'Person'])
         const isExternal = person.location === 'External'
         const hasProperties = Object.keys(person.properties).length > 0
-        const hasBlock = isExternal || !!person.url || hasProperties
+        const hasBlock = isExternal || !!person.url || !!person.status || !!person.owner || hasProperties
 
         const parts: string[] = []
         parts.push('person')
@@ -245,6 +245,8 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
+            if (person.status) this.emit(`status ${person.status}`)
+            if (person.owner) this.emit(`owner "${this.escapeString(person.owner)}"`)
             if (isExternal) this.emit('location External')
             if (hasProperties) this.serializeProperties(person.properties)
             this.depth--
@@ -259,7 +261,7 @@ class SerializerContext {
         const extraTags = this.getExtraTags(sys.tags, ['Element', 'Software System'])
         const isExternal = sys.location === 'External'
         const hasProperties = Object.keys(sys.properties).length > 0
-        const hasBody = sys.containers.length > 0 || isExternal || !!sys.url || hasProperties
+        const hasBody = sys.containers.length > 0 || isExternal || !!sys.url || !!sys.status || !!sys.owner || hasProperties
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -276,6 +278,8 @@ class SerializerContext {
             this.depth++
 
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
+            if (sys.status) this.emit(`status ${sys.status}`)
+            if (sys.owner) this.emit(`owner "${this.escapeString(sys.owner)}"`)
             if (isExternal) this.emit('location External')
             if (hasProperties) this.serializeProperties(sys.properties)
 
@@ -295,7 +299,7 @@ class SerializerContext {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
         const hasProperties = Object.keys(container.properties).length > 0
-        const hasBody = container.components.length > 0 || !!container.url || hasProperties
+        const hasBody = container.components.length > 0 || !!container.url || !!container.status || !!container.owner || hasProperties
 
         const parts: string[] = []
         parts.push('container')
@@ -315,6 +319,8 @@ class SerializerContext {
             this.depth++
 
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
+            if (container.status) this.emit(`status ${container.status}`)
+            if (container.owner) this.emit(`owner "${this.escapeString(container.owner)}"`)
             if (hasProperties) this.serializeProperties(container.properties)
             for (const comp of container.components) {
                 this.serializeComponent(comp)
@@ -331,7 +337,7 @@ class SerializerContext {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
         const hasProperties = Object.keys(comp.properties).length > 0
-        const hasBlock = !!comp.url || hasProperties
+        const hasBlock = !!comp.url || !!comp.status || !!comp.owner || hasProperties
 
         const parts: string[] = []
         parts.push('component')
@@ -350,6 +356,8 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (comp.url) this.emit(`url "${this.escapeString(comp.url)}"`)
+            if (comp.status) this.emit(`status ${comp.status}`)
+            if (comp.owner) this.emit(`owner "${this.escapeString(comp.owner)}"`)
             if (hasProperties) this.serializeProperties(comp.properties)
             this.depth--
             this.emit('}')

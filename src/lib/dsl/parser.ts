@@ -612,7 +612,7 @@ class ContextAwareParser {
                     continue
                 }
 
-                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'location') {
+                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'location' || kw === 'status' || kw === 'owner') {
                     this.parseElementPropertyOnElement(sys, kw)
                     continue
                 }
@@ -733,7 +733,7 @@ class ContextAwareParser {
                     continue
                 }
 
-                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives') {
+                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'status' || kw === 'owner') {
                     this.parseElementPropertyOnElement(container, kw)
                     continue
                 }
@@ -825,7 +825,7 @@ class ContextAwareParser {
 
             if (token.type === 'KEYWORD') {
                 const kw = token.value.toLowerCase()
-                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'location') {
+                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'location' || kw === 'status' || kw === 'owner') {
                     this.parseElementPropertyOnElement(element, kw)
                     continue
                 }
@@ -859,6 +859,17 @@ class ContextAwareParser {
         } else if (keyword === 'url') {
             const val = this.readOptionalString()
             if (val !== undefined) element.url = val
+        } else if (keyword === 'status') {
+            const val = this.peek()
+            if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD' || val.type === 'STRING') {
+                const s = this.advance().value
+                if (s === 'Live' || s === 'Planned' || s === 'Deprecated' || s === 'Removed') {
+                    element.status = s
+                }
+            }
+        } else if (keyword === 'owner') {
+            const val = this.readOptionalString()
+            if (val !== undefined) element.owner = val
         } else if (keyword === 'location') {
             const val = this.peek()
             if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD') {

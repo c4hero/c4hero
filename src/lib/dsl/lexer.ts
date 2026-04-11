@@ -71,6 +71,8 @@ const KEYWORDS = new Set([
     'healthCheck',
     'default',
     'location',
+    'status',
+    'owner',
 ])
 
 // Directives that start opaque pass-through blocks
