@@ -208,25 +208,29 @@ class SerializerContext {
         const varName = this.idToVar.get(person.id)
         const extraTags = this.getExtraTags(person.tags, ['Element', 'Person'])
         const isExternal = person.location === 'External'
+        const hasBlock = isExternal || !!person.url
 
         const parts: string[] = []
         parts.push('person')
         parts.push(`"${this.escapeString(person.name)}"`)
-        if (person.description || extraTags || isExternal) {
+        if (person.description || extraTags || hasBlock) {
             parts.push(`"${this.escapeString(person.description ?? '')}"`)
         }
         if (extraTags) parts.push(`"${extraTags}"`)
 
         const prefix = varName ? `${varName} = ` : ''
 
-        if (isExternal) {
+        if (hasBlock) {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
-            this.emit('properties {')
-            this.depth++
-            this.emit(`"c4hero.location" "External"`)
-            this.depth--
-            this.emit('}')
+            if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
+            if (isExternal) {
+                this.emit('properties {')
+                this.depth++
+                this.emit(`"c4hero.location" "External"`)
+                this.depth--
+                this.emit('}')
+            }
             this.depth--
             this.emit('}')
         } else {
@@ -238,7 +242,7 @@ class SerializerContext {
         const varName = this.idToVar.get(sys.id)
         const extraTags = this.getExtraTags(sys.tags, ['Element', 'Software System'])
         const isExternal = sys.location === 'External'
-        const hasBody = sys.containers.length > 0 || isExternal
+        const hasBody = sys.containers.length > 0 || isExternal || !!sys.url
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -254,6 +258,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
 
+            if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
             if (isExternal) {
                 this.emit('properties {')
                 this.depth++
@@ -277,7 +282,7 @@ class SerializerContext {
     private serializeContainer(container: Container): void {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
-        const hasBody = container.components.length > 0
+        const hasBody = container.components.length > 0 || !!container.url
 
         const parts: string[] = []
         parts.push('container')
@@ -296,6 +301,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
 
+            if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
             for (const comp of container.components) {
                 this.serializeComponent(comp)
             }
@@ -310,11 +316,12 @@ class SerializerContext {
     private serializeComponent(comp: Component): void {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
+        const hasBlock = !!comp.url
 
         const parts: string[] = []
         parts.push('component')
         parts.push(`"${this.escapeString(comp.name)}"`)
-        if (comp.description || comp.technology || extraTags) {
+        if (comp.description || comp.technology || extraTags || hasBlock) {
             parts.push(`"${this.escapeString(comp.description ?? '')}"`)
         }
         if (comp.technology || extraTags) {
@@ -323,7 +330,16 @@ class SerializerContext {
         if (extraTags) parts.push(`"${extraTags}"`)
 
         const prefix = varName ? `${varName} = ` : ''
-        this.emit(`${prefix}${parts.join(' ')}`)
+
+        if (hasBlock) {
+            this.emit(`${prefix}${parts.join(' ')} {`)
+            this.depth++
+            this.emit(`url "${this.escapeString(comp.url!)}"`)
+            this.depth--
+            this.emit('}')
+        } else {
+            this.emit(`${prefix}${parts.join(' ')}`)
+        }
     }
 
     private serializeRelationship(rel: Relationship): void {
@@ -335,15 +351,27 @@ class SerializerContext {
         if (rel.description) parts.push(`"${this.escapeString(rel.description)}"`)
         if (rel.technology) parts.push(`"${this.escapeString(rel.technology)}"`)
 
-        // Emit a block only when interactionStyle is explicitly set. Synchronous is the
-        // Structurizr default so we only need to persist Asynchronous, but we persist
-        // any explicit value to preserve user intent.
-        if (rel.interactionStyle) {
+        const extraTags = this.getExtraTags(rel.tags, ['Relationship'])
+        const needsBlock = !!rel.interactionStyle
+
+        if (needsBlock) {
+            // Use block form when interactionStyle is present; put tags in block too
             this.emit(`${parts.join(' ')} {`)
             this.depth++
             this.emit(`interactionStyle ${rel.interactionStyle}`)
+            if (extraTags) this.emit(`tags "${extraTags}"`)
             this.depth--
             this.emit('}')
+        } else if (extraTags) {
+            // Inline form: tags are the 4th positional arg in Structurizr DSL.
+            // All preceding slots must be filled, so rebuild with explicit slots.
+            const inline = [
+                `${sourceRef} -> ${destRef}`,
+                `"${this.escapeString(rel.description ?? '')}"`,
+                `"${this.escapeString(rel.technology ?? '')}"`,
+                `"${extraTags}"`,
+            ]
+            this.emit(inline.join(' '))
         } else {
             this.emit(parts.join(' '))
         }
