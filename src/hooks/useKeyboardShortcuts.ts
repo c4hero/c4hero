@@ -60,6 +60,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.presentationMode) { store.setPresentationMode(false); return }
     if (store.commandPaletteOpen) { store.setCommandPaletteOpen(false); return }
     if (store.searchOpen) { store.setSearchOpen(false); return }
+    if (store.addElementPanelOpen) { store.setAddElementPanelOpen(false); return }
     if (store.selectedElementIds.length > 0 || store.selectedRelationshipId || store.selectedGroupId) { store.clearSelection(); return }
     if (store.viewHistory.length > 0) { store.navigateBack() }
   },
@@ -120,6 +121,9 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (!store.workspace) return
     const ct = getCreatableTypes(store.workspace, store.activeViewKey)
     if (ct.canCreateComponent) store.addComponent(ct.canCreateComponent, 'New Component')
+  },
+  'a': (store) => {
+    if (store.workspace) store.setAddElementPanelOpen(!store.addElementPanelOpen)
   },
   '?': (store) => store.setCommandPaletteOpen(true),
   '=': (_store, rf) => rf?.zoomIn({ duration: 200 }),

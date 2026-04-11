@@ -44,7 +44,8 @@ export default function FloatingToolRail() {
   const reactFlow = useReactFlow()
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const setMultiSelectMode = useWorkspaceStore((s) => s.setMultiSelectMode)
-  const [addPanelOpen, setAddPanelOpen] = useState(false)
+  const addPanelOpen = useWorkspaceStore((s) => s.addElementPanelOpen)
+  const setAddPanelOpen = useWorkspaceStore((s) => s.setAddElementPanelOpen)
   const [arrangePanelOpen, setArrangePanelOpen] = useState(false)
 
   const canvasSettingsOpen = useWorkspaceStore((s) => s.canvasSettingsOpen)
@@ -140,7 +141,7 @@ export default function FloatingToolRail() {
           label="Add element"
           active={addPanelOpen}
           expanded={addPanelOpen}
-          onClick={() => { setAddPanelOpen((o) => !o); setArrangePanelOpen(false) }}
+          onClick={() => { setAddPanelOpen(!addPanelOpen); setArrangePanelOpen(false) }}
         />
         {addPanelOpen && (
           <div ref={addElementFlyoutRef}>
