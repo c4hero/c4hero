@@ -32,11 +32,13 @@ export default function FloatingBottomStrip() {
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
+  // Build element map once per workspace change — shared by all derived selectors below
+  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
+
   // All custom tags across entire workspace
   const allWorkspaceTags = useMemo(() => {
     if (!workspace) return []
     const tags = new Set<string>()
-    const elementMap = buildElementMap(workspace)
     for (const el of elementMap.values()) {
       for (const tag of el.tags) {
         if (!DEFAULT_BUILTIN_TAGS.includes(tag)) tags.add(tag)
@@ -46,13 +48,12 @@ export default function FloatingBottomStrip() {
       tags.add(s.tag)
     }
     return Array.from(tags).sort()
-  }, [workspace])
+  }, [workspace, elementMap])
 
   // Tags visible in current view (for filter pills)
   const viewTags = useMemo(() => {
-    if (!view || !workspace) return []
+    if (!view) return []
     const tags = new Set<string>()
-    const elementMap = buildElementMap(workspace)
     for (const ve of view.elements) {
       const el = elementMap.get(ve.id)
       if (el) for (const tag of el.tags) {
@@ -60,18 +61,17 @@ export default function FloatingBottomStrip() {
       }
     }
     return Array.from(tags).sort()
-  }, [workspace, view])
+  }, [view, elementMap])
 
   const viewStatuses = useMemo(() => {
-    if (!view || !workspace) return []
+    if (!view) return []
     const statuses = new Set<ElementStatus>()
-    const elementMap = buildElementMap(workspace)
     for (const ve of view.elements) {
       const el = elementMap.get(ve.id)
       if (el?.status) statuses.add(el.status)
     }
     return Array.from(statuses)
-  }, [workspace, view])
+  }, [view, elementMap])
 
   if (!workspace) return null
 

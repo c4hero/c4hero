@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, buildElementMap } from '@/store/workspace'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
@@ -33,6 +33,8 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const toggleElementInView = useWorkspaceStore((s) => s.toggleElementInView)
   const [search, setSearch] = useState('')
 
+  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
+
   if (!workspace || !activeViewKey) return null
 
   const creatableTypes = getCreatableTypes(workspace, activeViewKey)
@@ -48,7 +50,6 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   if (creatableTypes.canCreateComponent !== null) allowedTypes.add('component')
 
   // Filter existing elements: must be an allowed type AND not already in view
-  const elementMap = buildElementMap(workspace)
   const allElements = Array.from(elementMap.values())
   const notInView = allElements.filter(
     (el) => allowedTypes.has(el.type) && !viewElementIds.has(el.id),
