@@ -218,9 +218,12 @@ type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' |
   & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string }
 
 /** Apply a patch to an element in-place. Shared by updateElement and updateElementLive. */
-function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): void {
+/** Returns true if the element was found and patched, false if no element with that ID exists. */
+function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): boolean {
+  let found = false
   forEachElement(ws, (el) => {
     if (el.id !== id) return false
+    found = true
     // Use 'key in patch' for fields that can be legitimately cleared to undefined.
     // This distinguishes { status: undefined } (clear) from {} (leave unchanged),
     // which matters because the UI passes { status: undefined } when the user
@@ -239,6 +242,7 @@ function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): void
     }
     return true
   })
+  return found
 }
 
 /** The four view-type array keys — used wherever we need to iterate or locate views by type */
@@ -485,7 +489,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   updateElement: (id, patch) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    applyElementPatch(ws, id, patch)
+    if (!applyElementPatch(ws, id, patch)) return s
     return { ...pushUndo(s), workspace: ws }
   }),
 
@@ -493,14 +497,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!s.workspace) return s
     // Shallow-clone workspace, deep-clone only the model for live typing perf
     const ws = { ...s.workspace, model: structuredClone(s.workspace.model) }
-    applyElementPatch(ws, id, patch)
+    if (!applyElementPatch(ws, id, patch)) return s
     return { workspace: ws } // no undo push
   }),
 
   updateElementTechnology: (id, technology) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    applyElementPatch(ws, id, { technology })
+    if (!applyElementPatch(ws, id, { technology })) return s
     return { ...pushUndo(s), workspace: ws }
   }),
 
