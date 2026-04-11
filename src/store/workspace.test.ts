@@ -1059,6 +1059,42 @@ describe('Element CRUD', () => {
     expect(ws.model.people.find(p => p.id === 'alice')).toBeDefined()
     expect(ws.model.softwareSystems.find(s => s.id === 'api')).toBeDefined()
   })
+
+  it('deleteElements removes container views scoped to deleted software system', () => {
+    // Create a container view scoped to 'api'
+    const viewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    expect(ws0.views.containerViews.some(v => v.key === viewKey)).toBe(true)
+
+    // Delete the software system
+    useWorkspaceStore.getState().deleteElements(['api'])
+    const ws = useWorkspaceStore.getState().workspace!
+    // The container view should be gone — its scope is the deleted system
+    expect(ws.views.containerViews.some(v => v.key === viewKey)).toBe(false)
+  })
+
+  it('deleteElements removes component views scoped to a deleted container', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Frontend')
+    const compViewKey = useWorkspaceStore.getState().addView('component', containerId, 'Components')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    expect(ws0.views.componentViews.some(v => v.key === compViewKey)).toBe(true)
+
+    // Explicitly delete the container
+    useWorkspaceStore.getState().deleteElements([containerId])
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.componentViews.some(v => v.key === compViewKey)).toBe(false)
+  })
+
+  it('deleteElements removes component views when parent system is deleted', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Frontend')
+    const compViewKey = useWorkspaceStore.getState().addView('component', containerId, 'Components')
+
+    // Delete the parent system (container is implicitly deleted)
+    useWorkspaceStore.getState().deleteElements(['api'])
+    const ws = useWorkspaceStore.getState().workspace!
+    // Component view scoped to the now-gone container should also be removed
+    expect(ws.views.componentViews.some(v => v.key === compViewKey)).toBe(false)
+  })
 })
 
 // ─── UI Toggles ──────────────────────────────────────────────────────

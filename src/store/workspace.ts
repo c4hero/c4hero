@@ -510,6 +510,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const ws = cloneWs(s)
       if (!ws) return s
       const idSet = new Set(ids)
+
+      // Collect container IDs that will be implicitly removed (children of deleted systems)
+      const deletedContainerIds = new Set<string>()
+      for (const sys of ws.model.softwareSystems) {
+        if (idSet.has(sys.id)) {
+          for (const c of sys.containers) deletedContainerIds.add(c.id)
+        } else {
+          for (const c of sys.containers) {
+            if (idSet.has(c.id)) deletedContainerIds.add(c.id)
+          }
+        }
+      }
+
       ws.model.people = ws.model.people.filter(p => !idSet.has(p.id))
       ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
         if (idSet.has(sys.id)) return false
@@ -528,6 +541,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         v.elements = v.elements.filter(e => !idSet.has(e.id))
         v.relationships = v.relationships.filter(r => survivingRelIds.has(r.id))
       })
+      // Remove container views scoped to deleted systems
+      ws.views.containerViews = ws.views.containerViews.filter(
+        v => !v.softwareSystemId || !idSet.has(v.softwareSystemId)
+      )
+      // Remove component views scoped to deleted containers (explicit or via parent system)
+      ws.views.componentViews = ws.views.componentViews.filter(
+        v => !v.containerId || (!idSet.has(v.containerId) && !deletedContainerIds.has(v.containerId))
+      )
       ws.model.groups = ws.model.groups.map(g => ({
         ...g,
         elementIds: g.elementIds.filter(eid => !idSet.has(eid)),
