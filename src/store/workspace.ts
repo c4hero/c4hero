@@ -324,6 +324,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedElementIds: [],
       selectedRelationshipId: null,
       selectedGroupId: null,
+      focusElementId: null, // prevent stale scroll-to signal from a previous workspace
       undoStack: [],
       redoStack: [],
       // Clear view filters so they don't bleed from a previous workspace
@@ -342,6 +343,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedElementIds: [],
       selectedRelationshipId: null,
       selectedGroupId: null,
+      focusElementId: null,
       undoStack: [],
       redoStack: [],
     }),
