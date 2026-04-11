@@ -96,6 +96,7 @@ interface WorkspaceState extends UndoState {
   updateElementTechnology: (id: string, technology: string) => void
   deleteElement: (id: string) => void
   deleteElements: (ids: string[]) => void
+  duplicateElements: (ids: string[]) => string[]
 
   // Group CRUD
   addGroup: (name: string, elementIds?: string[]) => string
@@ -500,6 +501,85 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
     })
     announce(ids.length === 1 ? 'Element deleted' : `${ids.length} elements deleted`)
+  },
+
+  duplicateElements: (ids) => {
+    const newIds: string[] = []
+    set((s) => {
+      const ws = cloneWs(s)
+      if (!ws || !s.activeViewKey) return s
+      const view = findView(ws, s.activeViewKey)
+      if (!view) return s
+
+      for (const id of ids) {
+        const element = findElement(ws, id)
+        if (!element) continue
+
+        const inView = view.elements.find(e => e.id === id)
+        const offsetX = (inView?.x ?? 200) + 60
+        const offsetY = (inView?.y ?? 200) + 30
+        const newId = nanoid(8)
+        newIds.push(newId)
+
+        if (element.type === 'person') {
+          ws.model.people.push({
+            ...structuredClone(element),
+            id: newId,
+            name: uniqueElementName(`${element.name} copy`, ws),
+          })
+        } else if (element.type === 'softwareSystem') {
+          const clonedContainers = element.containers.map(c => ({
+            ...structuredClone(c),
+            id: nanoid(8),
+            components: c.components.map(comp => ({ ...structuredClone(comp), id: nanoid(8) })),
+          }))
+          ws.model.softwareSystems.push({
+            ...structuredClone(element),
+            id: newId,
+            name: uniqueElementName(`${element.name} copy`, ws),
+            containers: clonedContainers,
+          })
+        } else if (element.type === 'container') {
+          const parent = ws.model.softwareSystems.find(sys => sys.containers.some(c => c.id === id))
+          if (parent) {
+            parent.containers.push({
+              ...structuredClone(element),
+              id: newId,
+              name: uniqueElementName(`${element.name} copy`, ws),
+              components: [],
+            })
+          }
+        } else if (element.type === 'component') {
+          outer: for (const sys of ws.model.softwareSystems) {
+            for (const container of sys.containers) {
+              if (container.components.some(c => c.id === id)) {
+                container.components.push({
+                  ...structuredClone(element),
+                  id: newId,
+                  name: uniqueElementName(`${element.name} copy`, ws),
+                })
+                break outer
+              }
+            }
+          }
+        }
+
+        view.elements.push({ id: newId, x: offsetX, y: offsetY })
+      }
+
+      if (newIds.length === 0) return s
+      return {
+        ...pushUndo(s),
+        workspace: ws,
+        selectedElementIds: newIds,
+        selectedRelationshipId: null,
+        selectedGroupId: null,
+      }
+    })
+    if (newIds.length > 0) {
+      announce(newIds.length === 1 ? 'Element duplicated' : `${newIds.length} elements duplicated`)
+    }
+    return newIds
   },
 
   // ─── Group CRUD ─────────────────────────────────────────────────

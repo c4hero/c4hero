@@ -21,6 +21,9 @@ const META_SHORTCUTS: Record<string, KeyHandler> = {
 const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   'mod+z': (store) => store.undo(),
   'mod+shift+z': (store) => store.redo(),
+  'mod+d': (store) => {
+    if (store.selectedElementIds.length > 0) store.duplicateElements(store.selectedElementIds)
+  },
   'mod+a': (store) => {
     if (store.workspace && store.activeViewKey) {
       const view = getActiveView(store.workspace, store.activeViewKey)

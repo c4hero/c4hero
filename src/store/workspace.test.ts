@@ -702,6 +702,74 @@ describe('updateWorkspaceMeta', () => {
   })
 })
 
+// ─── duplicateElements ────────────────────────────────────────────────
+
+describe('duplicateElements', () => {
+  let viewKey: string
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+      viewHistory: [],
+    })
+    viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    // Add both elements to the view so they have positions
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'api')
+  })
+
+  it('duplicates a person with a unique name', () => {
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice'])
+    expect(newIds).toHaveLength(1)
+    const ws = useWorkspaceStore.getState().workspace!
+    const original = ws.model.people.find(p => p.id === 'alice')
+    const clone = ws.model.people.find(p => p.id === newIds[0])
+    expect(clone).toBeDefined()
+    expect(clone?.name).not.toBe(original?.name)
+    expect(clone?.name).toContain('copy')
+  })
+
+  it('duplicates a softwareSystem', () => {
+    const newIds = useWorkspaceStore.getState().duplicateElements(['api'])
+    expect(newIds).toHaveLength(1)
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.softwareSystems).toHaveLength(2)
+    const clone = ws.model.softwareSystems.find(s => s.id === newIds[0])
+    expect(clone?.name).toContain('copy')
+  })
+
+  it('adds the duplicate to the current view at an offset position', () => {
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice'])
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    const cloneInView = view.elements.find(e => e.id === newIds[0])
+    expect(cloneInView).toBeDefined()
+  })
+
+  it('selects the duplicated elements', () => {
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice'])
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual(newIds)
+  })
+
+  it('supports undo', () => {
+    const beforeCount = useWorkspaceStore.getState().workspace!.model.people.length
+    useWorkspaceStore.getState().duplicateElements(['alice'])
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().workspace!.model.people).toHaveLength(beforeCount)
+  })
+
+  it('is a no-op if element does not exist', () => {
+    const newIds = useWorkspaceStore.getState().duplicateElements(['nonexistent'])
+    expect(newIds).toHaveLength(0)
+  })
+})
+
 // ─── drillInto & navigateBack ────────────────────────────────────────
 
 describe('drillInto', () => {
