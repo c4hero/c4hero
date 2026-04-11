@@ -113,6 +113,19 @@ class SerializerContext {
         }
     }
 
+    /** Emit a `properties { }` block for any user-defined key/value pairs. */
+    private serializeProperties(props: Record<string, string>): void {
+        const entries = Object.entries(props)
+        if (entries.length === 0) return
+        this.emit('properties {')
+        this.depth++
+        for (const [key, val] of entries) {
+            this.emit(`"${this.escapeString(key)}" "${this.escapeString(val)}"`)
+        }
+        this.depth--
+        this.emit('}')
+    }
+
     // ─── Main Serialize ─────────────────────────────────────────────
 
     serialize(): string {
@@ -208,7 +221,8 @@ class SerializerContext {
         const varName = this.idToVar.get(person.id)
         const extraTags = this.getExtraTags(person.tags, ['Element', 'Person'])
         const isExternal = person.location === 'External'
-        const hasBlock = isExternal || !!person.url
+        const hasProperties = Object.keys(person.properties).length > 0
+        const hasBlock = isExternal || !!person.url || hasProperties
 
         const parts: string[] = []
         parts.push('person')
@@ -225,6 +239,7 @@ class SerializerContext {
             this.depth++
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
             if (isExternal) this.emit('location External')
+            if (hasProperties) this.serializeProperties(person.properties)
             this.depth--
             this.emit('}')
         } else {
@@ -236,7 +251,8 @@ class SerializerContext {
         const varName = this.idToVar.get(sys.id)
         const extraTags = this.getExtraTags(sys.tags, ['Element', 'Software System'])
         const isExternal = sys.location === 'External'
-        const hasBody = sys.containers.length > 0 || isExternal || !!sys.url
+        const hasProperties = Object.keys(sys.properties).length > 0
+        const hasBody = sys.containers.length > 0 || isExternal || !!sys.url || hasProperties
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -254,6 +270,7 @@ class SerializerContext {
 
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
             if (isExternal) this.emit('location External')
+            if (hasProperties) this.serializeProperties(sys.properties)
 
             for (let i = 0; i < sys.containers.length; i++) {
                 if (i > 0) this.emitBlank()
@@ -270,7 +287,8 @@ class SerializerContext {
     private serializeContainer(container: Container): void {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
-        const hasBody = container.components.length > 0 || !!container.url
+        const hasProperties = Object.keys(container.properties).length > 0
+        const hasBody = container.components.length > 0 || !!container.url || hasProperties
 
         const parts: string[] = []
         parts.push('container')
@@ -290,6 +308,7 @@ class SerializerContext {
             this.depth++
 
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
+            if (hasProperties) this.serializeProperties(container.properties)
             for (const comp of container.components) {
                 this.serializeComponent(comp)
             }
@@ -304,7 +323,8 @@ class SerializerContext {
     private serializeComponent(comp: Component): void {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
-        const hasBlock = !!comp.url
+        const hasProperties = Object.keys(comp.properties).length > 0
+        const hasBlock = !!comp.url || hasProperties
 
         const parts: string[] = []
         parts.push('component')
@@ -322,7 +342,8 @@ class SerializerContext {
         if (hasBlock) {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
-            this.emit(`url "${this.escapeString(comp.url!)}"`)
+            if (comp.url) this.emit(`url "${this.escapeString(comp.url)}"`)
+            if (hasProperties) this.serializeProperties(comp.properties)
             this.depth--
             this.emit('}')
         } else {
