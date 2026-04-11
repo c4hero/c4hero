@@ -471,6 +471,55 @@ workspace {
   })
 })
 
+describe('unknown KEYWORD with inline brace block does not eat parent closing RBRACE', () => {
+  it('recognized DSL keyword with inline brace block in softwareSystem body does not drop later containers', () => {
+    // Keywords like `styles`, `users`, `branding` are in the lexer KEYWORDS set but not
+    // handled inside softwareSystem body — they fall through to the unknown-KEYWORD path.
+    // Before the fix, skipToNextLine() consumed the inline `{`, so the block content was
+    // processed by the outer loop until `}` prematurely terminated it.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      styles { color "#ff0000" }
+      api = container "API"
+      db = container "Database"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const sys = workspace.model.softwareSystems.find(s => s.name === 'Sys')
+    expect(sys).toBeDefined()
+    expect(sys?.containers.find(c => c.name === 'API')).toBeDefined()
+    expect(sys?.containers.find(c => c.name === 'Database')).toBeDefined()
+  })
+
+  it('recognized DSL keyword with inline brace block in container body does not drop later components', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      api = container "API" {
+        users { user1 "read" }
+        auth = component "Auth"
+        orders = component "Orders"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const container = workspace.model.softwareSystems[0]?.containers[0]
+    expect(container?.components.find(c => c.name === 'Auth')).toBeDefined()
+    expect(container?.components.find(c => c.name === 'Orders')).toBeDefined()
+  })
+})
+
 describe('unknown brace block in relationship body does not eat the relationship closing RBRACE', () => {
   it('unknown keyword with brace block in relationship body does not drop subsequent tags', () => {
     // Before the fix: the inner `}` of the unknown block terminated the relationship

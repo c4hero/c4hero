@@ -404,8 +404,12 @@ class ContextAwareParser {
                 }
             } else {
                 this.advance()
-                this.skipToNextLine()
                 // Unknown configuration properties may have a nested brace block (e.g. users { ... })
+                // Stop before LBRACE so inline `{` is not consumed by the line-skip.
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
                 this.skipNewlines()
                 if (this.check('LBRACE')) this.skipBraceBlock()
             }
@@ -504,7 +508,10 @@ class ContextAwareParser {
                 }
 
                 this.advance()
-                this.skipToNextLine()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
                 this.skipNewlines()
                 if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
@@ -662,10 +669,14 @@ class ContextAwareParser {
                     continue
                 }
 
-                // Unknown keyword: consume keyword + inline args, then skip any brace block so the
-                // parent element's closing RBRACE is not mistakenly consumed as the inner block's.
+                // Unknown keyword: consume keyword + any inline args (stopping before LBRACE),
+                // then skip any brace block so the parent element's closing RBRACE is not
+                // mistakenly consumed as the inner block's.
                 this.advance()
-                this.skipToNextLine()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
                 this.skipNewlines()
                 if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
@@ -795,10 +806,14 @@ class ContextAwareParser {
                     continue
                 }
 
-                // Unknown keyword: consume keyword + inline args, then skip any brace block so the
-                // parent element's closing RBRACE is not mistakenly consumed as the inner block's.
+                // Unknown keyword: consume keyword + any inline args (stopping before LBRACE),
+                // then skip any brace block so the parent element's closing RBRACE is not
+                // mistakenly consumed as the inner block's.
                 this.advance()
-                this.skipToNextLine()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
                 this.skipNewlines()
                 if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
@@ -904,10 +919,13 @@ class ContextAwareParser {
                     this.parseElementPropertyOnElement(element, kw)
                     continue
                 }
-                // Unknown keyword: consume it and skip any brace block so the outer
-                // RBRACE isn't mistakenly consumed as the inner block's closing brace.
+                // Unknown keyword: consume it and any inline args (stopping before LBRACE),
+                // then skip any brace block so the outer RBRACE isn't mistakenly consumed.
                 this.advance()
-                this.skipToNextLine()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
                 this.skipNewlines()
                 if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
@@ -1229,7 +1247,10 @@ class ContextAwareParser {
                     continue
                 }
                 this.advance()
-                this.skipToNextLine()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
                 this.skipNewlines()
                 if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
@@ -1396,10 +1417,13 @@ class ContextAwareParser {
                     continue
                 }
 
-                // Unknown keyword: consume it and any inline args, then skip any brace
-                // block so the view's closing RBRACE is not consumed as the block's.
+                // Unknown keyword: consume it and any inline args (stopping before LBRACE),
+                // then skip any brace block so the view's closing RBRACE is not consumed.
                 this.advance()
-                this.skipToNextLine()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
                 this.skipNewlines()
                 if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
