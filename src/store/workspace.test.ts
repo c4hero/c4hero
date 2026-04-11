@@ -1165,6 +1165,14 @@ describe('Element CRUD', () => {
     expect(newActive).toBe(landscapeKey)
   })
 
+  it('deleteElements([]) is a no-op (no undo, nothing removed)', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    const wsBefore = useWorkspaceStore.getState().workspace
+    useWorkspaceStore.getState().deleteElements([])
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
+    expect(useWorkspaceStore.getState().workspace).toBe(wsBefore) // same reference
+  })
+
   it('deleteElements purges orphaned view keys from viewHistory', () => {
     const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
     const containerViewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')

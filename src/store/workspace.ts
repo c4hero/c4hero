@@ -506,6 +506,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   deleteElements: (ids) => {
+    if (ids.length === 0) return
     set((s) => {
       const ws = cloneWs(s)
       if (!ws) return s
