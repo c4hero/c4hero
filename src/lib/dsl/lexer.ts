@@ -83,6 +83,11 @@ const OPAQUE_DIRECTIVES = new Set([
     '!var',
     '!element',
     '!relationship',
+    // Workspace-level configuration directives — consume whole line, no-op
+    '!identifiers',
+    '!impliedRelationships',
+    '!extend',
+    '!plugin',
 ])
 
 export interface LexerError {

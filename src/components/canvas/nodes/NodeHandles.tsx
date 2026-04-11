@@ -42,7 +42,8 @@ function getHandleStyle(side: Side, slot: string): React.CSSProperties {
 export default function NodeHandles() {
   const nodeId = useNodeId()
 
-  // Only subscribe to edges connected to this node (avoids O(N*E) re-renders)
+  // Only subscribe to edges connected to this node (avoids O(N*E) re-renders).
+  // Shallow-compare by IDs so the component doesn't re-render when unrelated edges change.
   const connectedEdges = useStore(
     (s) => {
       if (!nodeId) return []
@@ -50,6 +51,9 @@ export default function NodeHandles() {
         (e) => e.source === nodeId || e.target === nodeId,
       )
     },
+    (prev, next) =>
+      prev.length === next.length &&
+      prev.every((e, i) => e.id === next[i].id && e.sourceHandle === next[i].sourceHandle && e.targetHandle === next[i].targetHandle),
   )
 
   // Determine which sides have existing connections
