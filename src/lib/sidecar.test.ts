@@ -112,6 +112,24 @@ describe('applySidecar', () => {
     expect(ws.model.people[0].status).toBeUndefined()
   })
 
+  it('rejects invalid status values not in the union type', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      elements: { alice: { status: 'Injected' as 'Live' } },
+    })
+    expect(ws.model.people[0].status).toBeUndefined()
+  })
+
+  it('rejects invalid lineStyle values not in the union type', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      relationships: { 'rel-1': { lineStyle: 'Injected' as 'Curved' } },
+    })
+    expect(ws.model.relationships[0].lineStyle).toBeUndefined()
+  })
+
   it('does not apply unknown/disallowed element keys', () => {
     const ws = makeWorkspace()
     const sidecar = {

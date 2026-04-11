@@ -2,6 +2,17 @@ import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
 import { buildElementMap, allViewsOf } from '@/store/workspace'
 import { createLogger } from '@/lib/logger'
 
+const VALID_STATUSES: ReadonlySet<string> = new Set<ElementStatus>(['Live', 'Planned', 'Deprecated', 'Removed'])
+const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
+
+function isValidStatus(v: unknown): v is ElementStatus {
+  return typeof v === 'string' && VALID_STATUSES.has(v)
+}
+
+function isValidLineStyle(v: unknown): v is LineStyle {
+  return typeof v === 'string' && VALID_LINE_STYLES.has(v)
+}
+
 const log = createLogger('sidecar')
 
 // ─── Sidecar schema ─────────────────────────────────────────────────
@@ -92,20 +103,12 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
 
   // Elements — only apply known sidecar properties
   if (sidecar.elements) {
-    const ALLOWED_ELEMENT_KEYS: (keyof SidecarElement)[] = ['status', 'owner']
-    const sanitize = (data: SidecarElement): SidecarElement => {
-      const clean: SidecarElement = {}
-      for (const key of ALLOWED_ELEMENT_KEYS) {
-        if (key in data) (clean as Record<string, unknown>)[key] = data[key]
-      }
-      return clean
-    }
     const applyToElement = (id: string, data: SidecarElement) => {
-      const safe = sanitize(data)
-      // Explicit property-by-property assignment — no Object.assign, no prototype risk.
+      // Explicit property-by-property assignment with runtime type validation.
+      // No Object.assign — avoids prototype pollution and enforces valid union values.
       const applyProps = (el: { status?: ElementStatus; owner?: string }) => {
-        if (safe.status !== undefined) el.status = safe.status
-        if (safe.owner !== undefined) el.owner = safe.owner
+        if (isValidStatus(data.status)) el.status = data.status
+        if (typeof data.owner === 'string') el.owner = data.owner
       }
       // People
       for (const p of workspace.model.people) {
@@ -132,7 +135,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     for (const rel of workspace.model.relationships) {
       const data = sidecar.relationships[rel.id]
       if (data) {
-        if (data.lineStyle) rel.lineStyle = data.lineStyle
+        if (isValidLineStyle(data.lineStyle)) rel.lineStyle = data.lineStyle
       }
     }
   }
