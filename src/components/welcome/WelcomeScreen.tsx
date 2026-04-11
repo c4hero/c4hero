@@ -825,7 +825,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
       }
       loadWorkspace(workspace)
     } else {
-      alert('Failed to parse DSL file. Check console for errors.')
+      setErrorMsg('Failed to parse DSL file. Please check the file format.')
     }
   }
 
