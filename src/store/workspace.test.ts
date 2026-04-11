@@ -3693,3 +3693,77 @@ describe('getSelectedElement', () => {
     expect(getSelectedElement(ws, ['ghost-id'])).toBeUndefined()
   })
 })
+
+// ─── revalidateScope ──────────────────────────────────────────────────
+
+describe('revalidateScope', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('populates scopeViolations when a landscape-scoped workspace has containers', () => {
+    // Add a container to violate landscape scope
+    const ws = useWorkspaceStore.getState().workspace!
+    const patchedWs: Workspace = {
+      ...ws,
+      scope: 'landscape',
+      model: {
+        ...ws.model,
+        softwareSystems: [
+          {
+            id: 'api', type: 'softwareSystem', name: 'API', tags: ['Element', 'Software System'], properties: {},
+            containers: [{ id: 'c1', type: 'container', name: 'Web', tags: ['Element', 'Container'], properties: {}, components: [] }],
+          },
+        ],
+      },
+    }
+    useWorkspaceStore.setState({ workspace: patchedWs, scopeViolations: [] })
+    // scopeViolations is empty before revalidation
+    expect(useWorkspaceStore.getState().scopeViolations).toHaveLength(0)
+
+    useWorkspaceStore.getState().revalidateScope()
+
+    const violations = useWorkspaceStore.getState().scopeViolations
+    expect(violations).toHaveLength(1)
+    expect(violations[0].type).toBe('error')
+  })
+
+  it('clears scopeViolations when workspace becomes valid', () => {
+    // Start with a pre-loaded violation
+    useWorkspaceStore.setState({ scopeViolations: [{ type: 'error', message: 'stale error' }] })
+    // Current workspace has no scope set, so it should be violation-free
+    useWorkspaceStore.getState().revalidateScope()
+    expect(useWorkspaceStore.getState().scopeViolations).toHaveLength(0)
+  })
+
+  it('returns empty violations when workspace is null', () => {
+    useWorkspaceStore.setState({ workspace: null, scopeViolations: [{ type: 'error', message: 'old' }] })
+    useWorkspaceStore.getState().revalidateScope()
+    expect(useWorkspaceStore.getState().scopeViolations).toHaveLength(0)
+  })
+})
+
+// ─── setLastSavedUndoLength ───────────────────────────────────────────
+
+describe('setLastSavedUndoLength', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('updates lastSavedUndoLength', () => {
+    useWorkspaceStore.getState().setLastSavedUndoLength(5)
+    expect(useWorkspaceStore.getState().lastSavedUndoLength).toBe(5)
+  })
+
+  it('can be set to 0 to mark workspace as saved at current position', () => {
+    useWorkspaceStore.getState().setLastSavedUndoLength(3)
+    useWorkspaceStore.getState().setLastSavedUndoLength(0)
+    expect(useWorkspaceStore.getState().lastSavedUndoLength).toBe(0)
+  })
+
+  it('loadWorkspace resets lastSavedUndoLength to 0', () => {
+    useWorkspaceStore.getState().setLastSavedUndoLength(7)
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    expect(useWorkspaceStore.getState().lastSavedUndoLength).toBe(0)
+  })
+})
