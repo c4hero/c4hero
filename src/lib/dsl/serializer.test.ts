@@ -186,6 +186,28 @@ describe('Serializer — escaping special characters', () => {
     const dsl = serializeDSL(ws)
     expect(dsl).toContain('\\"special\\"')
   })
+
+  it('escapes backslash characters in names', () => {
+    const ws = makeWorkspace()
+    ws.model.people.push({
+      id: 'bp', type: 'person', name: 'Alice\\Bob', tags: ['Element', 'Person'], properties: {},
+    })
+    const dsl = serializeDSL(ws)
+    // Backslash must be doubled in the serialized output
+    expect(dsl).toContain('person "Alice\\\\Bob"')
+  })
+
+  it('backslash in name survives serialize → parse roundtrip', () => {
+    const ws = makeWorkspace()
+    ws.model.people.push({
+      id: 'bp', type: 'person', name: 'Alice\\Bob', tags: ['Element', 'Person'], properties: {},
+    })
+    const { workspace: parsed, errors } = parseDSL(serializeDSL(ws))
+    expect(errors).toEqual([])
+    const person = parsed.model.people.find(p => p.name === 'Alice\\Bob')
+    expect(person).toBeDefined()
+    expect(person!.name).toBe('Alice\\Bob')
+  })
 })
 
 describe('Serializer — var name deduplication', () => {
