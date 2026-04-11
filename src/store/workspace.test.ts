@@ -2533,6 +2533,21 @@ describe('renameTag', () => {
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
   })
 
+  it('is a no-op (no undo) when renaming TO a built-in tag name', () => {
+    // Renaming a custom tag to a built-in name like "Person" would produce duplicate tags
+    // on elements that already carry that built-in (e.g. Person elements have ["Element","Person",...]).
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().renameTag('VIP', 'Person')
+    const ws = useWorkspaceStore.getState().workspace!
+    // VIP tag should remain unchanged (the rename was blocked)
+    expect(ws.model.people[0].tags).toContain('VIP')
+    // No duplicate 'Person' tag — only the original built-in entry
+    const personCount = ws.model.people[0].tags.filter(t => t === 'Person').length
+    expect(personCount).toBe(1)
+    // No undo entry pushed
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
+  })
+
   it('is a no-op (no undo) when oldTag does not exist anywhere', () => {
     const undoBefore = useWorkspaceStore.getState().undoStack.length
     useWorkspaceStore.getState().renameTag('NonExistentTag99', 'NewName')

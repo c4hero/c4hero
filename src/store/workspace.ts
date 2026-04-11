@@ -1266,6 +1266,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   renameTag: (oldTag, newTag) => set((s) => {
     if (!newTag.trim() || oldTag === newTag) return s
     if (BUILTIN_TAGS.has(oldTag)) return s // Built-in tags cannot be renamed
+    if (BUILTIN_TAGS.has(newTag.trim())) return s // Cannot rename a custom tag to a built-in name
     if (!s.workspace) return s
     // Quick existence check before the expensive clone + undo push
     const src = s.workspace
