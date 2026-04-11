@@ -69,3 +69,35 @@ describe('interactionStyle roundtrip', () => {
     expect(rel?.interactionStyle).toBeUndefined()
   })
 })
+
+describe('relationship url roundtrip', () => {
+  it('url serializes into a block and parses back', () => {
+    const ws = makeWs({ url: 'https://docs.example.com/api' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('url "https://docs.example.com/api"')
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.url).toBe('https://docs.example.com/api')
+  })
+
+  it('url and interactionStyle both survive roundtrip', () => {
+    const ws = makeWs({ url: 'https://example.com', interactionStyle: 'Asynchronous' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('url "https://example.com"')
+    expect(dsl).toContain('interactionStyle Asynchronous')
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.url).toBe('https://example.com')
+    expect(rel?.interactionStyle).toBe('Asynchronous')
+  })
+
+  it('no url — no block emitted (inline form stays compact)', () => {
+    const ws = makeWs()
+    const dsl = serializeDSL(ws)
+    expect(dsl).not.toContain('url')
+    // Inline form: no braces, no url block
+    expect(dsl).toMatch(/user -> api "Uses" "REST"/)
+  })
+})

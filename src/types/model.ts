@@ -59,6 +59,7 @@ export interface Relationship {
   technology?: string
   interactionStyle?: InteractionStyle
   lineStyle?: LineStyle
+  url?: string
   tags: string[]
   properties: Record<string, string>
 }

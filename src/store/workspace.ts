@@ -105,7 +105,7 @@ interface WorkspaceState extends UndoState {
 
   // Relationship CRUD
   addRelationship: (sourceId: string, destinationId: string, description?: string, technology?: string) => string
-  updateRelationship: (id: string, patch: Partial<Pick<Relationship, 'description' | 'technology' | 'interactionStyle' | 'lineStyle' | 'tags'>>) => void
+  updateRelationship: (id: string, patch: Partial<Pick<Relationship, 'description' | 'technology' | 'interactionStyle' | 'lineStyle' | 'url' | 'tags'>>) => void
   reconnectRelationship: (id: string, newSourceId: string, newTargetId: string) => void
   deleteRelationship: (id: string) => void
 

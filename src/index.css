@@ -4,6 +4,7 @@
 @theme {
   /* Surfaces — canonical c4hero palette */
   --color-bg-primary: #0d1117;
+  --color-bg-panel: #0f1923;   /* dialog / panel background, one step above primary */
   --color-surface-1: #161b22;
   --color-surface-2: #1c2128;
   --color-surface-3: #21262d;

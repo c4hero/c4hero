@@ -362,12 +362,13 @@ class SerializerContext {
 
         const extraTags = this.getExtraTags(rel.tags, ['Relationship'])
         const hasProperties = Object.keys(rel.properties).length > 0
-        const needsBlock = !!rel.interactionStyle || hasProperties
+        const needsBlock = !!rel.interactionStyle || !!rel.url || hasProperties
 
         if (needsBlock) {
-            // Use block form when interactionStyle or properties are present; put tags in block too
+            // Use block form when interactionStyle, url, or properties are present
             this.emit(`${parts.join(' ')} {`)
             this.depth++
+            if (rel.url) this.emit(`url "${this.escapeString(rel.url)}"`)
             if (rel.interactionStyle) this.emit(`interactionStyle ${rel.interactionStyle}`)
             if (hasProperties) this.serializeProperties(rel.properties)
             if (extraTags) this.emit(`tags "${extraTags}"`)

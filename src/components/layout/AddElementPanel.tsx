@@ -66,11 +66,12 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   if (creatableTypes.canCreateContainer !== null) allowedTypes.add('container')
   if (creatableTypes.canCreateComponent !== null) allowedTypes.add('component')
 
-  // Filter existing elements: must be an allowed type AND not already in view
+  // Filter existing elements: must be an allowed type AND not already in view.
+  // Sort alphabetically so the list is predictable regardless of creation order.
   const allElements = Array.from(elementMap.values())
-  const notInView = allElements.filter(
-    (el) => allowedTypes.has(el.type) && !viewElementIds.has(el.id),
-  )
+  const notInView = allElements
+    .filter((el) => allowedTypes.has(el.type) && !viewElementIds.has(el.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   const query = search.toLowerCase().trim()
   const filtered = query

@@ -1001,6 +1001,12 @@ class ContextAwareParser {
                     }
                     continue
                 }
+                // 'url' in relationship body
+                if (this.peekType() === 'KEYWORD' && this.peekValue().toLowerCase() === 'url') {
+                    this.advance()
+                    if (this.peekType() === 'STRING') rel.url = this.advance().value
+                    continue
+                }
                 this.advance()
             }
             this.skipNewlines()

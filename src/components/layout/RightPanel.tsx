@@ -421,6 +421,26 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
           </select>
         </div>
         <div>
+          <FieldLabel>URL</FieldLabel>
+          <div className="flex items-center gap-1.5">
+            <div className="flex-1">
+              <EditableField value={relationship.url ?? ''} placeholder="https://..." aria-label="URL" onCommit={(v) => updateRelationship(relationship.id, { url: v || undefined })} />
+            </div>
+            {relationship.url && getSafeUrl(relationship.url) && (
+              <a
+                href={getSafeUrl(relationship.url)!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-icon !min-h-8 !min-w-8 !p-1.5 shrink-0"
+                title="Open URL"
+                aria-label="Open URL in new tab"
+              >
+                <ExternalLink size={14} />
+              </a>
+            )}
+          </div>
+        </div>
+        <div>
           <FieldLabel>Tags</FieldLabel>
           <TagsTab tags={relationship.tags} onUpdate={(tags) => updateRelationship(relationship.id, { tags })} />
         </div>
