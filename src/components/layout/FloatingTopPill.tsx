@@ -39,7 +39,6 @@ interface WsEntry {
 const ExportDialog = lazy(() => import('@/components/dialogs/ExportDialog'))
 const CommandPalette = lazy(() => import('@/components/command-palette/CommandPalette'))
 const CreateViewDialog = lazy(() => import('@/components/views/CreateViewDialog'))
-const CanvasSettingsDialog = lazy(() => import('@/components/settings/CanvasSettingsDialog'))
 const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDialog'))
 
 export default function FloatingTopPill() {
@@ -51,14 +50,12 @@ export default function FloatingTopPill() {
   const canRedo = useWorkspaceStore((s) => s.canRedo)
 
   const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
-
   const showUndoRedo = useSettingsStore((s) => s.showUndoRedo)
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [copyToast, setCopyToast] = useState<string | null>(null)
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false)
   const [showCreateView, setShowCreateView] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
   const [showNewWorkspace, setShowNewWorkspace] = useState(false)
   const [hamburgerOpen, setHamburgerOpen] = useState(false)
   const [wsPickerOpen, setWsPickerOpen] = useState(false)
@@ -456,7 +453,7 @@ export default function FloatingTopPill() {
       </div>{/* end outer row */}
 
       {showCreateView && <Suspense fallback={<LoadingDot />}><CreateViewDialog onClose={() => setShowCreateView(false)} /></Suspense>}
-      {showSettings && <Suspense fallback={<LoadingDot />}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
+      {/* CanvasSettingsDialog is rendered in FloatingToolRail via canvasSettingsOpen store state */}
       {showNewWorkspace && (
         <Suspense fallback={<LoadingDot />}>
           <ScopePickerDialog

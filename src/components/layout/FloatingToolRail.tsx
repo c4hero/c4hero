@@ -47,7 +47,8 @@ export default function FloatingToolRail() {
   const [addPanelOpen, setAddPanelOpen] = useState(false)
   const [arrangePanelOpen, setArrangePanelOpen] = useState(false)
 
-  const [showSettings, setShowSettings] = useState(false)
+  const canvasSettingsOpen = useWorkspaceStore((s) => s.canvasSettingsOpen)
+  const setCanvasSettingsOpen = useWorkspaceStore((s) => s.setCanvasSettingsOpen)
 
   const arrangeFlyoutRef = useRef<HTMLDivElement>(null)
 
@@ -229,10 +230,10 @@ export default function FloatingToolRail() {
       <RailBtn
         icon={<Settings size={16} />}
         label="Canvas settings"
-        onClick={() => setShowSettings(true)}
+        onClick={() => setCanvasSettingsOpen(true)}
       />
     </div>
-    {showSettings && <Suspense fallback={<LoadingDot />}><CanvasSettingsDialog onClose={() => setShowSettings(false)} /></Suspense>}
+    {canvasSettingsOpen && <Suspense fallback={<LoadingDot />}><CanvasSettingsDialog onClose={() => setCanvasSettingsOpen(false)} /></Suspense>}
     </>
   )
 }

@@ -153,6 +153,8 @@ interface WorkspaceState extends UndoState {
   setRightPanelOpen: (open: boolean) => void
   setSearchOpen: (open: boolean) => void
   setCommandPaletteOpen: (open: boolean) => void
+  canvasSettingsOpen: boolean
+  setCanvasSettingsOpen: (open: boolean) => void
   setPresentationMode: (on: boolean) => void
 }
 
@@ -268,6 +270,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   rightPanelOpen: true,
   searchOpen: false,
   commandPaletteOpen: false,
+  canvasSettingsOpen: false,
   pendingDelete: null,
   lastSavedUndoLength: 0,
   setLastSavedUndoLength: (n) => set({ lastSavedUndoLength: n }),
@@ -916,6 +919,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
   setSearchOpen: (open) => set({ searchOpen: open, commandPaletteOpen: false }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
+  setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
   confirmDelete: (message, onConfirm) => set({ pendingDelete: { message, onConfirm } }),
   cancelDelete: () => set({ pendingDelete: null }),
   setPresentationMode: (on) => set({ presentationMode: on }),

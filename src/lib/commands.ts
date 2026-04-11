@@ -267,11 +267,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: Settings,
       keywords: ['settings', 'preferences', 'config'],
-      execute: () => {
-        // Close command palette then open settings — settings dialog is managed in FloatingTopPill
-        // Use a small delay so the palette closes first
-        store().setCommandPaletteOpen(false)
-      },
+      execute: () => { store().setCanvasSettingsOpen(true) },
     },
 
     // ─── Navigation ──────────────────────────────────────
