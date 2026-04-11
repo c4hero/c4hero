@@ -121,6 +121,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     const ct = getCreatableTypes(store.workspace, store.activeViewKey)
     if (ct.canCreateComponent) store.addComponent(ct.canCreateComponent, 'New Component')
   },
+  '?': (store) => store.setCommandPaletteOpen(true),
   '=': (_store, rf) => rf?.zoomIn({ duration: 200 }),
   '+': (_store, rf) => rf?.zoomIn({ duration: 200 }),
   '-': (_store, rf) => rf?.zoomOut({ duration: 200 }),

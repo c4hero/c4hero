@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   Background,
@@ -25,6 +25,12 @@ import ContextMenu from './ContextMenu'
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
+}
+
+const KBD_STYLE: React.CSSProperties = {
+  padding: '2px 7px', borderRadius: 6,
+  background: 'var(--glass-overlay-sm)', border: '1px solid rgba(255,255,255,0.12)',
+  fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: '18px',
 }
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
@@ -885,10 +891,10 @@ export default function Canvas() {
           </span>
           <span style={{ fontSize: 13, color: 'var(--color-text-muted)', opacity: 0.7, display: 'flex', alignItems: 'center', gap: 6 }}>
             Press
-            <kbd style={{ padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: '18px' }}>A</kbd>
+            <kbd style={KBD_STYLE}>A</kbd>
             to add an element
             <span style={{ opacity: 0.5 }}>·</span>
-            <kbd style={{ padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: '18px' }}>?</kbd>
+            <kbd style={KBD_STYLE}>?</kbd>
             for shortcuts
           </span>
         </div>
