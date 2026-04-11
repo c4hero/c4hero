@@ -1623,3 +1623,237 @@ describe('removeTagGlobal', () => {
     expect(ws.model.people[0].tags).toContain('VIP')
   })
 })
+
+// ─── Canvas position and layout actions ─────────────────────────────────────
+
+describe('updateNodePosition and updateNodePositions', () => {
+  function makeWsWithView(): { ws: Workspace; viewKey: string } {
+    const ws = makeWorkspace()
+    const viewKey = 'v1'
+    ws.views.systemLandscapeViews.push({
+      key: viewKey,
+      type: 'systemLandscape',
+      title: 'Landscape',
+      elements: [{ id: 'alice', x: 0, y: 0 }, { id: 'api', x: 100, y: 0 }],
+      relationships: [],
+      autoLayout: { direction: 'TB' },
+    })
+    return { ws, viewKey }
+  }
+
+  beforeEach(() => {
+    const { ws, viewKey } = makeWsWithView()
+    useWorkspaceStore.setState({
+      workspace: ws,
+      activeViewKey: viewKey,
+      undoStack: [],
+      redoStack: [],
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+    })
+  })
+
+  it('updateNodePosition sets x, y and marks pinned=true', () => {
+    useWorkspaceStore.getState().updateNodePosition('alice', 42, 99)
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    const el = view.elements.find(e => e.id === 'alice')!
+    expect(el.x).toBe(42)
+    expect(el.y).toBe(99)
+    expect(el.pinned).toBe(true)
+  })
+
+  it('updateNodePosition does not affect other elements', () => {
+    useWorkspaceStore.getState().updateNodePosition('alice', 42, 99)
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    const api = view.elements.find(e => e.id === 'api')!
+    expect(api.x).toBe(100)
+    expect(api.y).toBe(0)
+    expect(api.pinned).toBeUndefined()
+  })
+
+  it('updateNodePosition does not push to undo stack', () => {
+    useWorkspaceStore.getState().updateNodePosition('alice', 42, 99)
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(0)
+  })
+
+  it('updateNodePositions updates multiple elements in one call', () => {
+    useWorkspaceStore.getState().updateNodePositions([
+      { id: 'alice', x: 10, y: 20 },
+      { id: 'api', x: 200, y: 300 },
+    ])
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.elements.find(e => e.id === 'alice')).toMatchObject({ x: 10, y: 20, pinned: true })
+    expect(view.elements.find(e => e.id === 'api')).toMatchObject({ x: 200, y: 300, pinned: true })
+  })
+})
+
+describe('setLayoutDirection and resetAndRelayout', () => {
+  function makeWsWithPinnedView(): { ws: Workspace; viewKey: string } {
+    const ws = makeWorkspace()
+    const viewKey = 'v1'
+    ws.views.systemLandscapeViews.push({
+      key: viewKey,
+      type: 'systemLandscape',
+      title: 'Landscape',
+      elements: [
+        { id: 'alice', x: 10, y: 20, pinned: true },
+        { id: 'api', x: 50, y: 80, pinned: true },
+      ],
+      relationships: [],
+      autoLayout: { direction: 'TB' },
+    })
+    return { ws, viewKey }
+  }
+
+  beforeEach(() => {
+    const { ws, viewKey } = makeWsWithPinnedView()
+    useWorkspaceStore.setState({
+      workspace: ws,
+      activeViewKey: viewKey,
+      layoutVersion: 0,
+      undoStack: [],
+      redoStack: [],
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+    })
+  })
+
+  it('setLayoutDirection changes direction on the view', () => {
+    useWorkspaceStore.getState().setLayoutDirection('v1', 'LR')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.autoLayout?.direction).toBe('LR')
+  })
+
+  it('setLayoutDirection resets element positions and pinned flags', () => {
+    useWorkspaceStore.getState().setLayoutDirection('v1', 'LR')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    for (const el of view.elements) {
+      expect(el.x).toBeUndefined()
+      expect(el.y).toBeUndefined()
+      expect(el.pinned).toBeUndefined()
+    }
+  })
+
+  it('setLayoutDirection increments layoutVersion', () => {
+    useWorkspaceStore.getState().setLayoutDirection('v1', 'LR')
+    expect(useWorkspaceStore.getState().layoutVersion).toBe(1)
+  })
+
+  it('setLayoutDirection supports undo', () => {
+    useWorkspaceStore.getState().setLayoutDirection('v1', 'LR')
+    useWorkspaceStore.getState().undo()
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.autoLayout?.direction).toBe('TB')
+    expect(view.elements[0].pinned).toBe(true)
+  })
+
+  it('resetAndRelayout clears all positions and optionally sets direction', () => {
+    useWorkspaceStore.getState().resetAndRelayout('v1', 'BT')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.autoLayout?.direction).toBe('BT')
+    for (const el of view.elements) {
+      expect(el.x).toBeUndefined()
+      expect(el.pinned).toBeUndefined()
+    }
+  })
+
+  it('resetAndRelayout without direction preserves existing direction', () => {
+    useWorkspaceStore.getState().resetAndRelayout('v1')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.autoLayout?.direction).toBe('TB')
+  })
+
+  it('resetAndRelayout increments layoutVersion', () => {
+    useWorkspaceStore.getState().resetAndRelayout('v1')
+    expect(useWorkspaceStore.getState().layoutVersion).toBe(1)
+  })
+})
+
+describe('updateElementStyle and removeElementStyle', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('updateElementStyle adds a new style when tag does not exist', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    const styles = useWorkspaceStore.getState().workspace!.views.configuration.styles.elements
+    expect(styles).toHaveLength(1)
+    expect(styles[0]).toMatchObject({ tag: 'VIP', background: '#ff0000' })
+  })
+
+  it('updateElementStyle merges when tag already exists', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', color: '#ffffff' })
+    const styles = useWorkspaceStore.getState().workspace!.views.configuration.styles.elements
+    expect(styles).toHaveLength(1)
+    expect(styles[0]).toMatchObject({ tag: 'VIP', background: '#ff0000', color: '#ffffff' })
+  })
+
+  it('updateElementStyle supports undo', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    useWorkspaceStore.getState().undo()
+    const styles = useWorkspaceStore.getState().workspace!.views.configuration.styles.elements
+    expect(styles).toHaveLength(0)
+  })
+
+  it('removeElementStyle removes a custom style', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    useWorkspaceStore.getState().removeElementStyle('VIP')
+    const styles = useWorkspaceStore.getState().workspace!.views.configuration.styles.elements
+    expect(styles).toHaveLength(0)
+  })
+
+  it('removeElementStyle is a no-op for built-in tags', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'Person', background: '#ff0000' })
+    useWorkspaceStore.getState().removeElementStyle('Person')
+    const styles = useWorkspaceStore.getState().workspace!.views.configuration.styles.elements
+    expect(styles).toHaveLength(1)
+  })
+
+  it('removeElementStyle supports undo', () => {
+    useWorkspaceStore.getState().updateElementStyle({ tag: 'VIP', background: '#ff0000' })
+    useWorkspaceStore.getState().removeElementStyle('VIP')
+    useWorkspaceStore.getState().undo()
+    const styles = useWorkspaceStore.getState().workspace!.views.configuration.styles.elements
+    expect(styles).toHaveLength(1)
+    expect(styles[0].tag).toBe('VIP')
+  })
+})
+
+describe('setActiveTagFilter and setActiveStatusFilter', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('setActiveTagFilter sets the filter', () => {
+    useWorkspaceStore.getState().setActiveTagFilter('VIP')
+    expect(useWorkspaceStore.getState().activeTagFilter).toBe('VIP')
+  })
+
+  it('setActiveTagFilter clears the filter with null', () => {
+    useWorkspaceStore.getState().setActiveTagFilter('VIP')
+    useWorkspaceStore.getState().setActiveTagFilter(null)
+    expect(useWorkspaceStore.getState().activeTagFilter).toBeNull()
+  })
+
+  it('setActiveStatusFilter sets the status filter', () => {
+    useWorkspaceStore.getState().setActiveStatusFilter('Live')
+    expect(useWorkspaceStore.getState().activeStatusFilter).toBe('Live')
+  })
+
+  it('setActiveStatusFilter clears the filter with null', () => {
+    useWorkspaceStore.getState().setActiveStatusFilter('Deprecated')
+    useWorkspaceStore.getState().setActiveStatusFilter(null)
+    expect(useWorkspaceStore.getState().activeStatusFilter).toBeNull()
+  })
+
+  it('loadWorkspace resets both filters', () => {
+    useWorkspaceStore.getState().setActiveTagFilter('VIP')
+    useWorkspaceStore.getState().setActiveStatusFilter('Live')
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    expect(useWorkspaceStore.getState().activeTagFilter).toBeNull()
+    expect(useWorkspaceStore.getState().activeStatusFilter).toBeNull()
+  })
+})
