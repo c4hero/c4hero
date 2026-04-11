@@ -1042,3 +1042,79 @@ workspace {
     expect(alice.tags.filter(t => t === 'Premium')).toHaveLength(1)
   })
 })
+
+// ─── DSL parser — sibling element loss regression ────────────────────
+
+describe('DSL parser — unknown brace-block in element body does not lose siblings', () => {
+  it('containers defined after an unknown annotation block in softwareSystem body are not lost', () => {
+    // Regression: unknown identifier with a brace block inside a softwareSystem body
+    // used to consume the parent closing RBRACE, discarding all subsequent containers.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      unknownAnnotation "value" {
+        someKey "someValue"
+      }
+      webApp = container "Web App"
+      api = container "API"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const sys = workspace.model.softwareSystems[0]
+    expect(sys.containers).toHaveLength(2)
+    expect(sys.containers.map(c => c.name)).toContain('Web App')
+    expect(sys.containers.map(c => c.name)).toContain('API')
+  })
+
+  it('components defined after an unknown annotation block in container body are not lost', () => {
+    // Regression: same issue inside container bodies for components.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      api = container "API" {
+        unknownAnnotation {
+          flag true
+        }
+        auth = component "Auth"
+        db = component "DB"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const container = workspace.model.softwareSystems[0].containers[0]
+    expect(container.components).toHaveLength(2)
+    expect(container.components.map(c => c.name)).toContain('Auth')
+    expect(container.components.map(c => c.name)).toContain('DB')
+  })
+
+  it('elements in model body after an unknown identifier brace block are not lost', () => {
+    // Regression: unknown IDENTIFIER at model body level with a brace block
+    // used to consume the parent workspace closing RBRACE.
+    const dsl = `
+workspace {
+  model {
+    unknownThing "value" {
+      key "value"
+    }
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(workspace.model.people).toHaveLength(1)
+    expect(workspace.model.softwareSystems).toHaveLength(1)
+  })
+})
