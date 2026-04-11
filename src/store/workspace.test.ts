@@ -1930,6 +1930,35 @@ describe('duplicateElements', () => {
     expect(clone?.components[0].name).toBe('Login')
     expect(clone?.components[1].name).toBe('Dashboard')
   })
+
+  it('adds duplicated relationship to every view containing both cloned elements, not just the active view', () => {
+    // Add a relationship between the two elements
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'Uses')
+
+    // Create a second landscape view and add both elements to it
+    const viewKey2 = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape 2')
+    useWorkspaceStore.getState().toggleElementInView(viewKey2, 'alice')
+    useWorkspaceStore.getState().toggleElementInView(viewKey2, 'api')
+
+    // Active view is still viewKey (set in beforeEach); duplicate both elements from there
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice', 'api'])
+    expect(newIds).toHaveLength(2)
+
+    const ws = useWorkspaceStore.getState().workspace!
+    const cloneRel = ws.model.relationships.find(
+      r => newIds.includes(r.sourceId) && newIds.includes(r.destinationId)
+    )
+    expect(cloneRel).toBeDefined()
+
+    // The active view should have the cloned relationship
+    const activeView = ws.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    expect(activeView.relationships.some(r => r.id === cloneRel!.id)).toBe(true)
+
+    // The second view ALSO has both cloned elements — it should also receive the relationship ref
+    const secondView = ws.views.systemLandscapeViews.find(v => v.key === viewKey2)!
+    expect(secondView.elements.some(e => newIds.includes(e.id))).toBe(true) // both clones were added
+    expect(secondView.relationships.some(r => r.id === cloneRel!.id)).toBe(true)
+  })
 })
 
 // ─── drillInto & navigateBack ────────────────────────────────────────

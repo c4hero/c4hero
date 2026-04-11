@@ -688,7 +688,45 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         if (!cloned) continue
         idMapping.set(id, newId)
         newIds.push(newId)
+        // Add to active view with a small position offset from the original
         view.elements.push({ id: newId, x: offsetX, y: offsetY })
+        // Mirror the auto-add-to-sibling-views behaviour of addPerson / addContainer /
+        // addComponent so that the clone appears everywhere the original appeared.
+        if (element.type === 'person' || element.type === 'softwareSystem') {
+          for (const v of ws.views.systemLandscapeViews) {
+            if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === newId)) {
+              v.elements.push({ id: newId })
+            }
+          }
+        } else if (element.type === 'container') {
+          // parentSysId: the system that now owns the clone (same as the original's parent)
+          const parentSysId = ws.model.softwareSystems.find(sys =>
+            sys.containers.some(c => c.id === newId)
+          )?.id
+          if (parentSysId) {
+            for (const v of ws.views.containerViews) {
+              if (v.softwareSystemId === parentSysId && v.key !== s.activeViewKey && !v.elements.some(e => e.id === newId)) {
+                v.elements.push({ id: newId })
+              }
+            }
+          }
+        } else if (element.type === 'component') {
+          const parentContainerId = (() => {
+            for (const sys of ws.model.softwareSystems) {
+              for (const c of sys.containers) {
+                if (c.components.some(comp => comp.id === newId)) return c.id
+              }
+            }
+            return null
+          })()
+          if (parentContainerId) {
+            for (const v of ws.views.componentViews) {
+              if (v.containerId === parentContainerId && v.key !== s.activeViewKey && !v.elements.some(e => e.id === newId)) {
+                v.elements.push({ id: newId })
+              }
+            }
+          }
+        }
       }
 
       // Duplicate relationships that connect two elements within the duplicated set.
@@ -704,7 +742,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             sourceId: newSourceId,
             destinationId: newDestId,
           })
-          view.relationships.push({ id: newRelId })
+          // Propagate the relationship ref to every view that now contains both clone
+          // endpoints (mirrors addRelationship behaviour instead of only updating the
+          // active view).
+          for (const v of allViewsOf(ws)) {
+            const viewElIds = new Set(v.elements.map(e => e.id))
+            if (viewElIds.has(newSourceId) && viewElIds.has(newDestId)) {
+              if (!v.relationships.some(r => r.id === newRelId)) {
+                v.relationships.push({ id: newRelId })
+              }
+            }
+          }
         }
       }
 
