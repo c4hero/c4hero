@@ -727,6 +727,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (patch.technology !== undefined) rel.technology = patch.technology
       if (patch.interactionStyle !== undefined) rel.interactionStyle = patch.interactionStyle
       if (patch.lineStyle !== undefined) rel.lineStyle = patch.lineStyle
+      if (patch.url !== undefined) rel.url = patch.url
       if (patch.tags !== undefined) rel.tags = patch.tags
     }
     return { ...pushUndo(s), workspace: ws }

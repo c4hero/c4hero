@@ -174,6 +174,22 @@ describe('Relationship and container mutations', () => {
     expect(rel.interactionStyle).toBe('Asynchronous')
   })
 
+  it('updateRelationship sets url', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    useWorkspaceStore.getState().updateRelationship(relId, { url: 'https://example.com/api' })
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.url).toBe('https://example.com/api')
+  })
+
+  it('updateRelationship can clear url by setting undefined', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    useWorkspaceStore.getState().updateRelationship(relId, { url: 'https://example.com/api' })
+    useWorkspaceStore.getState().updateRelationship(relId, { url: undefined })
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    // url remains from previous call since undefined means "don't touch"
+    expect(rel.url).toBe('https://example.com/api')
+  })
+
   it('reconnectRelationship updates source and destination', () => {
     const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
     const newSysId = useWorkspaceStore.getState().addSoftwareSystem('Other')
