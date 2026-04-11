@@ -1,6 +1,45 @@
 import { describe, it, expect } from 'vitest'
 import { parseDSL } from '@/lib/dsl'
 
+describe('unknown workspace-level keyword blocks', () => {
+  it('branding block is skipped without errors', () => {
+    const dsl = `
+workspace "Test" {
+  branding {
+    logo "https://example.com/logo.png"
+    font "Courier New"
+  }
+  model {
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+
+  it('terminology block is skipped without errors', () => {
+    const dsl = `
+workspace "Test" {
+  model {
+    api = softwareSystem "API"
+  }
+  views {}
+  terminology {
+    enterprise "Bank"
+    person "Customer"
+    softwareSystem "App"
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+})
+
 describe('perspectives block parsing', () => {
   it('perspectives block in softwareSystem body is skipped without errors', () => {
     const dsl = `

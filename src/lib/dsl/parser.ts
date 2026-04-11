@@ -289,8 +289,12 @@ class ContextAwareParser {
                     this.skipNewlines()
                     this.skipBraceBlock()
                 } else {
+                    // Unknown workspace-level keyword (e.g. branding, terminology, !identifiers).
+                    // Consume keyword + any inline string args, then skip a brace block if present.
                     this.advance()
-                    this.skipToNextLine()
+                    while (this.check('STRING') || this.check('IDENTIFIER') || this.check('NUMBER')) this.advance()
+                    this.skipNewlines()
+                    if (this.check('LBRACE')) this.skipBraceBlock()
                 }
             } else {
                 this.advance()
