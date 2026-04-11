@@ -106,3 +106,33 @@ describe('External location roundtrip', () => {
     expect(int?.location === undefined || int?.location === 'Internal').toBe(true)
   })
 })
+
+describe('serializer does not emit unnecessary empty string placeholders', () => {
+  it('External person with no description serializes without "" before the block', () => {
+    const ws = makeWs()
+    const dsl = serializeDSL(ws)
+    // alice is External so has a block body; she has no description.
+    // The serializer must NOT emit person "Alice" "" { location External }
+    // It should emit person "Alice" { location External }
+    expect(dsl).not.toMatch(/person "Alice" "" \{/)
+    expect(dsl).toMatch(/person "Alice" \{/)
+  })
+
+  it('External softwareSystem with no description serializes without "" before the block', () => {
+    const ws = makeWs()
+    const dsl = serializeDSL(ws)
+    // ExtSys is External so has a block body; it has no description.
+    expect(dsl).not.toMatch(/softwareSystem "ExtSys" "" \{/)
+    expect(dsl).toMatch(/softwareSystem "ExtSys" \{/)
+  })
+
+  it('External person with no description roundtrips with location and no description', () => {
+    const ws = makeWs()
+    const dsl = serializeDSL(ws)
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const alice = workspace.model.people.find(p => p.name === 'Alice')
+    expect(alice?.description).toBeUndefined()
+    expect(alice?.location).toBe('External')
+  })
+})

@@ -234,7 +234,7 @@ class SerializerContext {
         const parts: string[] = []
         parts.push('person')
         parts.push(`"${this.escapeString(person.name)}"`)
-        if (person.description || extraTags || hasBlock) {
+        if (person.description || extraTags) {
             parts.push(`"${this.escapeString(person.description ?? '')}"`)
         }
         if (extraTags) parts.push(`"${extraTags}"`)
@@ -266,7 +266,7 @@ class SerializerContext {
         const parts: string[] = []
         parts.push('softwareSystem')
         parts.push(`"${this.escapeString(sys.name)}"`)
-        if (sys.description || extraTags || hasBody) {
+        if (sys.description || extraTags) {
             parts.push(`"${this.escapeString(sys.description ?? '')}"`)
         }
         if (extraTags) parts.push(`"${extraTags}"`)
@@ -304,7 +304,7 @@ class SerializerContext {
         const parts: string[] = []
         parts.push('container')
         parts.push(`"${this.escapeString(container.name)}"`)
-        if (container.description || container.technology || extraTags || hasBody) {
+        if (container.description || container.technology || extraTags) {
             parts.push(`"${this.escapeString(container.description ?? '')}"`)
         }
         if (container.technology || extraTags) {
@@ -342,7 +342,7 @@ class SerializerContext {
         const parts: string[] = []
         parts.push('component')
         parts.push(`"${this.escapeString(comp.name)}"`)
-        if (comp.description || comp.technology || extraTags || hasBlock) {
+        if (comp.description || comp.technology || extraTags) {
             parts.push(`"${this.escapeString(comp.description ?? '')}"`)
         }
         if (comp.technology || extraTags) {
