@@ -1,4 +1,4 @@
-import { useReactFlow } from '@xyflow/react'
+import { useReactFlow, useViewport } from '@xyflow/react'
 import { Minus, Plus, Maximize2 } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
@@ -76,8 +76,7 @@ function ZoomHudBtn({
 }
 
 function ZoomLabel() {
-  const reactFlow = useReactFlow()
-  const zoom = reactFlow.getZoom()
+  const { zoom } = useViewport()
   return (
     <span
       style={{

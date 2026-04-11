@@ -555,7 +555,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         const view = findView(ws, s.activeViewKey)
         if (view) view.relationships.push({ id })
       }
-      return { ...pushUndo(s), workspace: ws, selectedRelationshipId: id, selectedElementIds: [] }
+      return { ...pushUndo(s), workspace: ws, selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null }
     })
     return id
   },
