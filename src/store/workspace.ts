@@ -1133,6 +1133,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   renameTag: (oldTag, newTag) => set((s) => {
     if (!newTag.trim() || oldTag === newTag) return s
     if (BUILTIN_TAGS.has(oldTag)) return s // Built-in tags cannot be renamed
+    if (!s.workspace) return s
+    // Quick existence check before the expensive clone + undo push
+    const src = s.workspace
+    let exists = src.views.configuration.styles.elements.some(es => es.tag === oldTag)
+      || src.views.configuration.styles.relationships.some(rs => rs.tag === oldTag)
+      || src.model.relationships.some(r => r.tags.includes(oldTag))
+    if (!exists) forEachElement(src, (el) => { if (el.tags.includes(oldTag)) { exists = true; return true } })
+    if (!exists) return s
     const ws = cloneWs(s)
     if (!ws) return s
     forEachElement(ws, (el) => { el.tags = el.tags.map(t => t === oldTag ? newTag : t) })

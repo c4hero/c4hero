@@ -1995,6 +1995,12 @@ describe('renameTag', () => {
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
   })
 
+  it('is a no-op (no undo) when oldTag does not exist anywhere', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().renameTag('NonExistentTag99', 'NewName')
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
+  })
+
   it('supports undo', () => {
     useWorkspaceStore.getState().renameTag('VIP', 'Premium')
     useWorkspaceStore.getState().undo()
