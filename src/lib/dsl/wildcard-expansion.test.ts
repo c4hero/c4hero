@@ -116,4 +116,60 @@ workspace "Test" {
     const rel = workspace.model.relationships[0]
     expect(view.relationships[0].id).toBe(rel.id)
   })
+
+  it('exclude removes specific elements after include *', () => {
+    const dsl = `
+workspace "Test" {
+  model {
+    alice = person "Alice"
+    bob = person "Bob"
+    api = softwareSystem "API"
+  }
+  views {
+    systemLandscape "overview" {
+      include *
+      exclude bob
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = workspace.views.systemLandscapeViews[0]
+    const bobId = workspace.model.people.find(p => p.name === 'Bob')!.id
+    const aliceId = workspace.model.people.find(p => p.name === 'Alice')!.id
+    const apiId = workspace.model.softwareSystems[0].id
+    // Bob should be excluded
+    expect(view.elements.some(e => e.id === bobId)).toBe(false)
+    // Alice and API should remain
+    expect(view.elements.some(e => e.id === aliceId)).toBe(true)
+    expect(view.elements.some(e => e.id === apiId)).toBe(true)
+  })
+
+  it('exclude removes explicitly included elements', () => {
+    const dsl = `
+workspace "Test" {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {
+    systemLandscape "overview" {
+      include alice
+      include api
+      exclude alice
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = workspace.views.systemLandscapeViews[0]
+    const aliceId = workspace.model.people[0].id
+    const apiId = workspace.model.softwareSystems[0].id
+    // Alice should be excluded
+    expect(view.elements.some(e => e.id === aliceId)).toBe(false)
+    // API should remain
+    expect(view.elements.some(e => e.id === apiId)).toBe(true)
+  })
 })

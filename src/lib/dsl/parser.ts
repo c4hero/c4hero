@@ -100,6 +100,13 @@ class ContextAwareParser {
 
     private relCounter = 0
 
+    // Track elements excluded per view (used in post-processing to apply `exclude` directives)
+    private viewExcludedIds = new Map<View, Set<string>>()
+
+    getExcludedIdsForView(view: View): Set<string> {
+        return this.viewExcludedIds.get(view) ?? new Set()
+    }
+
     constructor(tokens: Token[]) {
         this.tokens = tokens
     }
@@ -1163,9 +1170,13 @@ class ContextAwareParser {
 
                 if (kw === 'exclude') {
                     this.advance()
-                    while (this.check('STAR') || this.check('IDENTIFIER') || this.check('STRING')) {
-                        this.advance()
+                    const excluded = this.viewExcludedIds.get(view) ?? new Set<string>()
+                    while (this.check('STAR') || this.check('IDENTIFIER') || this.check('STRING') || this.check('KEYWORD')) {
+                        const ref = this.advance().value
+                        const resolvedId = this.resolveRef(ref)
+                        excluded.add(resolvedId ?? ref)
                     }
+                    this.viewExcludedIds.set(view, excluded)
                     continue
                 }
 
@@ -1399,10 +1410,15 @@ export function parse(input: string): ParseResult {
         ...ws.views.componentViews,
     ]
     for (const view of allViews) {
+        const excluded = parser.getExcludedIdsForView(view)
         const hasWildcard = view.elements.some(e => e.id === '*')
         if (hasWildcard) {
             // Expand `include *` to all elements appropriate for this view type
-            const expanded = expandWildcard(ws.model, view)
+            let expanded = expandWildcard(ws.model, view)
+            // Apply `exclude` directives after wildcard expansion
+            if (excluded.size > 0) {
+                expanded = expanded.filter(e => !excluded.has(e.id))
+            }
             view.elements = expanded
             // Wildcard views include all relationships between expanded elements
             const expandedIds = new Set(expanded.map(e => e.id))
@@ -1410,7 +1426,13 @@ export function parse(input: string): ParseResult {
                 .filter(r => expandedIds.has(r.sourceId) && expandedIds.has(r.destinationId))
                 .map(r => ({ id: r.id }))
         } else {
-            const elementIds = new Set(view.elements.map(e => e.id))
+            // Apply `exclude` directives for explicit includes
+            let elements = view.elements
+            if (excluded.size > 0) {
+                elements = elements.filter(e => !excluded.has(e.id))
+                view.elements = elements
+            }
+            const elementIds = new Set(elements.map(e => e.id))
             view.relationships = ws.model.relationships
                 .filter(r => elementIds.has(r.sourceId) && elementIds.has(r.destinationId))
                 .map(r => ({ id: r.id }))
