@@ -204,7 +204,7 @@ workspace {
     expect(ids).toContain('apiService')
   })
 
-  it('parses a containerView with include * wildcard', () => {
+  it('parses a containerView with include * wildcard — expands to containers', () => {
     const dsl = `
 workspace {
   model {
@@ -222,7 +222,12 @@ workspace {
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toHaveLength(0)
     const view = workspace.views.containerViews[0]
-    expect(view.elements.some(e => e.id === '*')).toBe(true)
+    // Wildcard should be expanded — no literal '*' element remains
+    expect(view.elements.some(e => e.id === '*')).toBe(false)
+    // The web app container should be included
+    const banking = workspace.model.softwareSystems[0]
+    const webAppId = banking.containers[0].id
+    expect(view.elements.some(e => e.id === webAppId)).toBe(true)
   })
 
   it('parses a componentView with include elements', () => {

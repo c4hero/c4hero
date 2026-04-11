@@ -18,9 +18,48 @@ import type {
     ElementStyle,
     RelationshipStyle,
     ViewConfiguration,
+    ElementInView,
 } from '@/types/model'
 import { lex } from './lexer'
 import type { Token, TokenType } from './lexer'
+
+/**
+ * Expand an `include *` wildcard into the actual elements appropriate for the view type.
+ * Structurizr semantics: landscape/context = people + systems; container = people + systems + containers
+ * of the scoped system; component = people + systems + containers + components of the scoped container.
+ */
+function expandWildcard(model: Model, view: View): ElementInView[] {
+    const ids: string[] = []
+
+    const addId = (id: string) => { if (!ids.includes(id)) ids.push(id) }
+
+    if (view.type === 'systemLandscape' || view.type === 'systemContext') {
+        for (const p of model.people) addId(p.id)
+        for (const s of model.softwareSystems) addId(s.id)
+    } else if (view.type === 'container' && view.softwareSystemId) {
+        for (const p of model.people) addId(p.id)
+        for (const s of model.softwareSystems) {
+            if (s.id === view.softwareSystemId) {
+                for (const c of s.containers) addId(c.id)
+            } else {
+                addId(s.id)
+            }
+        }
+    } else if (view.type === 'component' && view.containerId) {
+        for (const p of model.people) addId(p.id)
+        for (const s of model.softwareSystems) {
+            const parentContainer = s.containers.find(c => c.id === view.containerId)
+            if (parentContainer) {
+                for (const comp of parentContainer.components) addId(comp.id)
+                for (const c of s.containers) { if (c.id !== view.containerId) addId(c.id) }
+            } else {
+                addId(s.id)
+            }
+        }
+    }
+
+    return ids.map(id => ({ id }))
+}
 
 // ─── Public Types ────────────────────────────────────────────────────
 
@@ -1362,8 +1401,14 @@ export function parse(input: string): ParseResult {
     for (const view of allViews) {
         const hasWildcard = view.elements.some(e => e.id === '*')
         if (hasWildcard) {
-            // Wildcard views include all relationships
-            view.relationships = ws.model.relationships.map(r => ({ id: r.id }))
+            // Expand `include *` to all elements appropriate for this view type
+            const expanded = expandWildcard(ws.model, view)
+            view.elements = expanded
+            // Wildcard views include all relationships between expanded elements
+            const expandedIds = new Set(expanded.map(e => e.id))
+            view.relationships = ws.model.relationships
+                .filter(r => expandedIds.has(r.sourceId) && expandedIds.has(r.destinationId))
+                .map(r => ({ id: r.id }))
         } else {
             const elementIds = new Set(view.elements.map(e => e.id))
             view.relationships = ws.model.relationships
