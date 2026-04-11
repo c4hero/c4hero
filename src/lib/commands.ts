@@ -5,7 +5,7 @@ import {
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, FileText, Image, FileCode, Copy, Plus,
 } from 'lucide-react'
-import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, allViewsOf } from '@/store/workspace'
+import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
@@ -212,19 +212,11 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: LayoutDashboard,
       keywords: ['layout', 'arrange', 'organize'],
+      when: () => !!store().activeViewKey,
       execute: () => {
         const s = store()
-        if (!s.workspace || !s.activeViewKey) return
-        const ws = structuredClone(s.workspace)
-        const v = allViewsOf(ws).find((v) => v.key === s.activeViewKey)
-        if (v) {
-          for (const el of v.elements) {
-            el.x = undefined
-            el.y = undefined
-            el.pinned = undefined
-          }
-          useWorkspaceStore.setState({ workspace: ws })
-        }
+        if (!s.activeViewKey) return
+        s.resetAndRelayout(s.activeViewKey)
       },
     },
     {
