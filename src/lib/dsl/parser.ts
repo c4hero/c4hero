@@ -291,8 +291,8 @@ class ContextAwareParser {
                 return { workspace, errors: this.errors }
             }
 
-            workspace.name = this.readOptionalString()
-            workspace.description = this.readOptionalString()
+            workspace.name = this.readOptionalString() || undefined
+            workspace.description = this.readOptionalString() || undefined
             this.skipNewlines()
 
             if (this.match('LBRACE')) {
