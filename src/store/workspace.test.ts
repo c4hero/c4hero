@@ -152,6 +152,14 @@ describe('Relationship and container mutations', () => {
     expect(rel.technology).toBe('gRPC')
   })
 
+  it('addRelationship always seeds the Relationship built-in tag', () => {
+    // Regression: parser re-adds 'Relationship' tag on roundtrip; store must also
+    // produce it initially so tag-based style lookups work from the moment of creation.
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships[0]
+    expect(rel.tags).toContain('Relationship')
+  })
+
   it('updateRelationship updates description and technology', () => {
     const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls', 'gRPC')
     useWorkspaceStore.getState().updateRelationship(relId, { description: 'queries', technology: 'SQL' })
@@ -275,6 +283,41 @@ describe('Relationship and container mutations', () => {
     const container = sys.containers.find(c => c.id === containerId)!
     expect(container.components).toHaveLength(1)
     expect(container.components[0].name).toBe('Login Handler')
+  })
+
+  it('updateElementTechnology sets technology on a container', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'API Gateway')
+    useWorkspaceStore.getState().updateElementTechnology(containerId, 'Node.js')
+    const ws = useWorkspaceStore.getState().workspace!
+    const sys = ws.model.softwareSystems.find(s => s.id === 'api')!
+    const container = sys.containers.find(c => c.id === containerId)!
+    expect(container.technology).toBe('Node.js')
+  })
+
+  it('updateElementTechnology sets technology on a component', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'API Gateway')
+    const compId = useWorkspaceStore.getState().addComponent(containerId, 'Auth Service')
+    useWorkspaceStore.getState().updateElementTechnology(compId, 'Spring Boot')
+    const ws = useWorkspaceStore.getState().workspace!
+    const container = ws.model.softwareSystems[0].containers.find(c => c.id === containerId)!
+    const comp = container.components.find(c => c.id === compId)!
+    expect(comp.technology).toBe('Spring Boot')
+  })
+
+  it('updateElementTechnology is a no-op for people (technology does not apply)', () => {
+    const before = JSON.stringify(useWorkspaceStore.getState().workspace!.model.people)
+    useWorkspaceStore.getState().updateElementTechnology('alice', 'SomeStack')
+    const after = JSON.stringify(useWorkspaceStore.getState().workspace!.model.people)
+    expect(after).toBe(before)
+  })
+
+  it('updateElementTechnology supports undo', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'API Gateway')
+    useWorkspaceStore.getState().updateElementTechnology(containerId, 'Node.js')
+    useWorkspaceStore.getState().undo()
+    const ws = useWorkspaceStore.getState().workspace!
+    const container = ws.model.softwareSystems.find(s => s.id === 'api')!.containers.find(c => c.id === containerId)!
+    expect(container.technology).toBeUndefined()
   })
 
   it('undo/redo stack depth — undo twice returns to state before last 2 mutations', () => {
