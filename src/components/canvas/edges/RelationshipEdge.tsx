@@ -83,8 +83,8 @@ function RelationshipEdge({
         }}
         markerEnd="url(#c4-arrow)"
       />
-      {/* Label */}
-      {relationship?.description && (
+      {/* Label — shown when either description or technology is present */}
+      {(relationship?.description || relationship?.technology) && (
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto"
@@ -96,15 +96,17 @@ function RelationshipEdge({
               lineHeight: 1.3,
             }}
           >
-            <span
-              className="text-[11px]"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              {relationship.description}
-            </span>
-            {relationship.technology && (
+            {relationship?.description && (
               <span
-                className="ml-1 text-[10px]"
+                className="text-[11px]"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                {relationship.description}
+              </span>
+            )}
+            {relationship?.technology && (
+              <span
+                className={relationship?.description ? 'ml-1 text-[10px]' : 'text-[10px]'}
                 style={{ color: 'var(--color-text-muted)' }}
               >
                 {relationship.technology}
