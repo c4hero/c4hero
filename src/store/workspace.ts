@@ -344,6 +344,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedRelationshipId: null,
       selectedGroupId: null,
       focusElementId: null,
+      pendingDelete: null, // dismiss any in-flight delete confirmation dialog
       undoStack: [],
       redoStack: [],
     }),
@@ -730,8 +731,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!ws) return s
     const group = ws.model.groups.find(g => g.id === id)
     if (!group) return s
-    if (patch.name !== undefined) group.name = patch.name
-    if (patch.elementIds !== undefined) group.elementIds = patch.elementIds
+    let changed = false
+    if (patch.name !== undefined && group.name !== patch.name) { group.name = patch.name; changed = true }
+    if (patch.elementIds !== undefined) { group.elementIds = patch.elementIds; changed = true } // array, always treat as a change
+    if (!changed) return s
     return { ...pushUndo(s), workspace: ws }
   }),
 

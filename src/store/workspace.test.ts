@@ -138,6 +138,15 @@ describe('Group store actions', () => {
     useWorkspaceStore.getState().deleteGroup('non-existent-group-id')
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(prevUndoLength)
   })
+
+  it('updateGroup name is a no-op (no undo entry) when name is already the same value', () => {
+    useWorkspaceStore.getState().addGroup('Team Alpha', ['alice'])
+    const id = useWorkspaceStore.getState().workspace!.model.groups[0].id
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateGroup(id, { name: 'Team Alpha' }) // same name
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+    expect(useWorkspaceStore.getState().workspace!.model.groups[0].name).toBe('Team Alpha')
+  })
 })
 
 // ─── Relationship and Container Mutations ─────────────────────────────
@@ -531,6 +540,14 @@ describe('activeWorkspaceFilename', () => {
     useWorkspaceStore.getState().setActiveWorkspaceFilename('foo.dsl')
     useWorkspaceStore.getState().closeWorkspace()
     expect(useWorkspaceStore.getState().activeWorkspaceFilename).toBeNull()
+  })
+
+  it('closeWorkspace clears pendingDelete to dismiss in-flight confirmation dialogs', () => {
+    useWorkspaceStore.setState({
+      pendingDelete: { message: 'Delete?', onConfirm: () => {} },
+    })
+    useWorkspaceStore.getState().closeWorkspace()
+    expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
   })
 })
 
