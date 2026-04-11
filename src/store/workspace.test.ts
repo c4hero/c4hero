@@ -1046,6 +1046,46 @@ describe('addContainer — auto-add to all container views scoped to same system
   })
 })
 
+// ─── addView container view — cross-system container auto-populate ───────────
+
+describe('addView container view — related containers from other systems are auto-included', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('auto-includes a container from another system that is directly related to the scoped containers', () => {
+    // System A ("api") gets a container; system B gets a container; they have a relationship.
+    const containerA = useWorkspaceStore.getState().addContainer('api', 'API Backend')
+    const sysB = useWorkspaceStore.getState().addSoftwareSystem('Payment Service')
+    const containerB = useWorkspaceStore.getState().addContainer(sysB, 'Payments API')
+    useWorkspaceStore.getState().addRelationship(containerA, containerB, 'calls')
+
+    // Create a container view for "api" AFTER all elements and relationships exist
+    const viewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.containerViews.find(v => v.key === viewKey)!
+
+    // containerA is the scoped container — must appear
+    expect(view.elements.some(e => e.id === containerA)).toBe(true)
+    // containerB (from a different system) is directly related — must also appear
+    expect(view.elements.some(e => e.id === containerB)).toBe(true)
+  })
+
+  it('auto-includes the relationship to the cross-system container', () => {
+    const containerA = useWorkspaceStore.getState().addContainer('api', 'API Backend')
+    const sysB = useWorkspaceStore.getState().addSoftwareSystem('Payment Service')
+    const containerB = useWorkspaceStore.getState().addContainer(sysB, 'Payments API')
+    const relId = useWorkspaceStore.getState().addRelationship(containerA, containerB, 'calls')
+
+    const viewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.containerViews.find(v => v.key === viewKey)!
+
+    // The relationship between containerA and containerB should appear in the view
+    expect(view.relationships.some(r => r.id === relId)).toBe(true)
+  })
+})
+
 describe('addComponent — auto-add to all component views scoped to same container', () => {
   beforeEach(() => {
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())

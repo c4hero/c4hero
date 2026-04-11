@@ -964,6 +964,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         }
         for (const otherSys of ws.model.softwareSystems) {
           if (otherSys.id !== scopeId && relatedIds.has(otherSys.id)) initialElements.push({ id: otherSys.id })
+          // Also include containers from other systems that are directly related to the
+          // scoped system's containers (mirrors the same pattern in component view init)
+          for (const c of otherSys.containers) {
+            if (relatedIds.has(c.id)) initialElements.push({ id: c.id })
+          }
         }
       } else if (type === 'component' && scopeId) {
         // All components of the scoped container
