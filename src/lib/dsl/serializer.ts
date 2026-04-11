@@ -458,6 +458,11 @@ class SerializerContext {
         this.emit(`${parts.join(' ')} {`)
         this.depth++
 
+        // Description (block property — cannot be expressed as a positional arg)
+        if (view.description) {
+            this.emit(`description "${this.escapeString(view.description)}"`)
+        }
+
         // Elements
         const hasWildcard = view.elements.some(e => e.id === '*')
         if (hasWildcard) {
