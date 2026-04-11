@@ -72,7 +72,7 @@ export default function ConfirmDeleteDialog({ message, onConfirm, onCancel }: Pr
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{
             width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-            background: 'rgba(239,68,68,0.12)',
+            background: 'var(--color-tint-error)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <Trash2 size={15} style={{ color: 'var(--color-error)' }} />

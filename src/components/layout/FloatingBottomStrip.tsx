@@ -389,7 +389,7 @@ function TagRow({
         <div style={{
           width: 12, height: 12, borderRadius: 3, flexShrink: 0,
           background: style?.background ?? 'var(--color-border)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid var(--glass-overlay-md)',
         }} />
 
         {/* Rename input */}
@@ -489,7 +489,7 @@ function ModeTab({ icon, label, active, onClick, isFirst }: {
         height: '100%', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 5,
         fontSize: 'var(--text-xs)', fontWeight: 600,
         color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-        ...(active ? { background: 'rgba(255,255,255,0.06)' } : {}),
+        ...(active ? { background: 'var(--glass-overlay-xs)' } : {}),
         borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
         cursor: 'pointer', border: 'none', transition: 'color 0.12s, background 0.12s',
         borderRadius: isFirst ? 'var(--radius-lg) 0 0 var(--radius-lg)' : 0,
@@ -538,7 +538,7 @@ function TagStyleEditor({ tag, style, onClose }: {
       padding: 12,
       borderRadius: 'var(--radius-md)',
       border: '1px solid var(--color-border)',
-      background: 'rgba(255,255,255,0.03)',
+      background: 'var(--glass-overlay-xxs)',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <StyleField label="Background">
@@ -596,7 +596,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           className="hover-danger-text"
           style={{
             marginTop: 10, width: '100%', padding: '5px 0', borderRadius: 'var(--radius-sm)',
-            border: '1px solid rgba(239,68,68,0.3)', background: 'transparent',
+            border: '1px solid var(--color-border-error)', background: 'transparent',
             color: 'var(--color-error)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s',
           }}
         >
@@ -696,7 +696,7 @@ function ScopeViolationBanner({ violations }: { violations: ScopeViolation[] }) 
   return (
     <div style={{
       position: 'fixed', bottom: 48, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
-      background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)',
+      background: 'var(--color-tint-error)', border: '1px solid var(--color-border-error)',
       borderRadius: 10, padding: '8px 16px', fontSize: 12, color: '#fca5a5',
       display: 'flex', alignItems: 'center', gap: 8, maxWidth: 500, pointerEvents: 'auto',
     }}>

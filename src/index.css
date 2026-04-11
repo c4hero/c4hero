@@ -71,6 +71,7 @@
   --glass-overlay-xxs: rgba(255, 255, 255, 0.015);
   --glass-overlay-xs: rgba(255, 255, 255, 0.04);
   --glass-overlay-sm: rgba(255, 255, 255, 0.08);
+  --glass-overlay-md: rgba(255, 255, 255, 0.1);
 
   /* Transparent text colors — for elements rendered directly on canvas */
   --color-text-dim: rgba(255, 255, 255, 0.35);
