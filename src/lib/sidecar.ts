@@ -1,5 +1,5 @@
 import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
-import { buildElementMap, allViewsOf } from '@/store/workspace'
+import { allViewsOf } from '@/store/workspace'
 import { createLogger } from '@/lib/logger'
 
 const VALID_STATUSES: ReadonlySet<string> = new Set<ElementStatus>(['Live', 'Planned', 'Deprecated', 'Removed'])
@@ -50,19 +50,9 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
   let hasData = false
 
-  // Elements: status, owner
-  const elementMap = buildElementMap(workspace)
-  const elements: Record<string, SidecarElement> = {}
-  for (const [id, el] of elementMap) {
-    const entry: SidecarElement = {}
-    if (el.status) entry.status = el.status
-    if (el.owner) entry.owner = el.owner
-    if (Object.keys(entry).length > 0) {
-      elements[id] = entry
-      hasData = true
-    }
-  }
-  if (Object.keys(elements).length > 0) sidecar.elements = elements
+  // Note: status and owner are now serialized in the DSL — not duplicated here.
+  // SidecarElement + the applySidecar reader are kept for backward-compat migration
+  // of existing sidecar files written by older versions of c4hero.
 
   // Relationships: lineStyle
   const relationships: Record<string, SidecarRelationship> = {}
@@ -106,9 +96,11 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     const applyToElement = (id: string, data: SidecarElement) => {
       // Explicit property-by-property assignment with runtime type validation.
       // No Object.assign — avoids prototype pollution and enforces valid union values.
+      // DSL is the authoritative source; sidecar is a migration fallback for files
+      // written before status/owner were serialized in the DSL.
       const applyProps = (el: { status?: ElementStatus; owner?: string }) => {
-        if (isValidStatus(data.status)) el.status = data.status
-        if (typeof data.owner === 'string') el.owner = data.owner
+        if (el.status === undefined && isValidStatus(data.status)) el.status = data.status
+        if (el.owner === undefined && typeof data.owner === 'string') el.owner = data.owner
       }
       // People
       for (const p of workspace.model.people) {

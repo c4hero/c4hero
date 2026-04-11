@@ -49,12 +49,13 @@ describe('extractSidecar', () => {
     expect(result).toBeNull()
   })
 
-  it('returns sidecar data when a person has status set', () => {
+  it('does NOT include status in sidecar (status is now in DSL)', () => {
     const ws = makeWorkspace()
     ws.model.people[0].status = 'Live'
+    // status/owner are serialized in the DSL — extractSidecar should not duplicate them
     const result = extractSidecar(ws)
-    expect(result).not.toBeNull()
-    expect(result!.elements?.['alice']?.status).toBe('Live')
+    expect(result).toBeNull()
+    // If there were also a relationship with lineStyle we'd get a result, but no elements key
   })
 
   it('captures relationship lineStyle', () => {
@@ -73,9 +74,9 @@ describe('extractSidecar', () => {
     expect(result!.views?.['sl1']?.elements?.['alice']?.pinned).toBe(true)
   })
 
-  it('version is always 1', () => {
+  it('version is always 1 when there is sidecar data', () => {
     const ws = makeWorkspace()
-    ws.model.people[0].status = 'Planned'
+    ws.model.relationships[0].lineStyle = 'Curved'
     const result = extractSidecar(ws)
     expect(result!.version).toBe(1)
   })
@@ -84,10 +85,17 @@ describe('extractSidecar', () => {
 // ─── applySidecar ────────────────────────────────────────────────────
 
 describe('applySidecar', () => {
-  it('applies status to a person', () => {
+  it('applies status to a person when DSL did not set it (migration fallback)', () => {
     const ws = makeWorkspace()
     applySidecar(ws, { version: 1, elements: { alice: { status: 'Deprecated' } } })
     expect(ws.model.people[0].status).toBe('Deprecated')
+  })
+
+  it('does not override status already set by DSL (DSL is authoritative)', () => {
+    const ws = makeWorkspace()
+    ws.model.people[0].status = 'Live' // simulates DSL parse result
+    applySidecar(ws, { version: 1, elements: { alice: { status: 'Deprecated' } } })
+    expect(ws.model.people[0].status).toBe('Live') // DSL value wins
   })
 
   it('applies lineStyle to a relationship', () => {
@@ -184,7 +192,7 @@ describe('parseSidecar', () => {
 describe('serializeSidecar / parseSidecar round-trip', () => {
   it('serializes and deserializes sidecar data correctly', () => {
     const ws = makeWorkspace()
-    ws.model.people[0].status = 'Planned'
+    // status is now in DSL — not extracted to sidecar
     ws.model.relationships[0].lineStyle = 'Straight'
     ws.views.systemLandscapeViews[0].elements[0].pinned = true
 
@@ -194,7 +202,7 @@ describe('serializeSidecar / parseSidecar round-trip', () => {
 
     expect(parsed).not.toBeNull()
     expect(parsed!.version).toBe(1)
-    expect(parsed!.elements?.['alice']?.status).toBe('Planned')
+    expect(parsed!.elements).toBeUndefined() // status/owner no longer in sidecar
     expect(parsed!.relationships?.['rel-1']?.lineStyle).toBe('Straight')
     expect(parsed!.views?.['sl1']?.elements?.['alice']?.pinned).toBe(true)
   })
