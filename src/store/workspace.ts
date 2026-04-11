@@ -702,6 +702,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   deleteGroup: (id) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
+    if (!ws.model.groups.some(g => g.id === id)) return s
     ws.model.groups = ws.model.groups.filter(g => g.id !== id)
     return { ...pushUndo(s), workspace: ws, selectedGroupId: s.selectedGroupId === id ? null : s.selectedGroupId }
   }),
@@ -791,6 +792,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   deleteRelationship: (id) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
+    if (!ws.model.relationships.some(r => r.id === id)) return s
     ws.model.relationships = ws.model.relationships.filter(r => r.id !== id)
     // Remove from all views
     forEachView(ws, (v) => {

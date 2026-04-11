@@ -132,6 +132,12 @@ describe('Group store actions', () => {
     useWorkspaceStore.getState().undo()
     expect(useWorkspaceStore.getState().workspace!.model.groups).toHaveLength(1)
   })
+
+  it('deleteGroup is a no-op (no undo) when group ID does not exist', () => {
+    const prevUndoLength = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().deleteGroup('non-existent-group-id')
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(prevUndoLength)
+  })
 })
 
 // ─── Relationship and Container Mutations ─────────────────────────────
@@ -308,6 +314,12 @@ describe('Relationship and container mutations', () => {
     // The relationship may or may not be in the view; test that delete cleans up
     useWorkspaceStore.getState().deleteRelationship(relId)
     expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
+  })
+
+  it('deleteRelationship is a no-op (no undo) when ID does not exist', () => {
+    const prevUndoLength = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().deleteRelationship('non-existent-rel-id')
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(prevUndoLength)
   })
 
   it('addContainer creates container under the specified softwareSystem', () => {
