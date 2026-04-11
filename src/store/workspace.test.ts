@@ -401,6 +401,24 @@ describe('Relationship and container mutations', () => {
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(prevUndoLength)
   })
 
+  it('deleteRelationship clears selectedRelationshipId when the selected relationship is deleted', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    // addRelationship selects the new relationship
+    expect(useWorkspaceStore.getState().selectedRelationshipId).toBe(relId)
+    useWorkspaceStore.getState().deleteRelationship(relId)
+    expect(useWorkspaceStore.getState().selectedRelationshipId).toBeNull()
+  })
+
+  it('deleteRelationship does not clear selectedRelationshipId for a different relationship', () => {
+    const relId1 = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const relId2 = useWorkspaceStore.getState().addRelationship('alice', 'api', 'queries')
+    // After second addRelationship, relId2 is selected
+    expect(useWorkspaceStore.getState().selectedRelationshipId).toBe(relId2)
+    // Deleting relId1 (not the selected one) should not clear selection
+    useWorkspaceStore.getState().deleteRelationship(relId1)
+    expect(useWorkspaceStore.getState().selectedRelationshipId).toBe(relId2)
+  })
+
   it('updateRelationship is a no-op (no undo entry) when description value is unchanged', () => {
     const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls', 'gRPC')
     const undoBefore = useWorkspaceStore.getState().undoStack.length
@@ -731,6 +749,21 @@ describe('view CRUD', () => {
     expect(state.undoStack).toHaveLength(undoBefore)
     // activeViewKey unchanged
     expect(state.activeViewKey).toBe(prevActiveKey)
+  })
+
+  it('addView auto-populates initial relationships between auto-included elements', () => {
+    // Create a relationship BEFORE the view exists; addRelationship can't add it to a view
+    // that doesn't exist yet. When addView runs it should seed initialRelationships.
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'Uses')
+    // Confirm the relationship is not in any view at this point (no views exist)
+    const wsBefore = useWorkspaceStore.getState().workspace!
+    expect(wsBefore.views.systemLandscapeViews).toHaveLength(0)
+
+    const key = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.systemLandscapeViews.find(v => v.key === key)!
+    // Both endpoints (alice and api) are auto-included — the relationship should appear too
+    expect(view.relationships.some(r => r.id === relId)).toBe(true)
   })
 })
 
@@ -1735,6 +1768,24 @@ describe('duplicateView', () => {
     const ws = useWorkspaceStore.getState().workspace!
     const copy = ws.views.systemLandscapeViews.find(v => v.key === newKey)!
     expect(copy.elements).toHaveLength(srcElCount)
+  })
+
+  it('copies relationships from the source view', () => {
+    // Add a relationship so the source view has at least one relationship
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'Uses')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const src = ws0.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    const srcRelCount = src.relationships.length
+    expect(srcRelCount).toBeGreaterThan(0)
+
+    const newKey = useWorkspaceStore.getState().duplicateView(viewKey)
+    const ws = useWorkspaceStore.getState().workspace!
+    const copy = ws.views.systemLandscapeViews.find(v => v.key === newKey)!
+    expect(copy.relationships).toHaveLength(srcRelCount)
+    // Relationship IDs should be the same (same model references, not new copies)
+    const srcRelIds = src.relationships.map(r => r.id)
+    const copyRelIds = copy.relationships.map(r => r.id)
+    expect(copyRelIds).toEqual(expect.arrayContaining(srcRelIds))
   })
 
   it('activates the duplicate after creation', () => {
