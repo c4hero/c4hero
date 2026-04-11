@@ -1186,3 +1186,56 @@ workspace {
     expect(view.elements.some(e => e.id === 'api')).toBe(true)
   })
 })
+
+// ─── DSL parser — error recovery ─────────────────────────────────────
+
+describe('DSL parser — unresolved relationship reference errors', () => {
+  it('produces an error when a relationship uses an undefined source variable', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "System"
+    ghost -> sys "calls"
+  }
+  views {}
+}
+`
+    const { errors } = parseDSL(dsl)
+    expect(errors.length).toBeGreaterThan(0)
+    expect(errors.some(e => /unresolved reference/i.test(e.message))).toBe(true)
+  })
+
+  it('produces an error when a relationship uses an undefined destination variable', () => {
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    alice -> ghost "calls"
+  }
+  views {}
+}
+`
+    const { errors } = parseDSL(dsl)
+    expect(errors.length).toBeGreaterThan(0)
+    expect(errors.some(e => /unresolved reference/i.test(e.message))).toBe(true)
+  })
+
+  it('still parses valid model elements despite unresolved reference errors', () => {
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    ghost -> api "calls"
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    // The error should be recorded but parsing continues
+    expect(errors.length).toBeGreaterThan(0)
+    // Valid elements are still returned
+    expect(workspace.model.people).toHaveLength(1)
+    expect(workspace.model.softwareSystems).toHaveLength(1)
+  })
+})
