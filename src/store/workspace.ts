@@ -1113,8 +1113,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!ws) return s
     forEachElement(ws, (el) => { el.tags = el.tags.map(t => t === oldTag ? newTag : t) })
     for (const rel of ws.model.relationships) { rel.tags = rel.tags.map(t => t === oldTag ? newTag : t) }
-    const style = ws.views.configuration.styles.elements.find(es => es.tag === oldTag)
-    if (style) style.tag = newTag
+    const elStyle = ws.views.configuration.styles.elements.find(es => es.tag === oldTag)
+    if (elStyle) elStyle.tag = newTag
+    const relStyle = ws.views.configuration.styles.relationships.find(rs => rs.tag === oldTag)
+    if (relStyle) relStyle.tag = newTag
     return { ...pushUndo(s), workspace: ws }
   }),
 
@@ -1125,6 +1127,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     forEachElement(ws, (el) => { el.tags = el.tags.filter(t => t !== tag) })
     for (const rel of ws.model.relationships) { rel.tags = rel.tags.filter(t => t !== tag) }
     ws.views.configuration.styles.elements = ws.views.configuration.styles.elements.filter(es => es.tag !== tag)
+    ws.views.configuration.styles.relationships = ws.views.configuration.styles.relationships.filter(rs => rs.tag !== tag)
     return { ...pushUndo(s), workspace: ws }
   }),
 

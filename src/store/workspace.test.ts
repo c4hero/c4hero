@@ -1748,6 +1748,7 @@ describe('renameTag', () => {
     ws.model.people[0].tags = ['Element', 'Person', 'VIP']
     ws.model.relationships.push({ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship', 'VIP'], properties: {} })
     ws.views.configuration.styles.elements.push({ tag: 'VIP', background: '#ff0000' })
+    ws.views.configuration.styles.relationships.push({ tag: 'VIP', color: '#ff0000' })
     return ws
   }
 
@@ -1775,6 +1776,12 @@ describe('renameTag', () => {
     expect(ws.views.configuration.styles.elements[0].tag).toBe('Premium')
   })
 
+  it('renames matching relationship style tag', () => {
+    useWorkspaceStore.getState().renameTag('VIP', 'Premium')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.configuration.styles.relationships[0].tag).toBe('Premium')
+  })
+
   it('is a no-op when old and new names are the same', () => {
     const before = JSON.stringify(useWorkspaceStore.getState().workspace)
     useWorkspaceStore.getState().renameTag('VIP', 'VIP')
@@ -1796,6 +1803,7 @@ describe('removeTagGlobal', () => {
     ws.model.people[0].tags = ['Element', 'Person', 'VIP']
     ws.model.relationships.push({ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship', 'VIP'], properties: {} })
     ws.views.configuration.styles.elements.push({ tag: 'VIP', background: '#ff0000' })
+    ws.views.configuration.styles.relationships.push({ tag: 'VIP', color: '#ff0000' })
     return ws
   }
 
@@ -1821,6 +1829,12 @@ describe('removeTagGlobal', () => {
     useWorkspaceStore.getState().removeTagGlobal('VIP')
     const ws = useWorkspaceStore.getState().workspace!
     expect(ws.views.configuration.styles.elements).toHaveLength(0)
+  })
+
+  it('removes matching relationship style', () => {
+    useWorkspaceStore.getState().removeTagGlobal('VIP')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.configuration.styles.relationships).toHaveLength(0)
   })
 
   it('is a no-op for built-in tags (Person cannot be removed)', () => {
