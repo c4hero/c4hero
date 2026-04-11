@@ -31,11 +31,11 @@ export default function SearchDialog() {
     inputRef.current?.focus()
   }, [])
 
+  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
+
   // Collect all unique custom tags
   const allTags = useMemo(() => {
-    if (!workspace) return []
     const tags = new Set<string>()
-    const elementMap = buildElementMap(workspace)
     for (const [, el] of elementMap) {
       for (const tag of el.tags) {
         if (!['Person', 'Software System', 'Container', 'Component', 'Element', 'Relationship'].includes(tag)) {
@@ -44,15 +44,14 @@ export default function SearchDialog() {
       }
     }
     return Array.from(tags).sort()
-  }, [workspace])
+  }, [elementMap])
 
   const results = useMemo<SearchResult[]>(() => {
     if (!workspace) return []
     const q = query.toLowerCase().trim()
-    const results: SearchResult[] = []
+    const out: SearchResult[] = []
 
     // Search elements
-    const elementMap = buildElementMap(workspace)
     for (const [, element] of elementMap) {
       // Type filter
       if (typeFilter && element.type !== typeFilter) continue
@@ -69,7 +68,7 @@ export default function SearchDialog() {
         ) continue
       }
 
-      results.push({ kind: 'element', element })
+      out.push({ kind: 'element', element })
     }
 
     // Search views (only if no type/tag filter)
@@ -77,13 +76,13 @@ export default function SearchDialog() {
       for (const view of getAllViews(workspace)) {
         const title = view.title ?? view.key
         if (!q || title.toLowerCase().includes(q) || view.type.toLowerCase().includes(q)) {
-          results.push({ kind: 'view', view })
+          out.push({ kind: 'view', view })
         }
       }
     }
 
-    return results.slice(0, 20)
-  }, [workspace, query, typeFilter, tagFilter])
+    return out.slice(0, 20)
+  }, [workspace, elementMap, query, typeFilter, tagFilter])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSelectedIndex(0) }, [query, typeFilter, tagFilter])
@@ -159,6 +158,7 @@ export default function SearchDialog() {
           <button
             onClick={() => setSearchOpen(false)}
             className="btn-icon !min-h-6 !min-w-6 !p-1"
+            aria-label="Close search"
           >
             <X size={14} />
           </button>
