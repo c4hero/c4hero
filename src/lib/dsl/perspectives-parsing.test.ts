@@ -419,3 +419,54 @@ workspace {
     expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
   })
 })
+
+describe('unknown keyword/identifier with brace block in views body does not drop subsequent views', () => {
+  it('unknown keyword with brace block on next line in views body does not drop subsequent views', () => {
+    // parseViewsBody unknown KEYWORD fallthrough lacked the LBRACE guard:
+    // the `{` was left unconsumed and the next `}` terminated the views loop.
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api "uses"
+  }
+  views {
+    unknownExtension
+    {
+      key "value"
+    }
+    systemLandscape "sl" {
+      include *
+    }
+  }
+}
+`
+    const { workspace } = parseDSL(dsl)
+    expect(workspace.views.systemLandscapeViews).toHaveLength(1)
+    expect(workspace.views.systemLandscapeViews[0].elements.length).toBeGreaterThan(0)
+  })
+
+  it('unknown identifier with inline brace block in views body does not drop subsequent views', () => {
+    // parseViewsBody had no IDENTIFIER handler at all — unknown identifiers with
+    // brace blocks left stray tokens that corrupted the parse position.
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api "uses"
+  }
+  views {
+    unknownPlugin "config" { key "value" }
+    systemLandscape "sl" {
+      include *
+    }
+  }
+}
+`
+    const { workspace } = parseDSL(dsl)
+    expect(workspace.views.systemLandscapeViews).toHaveLength(1)
+    expect(workspace.views.systemLandscapeViews[0].elements.length).toBeGreaterThan(0)
+  })
+})

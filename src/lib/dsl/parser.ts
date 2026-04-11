@@ -1217,6 +1217,19 @@ class ContextAwareParser {
                 }
                 this.advance()
                 this.skipToNextLine()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
+                continue
+            }
+
+            if (token.type === 'IDENTIFIER') {
+                this.advance()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
             }
 
