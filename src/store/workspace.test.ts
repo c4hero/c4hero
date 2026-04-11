@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useWorkspaceStore } from './workspace'
+import { useWorkspaceStore, getBreadcrumb } from './workspace'
 import type { Workspace } from '@/types/model'
 
 function makeWorkspace(): Workspace {
@@ -1705,6 +1705,56 @@ describe('navigateBack', () => {
     const key = useWorkspaceStore.getState().activeViewKey!
     useWorkspaceStore.getState().navigateBack()
     expect(useWorkspaceStore.getState().activeViewKey).toBe(key)
+  })
+})
+
+// ─── getBreadcrumb ──────────────────────────────────────────────────
+
+describe('getBreadcrumb', () => {
+  let ws: Workspace
+  let keyA: string
+  let keyB: string
+  let keyC: string
+
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    keyB = useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
+    keyC = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    ws = useWorkspaceStore.getState().workspace!
+  })
+
+  it('returns empty array when history is empty and activeViewKey is null', () => {
+    expect(getBreadcrumb(ws, [], null)).toHaveLength(0)
+  })
+
+  it('includes only active view when history is empty', () => {
+    const crumbs = getBreadcrumb(ws, [], keyA)
+    expect(crumbs).toHaveLength(1)
+    expect(crumbs[0]).toEqual({ key: keyA, label: 'Landscape' })
+  })
+
+  it('includes history views before active view', () => {
+    const crumbs = getBreadcrumb(ws, [keyA, keyB], keyC)
+    expect(crumbs).toHaveLength(3)
+    expect(crumbs[0]).toEqual({ key: keyA, label: 'Landscape' })
+    expect(crumbs[1]).toEqual({ key: keyB, label: 'API Context' })
+    expect(crumbs[2]).toEqual({ key: keyC, label: 'API Containers' })
+  })
+
+  it('silently skips stale view keys in history', () => {
+    const crumbs = getBreadcrumb(ws, ['stale-key-xyz', keyA], keyB)
+    // 'stale-key-xyz' doesn't exist in workspace — should be skipped
+    expect(crumbs).toHaveLength(2)
+    expect(crumbs[0].key).toBe(keyA)
+    expect(crumbs[1].key).toBe(keyB)
+  })
+
+  it('falls back to key as label when title is missing', () => {
+    // Manually set a view without a title
+    ws.views.systemLandscapeViews[0].title = undefined
+    const crumbs = getBreadcrumb(ws, [], keyA)
+    expect(crumbs[0].label).toBe(keyA)
   })
 })
 
