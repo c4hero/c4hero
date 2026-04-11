@@ -2957,3 +2957,107 @@ describe('setActiveTagFilter and setActiveStatusFilter', () => {
     expect(useWorkspaceStore.getState().activeStatusFilter).toBeNull()
   })
 })
+
+// ─── addPerson / addSoftwareSystem location parameter ────────────────
+
+describe('addPerson and addSoftwareSystem — location parameter', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('addPerson defaults to Internal location', () => {
+    const id = useWorkspaceStore.getState().addPerson('Bob')
+    const person = useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === id)!
+    expect(person.location).toBe('Internal')
+  })
+
+  it('addPerson with External location stores External', () => {
+    const id = useWorkspaceStore.getState().addPerson('External User', undefined, 'External')
+    const person = useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === id)!
+    expect(person.location).toBe('External')
+  })
+
+  it('addSoftwareSystem defaults to Internal location', () => {
+    const id = useWorkspaceStore.getState().addSoftwareSystem('MyApp')
+    const sys = useWorkspaceStore.getState().workspace!.model.softwareSystems.find(s => s.id === id)!
+    expect(sys.location).toBe('Internal')
+  })
+
+  it('addSoftwareSystem with External location stores External', () => {
+    const id = useWorkspaceStore.getState().addSoftwareSystem('Legacy API', undefined, 'External')
+    const sys = useWorkspaceStore.getState().workspace!.model.softwareSystems.find(s => s.id === id)!
+    expect(sys.location).toBe('External')
+  })
+})
+
+// ─── updateElement location ──────────────────────────────────────────
+
+describe('updateElement — location', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('updateElement changes location to External', () => {
+    // alice has no location set in makeWorkspace() (undefined) — changing it to External is a real change
+    useWorkspaceStore.getState().updateElement('alice', { location: 'External' })
+    expect(useWorkspaceStore.getState().workspace!.model.people[0].location).toBe('External')
+  })
+
+  it('updateElement location change supports undo', () => {
+    useWorkspaceStore.getState().updateElement('alice', { location: 'External' })
+    useWorkspaceStore.getState().undo()
+    // After undo the location reverts to the state before the change (undefined in makeWorkspace)
+    expect(useWorkspaceStore.getState().workspace!.model.people[0].location).toBeUndefined()
+  })
+
+  it('updateElement is a no-op (no undo) when location is already the same value', () => {
+    // First set a location explicitly
+    useWorkspaceStore.getState().updateElement('alice', { location: 'External' })
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    // Passing the same value again should not push undo
+    useWorkspaceStore.getState().updateElement('alice', { location: 'External' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('updateElement location has no effect on containers (not applicable)', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    // Containers have no location field — this should be a no-op
+    useWorkspaceStore.getState().updateElement(containerId, { location: 'External' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+})
+
+// ─── updateRelationship — tags ───────────────────────────────────────
+
+describe('updateRelationship — tags', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('updateRelationship adds a custom tag to the relationship', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    useWorkspaceStore.getState().updateRelationship(relId, { tags: ['Relationship', 'Priority'] })
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.tags).toContain('Priority')
+    expect(rel.tags).toContain('Relationship')
+  })
+
+  it('updateRelationship tags change supports undo', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    useWorkspaceStore.getState().updateRelationship(relId, { tags: ['Relationship', 'Priority'] })
+    useWorkspaceStore.getState().undo()
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.tags).not.toContain('Priority')
+    expect(rel.tags).toContain('Relationship')
+  })
+
+  it('updateRelationship is a no-op (no undo) when tags array is identical', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    // Pass the exact same tags array contents — should not push undo
+    useWorkspaceStore.getState().updateRelationship(relId, { tags: [...rel.tags] })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+})
