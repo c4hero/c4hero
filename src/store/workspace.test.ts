@@ -198,6 +198,13 @@ describe('Relationship and container mutations', () => {
     expect(rel.url).toBe('https://example.com/api')
   })
 
+  it('updateRelationship sets lineStyle', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    useWorkspaceStore.getState().updateRelationship(relId, { lineStyle: 'dashed' })
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.lineStyle).toBe('dashed')
+  })
+
   it('reconnectRelationship updates source and destination', () => {
     const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
     const newSysId = useWorkspaceStore.getState().addSoftwareSystem('Other')
@@ -245,6 +252,28 @@ describe('Relationship and container mutations', () => {
     // View A has C1 (yes) and alice (alice was added by addRelationship to context views? no, this is container view)
     // alice is NOT in the container view, so relationship should be removed from vA
     expect(vA.relationships.some(r => r.id === relId)).toBe(false)
+  })
+
+  it('reconnectRelationship adds relationship to views where both new endpoints become present', () => {
+    // C1 and C2 are both in viewA; create a rel between alice and a new system (neither in viewA)
+    const c1 = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const c2 = useWorkspaceStore.getState().addContainer('api', 'DB')
+    const keyA = useWorkspaceStore.getState().addView('container', 'api', 'View A')
+    useWorkspaceStore.getState().setActiveView(keyA)
+
+    // Create a relationship between alice and api (not in container view initially)
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const vAbefore = ws0.views.containerViews.find(v => v.key === keyA)!
+    // The relationship is NOT in viewA (alice and api are not container-level elements in it)
+    expect(vAbefore.relationships.some(r => r.id === relId)).toBe(false)
+
+    // Reconnect to c1→c2 — both are already in viewA
+    useWorkspaceStore.getState().reconnectRelationship(relId, c1, c2)
+    const ws = useWorkspaceStore.getState().workspace!
+    const vA = ws.views.containerViews.find(v => v.key === keyA)!
+    // Now both endpoints (c1 and c2) exist in viewA, so the relationship should be added
+    expect(vA.relationships.some(r => r.id === relId)).toBe(true)
   })
 
   it('deleteRelationship removes it from model', () => {
