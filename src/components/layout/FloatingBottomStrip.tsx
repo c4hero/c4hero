@@ -279,7 +279,7 @@ function TagManagerPanel({
           <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
             Manage Tags
           </div>
-          <button onClick={onClose} className="btn-icon" style={{ minWidth: 24, minHeight: 24, padding: 4 }}>
+          <button onClick={onClose} className="btn-icon" aria-label="Close tag manager" style={{ minWidth: 24, minHeight: 24, padding: 4 }}>
             <X size={12} />
           </button>
         </div>
@@ -418,6 +418,7 @@ function TagRow({
         {focused && draft.trim() !== tag && (
           <button
             onMouseDown={(e) => { e.preventDefault(); commitRename() }}
+            aria-label="Confirm rename"
             style={{
               width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--color-accent-glow)', color: 'var(--color-accent)',
@@ -456,6 +457,7 @@ function TagRow({
             color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s, color 0.1s',
           }}
           title="Remove tag globally"
+          aria-label={`Remove tag "${tag}" globally`}
         >
           <X size={11} />
         </button>
