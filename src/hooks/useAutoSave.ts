@@ -30,6 +30,11 @@ export function useAutoSave() {
       const currentWs = useWorkspaceStore.getState().workspace
       if (!currentWs) return
 
+      // Capture workspace identity so the idle callback can verify it hasn't changed.
+      // If the user switches workspaces between debounce fire and idle fire, we skip
+      // file I/O — the localStorage save below already captured the correct state.
+      const savedName = currentWs.name
+
       // Always save to localStorage for crash recovery (fast, synchronous)
       saveToLocalStorage(currentWs)
 
@@ -39,7 +44,7 @@ export function useAutoSave() {
         // Re-check at idle fire time too — closeWorkspace may have run
         // after the debounce but before this idle callback.
         const state = useWorkspaceStore.getState()
-        if (!state.workspace) return
+        if (!state.workspace || state.workspace.name !== savedName) return
 
         const hasSingleFile = !!getCurrentFileHandle()
         const dirHandle = getCurrentDirHandle()

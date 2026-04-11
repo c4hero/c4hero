@@ -33,6 +33,14 @@ const KBD_STYLE: React.CSSProperties = {
   fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: '18px',
 }
 
+// Stable ReactFlow prop objects — defined outside the component to avoid re-creating
+// them on every render (ReactFlow uses shallow equality to decide when to re-render).
+const RF_PRO_OPTIONS = { hideAttribution: true }
+const RF_SNAP_GRID: [number, number] = [20, 20]
+const RF_DEFAULT_EDGE_OPTIONS = { type: 'relationship', reconnectable: true }
+const RF_PAN_ON_DRAG_DEFAULT = [0]
+const RF_PAN_ON_DRAG_SPACE = [0, 1, 2]
+
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
 function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
   const map = new Map<string, ElementStyle>()
@@ -863,6 +871,17 @@ export default function Canvas() {
     [reconnectRelationship, setEdges],
   )
 
+  const onPaneClick = useCallback(() => {
+    if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
+    setContextMenu(null)
+    clearSelection()
+  }, [clearSelection])
+
+  const onInit = useCallback((instance: typeof reactFlowInstance) => {
+    rfInitInstance.current = instance
+    if (fitPending.current) requestAnimationFrame(fitContentNodes)
+  }, [fitContentNodes])
+
   // Empty state — no content nodes in this view
   const hasContentNodes = nodes.some(n => n.type !== 'group' && n.type !== 'boundary')
 
@@ -902,10 +921,7 @@ export default function Canvas() {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onInit={(instance) => {
-          rfInitInstance.current = instance
-          if (fitPending.current) requestAnimationFrame(fitContentNodes)
-        }}
+        onInit={onInit}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
@@ -920,25 +936,18 @@ export default function Canvas() {
         onReconnect={onReconnect}
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
-        onPaneClick={() => {
-          if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
-          setContextMenu(null)
-          clearSelection()
-        }}
+        onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        proOptions={{ hideAttribution: true }}
+        proOptions={RF_PRO_OPTIONS}
         minZoom={0.1}
         maxZoom={2}
         snapToGrid={snapToGrid}
-        snapGrid={[20, 20]}
+        snapGrid={RF_SNAP_GRID}
         connectionRadius={40}
         deleteKeyCode={null}
-        panOnDrag={spaceHeld ? [0, 1, 2] : [0]}
-        defaultEdgeOptions={{
-          type: 'relationship',
-          reconnectable: true,
-        }}
+        panOnDrag={spaceHeld ? RF_PAN_ON_DRAG_SPACE : RF_PAN_ON_DRAG_DEFAULT}
+        defaultEdgeOptions={RF_DEFAULT_EDGE_OPTIONS}
       >
         <Background
           variant={BackgroundVariant.Dots}
