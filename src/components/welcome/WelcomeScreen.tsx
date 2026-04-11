@@ -297,21 +297,21 @@ function WorkspaceEditDialog({ name, onRename, onDelete, onClose }: {
         </div>
 
         {/* Danger zone */}
-        <div style={{ borderTop: '1px solid rgba(239,68,68,0.2)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#ef4444' }}>
+        <div style={{ borderTop: '1px solid var(--color-border-error)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-error)' }}>
             Danger Zone
           </span>
           <button
             onClick={onDelete}
             style={{
               display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 10,
-              border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)',
+              border: '1px solid var(--color-border-error)', background: 'var(--color-tint-error)',
               cursor: 'pointer', textAlign: 'left',
             }}
           >
-            <Trash2 size={14} style={{ color: '#ef4444', flexShrink: 0 }} />
+            <Trash2 size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }}>Delete workspace</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-error)' }}>Delete workspace</div>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Permanently remove this .dsl file</div>
             </div>
           </button>

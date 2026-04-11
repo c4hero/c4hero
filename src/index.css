@@ -51,6 +51,7 @@
   /* Semantic tint backgrounds */
   --color-tint-success: rgba(34, 197, 94, 0.12);
   --color-tint-error: rgba(239, 68, 68, 0.08);
+  --color-border-error: rgba(239, 68, 68, 0.25);
 
   /* Feedback colors */
   --color-error: #ef4444;
