@@ -1138,7 +1138,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(previous)
       // Purge any viewHistory entries that no longer exist in the restored workspace
       const viewHistory = s.viewHistory.filter(k => !!findView(previous, k))
-      return { workspace: previous, undoStack, redoStack, activeViewKey, viewHistory, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
+      return { workspace: previous, undoStack, redoStack, activeViewKey, viewHistory, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null, scopeViolations: validateScope(previous) }
     })
     announce('Undone')
   },
@@ -1154,7 +1154,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(next)
       // Purge any viewHistory entries that no longer exist in the target workspace
       const viewHistory = s.viewHistory.filter(k => !!findView(next, k))
-      return { workspace: next, undoStack, redoStack, activeViewKey, viewHistory, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
+      return { workspace: next, undoStack, redoStack, activeViewKey, viewHistory, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null, scopeViolations: validateScope(next) }
     })
     announce('Redone')
   },

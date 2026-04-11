@@ -1251,6 +1251,46 @@ describe('Undo/redo after relationship mutations', () => {
     useWorkspaceStore.getState().redo()
     expect(useWorkspaceStore.getState().selectedGroupId).toBeNull()
   })
+
+  it('undo recomputes scopeViolations for the restored workspace', () => {
+    // Set up a landscape-scoped workspace (containers are a scope violation)
+    useWorkspaceStore.setState({
+      workspace: { ...makeWorkspace(), scope: 'landscape' },
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+      scopeViolations: [],
+    })
+    // addContainer creates a violation in a landscape-scoped workspace
+    useWorkspaceStore.getState().addContainer('api', 'Frontend')
+    expect(useWorkspaceStore.getState().scopeViolations).toHaveLength(1)
+    // Undo removes the container — violations should clear
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().scopeViolations).toHaveLength(0)
+  })
+
+  it('redo recomputes scopeViolations for the restored workspace', () => {
+    useWorkspaceStore.setState({
+      workspace: { ...makeWorkspace(), scope: 'landscape' },
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+      scopeViolations: [],
+    })
+    useWorkspaceStore.getState().addContainer('api', 'Frontend')
+    expect(useWorkspaceStore.getState().scopeViolations).toHaveLength(1)
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().scopeViolations).toHaveLength(0)
+    // Redo brings the container back — violations should reappear
+    useWorkspaceStore.getState().redo()
+    expect(useWorkspaceStore.getState().scopeViolations).toHaveLength(1)
+  })
 })
 
 // ─── Undo/redo active view stability ─────────────────────────────────
