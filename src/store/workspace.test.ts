@@ -1493,6 +1493,22 @@ describe('Element CRUD', () => {
     expect(useWorkspaceStore.getState().selectedElementIds).toContain(id)
   })
 
+  it('addPerson deduplicates name when an element with that name already exists', () => {
+    // makeWorkspace already has 'Alice'; adding another 'Alice' should produce 'Alice 2'
+    const id = useWorkspaceStore.getState().addPerson('Alice')
+    const ws = useWorkspaceStore.getState().workspace!
+    const person = ws.model.people.find(p => p.id === id)!
+    expect(person.name).toBe('Alice 2')
+  })
+
+  it('addSoftwareSystem deduplicates name when an element with that name already exists', () => {
+    // makeWorkspace already has 'API'; adding another 'API' should produce 'API 2'
+    const id = useWorkspaceStore.getState().addSoftwareSystem('API')
+    const ws = useWorkspaceStore.getState().workspace!
+    const sys = ws.model.softwareSystems.find(s => s.id === id)!
+    expect(sys.name).toBe('API 2')
+  })
+
   it('updateElement updates name and description', () => {
     useWorkspaceStore.getState().updateElement('alice', { name: 'Alice Smith', description: 'Lead dev' })
     const ws = useWorkspaceStore.getState().workspace!
@@ -2196,6 +2212,17 @@ describe('duplicateElements', () => {
     expect(ws.model.softwareSystems).toHaveLength(2)
     const clone = ws.model.softwareSystems.find(s => s.id === newIds[0])
     expect(clone?.name).toContain('copy')
+  })
+
+  it('duplicateElements increments to next available suffix when copy name is already taken', () => {
+    // Create an element called 'Alice copy' to preempt the first duplicate name
+    useWorkspaceStore.getState().addPerson('Alice copy')
+    // Now duplicate alice — 'Alice copy' is taken, so it should use 'Alice copy 2'
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice'])
+    expect(newIds).toHaveLength(1)
+    const ws = useWorkspaceStore.getState().workspace!
+    const clone = ws.model.people.find(p => p.id === newIds[0])!
+    expect(clone.name).toBe('Alice copy 2')
   })
 
   it('adds the duplicate to the current view at an offset position', () => {
