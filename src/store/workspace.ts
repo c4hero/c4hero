@@ -877,7 +877,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         return rel.sourceId !== elementId && rel.destinationId !== elementId
       })
     } else {
+      // Capture IDs already in the view BEFORE adding the new element
+      const existingElementIds = new Set(view.elements.map(e => e.id))
       view.elements.push({ id: elementId })
+      // Auto-add any model relationships that connect the new element to elements
+      // already present in the view (avoids forcing the user to re-draw connections)
+      const existingRelIds = new Set(view.relationships.map(r => r.id))
+      for (const rel of ws.model.relationships) {
+        if (existingRelIds.has(rel.id)) continue
+        const linksNewEl =
+          (rel.sourceId === elementId && existingElementIds.has(rel.destinationId)) ||
+          (rel.destinationId === elementId && existingElementIds.has(rel.sourceId))
+        if (linksNewEl) {
+          view.relationships.push({ id: rel.id })
+          existingRelIds.add(rel.id)
+        }
+      }
     }
     return { ...pushUndo(s), workspace: ws }
   }),

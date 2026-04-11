@@ -751,6 +751,75 @@ describe('toggleElementInView', () => {
   })
 })
 
+describe('toggleElementInView — relationship auto-discovery', () => {
+  function makeWorkspaceWithRel(): Workspace {
+    return {
+      name: 'Test',
+      model: {
+        people: [
+          { id: 'alice', type: 'person', name: 'Alice', tags: ['Element', 'Person'], properties: {} },
+          { id: 'bob', type: 'person', name: 'Bob', tags: ['Element', 'Person'], properties: {} },
+        ],
+        softwareSystems: [{ id: 'api', type: 'softwareSystem', name: 'API', tags: ['Element', 'Software System'], properties: {}, containers: [] }],
+        relationships: [{ id: 'rel1', sourceId: 'alice', destinationId: 'api', description: 'Uses', tags: [] }],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+  }
+
+  let viewKey: string
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspaceWithRel(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+    })
+    viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+  })
+
+  it('auto-adds relationships when toggling an element back into view', () => {
+    // systemLandscape auto-populates: alice, bob, api, and rel1 (alice→api)
+    const viewInit = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    expect(viewInit.relationships.some(r => r.id === 'rel1')).toBe(true)
+
+    // Remove alice — rel1 is also removed since it references alice
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    const viewAfterRemove = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    expect(viewAfterRemove.elements.some(e => e.id === 'alice')).toBe(false)
+    expect(viewAfterRemove.relationships.some(r => r.id === 'rel1')).toBe(false)
+
+    // Toggle alice back in — rel1 should auto-appear (api is still in the view)
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    const viewAfterReAdd = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    expect(viewAfterReAdd.elements.some(e => e.id === 'alice')).toBe(true)
+    expect(viewAfterReAdd.relationships.some(r => r.id === 'rel1')).toBe(true)
+  })
+
+  it('does not auto-add relationship when the other endpoint is not in the view', () => {
+    // Remove alice (rel1 removed) then remove api (now neither endpoint is in view)
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'api')
+
+    // Toggle alice back in — api is NOT in view, so rel1 should NOT appear
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    expect(view.elements.some(e => e.id === 'alice')).toBe(true)
+    expect(view.relationships.some(r => r.id === 'rel1')).toBe(false)
+  })
+})
+
 describe('renameView', () => {
   let viewKey: string
 
