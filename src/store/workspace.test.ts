@@ -1253,6 +1253,72 @@ describe('Undo/redo after relationship mutations', () => {
   })
 })
 
+// ─── Undo/redo active view stability ─────────────────────────────────
+
+describe('undo/redo — activeViewKey stays valid', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('undo of addView falls back to first existing view (not stale deleted-view key)', () => {
+    // Add view A first so there is a pre-existing view to fall back to
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'First View')
+    // Add view B — this becomes active
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Second View')
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(keyB)
+
+    // Undo the addition of view B
+    useWorkspaceStore.getState().undo()
+
+    // View B is gone; activeViewKey must not still point to keyB
+    const ws = useWorkspaceStore.getState().workspace!
+    const restoredKey = useWorkspaceStore.getState().activeViewKey
+    const allViewKeys = [
+      ...ws.views.systemLandscapeViews,
+      ...ws.views.systemContextViews,
+      ...ws.views.containerViews,
+      ...ws.views.componentViews,
+    ].map(v => v.key)
+    // Active key must be a real view
+    expect(allViewKeys).toContain(restoredKey)
+    // It should not be the deleted view
+    expect(restoredKey).not.toBe(keyB)
+    // It should be view A (the only remaining view)
+    expect(restoredKey).toBe(keyA)
+  })
+
+  it('redo falls back to first valid view if current key is not in the redo target', () => {
+    // Build: add A, add B, undo B (active=A), undo A (active=null or first), redo A (active must be valid)
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'First View')
+    useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Second View')
+    // Undo twice — workspace has no views, active = null
+    useWorkspaceStore.getState().undo() // removes B
+    useWorkspaceStore.getState().undo() // removes A
+    // Redo — adds view A back
+    useWorkspaceStore.getState().redo()
+    const ws = useWorkspaceStore.getState().workspace!
+    const redoKey = useWorkspaceStore.getState().activeViewKey
+    const allViewKeys = [
+      ...ws.views.systemLandscapeViews,
+      ...ws.views.systemContextViews,
+      ...ws.views.containerViews,
+      ...ws.views.componentViews,
+    ].map(v => v.key)
+    expect(allViewKeys).toContain(redoKey)
+  })
+
+  it('undo preserves current activeViewKey when the view still exists after undo', () => {
+    // Add a view so there's something to be on
+    const viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'My View')
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(viewKey)
+    // Add a relationship (not a view) — view still exists after undo
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'pings')
+    useWorkspaceStore.getState().undo()
+    // The view still exists → activeViewKey should be unchanged
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(viewKey)
+  })
+})
+
 // ─── Element CRUD ────────────────────────────────────────────────────
 
 describe('Element CRUD', () => {

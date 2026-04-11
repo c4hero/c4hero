@@ -1133,7 +1133,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const undoStack = [...s.undoStack]
       const previous = undoStack.pop()!
       const redoStack = [...s.redoStack, structuredClone(s.workspace)]
-      return { workspace: previous, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
+      // If the current active view no longer exists in the restored workspace, fall back to first view
+      const activeStillExists = s.activeViewKey ? !!findView(previous, s.activeViewKey) : false
+      const activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(previous)
+      return { workspace: previous, undoStack, redoStack, activeViewKey, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
     })
     announce('Undone')
   },
@@ -1144,7 +1147,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const redoStack = [...s.redoStack]
       const next = redoStack.pop()!
       const undoStack = [...s.undoStack, structuredClone(s.workspace)]
-      return { workspace: next, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
+      // If the current active view no longer exists in the target workspace, fall back to first view
+      const activeStillExists = s.activeViewKey ? !!findView(next, s.activeViewKey) : false
+      const activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(next)
+      return { workspace: next, undoStack, redoStack, activeViewKey, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
     })
     announce('Redone')
   },
