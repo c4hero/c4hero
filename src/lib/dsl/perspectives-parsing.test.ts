@@ -171,6 +171,84 @@ workspace {
   })
 })
 
+describe('unknown brace block in element bodies does not eat subsequent siblings', () => {
+  it('unknown brace block in softwareSystem body does not discard later containers', () => {
+    // Before the fix: the inner `}` of the unknown block terminated parseSoftwareSystemBody,
+    // causing all containers defined after it to be silently lost.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      unknownExtension "config" {
+        key "value"
+      }
+      api = container "API"
+      db = container "Database"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const sys = workspace.model.softwareSystems.find(s => s.name === 'Sys')
+    expect(sys).toBeDefined()
+    expect(sys?.containers.find(c => c.name === 'API')).toBeDefined()
+    expect(sys?.containers.find(c => c.name === 'Database')).toBeDefined()
+  })
+
+  it('unknown brace block in container body does not discard later components', () => {
+    // Before the fix: the inner `}` of the unknown block terminated parseContainerBody,
+    // causing all components defined after it to be silently lost.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      api = container "API" {
+        unknownExtension "config" {
+          key "value"
+        }
+        auth = component "Auth Service"
+        orders = component "Orders Service"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const container = workspace.model.softwareSystems[0]?.containers.find(c => c.name === 'API')
+    expect(container).toBeDefined()
+    expect(container?.components.find(c => c.name === 'Auth Service')).toBeDefined()
+    expect(container?.components.find(c => c.name === 'Orders Service')).toBeDefined()
+  })
+
+  it('unknown brace block on next line in softwareSystem body is also handled', () => {
+    // Test the case where `{` is on the line after the keyword (not inline)
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys"
+    {
+      unknownKeyword
+      {
+        nested "stuff"
+      }
+      web = container "Web"
+    }
+  }
+  views {}
+}
+`
+    // This is unusual DSL (brace on its own line), but the parser should not crash.
+    // Even if it can't parse `sys` correctly in this form, the subsequent parse must not throw.
+    const { workspace } = parseDSL(dsl)
+    // At minimum, no exception was thrown. The workspace itself may be partially parsed.
+    expect(workspace).toBeDefined()
+  })
+})
+
 describe('wildcard expansion in views', () => {
   it('systemLandscape include * expands to all people and systems', () => {
     const dsl = `

@@ -658,8 +658,12 @@ class ContextAwareParser {
                     continue
                 }
 
+                // Unknown keyword: consume keyword + inline args, then skip any brace block so the
+                // parent element's closing RBRACE is not mistakenly consumed as the inner block's.
                 this.advance()
                 this.skipToNextLine()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
             }
 
@@ -698,9 +702,17 @@ class ContextAwareParser {
                     continue
                 }
 
+                // Standalone identifier (unknown reference/annotation): consume it and any
+                // inline args, then skip any brace block so the parent element's closing
+                // RBRACE is not mistakenly consumed as the inner block's closing brace.
                 this.pos = saved
                 this.advance()
-                this.skipToNextLine()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
             }
 
@@ -779,8 +791,12 @@ class ContextAwareParser {
                     continue
                 }
 
+                // Unknown keyword: consume keyword + inline args, then skip any brace block so the
+                // parent element's closing RBRACE is not mistakenly consumed as the inner block's.
                 this.advance()
                 this.skipToNextLine()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
             }
 
@@ -814,9 +830,17 @@ class ContextAwareParser {
                     continue
                 }
 
+                // Standalone identifier (unknown reference/annotation): consume it and any
+                // inline args, then skip any brace block so the parent element's closing
+                // RBRACE is not mistakenly consumed as the inner block's closing brace.
                 this.pos = saved
                 this.advance()
-                this.skipToNextLine()
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
             }
 
