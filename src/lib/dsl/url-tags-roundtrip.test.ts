@@ -112,4 +112,44 @@ describe('relationship tag roundtrip', () => {
     expect(rel?.tags).toContain('Secondary')
     expect(rel?.interactionStyle).toBe('Asynchronous')
   })
+
+  it('built-in Relationship tag is always present after parse', () => {
+    // The serializer strips 'Relationship' (built-in) before emitting, so the parser
+    // must always add it back. Without this, style lookups for tag 'Relationship' fail
+    // after a DSL reload.
+    const dsl = `
+workspace "test" {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api "Uses"
+  }
+  views { }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0]
+    expect(rel?.tags).toContain('Relationship')
+  })
+
+  it('Relationship tag appears exactly once even if explicitly listed in DSL', () => {
+    // Guard against double-adding if someone writes 'Relationship' in the inline tags arg
+    const dsl = `
+workspace "test" {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api "Uses" "" "Relationship,Custom"
+  }
+  views { }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0]
+    const relTagCount = rel?.tags.filter(t => t === 'Relationship').length ?? 0
+    expect(relTagCount).toBe(1)
+    expect(rel?.tags).toContain('Custom')
+  })
 })

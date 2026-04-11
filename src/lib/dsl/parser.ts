@@ -939,13 +939,23 @@ class ContextAwareParser {
         }
 
         this.relCounter++
+        // Always seed with the built-in 'Relationship' tag — matches addRelationship() in the store.
+        // The serializer strips this tag before emitting (it's implicit), so after a roundtrip the
+        // parser must add it back, otherwise parsed relationships lose the tag entirely.
+        const initialTags = ['Relationship']
+        if (tagsStr) {
+            for (const t of tagsStr.split(',')) {
+                const trimmed = t.trim()
+                if (trimmed && !initialTags.includes(trimmed)) initialTags.push(trimmed)
+            }
+        }
         const rel: Relationship = {
             id: `rel-${this.relCounter}`,
             sourceId: sourceId ?? sourceToken.value,
             destinationId: destId ?? destRef,
             description,
             technology,
-            tags: tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [],
+            tags: initialTags,
             properties: {},
         }
 
@@ -964,7 +974,8 @@ class ContextAwareParser {
                         const tagVal = this.advance().value
                         for (const t of tagVal.split(',')) {
                             const trimmed = t.trim()
-                            if (trimmed) rel.tags.push(trimmed)
+                            // Deduplicate: don't re-add tags already in the list
+                            if (trimmed && !rel.tags.includes(trimmed)) rel.tags.push(trimmed)
                         }
                     }
                     continue
