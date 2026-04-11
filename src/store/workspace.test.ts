@@ -195,13 +195,36 @@ describe('Relationship and container mutations', () => {
     expect(rel.url).toBe('https://example.com/api')
   })
 
-  it('updateRelationship can clear url by setting undefined', () => {
+  it('updateRelationship clears url when passed undefined (UI "clear" gesture)', () => {
     const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
     useWorkspaceStore.getState().updateRelationship(relId, { url: 'https://example.com/api' })
     useWorkspaceStore.getState().updateRelationship(relId, { url: undefined })
     const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
-    // url remains from previous call since undefined means "don't touch"
-    expect(rel.url).toBe('https://example.com/api')
+    expect(rel.url).toBeUndefined()
+  })
+
+  it('updateRelationship clears description when passed undefined', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    useWorkspaceStore.getState().updateRelationship(relId, { description: 'old' })
+    useWorkspaceStore.getState().updateRelationship(relId, { description: undefined })
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.description).toBeUndefined()
+  })
+
+  it('updateRelationship clears interactionStyle when passed undefined', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    useWorkspaceStore.getState().updateRelationship(relId, { interactionStyle: 'Asynchronous' })
+    useWorkspaceStore.getState().updateRelationship(relId, { interactionStyle: undefined })
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.interactionStyle).toBeUndefined()
+  })
+
+  it('updateRelationship clears lineStyle when passed undefined', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    useWorkspaceStore.getState().updateRelationship(relId, { lineStyle: 'Curved' })
+    useWorkspaceStore.getState().updateRelationship(relId, { lineStyle: undefined })
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.lineStyle).toBeUndefined()
   })
 
   it('updateRelationship sets lineStyle', () => {

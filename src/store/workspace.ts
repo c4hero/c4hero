@@ -775,12 +775,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!ws) return s
     const rel = ws.model.relationships.find(r => r.id === id)
     if (!rel) return s
-    if (patch.description !== undefined) rel.description = patch.description
-    if (patch.technology !== undefined) rel.technology = patch.technology
-    if (patch.interactionStyle !== undefined) rel.interactionStyle = patch.interactionStyle
-    if (patch.lineStyle !== undefined) rel.lineStyle = patch.lineStyle
-    if (patch.url !== undefined) rel.url = patch.url
-    if (patch.tags !== undefined) rel.tags = patch.tags
+    // Use 'key in patch' for optional fields that the UI may legitimately clear by passing
+    // undefined (e.g. empty text field → { description: undefined }).  This mirrors the same
+    // pattern used in applyElementPatch.
+    if ('description' in patch) rel.description = patch.description
+    if ('technology' in patch) rel.technology = patch.technology
+    if ('interactionStyle' in patch) rel.interactionStyle = patch.interactionStyle
+    if ('lineStyle' in patch) rel.lineStyle = patch.lineStyle
+    if ('url' in patch) rel.url = patch.url
+    if (patch.tags !== undefined) rel.tags = patch.tags  // tags array is never "cleared" to undefined
     return { ...pushUndo(s), workspace: ws }
   }),
 
