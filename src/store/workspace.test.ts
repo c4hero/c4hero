@@ -1713,6 +1713,20 @@ describe('Element CRUD', () => {
     expect(ws.views.componentViews.some(v => v.key === compViewKey)).toBe(false)
   })
 
+  it('deleteElements falls back activeViewKey when active view is a component view of a deleted system', () => {
+    const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Frontend')
+    const compViewKey = useWorkspaceStore.getState().addView('component', containerId, 'Components')
+    useWorkspaceStore.getState().setActiveView(compViewKey)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(compViewKey)
+
+    // Delete the parent system — cascades through container to remove the component view
+    useWorkspaceStore.getState().deleteElements(['api'])
+    const newActive = useWorkspaceStore.getState().activeViewKey
+    expect(newActive).not.toBe(compViewKey)
+    expect(newActive).toBe(landscapeKey)
+  })
+
   it('deleteElements falls back activeViewKey when the active view is removed', () => {
     // Create a landscape view and a container view scoped to 'api'
     const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
