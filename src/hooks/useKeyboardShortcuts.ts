@@ -57,7 +57,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.presentationMode) { store.setPresentationMode(false); return }
     if (store.commandPaletteOpen) { store.setCommandPaletteOpen(false); return }
     if (store.searchOpen) { store.setSearchOpen(false); return }
-    if (store.selectedElementIds.length > 0 || store.selectedRelationshipId) { store.clearSelection(); return }
+    if (store.selectedElementIds.length > 0 || store.selectedRelationshipId || store.selectedGroupId) { store.clearSelection(); return }
     if (store.viewHistory.length > 0) { store.navigateBack() }
   },
   'Backspace': (store) => {
@@ -150,10 +150,10 @@ export function useKeyboardShortcuts() {
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable
 
       // Meta shortcuts (work even in inputs)
-      const metaCombo = getKeyCombo(e)
-      if (META_SHORTCUTS[metaCombo]) {
+      const combo = getKeyCombo(e)
+      if (META_SHORTCUTS[combo]) {
         e.preventDefault()
-        META_SHORTCUTS[metaCombo](store, rf)
+        META_SHORTCUTS[combo](store, rf)
         return
       }
 
@@ -161,7 +161,6 @@ export function useKeyboardShortcuts() {
       if (isInput) return
 
       // Global shortcuts
-      const combo = getKeyCombo(e)
       const handler = GLOBAL_SHORTCUTS[combo]
       if (handler) {
         e.preventDefault()
