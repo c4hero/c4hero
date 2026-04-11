@@ -755,14 +755,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const ws = cloneWs(s)
     if (!ws) return s
     const rel = ws.model.relationships.find(r => r.id === id)
-    if (rel) {
-      if (patch.description !== undefined) rel.description = patch.description
-      if (patch.technology !== undefined) rel.technology = patch.technology
-      if (patch.interactionStyle !== undefined) rel.interactionStyle = patch.interactionStyle
-      if (patch.lineStyle !== undefined) rel.lineStyle = patch.lineStyle
-      if (patch.url !== undefined) rel.url = patch.url
-      if (patch.tags !== undefined) rel.tags = patch.tags
-    }
+    if (!rel) return s
+    if (patch.description !== undefined) rel.description = patch.description
+    if (patch.technology !== undefined) rel.technology = patch.technology
+    if (patch.interactionStyle !== undefined) rel.interactionStyle = patch.interactionStyle
+    if (patch.lineStyle !== undefined) rel.lineStyle = patch.lineStyle
+    if (patch.url !== undefined) rel.url = patch.url
+    if (patch.tags !== undefined) rel.tags = patch.tags
     return { ...pushUndo(s), workspace: ws }
   }),
 
