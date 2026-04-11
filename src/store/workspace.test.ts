@@ -765,6 +765,54 @@ describe('view CRUD', () => {
     // Both endpoints (alice and api) are auto-included — the relationship should appear too
     expect(view.relationships.some(r => r.id === relId)).toBe(true)
   })
+
+  it('addView clears selection state when switching to the new view', () => {
+    // Set up a selection in the current state
+    useWorkspaceStore.setState({ selectedElementIds: ['alice'], selectedRelationshipId: null, selectedGroupId: null })
+    useWorkspaceStore.getState().addView('systemLandscape', undefined, 'New View')
+    const state = useWorkspaceStore.getState()
+    expect(state.selectedElementIds).toEqual([])
+    expect(state.selectedRelationshipId).toBeNull()
+    expect(state.selectedGroupId).toBeNull()
+  })
+
+  it('duplicateView clears selection state when switching to the duplicate', () => {
+    const key = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Original')
+    // Select something
+    useWorkspaceStore.setState({ selectedElementIds: ['alice'] })
+    useWorkspaceStore.getState().duplicateView(key)
+    const state = useWorkspaceStore.getState()
+    expect(state.selectedElementIds).toEqual([])
+    expect(state.selectedRelationshipId).toBeNull()
+    expect(state.selectedGroupId).toBeNull()
+  })
+
+  it('deleteView clears selection state when the active view is deleted', () => {
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View A')
+    useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View B')
+    useWorkspaceStore.getState().setActiveView(keyA)
+    // Select something in view A
+    useWorkspaceStore.setState({ selectedElementIds: ['alice'] })
+    // Delete view A — we switch to view B
+    useWorkspaceStore.getState().deleteView(keyA)
+    const state = useWorkspaceStore.getState()
+    expect(state.selectedElementIds).toEqual([])
+    expect(state.selectedRelationshipId).toBeNull()
+    expect(state.selectedGroupId).toBeNull()
+  })
+
+  it('deleteView preserves selection when a non-active view is deleted', () => {
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View A')
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View B')
+    useWorkspaceStore.getState().setActiveView(keyA)
+    // Select something in view A
+    useWorkspaceStore.setState({ selectedElementIds: ['alice'] })
+    // Delete view B (not the active view) — selection in view A should be preserved
+    useWorkspaceStore.getState().deleteView(keyB)
+    const state = useWorkspaceStore.getState()
+    expect(state.selectedElementIds).toEqual(['alice'])
+    expect(state.activeViewKey).toBe(keyA)
+  })
 })
 
 // ─── addView component view auto-populate ────────────────────────────

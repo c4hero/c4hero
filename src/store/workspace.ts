@@ -1019,7 +1019,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         case 'container': ws.views.containerViews.push(view); break
         case 'component': ws.views.componentViews.push(view); break
       }
-      return { ...pushUndo(s), workspace: ws, activeViewKey: key }
+      return { ...pushUndo(s), workspace: ws, activeViewKey: key, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
     })
     return key
   },
@@ -1041,7 +1041,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const newActiveKey = s.activeViewKey === key ? getFirstViewKey(ws) : s.activeViewKey
     // Remove the deleted key from navigation history so navigateBack never lands on a ghost view
     const newHistory = s.viewHistory.filter(k => k !== key)
-    return { ...pushUndo(s), workspace: ws, activeViewKey: newActiveKey, viewHistory: newHistory }
+    // Clear selection when the active view is being deleted (we're switching to a different view)
+    const switchingViews = s.activeViewKey === key
+    return {
+      ...pushUndo(s),
+      workspace: ws,
+      activeViewKey: newActiveKey,
+      viewHistory: newHistory,
+      ...(switchingViews ? { selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null } : {}),
+    }
   }),
 
   renameView: (key, title) => set((s) => {
@@ -1081,7 +1089,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         }
       }
       if (!found) return s
-      return { ...pushUndo(s), workspace: ws, activeViewKey: newKey }
+      return { ...pushUndo(s), workspace: ws, activeViewKey: newKey, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
     })
     return newKey
   },
