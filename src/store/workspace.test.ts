@@ -701,3 +701,114 @@ describe('updateWorkspaceMeta', () => {
     expect(useWorkspaceStore.getState().workspace?.name).toBe('Test')
   })
 })
+
+// ─── drillInto & navigateBack ────────────────────────────────────────
+
+describe('drillInto', () => {
+  let systemId: string
+  let containerViewKey: string
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+      viewHistory: [],
+    })
+    // Set up: a systemContext view, a softwareSystem, and a container view for it.
+    // addView auto-activates the created view, so we set the ctxView as active at the end.
+    const ctxKey = useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
+    containerViewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    useWorkspaceStore.getState().setActiveView(ctxKey) // ensure we start on the context view
+    systemId = 'api'
+  })
+
+  it('navigates to child container view and pushes current key to history', () => {
+    const ctxKey = useWorkspaceStore.getState().activeViewKey!
+    useWorkspaceStore.getState().drillInto(systemId)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(containerViewKey)
+    expect(useWorkspaceStore.getState().viewHistory).toContain(ctxKey)
+  })
+
+  it('is a no-op when no child view exists for the element', () => {
+    const ctxKey = useWorkspaceStore.getState().activeViewKey!
+    useWorkspaceStore.getState().drillInto('alice') // person — no child view
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(ctxKey)
+    expect(useWorkspaceStore.getState().viewHistory).toHaveLength(0)
+  })
+
+  it('clears selection when drilling in', () => {
+    useWorkspaceStore.getState().selectElements([systemId])
+    expect(useWorkspaceStore.getState().selectedElementIds).toHaveLength(1)
+    useWorkspaceStore.getState().drillInto(systemId)
+    expect(useWorkspaceStore.getState().selectedElementIds).toHaveLength(0)
+  })
+})
+
+describe('navigateBack', () => {
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+      viewHistory: [],
+    })
+    const ctxKey = useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
+    useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    useWorkspaceStore.getState().setActiveView(ctxKey) // ensure we start on the context view
+  })
+
+  it('returns to previous view after drillInto', () => {
+    const ctxKey = useWorkspaceStore.getState().activeViewKey!
+    useWorkspaceStore.getState().drillInto('api')
+    useWorkspaceStore.getState().navigateBack()
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(ctxKey)
+    expect(useWorkspaceStore.getState().viewHistory).toHaveLength(0)
+  })
+
+  it('is a no-op when history is empty', () => {
+    const key = useWorkspaceStore.getState().activeViewKey!
+    useWorkspaceStore.getState().navigateBack()
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(key)
+  })
+})
+
+// ─── updateElementLive ───────────────────────────────────────────────
+
+describe('updateElementLive', () => {
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+    })
+  })
+
+  it('updates element name immediately', () => {
+    useWorkspaceStore.getState().updateElementLive('alice', { name: 'Bob' })
+    expect(useWorkspaceStore.getState().workspace?.model.people[0].name).toBe('Bob')
+  })
+
+  it('updates element description', () => {
+    useWorkspaceStore.getState().updateElementLive('alice', { description: 'A user' })
+    expect(useWorkspaceStore.getState().workspace?.model.people[0].description).toBe('A user')
+  })
+
+  it('does NOT push to undo stack (live typing perf)', () => {
+    useWorkspaceStore.getState().updateElementLive('alice', { name: 'Charlie' })
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(0)
+    expect(useWorkspaceStore.getState().canUndo()).toBe(false)
+  })
+})
