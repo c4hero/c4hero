@@ -18,7 +18,8 @@ function isWorkspaceLinked(activeFilename: string | null): boolean {
 export default function SaveIndicator() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
-  const isDirty = useWorkspaceStore((s) => s.undoStack.length > 0)
+  const currentUndoLength = useWorkspaceStore((s) => s.undoStack.length)
+  const isDirty = currentUndoLength > 0
   const lastSavedUndoLength = useWorkspaceStore((s) => s.lastSavedUndoLength)
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -53,7 +54,6 @@ export default function SaveIndicator() {
     }
   }
 
-  const currentUndoLength = useWorkspaceStore.getState().undoStack.length
   const isFileDirty = isDirty && currentUndoLength !== savedUndoLengthRef.current && currentUndoLength !== lastSavedUndoLength
   const dotColor =
     saveStatus === 'saving' ? 'var(--color-info)'
