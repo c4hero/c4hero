@@ -146,4 +146,42 @@ describe('computeImpliedRelationships', () => {
       expect(r.description).toMatch(/\[implied\]/)
     }
   })
+
+  it('container→container across systems creates implied system→system', () => {
+    const ws = makeWorkspace()
+    addRelationship(ws, 'c-a1', 'c-b1', 'REST call')
+    const implied = computeImpliedRelationships(ws)
+    // System-level implied relationship must exist
+    expect(implied.some(r => r.sourceId === 'sys-a' && r.destinationId === 'sys-b')).toBe(true)
+    // No container→container implied needed (the explicit rel is already at container level)
+    const containerRels = implied.filter(r => r.sourceId === 'c-a1' && r.destinationId === 'c-b1')
+    expect(containerRels).toHaveLength(0)
+  })
+
+  it('component→container across systems creates implied system→system only (no container→container)', () => {
+    const ws = makeWorkspace()
+    // comp-a1 (in sys-a, c-a1) → c-b1 (container in sys-b, not a component)
+    addRelationship(ws, 'comp-a1', 'c-b1', 'calls endpoint')
+    const implied = computeImpliedRelationships(ws)
+    // System-level implied: comp-a1 is in sys-a, c-b1 is in sys-b
+    expect(implied.some(r => r.sourceId === 'sys-a' && r.destinationId === 'sys-b')).toBe(true)
+    // Container→container implied only happens for component→component pairs;
+    // here dstContainer is undefined for c-b1, so no container→container implied
+    const containerContainerRels = implied.filter(
+      r => r.sourceId === 'c-a1' && r.destinationId === 'c-b1',
+    )
+    expect(containerContainerRels).toHaveLength(0)
+  })
+
+  it('relationship with no description produces [implied] description', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships.push({
+      id: 'rel-0', sourceId: 'comp-a1', destinationId: 'comp-b1',
+      tags: ['Relationship'], properties: {},
+    })
+    const implied = computeImpliedRelationships(ws)
+    for (const r of implied) {
+      expect(r.description).toBe('[implied]')
+    }
+  })
 })
