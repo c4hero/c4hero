@@ -1043,6 +1043,27 @@ describe('Element CRUD', () => {
     expect(alice.description).toBe('Lead dev')
   })
 
+  it('updateElement clears description when passed undefined (UI "clear" gesture)', () => {
+    useWorkspaceStore.getState().updateElement('alice', { description: 'Had a description' })
+    expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')!.description).toBe('Had a description')
+    useWorkspaceStore.getState().updateElement('alice', { description: undefined })
+    expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')!.description).toBeUndefined()
+  })
+
+  it('updateElement clears status when passed undefined', () => {
+    useWorkspaceStore.getState().updateElement('alice', { status: 'Live' })
+    expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')!.status).toBe('Live')
+    useWorkspaceStore.getState().updateElement('alice', { status: undefined })
+    expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')!.status).toBeUndefined()
+  })
+
+  it('updateElement clears owner when passed undefined', () => {
+    useWorkspaceStore.getState().updateElement('alice', { owner: 'Team A' })
+    expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')!.owner).toBe('Team A')
+    useWorkspaceStore.getState().updateElement('alice', { owner: undefined })
+    expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')!.owner).toBeUndefined()
+  })
+
   it('deleteElement removes a person from model', () => {
     useWorkspaceStore.getState().deleteElement('alice')
     const ws = useWorkspaceStore.getState().workspace!

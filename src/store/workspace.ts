@@ -221,12 +221,16 @@ type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' |
 function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): void {
   forEachElement(ws, (el) => {
     if (el.id !== id) return false
-    if (patch.name !== undefined) el.name = patch.name
-    if (patch.description !== undefined) el.description = patch.description
+    // Use 'key in patch' for fields that can be legitimately cleared to undefined.
+    // This distinguishes { status: undefined } (clear) from {} (leave unchanged),
+    // which matters because the UI passes { status: undefined } when the user
+    // deselects a value (e.g. clears description or picks "no status").
+    if (patch.name !== undefined) el.name = patch.name   // name is required; never cleared
+    if ('description' in patch) el.description = patch.description
     if (patch.tags !== undefined) el.tags = patch.tags
-    if (patch.status !== undefined) el.status = patch.status
-    if (patch.owner !== undefined) el.owner = patch.owner
-    if (patch.url !== undefined) el.url = patch.url
+    if ('status' in patch) el.status = patch.status
+    if ('owner' in patch) el.owner = patch.owner
+    if ('url' in patch) el.url = patch.url
     if (patch.location !== undefined && (el.type === 'person' || el.type === 'softwareSystem')) {
       (el as Person | SoftwareSystem).location = patch.location
     }
