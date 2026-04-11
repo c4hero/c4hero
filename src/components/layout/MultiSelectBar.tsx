@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
+import type { Node } from '@xyflow/react'
 import {
   AlignStartVertical,
   AlignCenterVertical,
@@ -19,6 +20,7 @@ export default function MultiSelectBar() {
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
   const deleteElements = useWorkspaceStore((s) => s.deleteElements)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
+  const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const reactFlow = useReactFlow()
   const [alignOpen, setAlignOpen] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
@@ -77,19 +79,25 @@ export default function MultiSelectBar() {
       case 'bottom':   refVal = Math.max(...positions.map(p => p.y + p.h)); break
       case 'center-y': refVal = (Math.min(...positions.map(p => p.y)) + Math.max(...positions.map(p => p.y + p.h))) / 2; break
     }
+    const alignedPositions: { id: string; x: number; y: number }[] = []
     reactFlow.setNodes(nodes => nodes.map(n => {
       if (!selectedElementIds.includes(n.id)) return n
       const p = positions.find(p => p.id === n.id)!
+      let updated: Node
       switch (mode) {
-        case 'left':     return { ...n, position: { ...n.position, x: refVal } }
-        case 'right':    return { ...n, position: { ...n.position, x: refVal - p.w } }
-        case 'center-x': return { ...n, position: { ...n.position, x: refVal - p.w / 2 } }
-        case 'top':      return { ...n, position: { ...n.position, y: refVal } }
-        case 'bottom':   return { ...n, position: { ...n.position, y: refVal - p.h } }
-        case 'center-y': return { ...n, position: { ...n.position, y: refVal - p.h / 2 } }
+        case 'left':     updated = { ...n, position: { ...n.position, x: refVal } }; break
+        case 'right':    updated = { ...n, position: { ...n.position, x: refVal - p.w } }; break
+        case 'center-x': updated = { ...n, position: { ...n.position, x: refVal - p.w / 2 } }; break
+        case 'top':      updated = { ...n, position: { ...n.position, y: refVal } }; break
+        case 'bottom':   updated = { ...n, position: { ...n.position, y: refVal - p.h } }; break
+        case 'center-y': updated = { ...n, position: { ...n.position, y: refVal - p.h / 2 } }; break
         default:         return n
       }
+      alignedPositions.push({ id: n.id, x: updated.position.x, y: updated.position.y })
+      return updated
     }))
+    // Persist aligned positions to the store so they survive re-renders
+    if (alignedPositions.length > 0) updateNodePositions(alignedPositions)
     setAlignOpen(false)
   }
 
