@@ -357,7 +357,9 @@ class SerializerContext {
 
         const parts: string[] = []
         parts.push(`${sourceRef} -> ${destRef}`)
-        if (rel.description) parts.push(`"${this.escapeString(rel.description)}"`)
+        // When technology is set, description must be emitted first (positional arg).
+        // Emit an empty string for description if absent so technology lands in the right slot.
+        if (rel.description || rel.technology) parts.push(`"${this.escapeString(rel.description ?? '')}"`)
         if (rel.technology) parts.push(`"${this.escapeString(rel.technology)}"`)
 
         const extraTags = this.getExtraTags(rel.tags, ['Relationship'])

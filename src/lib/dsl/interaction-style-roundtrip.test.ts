@@ -102,6 +102,33 @@ describe('relationship url roundtrip', () => {
   })
 })
 
+describe('relationship technology-only roundtrip', () => {
+  it('technology without description roundtrips correctly', () => {
+    // Bug guard: if technology is serialized without an explicit empty description,
+    // the parser reads it as description instead. The serializer must emit "" first.
+    const ws = makeWs({ description: undefined, technology: 'HTTPS' })
+    const dsl = serializeDSL(ws)
+    // Should emit empty description slot so technology lands in the right position
+    expect(dsl).toMatch(/user -> api "" "HTTPS"/)
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.technology).toBe('HTTPS')
+    expect(rel?.description ?? '').toBe('')
+  })
+
+  it('description and technology both roundtrip intact', () => {
+    const ws = makeWs({ description: 'Calls', technology: 'gRPC' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).toMatch(/user -> api "Calls" "gRPC"/)
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0] as Relationship | undefined
+    expect(rel?.description).toBe('Calls')
+    expect(rel?.technology).toBe('gRPC')
+  })
+})
+
 describe('relationship lineStyle roundtrip', () => {
   it('Curved serializes and parses back', () => {
     const ws = makeWs({ lineStyle: 'Curved' })
