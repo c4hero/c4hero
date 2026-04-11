@@ -864,12 +864,25 @@ class ContextAwareParser {
             const token = this.peek()
             if (token.type === 'COMMENT') { this.advance(); continue }
 
+            if (token.type === 'KEYWORD' && token.value.startsWith('!')) {
+                this.advance()
+                this.skipToNextLine()
+                continue
+            }
+
             if (token.type === 'KEYWORD') {
                 const kw = token.value.toLowerCase()
                 if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'location' || kw === 'status' || kw === 'owner') {
                     this.parseElementPropertyOnElement(element, kw)
                     continue
                 }
+                // Unknown keyword: consume it and skip any brace block so the outer
+                // RBRACE isn't mistakenly consumed as the inner block's closing brace.
+                this.advance()
+                this.skipToNextLine()
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
+                continue
             }
 
             this.advance()

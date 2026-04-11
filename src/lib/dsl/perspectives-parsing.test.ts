@@ -126,6 +126,49 @@ workspace {
     const container = workspace.model.softwareSystems[0]?.containers.find(c => c.name === 'API Container')
     expect(container).toBeDefined()
   })
+
+  it('perspectives block in person body is skipped without errors', () => {
+    // Person body uses parseSimpleElementBlock — must also skip unknown brace blocks
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice" {
+      perspectives {
+        Security "Awareness training required"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const alice = workspace.model.people.find(p => p.name === 'Alice')
+    expect(alice).toBeDefined()
+  })
+
+  it('perspectives block in component body is skipped without errors', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "Sys" {
+      api = container "API" {
+        auth = component "Auth Service" {
+          perspectives {
+            Security "Authentication layer"
+          }
+        }
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const component = workspace.model.softwareSystems[0]?.containers[0]?.components.find(c => c.name === 'Auth Service')
+    expect(component).toBeDefined()
+  })
 })
 
 describe('wildcard expansion in views', () => {
