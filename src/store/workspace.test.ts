@@ -3767,3 +3767,46 @@ describe('setLastSavedUndoLength', () => {
     expect(useWorkspaceStore.getState().lastSavedUndoLength).toBe(0)
   })
 })
+
+// ─── focusElementId / clearFocusElement ──────────────────────────────
+
+describe('focusElementId', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('addPerson sets focusElementId to the new person id', () => {
+    const id = useWorkspaceStore.getState().addPerson('Carol')
+    expect(useWorkspaceStore.getState().focusElementId).toBe(id)
+  })
+
+  it('addSoftwareSystem sets focusElementId to the new system id', () => {
+    const id = useWorkspaceStore.getState().addSoftwareSystem('Payments')
+    expect(useWorkspaceStore.getState().focusElementId).toBe(id)
+  })
+
+  it('addContainer sets focusElementId to the new container id', () => {
+    const id = useWorkspaceStore.getState().addContainer('api', 'Database')
+    expect(useWorkspaceStore.getState().focusElementId).toBe(id)
+  })
+
+  it('addComponent sets focusElementId to the new component id', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Backend')
+    const id = useWorkspaceStore.getState().addComponent(containerId, 'Auth Service')
+    expect(useWorkspaceStore.getState().focusElementId).toBe(id)
+  })
+
+  it('clearFocusElement resets focusElementId to null', () => {
+    useWorkspaceStore.getState().addPerson('Dave')
+    expect(useWorkspaceStore.getState().focusElementId).not.toBeNull()
+    useWorkspaceStore.getState().clearFocusElement()
+    expect(useWorkspaceStore.getState().focusElementId).toBeNull()
+  })
+
+  it('loadWorkspace clears focusElementId', () => {
+    useWorkspaceStore.getState().addPerson('Eve')
+    expect(useWorkspaceStore.getState().focusElementId).not.toBeNull()
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    expect(useWorkspaceStore.getState().focusElementId).toBeNull()
+  })
+})
