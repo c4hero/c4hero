@@ -436,7 +436,10 @@ function buildEdges(
   return edges
 }
 
-/** Auto-layout unpinned nodes using dagre. Pinned nodes keep their positions. */
+/** Auto-layout unpinned nodes using dagre. Pinned nodes keep their positions.
+ *  A node is only treated as pinned when it has BOTH pinned=true AND saved x/y.
+ *  If pinned=true but positions are missing (e.g. loaded from DSL with no sidecar),
+ *  the node is re-laid out by dagre rather than stacking at origin. */
 function applyAutoLayout(
   nodes: Node[],
   edges: Edge[],
@@ -444,7 +447,7 @@ function applyAutoLayout(
   direction: string = 'TB',
 ): Node[] {
   const pinnedIds = new Set(
-    view.elements.filter(e => e.pinned).map(e => e.id),
+    view.elements.filter(e => e.pinned && e.x !== undefined && e.y !== undefined).map(e => e.id),
   )
   const hasUnpinned = nodes.some(n => !pinnedIds.has(n.id))
   if (!hasUnpinned) return nodes
@@ -826,15 +829,18 @@ export default function Canvas() {
     [],
   )
 
-  // Track recent connections to prevent duplicates from multiple handle matches
-  const recentConnect = useRef<string | null>(null)
+  // Track recent connections to prevent duplicates from multiple handle matches.
+  // Store a Set of both A→B and B→A keys so neither direction slips through twice.
+  const recentConnect = useRef<Set<string>>(new Set())
   const onConnect = useCallback(
     (connection: Connection) => {
       if (connection.source && connection.target && connection.source !== connection.target) {
         const key = `${connection.source}->${connection.target}`
-        if (recentConnect.current === key) return
-        recentConnect.current = key
-        setTimeout(() => { recentConnect.current = null }, 100)
+        const reverseKey = `${connection.target}->${connection.source}`
+        if (recentConnect.current.has(key) || recentConnect.current.has(reverseKey)) return
+        recentConnect.current.add(key)
+        recentConnect.current.add(reverseKey)
+        setTimeout(() => { recentConnect.current.delete(key); recentConnect.current.delete(reverseKey) }, 300)
         addRelationship(connection.source, connection.target)
       }
     },
@@ -921,6 +927,7 @@ export default function Canvas() {
         snapToGrid={snapToGrid}
         snapGrid={[20, 20]}
         connectionRadius={40}
+        deleteKeyCode={null}
         panOnDrag={spaceHeld ? [0, 1, 2] : [0]}
         defaultEdgeOptions={{
           type: 'relationship',
@@ -946,8 +953,8 @@ export default function Canvas() {
             }}
           />
         )}
-        {/* Custom arrow marker */}
-        <svg>
+        {/* Custom arrow marker — zero-size so it doesn't occupy canvas space */}
+        <svg style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
           <defs>
             <marker
               id="c4-arrow"

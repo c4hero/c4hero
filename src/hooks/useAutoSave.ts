@@ -25,19 +25,29 @@ export function useAutoSave() {
 
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
+      // Re-read state at fire time — the workspace may have been closed
+      // (e.g. during a delete) between the timer being set and it firing.
+      const currentWs = useWorkspaceStore.getState().workspace
+      if (!currentWs) return
+
       // Always save to localStorage for crash recovery (fast, synchronous)
-      saveToLocalStorage(workspace)
+      saveToLocalStorage(currentWs)
 
       // Defer file I/O to idle time so it doesn't block interaction
       cancelIdle(idleHandle.current)
       idleHandle.current = scheduleIdle(() => {
+        // Re-check at idle fire time too — closeWorkspace may have run
+        // after the debounce but before this idle callback.
+        const state = useWorkspaceStore.getState()
+        if (!state.workspace) return
+
         const hasSingleFile = !!getCurrentFileHandle()
         const dirHandle = getCurrentDirHandle()
-        const filename = useWorkspaceStore.getState().activeWorkspaceFilename
+        const filename = state.activeWorkspaceFilename
 
         if (hasSingleFile || (dirHandle && filename)) {
-          const dsl = serializeDSL(workspace)
-          const sidecar = extractSidecar(workspace)
+          const dsl = serializeDSL(state.workspace)
+          const sidecar = extractSidecar(state.workspace)
 
           if (hasSingleFile) {
             writeToCurrentHandle(dsl)
@@ -49,8 +59,7 @@ export function useAutoSave() {
             if (sidecar) writeSidecarFile(filename, serializeSidecar(sidecar))
           }
 
-          const undoLength = useWorkspaceStore.getState().undoStack.length
-          useWorkspaceStore.getState().setLastSavedUndoLength(undoLength)
+          useWorkspaceStore.getState().setLastSavedUndoLength(state.undoStack.length)
         }
       }) as unknown as number
     }, 1000)

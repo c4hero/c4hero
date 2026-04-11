@@ -302,7 +302,8 @@ class ContextAwareParser {
             this.skipNewlines()
             if (this.check('RBRACE') || this.peekType() === 'EOF') break
             const token = this.peek()
-            if (token.type === 'KEYWORD' && token.value.toLowerCase() === 'scope') {
+            // 'scope' is not a reserved keyword in the lexer, so it comes through as IDENTIFIER.
+            if ((token.type === 'IDENTIFIER' || token.type === 'KEYWORD') && token.value.toLowerCase() === 'scope') {
                 this.advance()
                 const val = this.peek()
                 if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD') {
@@ -803,9 +804,43 @@ class ContextAwareParser {
         } else if (keyword === 'url') {
             const val = this.readOptionalString()
             if (val !== undefined) element.url = val
-        } else if (keyword === 'properties' || keyword === 'perspectives') {
+        } else if (keyword === 'properties') {
+            this.skipNewlines()
+            if (this.match('LBRACE')) {
+                this.parsePropertiesBlock(element)
+                this.skipNewlines()
+                this.expect('RBRACE')
+            }
+        } else if (keyword === 'perspectives') {
             this.skipNewlines()
             this.skipBraceBlock()
+        }
+    }
+
+    /** Parse a `properties { "key" "value" ... }` block and attach known
+     *  keys to the element. Recognizes `c4hero.location` for Person/SoftwareSystem. */
+    private parsePropertiesBlock(element: Person | SoftwareSystem | Container | Component): void {
+        while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
+            this.skipNewlines()
+            if (this.check('RBRACE') || this.peekType() === 'EOF') break
+            const token = this.peek()
+            if (token.type === 'COMMENT') { this.advance(); continue }
+            if (token.type !== 'STRING' && token.type !== 'IDENTIFIER') { this.advance(); continue }
+            const key = this.advance().value
+            const valTok = this.peek()
+            let val: string | undefined
+            if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
+                val = this.advance().value
+            }
+            if (val === undefined) continue
+            // Recognized: c4hero.location → element.location for persons/systems
+            if (key === 'c4hero.location' && (element.type === 'person' || element.type === 'softwareSystem')) {
+                if (val === 'External') (element as Person | SoftwareSystem).location = 'External'
+                else if (val === 'Internal') (element as Person | SoftwareSystem).location = 'Internal'
+            } else {
+                // Generic passthrough to properties map
+                element.properties[key] = val
+            }
         }
     }
 

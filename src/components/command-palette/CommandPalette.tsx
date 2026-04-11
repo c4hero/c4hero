@@ -92,7 +92,7 @@ export default function CommandPalette() {
     <>
       {/* Backdrop */}
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'var(--color-backdrop)', pointerEvents: 'auto' }}
+        style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }}
         onClick={close}
         aria-hidden="true"
       />

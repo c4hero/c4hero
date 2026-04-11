@@ -111,7 +111,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
   return (
     <>
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'var(--color-backdrop)', pointerEvents: 'auto' }}
+        style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }}
         onClick={onClose}
         aria-hidden="true"
       />

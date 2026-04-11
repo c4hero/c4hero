@@ -4,18 +4,25 @@ import type { ViewType } from '@/types/model'
 import { X } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 
-const VIEW_TYPES: { value: ViewType; label: string }[] = [
+const ALL_VIEW_TYPES: { value: ViewType; label: string }[] = [
   { value: 'systemLandscape', label: 'System Landscape' },
   { value: 'systemContext', label: 'System Context' },
   { value: 'container', label: 'Container' },
   { value: 'component', label: 'Component' },
 ]
 
+function allowedViewTypes(scope: string | undefined) {
+  if (scope === 'landscape') return ALL_VIEW_TYPES.filter(vt => vt.value === 'systemLandscape' || vt.value === 'systemContext')
+  if (scope === 'softwaresystem') return ALL_VIEW_TYPES.filter(vt => vt.value !== 'systemLandscape')
+  return ALL_VIEW_TYPES
+}
+
 export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const addView = useWorkspaceStore((s) => s.addView)
 
-  const [type, setType] = useState<ViewType>('systemLandscape')
+  const viewTypes = allowedViewTypes(workspace?.scope)
+  const [type, setType] = useState<ViewType>(viewTypes[0].value)
   const [title, setTitle] = useState('')
   const [scopeId, setScopeId] = useState('')
 
@@ -66,7 +73,7 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
               className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
               style={{ background: 'var(--color-surface-2)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
             >
-              {VIEW_TYPES.map(vt => <option key={vt.value} value={vt.value}>{vt.label}</option>)}
+              {viewTypes.map(vt => <option key={vt.value} value={vt.value}>{vt.label}</option>)}
             </select>
           </div>
 
