@@ -125,22 +125,25 @@ export default function FloatingTopPill() {
     navigate('/', { replace: true })
   }, [navigate])
 
-  if (!workspace) return null
-
-  const views = getAllViews(workspace)
-  const activeView = views.find((v) => v.key === activeViewKey)
-  const wsName = workspace.name ?? 'workspace'
-
-  // Update browser title to reflect current location
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // Update browser title to reflect current location (before early return — hooks must not be called conditionally)
   useEffect(() => {
+    if (!workspace) return
+    const wsName = workspace.name ?? 'workspace'
+    const views = getAllViews(workspace)
+    const activeView = views.find((v) => v.key === activeViewKey)
     const viewTitle = activeView?.title ?? activeViewKey ?? ''
     const viewType = activeView ? ` (${LEVEL_BADGE[activeView.type] ?? activeView.type})` : ''
     const parts = viewTitle
       ? [`${viewTitle}${viewType}`, wsName]
       : [wsName]
     document.title = `${parts.join(' — ')} | c4hero`
-  }, [activeView, activeViewKey, wsName])
+  }, [workspace, activeViewKey])
+
+  if (!workspace) return null
+
+  const views = getAllViews(workspace)
+  const activeView = views.find((v) => v.key === activeViewKey)
+  const wsName = workspace.name ?? 'workspace'
 
   async function handleExport(format: 'dsl' | 'json' | 'png' | 'svg', theme: ExportTheme = 'dark') {
     if (!workspace) return
