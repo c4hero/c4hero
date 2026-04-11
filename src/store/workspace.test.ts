@@ -1033,6 +1033,69 @@ describe('renameView', () => {
   })
 })
 
+describe('duplicateView', () => {
+  let viewKey: string
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+    })
+    viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'My View')
+  })
+
+  it('creates a new view in the same array with a copy suffix', () => {
+    useWorkspaceStore.getState().duplicateView(viewKey)
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.systemLandscapeViews).toHaveLength(2)
+    const copy = ws.views.systemLandscapeViews[1]
+    expect(copy.title).toBe('My View copy')
+  })
+
+  it('gives the duplicate a different key', () => {
+    const newKey = useWorkspaceStore.getState().duplicateView(viewKey)
+    expect(newKey).not.toBe(viewKey)
+    const ws = useWorkspaceStore.getState().workspace!
+    const copy = ws.views.systemLandscapeViews.find(v => v.key === newKey)
+    expect(copy).toBeDefined()
+  })
+
+  it('copies elements from the source view', () => {
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const src = ws0.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    const srcElCount = src.elements.length
+
+    const newKey = useWorkspaceStore.getState().duplicateView(viewKey)
+    const ws = useWorkspaceStore.getState().workspace!
+    const copy = ws.views.systemLandscapeViews.find(v => v.key === newKey)!
+    expect(copy.elements).toHaveLength(srcElCount)
+  })
+
+  it('activates the duplicate after creation', () => {
+    const newKey = useWorkspaceStore.getState().duplicateView(viewKey)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(newKey)
+  })
+
+  it('supports undo', () => {
+    useWorkspaceStore.getState().duplicateView(viewKey)
+    expect(useWorkspaceStore.getState().workspace!.views.systemLandscapeViews).toHaveLength(2)
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().workspace!.views.systemLandscapeViews).toHaveLength(1)
+  })
+
+  it('is a no-op for non-existent key (returns a key but adds nothing)', () => {
+    useWorkspaceStore.getState().duplicateView('nonexistent')
+    // The view does not get added since source was not found
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.systemLandscapeViews).toHaveLength(1)
+  })
+})
+
 describe('updateWorkspaceMeta', () => {
   beforeEach(() => {
     useWorkspaceStore.setState({

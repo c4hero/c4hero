@@ -7,6 +7,7 @@ import {
   Pencil,
   Trash2,
   Check,
+  Copy,
 } from 'lucide-react'
 
 const VIEW_TYPE_LABELS: Record<string, string> = {
@@ -113,6 +114,7 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
   const deleteView = useWorkspaceStore((s) => s.deleteView)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const renameView = useWorkspaceStore((s) => s.renameView)
+  const duplicateView = useWorkspaceStore((s) => s.duplicateView)
 
   const [renamingViewKey, setRenamingViewKey] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -207,6 +209,12 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                           <Pencil size={13} />
                         </button>
                       )}
+                      <button onClick={e => { e.stopPropagation(); duplicateView(v.key); onClose() }}
+                        className="hover-lift"
+                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', transition: 'background 0.12s, color 0.12s' }}
+                        title="Duplicate view" aria-label={`Duplicate view ${v.title ?? v.key}`}>
+                        <Copy size={13} />
+                      </button>
                       <button onClick={e => { e.stopPropagation(); if (views.length > 1) confirmDelete(`Delete view "${v.title || v.key}"?`, () => deleteView(v.key)) }}
                         disabled={views.length <= 1}
                         className="hover-danger"

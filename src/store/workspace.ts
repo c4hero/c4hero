@@ -113,6 +113,7 @@ interface WorkspaceState extends UndoState {
   addView: (type: ViewType, scopeId?: string, title?: string) => string
   deleteView: (key: string) => void
   renameView: (key: string, title: string) => void
+  duplicateView: (key: string) => string
   updateNodePosition: (nodeId: string, x: number, y: number) => void
   updateNodePositions: (updates: { id: string; x: number; y: number }[]) => void
 
@@ -844,6 +845,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
     return { ...pushUndo(s), workspace: ws }
   }),
+
+  duplicateView: (key) => {
+    const newKey = nanoid(8)
+    set((s) => {
+      const ws = cloneWs(s)
+      if (!ws) return s
+      for (const arrKey of VIEW_ARRAY_KEYS) {
+        const src = ws.views[arrKey].find(v => v.key === key)
+        if (src) {
+          const copy: View = {
+            ...structuredClone(src),
+            key: newKey,
+            title: `${src.title ?? 'View'} copy`,
+          }
+          ws.views[arrKey].push(copy)
+          break
+        }
+      }
+      return { ...pushUndo(s), workspace: ws, activeViewKey: newKey }
+    })
+    return newKey
+  },
 
   updateNodePosition: (nodeId, x, y) => set((s) => {
     if (!s.workspace || !s.activeViewKey) return s
