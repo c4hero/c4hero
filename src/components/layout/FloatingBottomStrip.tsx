@@ -697,7 +697,7 @@ function ScopeViolationBanner({ violations }: { violations: ScopeViolation[] }) 
     <div style={{
       position: 'fixed', bottom: 48, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
       background: 'var(--color-tint-error)', border: '1px solid var(--color-border-error)',
-      borderRadius: 10, padding: '8px 16px', fontSize: 12, color: '#fca5a5',
+      borderRadius: 10, padding: '8px 16px', fontSize: 12, color: 'var(--color-error-text)',
       display: 'flex', alignItems: 'center', gap: 8, maxWidth: 500, pointerEvents: 'auto',
     }}>
       <AlertTriangle size={14} />

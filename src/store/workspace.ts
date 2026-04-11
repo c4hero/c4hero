@@ -760,6 +760,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         if (container) {
           for (const comp of container.components) initialElements.push({ id: comp.id })
         }
+        // Also include people and other elements that interact with those components
+        const componentIds = new Set(initialElements.map(e => e.id))
+        const relatedToComponents = new Set<string>()
+        for (const rel of ws.model.relationships) {
+          if (componentIds.has(rel.sourceId)) relatedToComponents.add(rel.destinationId)
+          if (componentIds.has(rel.destinationId)) relatedToComponents.add(rel.sourceId)
+        }
+        for (const p of ws.model.people) {
+          if (relatedToComponents.has(p.id)) initialElements.push({ id: p.id })
+        }
+        for (const otherSys of ws.model.softwareSystems) {
+          if (relatedToComponents.has(otherSys.id)) initialElements.push({ id: otherSys.id })
+          for (const c of otherSys.containers) {
+            if (c.id !== scopeId && relatedToComponents.has(c.id)) initialElements.push({ id: c.id })
+          }
+        }
       }
 
       // Compute initial relationships between auto-populated elements

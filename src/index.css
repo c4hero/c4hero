@@ -56,6 +56,7 @@
 
   /* Feedback colors */
   --color-error: #ef4444;
+  --color-error-text: #fca5a5;  /* lighter red — readable text on dark error tint backgrounds */
   --color-warning: #f97316;
   --color-success: #22c55e;
   --color-info: #58a6ff;

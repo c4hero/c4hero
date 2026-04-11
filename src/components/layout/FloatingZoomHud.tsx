@@ -4,11 +4,11 @@ import { useWorkspaceStore } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 
 export default function FloatingZoomHud() {
-  const workspace = useWorkspaceStore((s) => s.workspace)
+  const hasWorkspace = useWorkspaceStore((s) => s.workspace !== null)
   const showZoomControls = useSettingsStore((s) => s.showZoomControls)
   const reactFlow = useReactFlow()
 
-  if (!workspace || !showZoomControls) return null
+  if (!hasWorkspace || !showZoomControls) return null
 
   return (
     <div

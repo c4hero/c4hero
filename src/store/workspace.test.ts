@@ -413,6 +413,113 @@ describe('view CRUD', () => {
   })
 })
 
+// ─── addView component view auto-populate ────────────────────────────
+
+describe('addView component view — external actor auto-populate', () => {
+  let sysId: string
+  let containerId: string
+  let extPersonId: string
+  let extSystemId: string
+  let extContainerId: string
+
+  beforeEach(() => {
+    // Build a workspace with: sys → container (web) → component (auth)
+    // External: person (user), system (extSys), container (extContainer)
+    const ws: Workspace = {
+      name: 'Test',
+      model: {
+        people: [{ id: 'user', type: 'person', name: 'User', tags: ['Person'], properties: {} }],
+        softwareSystems: [
+          {
+            id: 'sys', type: 'softwareSystem', name: 'Sys', tags: ['Software System'], properties: {},
+            containers: [
+              {
+                id: 'web', type: 'container', name: 'Web', tags: ['Container'], properties: {},
+                components: [
+                  { id: 'auth', type: 'component', name: 'Auth', tags: ['Component'], properties: {} },
+                ],
+              },
+            ],
+          },
+          {
+            id: 'extSys', type: 'softwareSystem', name: 'ExtSys', tags: ['Software System'], properties: {},
+            containers: [
+              { id: 'extCont', type: 'container', name: 'ExtCont', tags: ['Container'], properties: {}, components: [] },
+            ],
+          },
+        ],
+        relationships: [
+          // user → auth
+          { id: 'r1', sourceId: 'user', destinationId: 'auth', description: 'logs in', tags: [], properties: {} },
+          // auth → extCont
+          { id: 'r2', sourceId: 'auth', destinationId: 'extCont', description: 'calls', tags: [], properties: {} },
+          // auth → extSys (direct system relationship)
+          { id: 'r3', sourceId: 'auth', destinationId: 'extSys', description: 'notifies', tags: [], properties: {} },
+        ],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    sysId = 'sys'
+    containerId = 'web'
+    extPersonId = 'user'
+    extSystemId = 'extSys'
+    extContainerId = 'extCont'
+    useWorkspaceStore.getState().loadWorkspace(ws)
+  })
+
+  it('auto-populates the scoped container\'s components', () => {
+    const key = useWorkspaceStore.getState().addView('component', containerId, 'Auth Components')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.componentViews.find(v => v.key === key)!
+    expect(view.elements.some(e => e.id === 'auth')).toBe(true)
+  })
+
+  it('auto-populates external person related to a component', () => {
+    const key = useWorkspaceStore.getState().addView('component', containerId, 'Auth Components')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.componentViews.find(v => v.key === key)!
+    expect(view.elements.some(e => e.id === extPersonId)).toBe(true)
+  })
+
+  it('auto-populates external container related to a component', () => {
+    const key = useWorkspaceStore.getState().addView('component', containerId, 'Auth Components')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.componentViews.find(v => v.key === key)!
+    expect(view.elements.some(e => e.id === extContainerId)).toBe(true)
+  })
+
+  it('auto-populates external software system related to a component', () => {
+    const key = useWorkspaceStore.getState().addView('component', containerId, 'Auth Components')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.componentViews.find(v => v.key === key)!
+    expect(view.elements.some(e => e.id === extSystemId)).toBe(true)
+  })
+
+  it('auto-includes relationships between auto-populated elements', () => {
+    const key = useWorkspaceStore.getState().addView('component', containerId, 'Auth Components')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.componentViews.find(v => v.key === key)!
+    expect(view.relationships.some(r => r.id === 'r1')).toBe(true)
+    expect(view.relationships.some(r => r.id === 'r2')).toBe(true)
+    expect(view.relationships.some(r => r.id === 'r3')).toBe(true)
+  })
+
+  it('does not include unrelated elements', () => {
+    const key = useWorkspaceStore.getState().addView('component', containerId, 'Auth Components')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.componentViews.find(v => v.key === key)!
+    // sys itself has no direct relationship to components (only via containers), should not appear
+    expect(view.elements.some(e => e.id === sysId)).toBe(false)
+  })
+})
+
 // ─── Undo/redo after relationship mutations ──────────────────────────
 
 describe('Undo/redo after relationship mutations', () => {
