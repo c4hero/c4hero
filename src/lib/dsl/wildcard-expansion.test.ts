@@ -68,15 +68,19 @@ workspace "Test" {
     expect(view.elements.some(e => e.id === externalId)).toBe(false)
   })
 
-  it('container include * expands to containers of the scoped system', () => {
+  it('container include * expands to containers of the scoped system plus related external elements', () => {
     const dsl = `
 workspace "Test" {
   model {
+    user = person "User"
     myApp = softwareSystem "My App" {
       webFront = container "Web Frontend"
       apiBack = container "API Backend"
     }
     external = softwareSystem "External System"
+    unrelated = softwareSystem "Unrelated"
+    user -> webFront "uses"
+    apiBack -> external "calls"
   }
   views {
     container myApp "myAppContainers" {
@@ -92,11 +96,17 @@ workspace "Test" {
     const myApp = workspace.model.softwareSystems.find(s => s.name === 'My App')!
     const webFrontId = myApp.containers.find(c => c.name === 'Web Frontend')!.id
     const apiBackId = myApp.containers.find(c => c.name === 'API Backend')!.id
+    const userId = workspace.model.people.find(p => p.name === 'User')!.id
+    const externalId = workspace.model.softwareSystems.find(s => s.name === 'External System')!.id
+    const unrelatedId = workspace.model.softwareSystems.find(s => s.name === 'Unrelated')!.id
+    // Scoped system's containers
     expect(view.elements.some(e => e.id === webFrontId)).toBe(true)
     expect(view.elements.some(e => e.id === apiBackId)).toBe(true)
-    // External system should appear as a system-level element, not a container
-    const externalId = workspace.model.softwareSystems.find(s => s.name === 'External System')!.id
+    // Related external elements
+    expect(view.elements.some(e => e.id === userId)).toBe(true)
     expect(view.elements.some(e => e.id === externalId)).toBe(true)
+    // Unrelated system should NOT appear
+    expect(view.elements.some(e => e.id === unrelatedId)).toBe(false)
   })
 
   it('component include * expands to components of the scoped container', () => {

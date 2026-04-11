@@ -51,23 +51,42 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
         for (const p of model.people) { if (connectedIds.has(p.id)) addId(p.id) }
         for (const s of model.softwareSystems) { if (s.id !== scopeId && connectedIds.has(s.id)) addId(s.id) }
     } else if (view.type === 'container' && view.softwareSystemId) {
-        for (const p of model.people) addId(p.id)
+        // Container view: containers of the scoped system + people/systems with direct
+        // relationships to those containers. Mirrors addView() logic in the store.
+        const scopeSys = model.softwareSystems.find(s => s.id === view.softwareSystemId)
+        if (scopeSys) {
+            for (const c of scopeSys.containers) addId(c.id)
+        }
+        const containerIds = new Set(ids)
+        const relatedIds = new Set<string>()
+        for (const rel of model.relationships) {
+            if (containerIds.has(rel.sourceId)) relatedIds.add(rel.destinationId)
+            if (containerIds.has(rel.destinationId)) relatedIds.add(rel.sourceId)
+        }
+        for (const p of model.people) { if (relatedIds.has(p.id)) addId(p.id) }
         for (const s of model.softwareSystems) {
-            if (s.id === view.softwareSystemId) {
-                for (const c of s.containers) addId(c.id)
-            } else {
-                addId(s.id)
-            }
+            if (s.id !== view.softwareSystemId && relatedIds.has(s.id)) addId(s.id)
         }
     } else if (view.type === 'component' && view.containerId) {
-        for (const p of model.people) addId(p.id)
+        // Component view: components of the scoped container + directly related elements.
+        const containerId = view.containerId
         for (const s of model.softwareSystems) {
-            const parentContainer = s.containers.find(c => c.id === view.containerId)
+            const parentContainer = s.containers.find(c => c.id === containerId)
             if (parentContainer) {
                 for (const comp of parentContainer.components) addId(comp.id)
-                for (const c of s.containers) { if (c.id !== view.containerId) addId(c.id) }
-            } else {
-                addId(s.id)
+            }
+        }
+        const componentIds = new Set(ids)
+        const relatedToComponents = new Set<string>()
+        for (const rel of model.relationships) {
+            if (componentIds.has(rel.sourceId)) relatedToComponents.add(rel.destinationId)
+            if (componentIds.has(rel.destinationId)) relatedToComponents.add(rel.sourceId)
+        }
+        for (const p of model.people) { if (relatedToComponents.has(p.id)) addId(p.id) }
+        for (const s of model.softwareSystems) {
+            if (relatedToComponents.has(s.id)) addId(s.id)
+            for (const c of s.containers) {
+                if (c.id !== containerId && relatedToComponents.has(c.id)) addId(c.id)
             }
         }
     }
