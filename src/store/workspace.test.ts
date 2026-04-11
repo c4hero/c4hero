@@ -874,6 +874,62 @@ describe('addView component view — external actor auto-populate', () => {
   })
 })
 
+// ─── addView component view — parent container boundary ──────────────
+
+describe('addView component view — parent container shown as boundary for cross-container component relations', () => {
+  beforeEach(() => {
+    const ws: Workspace = {
+      name: 'Test',
+      model: {
+        people: [],
+        softwareSystems: [
+          {
+            id: 'sys', type: 'softwareSystem', name: 'Sys', tags: ['Software System'], properties: {},
+            containers: [
+              {
+                id: 'frontend', type: 'container', name: 'Frontend', tags: ['Container'], properties: {},
+                components: [
+                  { id: 'loginComp', type: 'component', name: 'Login', tags: ['Component'], properties: {} },
+                ],
+              },
+              {
+                id: 'backend', type: 'container', name: 'Backend', tags: ['Container'], properties: {},
+                components: [
+                  { id: 'authComp', type: 'component', name: 'Auth', tags: ['Component'], properties: {} },
+                ],
+              },
+            ],
+          },
+        ],
+        // loginComp → authComp (cross-container component relationship)
+        relationships: [
+          { id: 'r1', sourceId: 'loginComp', destinationId: 'authComp', description: 'verifies', tags: [], properties: {} },
+        ],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+  })
+
+  it('shows the parent container (Backend) as boundary, not the internal component', () => {
+    const key = useWorkspaceStore.getState().addView('component', 'frontend', 'Frontend Components')
+    const view = useWorkspaceStore.getState().workspace!.views.componentViews.find(v => v.key === key)!
+    // The scoped component should appear
+    expect(view.elements.some(e => e.id === 'loginComp')).toBe(true)
+    // Backend container (parent of authComp) should appear as the C4 boundary
+    expect(view.elements.some(e => e.id === 'backend')).toBe(true)
+    // The internal authComp should NOT appear directly
+    expect(view.elements.some(e => e.id === 'authComp')).toBe(false)
+  })
+})
+
 // ─── addRelationship cross-view auto-add ─────────────────────────────
 
 describe('addRelationship — auto-add to views containing both endpoints', () => {
