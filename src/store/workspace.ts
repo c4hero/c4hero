@@ -692,6 +692,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (rel) {
       rel.sourceId = newSourceId
       rel.destinationId = newTargetId
+      // Sync view.relationships: keep only in views where both new endpoints exist
+      forEachView(ws, (v) => {
+        const elIds = new Set(v.elements.map(e => e.id))
+        const hasRel = v.relationships.some(r => r.id === id)
+        const bothPresent = elIds.has(newSourceId) && elIds.has(newTargetId)
+        if (hasRel && !bothPresent) {
+          v.relationships = v.relationships.filter(r => r.id !== id)
+        } else if (!hasRel && bothPresent) {
+          v.relationships.push({ id })
+        }
+      })
     }
     return { ...pushUndo(s), workspace: ws }
   }),

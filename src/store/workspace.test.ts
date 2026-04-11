@@ -192,6 +192,29 @@ describe('Relationship and container mutations', () => {
     expect(rel.destinationId).toBe('api')
   })
 
+  it('reconnectRelationship removes relationship from views where the new endpoint is absent', () => {
+    // V1: landscape auto-populates alice + api; becomes active view
+    const keyV1 = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View 1')
+    // V2: landscape auto-populates alice + api; addView sets V2 as active
+    const keyV2 = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View 2')
+    // Create 'other' while V2 is active — it auto-adds to V2 only
+    const otherId = useWorkspaceStore.getState().addSoftwareSystem('Other')
+    // Add relationship alice→api; both views have alice+api so relationship goes into both
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const v1before = ws0.views.systemLandscapeViews.find(v => v.key === keyV1)!
+    expect(v1before.relationships.some(r => r.id === relId)).toBe(true)
+    // Reconnect to alice→other: 'other' is in V2 but NOT in V1
+    useWorkspaceStore.getState().reconnectRelationship(relId, 'alice', otherId)
+    const ws = useWorkspaceStore.getState().workspace!
+    const v1 = ws.views.systemLandscapeViews.find(v => v.key === keyV1)!
+    const v2 = ws.views.systemLandscapeViews.find(v => v.key === keyV2)!
+    // V1 doesn't have 'other' → relationship should be removed
+    expect(v1.relationships.some(r => r.id === relId)).toBe(false)
+    // V2 has both alice and other → relationship should stay
+    expect(v2.relationships.some(r => r.id === relId)).toBe(true)
+  })
+
   it('deleteRelationship removes it from model', () => {
     const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
     useWorkspaceStore.getState().deleteRelationship(relId)
