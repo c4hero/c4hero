@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from './index'
-import type { Workspace, ElementStyle, ModelElement } from '@/types/model'
+import type { Workspace, ElementStyle, RelationshipStyle, ModelElement } from '@/types/model'
 
 // ─── DSL Parsing: stroke & strokeWidth ─────────────────────────────
 
@@ -351,5 +351,192 @@ describe('Style cascade', () => {
     const result = getElementStyle(person, styleIndex)!
     expect(result.background).toBe('#08427b')
     expect(result.shape).toBeUndefined()  // Person doesn't have Database tag
+  })
+})
+
+// ─── Relationship Style Parsing ────────────────────────────────────
+
+describe('Relationship style parsing', () => {
+  it('parses all relationship style properties', () => {
+    const dsl = `
+workspace {
+  model {
+    person "User"
+    softwareSystem "App"
+    User -> App "calls"
+  }
+  views {
+    styles {
+      relationship "Relationship" {
+        color #ff0000
+        thickness 3
+        dashed true
+        fontSize 14
+        opacity 75
+      }
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const style = workspace.views.configuration.styles.relationships[0]
+    expect(style.tag).toBe('Relationship')
+    expect(style.color).toBe('#ff0000')
+    expect(style.thickness).toBe(3)
+    expect(style.dashed).toBe(true)
+    expect(style.fontSize).toBe(14)
+    expect(style.opacity).toBe(75)
+  })
+
+  it('parses dashed false correctly', () => {
+    const dsl = `
+workspace {
+  model { }
+  views {
+    styles {
+      relationship "Async" {
+        dashed false
+      }
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const style = workspace.views.configuration.styles.relationships[0]
+    expect(style.dashed).toBe(false)
+  })
+
+  it('parses multiple relationship styles', () => {
+    const dsl = `
+workspace {
+  model { }
+  views {
+    styles {
+      relationship "Relationship" {
+        color #111111
+      }
+      relationship "Async" {
+        dashed true
+        thickness 2
+      }
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(workspace.views.configuration.styles.relationships).toHaveLength(2)
+    expect(workspace.views.configuration.styles.relationships[0].tag).toBe('Relationship')
+    expect(workspace.views.configuration.styles.relationships[1].tag).toBe('Async')
+    expect(workspace.views.configuration.styles.relationships[1].dashed).toBe(true)
+  })
+})
+
+// ─── Relationship Style Serialization ──────────────────────────────
+
+describe('Relationship style serialization', () => {
+  function makeWsWithRelStyles(styles: RelationshipStyle[]): Workspace {
+    return {
+      name: 'Test',
+      model: { people: [], softwareSystems: [], relationships: [], groups: [] },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: styles } },
+      },
+    }
+  }
+
+  it('serializes all relationship style properties', () => {
+    const ws = makeWsWithRelStyles([
+      { tag: 'Relationship', color: '#ff0000', thickness: 3, dashed: true, fontSize: 14, opacity: 75 },
+    ])
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('relationship "Relationship"')
+    expect(dsl).toContain('color #ff0000')
+    expect(dsl).toContain('thickness 3')
+    expect(dsl).toContain('dashed true')
+    expect(dsl).toContain('fontSize 14')
+    expect(dsl).toContain('opacity 75')
+  })
+
+  it('serializes dashed false', () => {
+    const ws = makeWsWithRelStyles([
+      { tag: 'Async', dashed: false },
+    ])
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('dashed false')
+  })
+
+  it('omits undefined relationship style properties', () => {
+    const ws = makeWsWithRelStyles([
+      { tag: 'Minimal', color: '#000' },
+    ])
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('color #000')
+    expect(dsl).not.toContain('thickness')
+    expect(dsl).not.toContain('dashed')
+    expect(dsl).not.toContain('opacity')
+  })
+})
+
+// ─── Relationship Style Round-trip ─────────────────────────────────
+
+describe('Relationship style round-trip', () => {
+  it('preserves all relationship style properties through serialize → parse', () => {
+    const dsl = `
+workspace {
+  model { }
+  views {
+    styles {
+      relationship "Relationship" {
+        color #ff0000
+        thickness 3
+        dashed true
+        fontSize 14
+        opacity 75
+      }
+    }
+  }
+}
+`
+    const { workspace: parsed1 } = parseDSL(dsl)
+    const reserialized = serializeDSL(parsed1)
+    const { workspace: parsed2, errors } = parseDSL(reserialized)
+
+    expect(errors).toHaveLength(0)
+    const style = parsed2.views.configuration.styles.relationships[0]
+    expect(style.tag).toBe('Relationship')
+    expect(style.color).toBe('#ff0000')
+    expect(style.thickness).toBe(3)
+    expect(style.dashed).toBe(true)
+    expect(style.fontSize).toBe(14)
+    expect(style.opacity).toBe(75)
+  })
+
+  it('dashed false survives roundtrip', () => {
+    const dsl = `
+workspace {
+  model { }
+  views {
+    styles {
+      relationship "Async" {
+        dashed false
+      }
+    }
+  }
+}
+`
+    const { workspace: parsed1 } = parseDSL(dsl)
+    const reserialized = serializeDSL(parsed1)
+    const { workspace: parsed2, errors } = parseDSL(reserialized)
+
+    expect(errors).toHaveLength(0)
+    const style = parsed2.views.configuration.styles.relationships[0]
+    expect(style.dashed).toBe(false)
   })
 })
