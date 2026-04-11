@@ -1492,10 +1492,17 @@ describe('duplicateView', () => {
   })
 
   it('is a no-op for non-existent key (returns a key but adds nothing)', () => {
+    const prevActiveKey = useWorkspaceStore.getState().activeViewKey
+    const prevUndoLength = useWorkspaceStore.getState().undoStack.length
     useWorkspaceStore.getState().duplicateView('nonexistent')
-    // The view does not get added since source was not found
-    const ws = useWorkspaceStore.getState().workspace!
+    const state = useWorkspaceStore.getState()
+    const ws = state.workspace!
+    // No view was added
     expect(ws.views.systemLandscapeViews).toHaveLength(1)
+    // activeViewKey is unchanged
+    expect(state.activeViewKey).toBe(prevActiveKey)
+    // No phantom undo entry was pushed
+    expect(state.undoStack).toHaveLength(prevUndoLength)
   })
 })
 

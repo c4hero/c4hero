@@ -934,6 +934,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => {
       const ws = cloneWs(s)
       if (!ws) return s
+      let found = false
       for (const arrKey of VIEW_ARRAY_KEYS) {
         const src = ws.views[arrKey].find(v => v.key === key)
         if (src) {
@@ -943,9 +944,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             title: `${src.title ?? 'View'} copy`,
           }
           ws.views[arrKey].push(copy)
+          found = true
           break
         }
       }
+      if (!found) return s
       return { ...pushUndo(s), workspace: ws, activeViewKey: newKey }
     })
     return newKey
