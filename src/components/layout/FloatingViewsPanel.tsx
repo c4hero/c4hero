@@ -1,8 +1,8 @@
-import { useState } from 'react'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import type { View } from '@/types/model'
 import { X, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import CreateViewDialog from '@/components/views/CreateViewDialog'
+import { useState } from 'react'
 
 const VIEW_TYPE_LABELS: Record<string, string> = {
   systemLandscape: 'System Landscape',
@@ -17,7 +17,8 @@ export default function FloatingViewsPanel() {
   const setViewsPanelOpen = useWorkspaceStore((s) => s.setViewsPanelOpen)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
-  const [showCreateView, setShowCreateView] = useState(false)
+  const showCreateView = useWorkspaceStore((s) => s.createViewDialogOpen)
+  const setShowCreateView = useWorkspaceStore((s) => s.setCreateViewDialogOpen)
 
   if (!workspace || !viewsPanelOpen) return null
 
