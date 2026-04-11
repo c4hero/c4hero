@@ -569,6 +569,29 @@ workspace {
   })
 })
 
+describe('standalone IDENTIFIER with inline multiline brace block does not eat subsequent elements', () => {
+  it('standalone IDENTIFIER with inline { on same line but multiline body does not drop subsequent elements', () => {
+    // `skipToNextLine()` consumed the `{` when it was on the same line as the identifier,
+    // letting the block body pollute the model parse loop. The LBRACE-aware while-loop fix
+    // stops before `{` and then calls skipBraceBlock().
+    const dsl = `
+workspace {
+  model {
+    unknownPlugin "config" {
+      key "value"
+    }
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {}
+}
+`
+    const { workspace } = parseDSL(dsl)
+    expect(workspace.model.people.find(p => p.name === 'Alice')).toBeDefined()
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+})
+
 describe('IDENTIFIER = unknownKeyword { block } does not eat subsequent model elements', () => {
   it('deploymentEnvironment with inline brace block does not drop subsequent elements', () => {
     // Before fix: `foo = deploymentEnvironment "Prod" {` — after consuming `=`, the parser was

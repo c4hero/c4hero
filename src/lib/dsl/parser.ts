@@ -572,7 +572,11 @@ class ContextAwareParser {
                 }
                 this.pos = saved
                 this.advance()
-                this.skipToNextLine()
+                // Stop before any inline `{` so we don't consume it with the rest of the line
+                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                    this.advance()
+                }
+                if (this.peekType() === 'NEWLINE') this.advance()
                 this.skipNewlines()
                 if (this.check('LBRACE')) this.skipBraceBlock()
                 continue
