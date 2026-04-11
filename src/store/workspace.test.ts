@@ -370,8 +370,9 @@ describe('view CRUD', () => {
     const view = ws.views.systemLandscapeViews[0]
     expect(view.key).toBe(key)
     expect(view.title).toBe('My Landscape')
-    expect(view.elements).toEqual([])
-    expect(view.relationships).toEqual([])
+    // Auto-populates with all people and systems from the model
+    expect(view.elements.some(e => e.id === 'alice')).toBe(true)
+    expect(view.elements.some(e => e.id === 'api')).toBe(true)
     expect(view.autoLayout?.direction).toBe('TB')
   })
 
@@ -722,24 +723,31 @@ describe('toggleElementInView', () => {
     viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
   })
 
-  it('adds element to view when not already present', () => {
+  it('removes element from view when already present (auto-populated)', () => {
+    // systemLandscape views auto-populate with all model elements, so alice is already in view
+    const viewBefore = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(viewBefore?.elements.some(e => e.id === 'alice')).toBe(true)
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(view?.elements.some(e => e.id === 'alice')).toBe(false)
+  })
+
+  it('adds element to view when not present (toggle back after removal)', () => {
+    // Remove alice (auto-populated), then add her back
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
     useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
     const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
     expect(view?.elements.some(e => e.id === 'alice')).toBe(true)
   })
 
-  it('removes element from view when already present', () => {
-    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
-    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
-    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
-    expect(view?.elements.some(e => e.id === 'alice')).toBe(false)
-  })
-
   it('supports undo after toggle', () => {
+    // alice is auto-populated in the view; toggle removes her, undo restores her
     useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    const viewAfterToggle = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(viewAfterToggle?.elements.some(e => e.id === 'alice')).toBe(false)
     useWorkspaceStore.getState().undo()
-    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
-    expect(view?.elements.some(e => e.id === 'alice')).toBe(false)
+    const viewAfterUndo = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(viewAfterUndo?.elements.some(e => e.id === 'alice')).toBe(true)
   })
 })
 

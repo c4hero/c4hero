@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid'
 import type {
   Workspace, ModelElement, Relationship, View, Group,
   Person, SoftwareSystem, Container, Component,
-  ViewType, ElementStatus,
+  ViewType, ElementStatus, ElementInView,
 } from '@/types/model'
 import { announce } from '@/lib/announce'
 import { validateScope } from '@/lib/scopeValidation'
@@ -693,12 +693,66 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => {
       const ws = cloneWs(s)
       if (!ws) return s
+
+      // Auto-populate new views with appropriate elements so the canvas isn't empty.
+      const initialElements: ElementInView[] = []
+      if (type === 'systemLandscape') {
+        // All people and software systems
+        for (const p of ws.model.people) initialElements.push({ id: p.id })
+        for (const sys of ws.model.softwareSystems) initialElements.push({ id: sys.id })
+      } else if (type === 'systemContext' && scopeId) {
+        // The scoped system + all people and systems with a relationship to it
+        initialElements.push({ id: scopeId })
+        const scopeRelatedIds = new Set<string>()
+        for (const rel of ws.model.relationships) {
+          if (rel.sourceId === scopeId) scopeRelatedIds.add(rel.destinationId)
+          if (rel.destinationId === scopeId) scopeRelatedIds.add(rel.sourceId)
+        }
+        for (const p of ws.model.people) {
+          if (scopeRelatedIds.has(p.id)) initialElements.push({ id: p.id })
+        }
+        for (const sys of ws.model.softwareSystems) {
+          if (sys.id !== scopeId && scopeRelatedIds.has(sys.id)) initialElements.push({ id: sys.id })
+        }
+      } else if (type === 'container' && scopeId) {
+        // All containers of the scoped system
+        const sys = ws.model.softwareSystems.find(s => s.id === scopeId)
+        if (sys) {
+          for (const c of sys.containers) initialElements.push({ id: c.id })
+        }
+        // Also include people and other systems that interact with those containers
+        const containerIds = new Set(initialElements.map(e => e.id))
+        const relatedIds = new Set<string>()
+        for (const rel of ws.model.relationships) {
+          if (containerIds.has(rel.sourceId)) relatedIds.add(rel.destinationId)
+          if (containerIds.has(rel.destinationId)) relatedIds.add(rel.sourceId)
+        }
+        for (const p of ws.model.people) {
+          if (relatedIds.has(p.id)) initialElements.push({ id: p.id })
+        }
+        for (const otherSys of ws.model.softwareSystems) {
+          if (otherSys.id !== scopeId && relatedIds.has(otherSys.id)) initialElements.push({ id: otherSys.id })
+        }
+      } else if (type === 'component' && scopeId) {
+        // All components of the scoped container
+        const container = ws.model.softwareSystems.flatMap(s => s.containers).find(c => c.id === scopeId)
+        if (container) {
+          for (const comp of container.components) initialElements.push({ id: comp.id })
+        }
+      }
+
+      // Compute initial relationships between auto-populated elements
+      const elementIdSet = new Set(initialElements.map(e => e.id))
+      const initialRelationships = ws.model.relationships
+        .filter(r => elementIdSet.has(r.sourceId) && elementIdSet.has(r.destinationId))
+        .map(r => ({ id: r.id }))
+
       const view: View = {
         type,
         key,
         title: title ?? `New ${type} view`,
-        elements: [],
-        relationships: [],
+        elements: initialElements,
+        relationships: initialRelationships,
         autoLayout: { direction: 'TB' },
         softwareSystemId: (type === 'systemContext' || type === 'container') ? scopeId : undefined,
         containerId: type === 'component' ? scopeId : undefined,
