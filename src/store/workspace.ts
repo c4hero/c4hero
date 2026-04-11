@@ -361,7 +361,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   // ─── Navigation ─────────────────────────────────────────────────
 
-  setActiveView: (key) => set({ activeViewKey: key, selectedElementIds: [], selectedRelationshipId: null }),
+  setActiveView: (key) => set({ activeViewKey: key, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 
   drillInto: (elementId) => set((s) => {
     if (!s.workspace || !s.activeViewKey) return s
@@ -376,6 +376,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       viewHistory: [...s.viewHistory, s.activeViewKey],
       selectedElementIds: [],
       selectedRelationshipId: null,
+      selectedGroupId: null,
     }
   }),
 
@@ -388,6 +389,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       viewHistory: history,
       selectedElementIds: [],
       selectedRelationshipId: null,
+      selectedGroupId: null,
     }
   }),
 
@@ -595,6 +597,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         workspace: ws,
         selectedElementIds: [],
         selectedRelationshipId: null,
+        selectedGroupId: null,
         activeViewKey: newActiveKey,
         viewHistory: newHistory,
       }
@@ -800,12 +803,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     // Use 'key in patch' for optional fields that the UI may legitimately clear by passing
     // undefined (e.g. empty text field → { description: undefined }).  This mirrors the same
     // pattern used in applyElementPatch.
-    if ('description' in patch) rel.description = patch.description
-    if ('technology' in patch) rel.technology = patch.technology
-    if ('interactionStyle' in patch) rel.interactionStyle = patch.interactionStyle
-    if ('lineStyle' in patch) rel.lineStyle = patch.lineStyle
-    if ('url' in patch) rel.url = patch.url
-    if (patch.tags !== undefined) rel.tags = patch.tags  // tags array is never "cleared" to undefined
+    // No-op guard: only push undo if at least one field actually changes.
+    let changed = false
+    if ('description' in patch && rel.description !== patch.description) { rel.description = patch.description; changed = true }
+    if ('technology' in patch && rel.technology !== patch.technology) { rel.technology = patch.technology; changed = true }
+    if ('interactionStyle' in patch && rel.interactionStyle !== patch.interactionStyle) { rel.interactionStyle = patch.interactionStyle; changed = true }
+    if ('lineStyle' in patch && rel.lineStyle !== patch.lineStyle) { rel.lineStyle = patch.lineStyle; changed = true }
+    if ('url' in patch && rel.url !== patch.url) { rel.url = patch.url; changed = true }
+    if (patch.tags !== undefined) {
+      // Tags array: compare by serialized form since the reference always differs post-clone
+      const tagsChanged = patch.tags.length !== rel.tags.length || patch.tags.some((t, i) => t !== rel.tags[i])
+      if (tagsChanged) { rel.tags = patch.tags; changed = true }
+    }
+    if (!changed) return s
     return { ...pushUndo(s), workspace: ws }
   }),
 

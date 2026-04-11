@@ -147,6 +147,53 @@ describe('Group store actions', () => {
     expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
     expect(useWorkspaceStore.getState().workspace!.model.groups[0].name).toBe('Team Alpha')
   })
+
+  it('setActiveView clears selectedGroupId', () => {
+    const viewKey = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().addGroup('Team', ['alice'])
+    const groupId = useWorkspaceStore.getState().workspace!.model.groups[0].id
+    useWorkspaceStore.getState().selectGroup(groupId)
+    expect(useWorkspaceStore.getState().selectedGroupId).toBe(groupId)
+    useWorkspaceStore.getState().setActiveView(viewKey)
+    expect(useWorkspaceStore.getState().selectedGroupId).toBeNull()
+  })
+
+  it('drillInto clears selectedGroupId', () => {
+    useWorkspaceStore.getState().addContainer('api', 'Web')
+    useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(landscapeKey)
+    useWorkspaceStore.getState().addGroup('Team', ['alice'])
+    const groupId = useWorkspaceStore.getState().workspace!.model.groups[0].id
+    useWorkspaceStore.getState().selectGroup(groupId)
+    expect(useWorkspaceStore.getState().selectedGroupId).toBe(groupId)
+    useWorkspaceStore.getState().drillInto('api')
+    expect(useWorkspaceStore.getState().selectedGroupId).toBeNull()
+  })
+
+  it('navigateBack clears selectedGroupId', () => {
+    const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().addContainer('api', 'Web')
+    useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    useWorkspaceStore.getState().setActiveView(landscapeKey)
+    // Simulate navigating forward so there's something to go back to
+    useWorkspaceStore.setState({ viewHistory: [landscapeKey] })
+    useWorkspaceStore.getState().addGroup('Team', ['alice'])
+    const groupId = useWorkspaceStore.getState().workspace!.model.groups[0].id
+    useWorkspaceStore.getState().selectGroup(groupId)
+    expect(useWorkspaceStore.getState().selectedGroupId).toBe(groupId)
+    useWorkspaceStore.getState().navigateBack()
+    expect(useWorkspaceStore.getState().selectedGroupId).toBeNull()
+  })
+
+  it('deleteElements clears selectedGroupId', () => {
+    useWorkspaceStore.getState().addGroup('Team', ['alice', 'api'])
+    const groupId = useWorkspaceStore.getState().workspace!.model.groups[0].id
+    useWorkspaceStore.getState().selectGroup(groupId)
+    expect(useWorkspaceStore.getState().selectedGroupId).toBe(groupId)
+    useWorkspaceStore.getState().deleteElements(['alice'])
+    expect(useWorkspaceStore.getState().selectedGroupId).toBeNull()
+  })
 })
 
 // ─── Relationship and Container Mutations ─────────────────────────────
@@ -352,6 +399,29 @@ describe('Relationship and container mutations', () => {
     const prevUndoLength = useWorkspaceStore.getState().undoStack.length
     useWorkspaceStore.getState().deleteRelationship('non-existent-rel-id')
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(prevUndoLength)
+  })
+
+  it('updateRelationship is a no-op (no undo entry) when description value is unchanged', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls', 'gRPC')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateRelationship(relId, { description: 'calls' }) // same value
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('updateRelationship is a no-op when both description and technology are unchanged', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls', 'gRPC')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateRelationship(relId, { description: 'calls', technology: 'gRPC' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('updateRelationship is NOT a no-op when clearing description (undefined clears existing value)', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateRelationship(relId, { description: undefined }) // clear
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.description).toBeUndefined()
   })
 
   it('addContainer creates container under the specified softwareSystem', () => {
