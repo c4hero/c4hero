@@ -996,6 +996,32 @@ describe('Undo/redo after relationship mutations', () => {
     useWorkspaceStore.getState().undo()
     expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
   })
+
+  it('undo clears selectedGroupId to avoid stale group selection', () => {
+    useWorkspaceStore.getState().addGroup('MyGroup', ['alice'])
+    const groupId = useWorkspaceStore.getState().workspace!.model.groups[0].id
+    useWorkspaceStore.getState().selectGroup(groupId)
+    expect(useWorkspaceStore.getState().selectedGroupId).toBe(groupId)
+    // Any undoable action followed by undo should clear the group selection
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'ping')
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().selectedGroupId).toBeNull()
+  })
+
+  it('redo clears selectedGroupId', () => {
+    // Add a group first, then add a relationship (so we have something to undo)
+    useWorkspaceStore.getState().addGroup('MyGroup', ['alice'])
+    const groupId = useWorkspaceStore.getState().workspace!.model.groups[0].id
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'ping')
+    // Undo the relationship — redo stack now has the workspace with the relationship
+    useWorkspaceStore.getState().undo()
+    // Select the group (selectGroup doesn't touch undo/redo stacks)
+    useWorkspaceStore.getState().selectGroup(groupId)
+    expect(useWorkspaceStore.getState().selectedGroupId).toBe(groupId)
+    // Redo — should clear selectedGroupId
+    useWorkspaceStore.getState().redo()
+    expect(useWorkspaceStore.getState().selectedGroupId).toBeNull()
+  })
 })
 
 // ─── Element CRUD ────────────────────────────────────────────────────

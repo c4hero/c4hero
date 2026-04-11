@@ -1055,7 +1055,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const undoStack = [...s.undoStack]
       const previous = undoStack.pop()!
       const redoStack = [...s.redoStack, structuredClone(s.workspace)]
-      return { workspace: previous, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null }
+      return { workspace: previous, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
     })
     announce('Undone')
   },
@@ -1066,7 +1066,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const redoStack = [...s.redoStack]
       const next = redoStack.pop()!
       const undoStack = [...s.undoStack, structuredClone(s.workspace)]
-      return { workspace: next, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null }
+      return { workspace: next, undoStack, redoStack, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
     })
     announce('Redone')
   },
