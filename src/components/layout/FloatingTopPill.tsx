@@ -55,7 +55,11 @@ export default function FloatingTopPill() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [copyToast, setCopyToast] = useState<string | null>(null)
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false)
-  const [showCreateView, setShowCreateView] = useState(false)
+  const createViewDialogOpen = useWorkspaceStore((s) => s.createViewDialogOpen)
+  const setCreateViewDialogOpen = useWorkspaceStore((s) => s.setCreateViewDialogOpen)
+  // showCreateView: local trigger (from ViewSwitcher button) OR global store trigger (command palette)
+  const showCreateView = createViewDialogOpen
+  const setShowCreateView = setCreateViewDialogOpen
   const [showNewWorkspace, setShowNewWorkspace] = useState(false)
   const [hamburgerOpen, setHamburgerOpen] = useState(false)
   const [wsPickerOpen, setWsPickerOpen] = useState(false)

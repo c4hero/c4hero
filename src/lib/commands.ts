@@ -3,7 +3,7 @@ import {
   UserRound, Globe, Box, Puzzle, Layers, Undo2, Redo2, Trash2,
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
-  Presentation, FolderOpen, FileText, Image, FileCode, Copy,
+  Presentation, FolderOpen, FileText, Image, FileCode, Copy, Plus,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, allViewsOf } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
@@ -234,6 +234,27 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       icon: LayoutGrid,
       keywords: ['views', 'panel', 'sidebar'],
       execute: () => store().toggleViewsPanel(),
+    },
+    {
+      id: 'new-view',
+      label: 'New View',
+      category: 'view',
+      icon: Plus,
+      keywords: ['create', 'add', 'view', 'diagram', 'new'],
+      when: () => !!store().workspace,
+      execute: () => store().setCreateViewDialogOpen(true),
+    },
+    {
+      id: 'duplicate-view',
+      label: 'Duplicate Current View',
+      category: 'view',
+      icon: Copy,
+      keywords: ['duplicate', 'clone', 'copy', 'view'],
+      when: () => !!store().workspace && !!store().activeViewKey,
+      execute: () => {
+        const s = store()
+        if (s.activeViewKey) s.duplicateView(s.activeViewKey)
+      },
     },
     {
       id: 'toggle-minimap',
