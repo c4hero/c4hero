@@ -282,7 +282,7 @@ const RailBtn = forwardRef<HTMLButtonElement, {
         justifyContent: 'center',
         borderRadius: 10,
         margin: '1px 4px',
-        ...(active ? { background: 'rgba(88,166,255,0.12)' } : {}),
+        ...(active ? { background: 'var(--color-accent-active)' } : {}),
         color: active ? 'var(--color-accent)' : color ?? 'var(--color-text-muted)',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'background 0.12s, color 0.12s',

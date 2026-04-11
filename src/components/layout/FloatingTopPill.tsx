@@ -615,7 +615,7 @@ function WorkspaceSwitcherPanel({
             placeholder="Untitled workspace"
             style={{
               padding: '8px 10px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--glass-overlay-xs)',
               border: '1px solid var(--color-border)',
               color: 'var(--color-text-primary)',
               outline: 'none',
@@ -629,7 +629,7 @@ function WorkspaceSwitcherPanel({
             rows={2}
             style={{
               padding: '8px 10px', borderRadius: 8, fontSize: 12,
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--glass-overlay-xs)',
               border: '1px solid var(--color-border)',
               color: 'var(--color-text-secondary)',
               outline: 'none', resize: 'none', fontFamily: 'inherit',
@@ -642,7 +642,7 @@ function WorkspaceSwitcherPanel({
           <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', flex: 1 }}>
             Workspaces
             {entries.length > 0 && (
-              <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 99, padding: '1px 7px', marginLeft: 6, fontWeight: 600 }}>
+              <span style={{ background: 'var(--glass-overlay-sm)', borderRadius: 99, padding: '1px 7px', marginLeft: 6, fontWeight: 600 }}>
                 {entries.length}
               </span>
             )}

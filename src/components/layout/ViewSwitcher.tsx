@@ -157,13 +157,13 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                       alignItems: 'center',
                       gap: 0,
                       padding: '0 8px',
-                      background: isActive ? 'rgba(88,166,255,0.08)' : 'transparent',
+                      background: isActive ? 'var(--color-accent-subtle)' : 'transparent',
                       borderLeft: isActive ? '2px solid var(--color-accent)' : '2px solid transparent',
                       transition: 'background 0.1s',
                     }}
                   >
                     {/* Level badge */}
-                    <span style={{ fontSize: 'var(--text-xxs)', fontWeight: 800, padding: '2px 5px', borderRadius: 'var(--radius-sm)', background: isActive ? 'rgba(88,166,255,0.2)' : 'var(--color-surface-3)', color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)', letterSpacing: '0.05em', flexShrink: 0, marginRight: 10 }}>
+                    <span style={{ fontSize: 'var(--text-xxs)', fontWeight: 800, padding: '2px 5px', borderRadius: 'var(--radius-sm)', background: isActive ? 'var(--color-accent-glow)' : 'var(--color-surface-3)', color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)', letterSpacing: '0.05em', flexShrink: 0, marginRight: 10 }}>
                       {LEVEL_BADGE[v.type] ?? v.type.slice(0,2).toUpperCase()}
                     </span>
 

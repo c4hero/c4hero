@@ -12,6 +12,8 @@
   --color-accent: #58a6ff;
   --color-accent-hover: #79b8ff;
   --color-accent-glow: rgba(88, 166, 255, 0.15);
+  --color-accent-active: rgba(88, 166, 255, 0.12);
+  --color-accent-subtle: rgba(88, 166, 255, 0.08);
   --color-text-primary: #e6edf3;
   --color-text-secondary: #8b949e;
   --color-text-muted: #848d97;
@@ -60,6 +62,9 @@
   --glass-bg-heavy: rgba(26, 34, 46, 0.99);
   --glass-blur: 20px;
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* Subtle white glass overlays for input backgrounds and badges */
+  --glass-overlay-xs: rgba(255, 255, 255, 0.04);
+  --glass-overlay-sm: rgba(255, 255, 255, 0.08);
 
   /* Radius scale */
   --radius-sm: 6px;

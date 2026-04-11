@@ -166,11 +166,12 @@ export default function FloatingBottomStrip() {
               style={{
                 width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 'var(--radius-sm)',
-                ...(tagManagerOpen ? { background: 'rgba(88,166,255,0.12)' } : {}),
+                ...(tagManagerOpen ? { background: 'var(--color-accent-active)' } : {}),
                 color: tagManagerOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: 'pointer', border: 'none', transition: 'background 0.1s, color 0.1s',
               }}
               title="Manage tags"
+              aria-label="Manage tags"
             >
               <Pencil size={12} />
             </button>
@@ -419,7 +420,7 @@ function TagRow({
             onMouseDown={(e) => { e.preventDefault(); commitRename() }}
             style={{
               width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 'var(--radius-sm)', border: 'none', background: 'rgba(88,166,255,0.15)', color: 'var(--color-accent)',
+              borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--color-accent-glow)', color: 'var(--color-accent)',
               cursor: 'pointer', flexShrink: 0,
             }}
           >
@@ -435,11 +436,12 @@ function TagRow({
           style={{
             width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: 'var(--radius-sm)', border: 'none',
-            background: editingStyle ? 'rgba(88,166,255,0.12)' : 'transparent',
+            background: editingStyle ? 'var(--color-accent-active)' : 'transparent',
             color: editingStyle ? 'var(--color-accent)' : 'var(--color-text-muted)',
             cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s',
           }}
           title="Edit style"
+          aria-label="Edit style"
         >
           <Palette size={11} />
         </button>
