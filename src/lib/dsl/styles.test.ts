@@ -147,7 +147,7 @@ describe('Element style serialization', () => {
     expect(dsl).toContain('fontSize 16')
     expect(dsl).toContain('border Dashed')
     expect(dsl).toContain('opacity 50')
-    expect(dsl).toContain('icon db-icon')
+    expect(dsl).toContain('icon "db-icon"')
     expect(dsl).toContain('stroke #333333')
     expect(dsl).toContain('strokeWidth 3')
   })
@@ -201,6 +201,51 @@ workspace {
     expect(style.border).toBe('Dashed')
     expect(style.opacity).toBe(80)
     expect(style.fontSize).toBe(16)
+  })
+})
+
+// ─── Icon serialization ────────────────────────────────────────────
+
+describe('Icon serialization', () => {
+  function makeWsWithIcon(icon: string): Workspace {
+    return {
+      name: 'Test',
+      model: { people: [], softwareSystems: [], relationships: [], groups: [] },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [{ tag: 'Custom', icon }], relationships: [] } },
+      },
+    }
+  }
+
+  it('serializes icon as a quoted string', () => {
+    const dsl = serializeDSL(makeWsWithIcon('db-icon'))
+    expect(dsl).toContain('icon "db-icon"')
+    expect(dsl).not.toContain('icon db-icon\n')
+  })
+
+  it('serializes path-style icon without breaking DSL', () => {
+    const dsl = serializeDSL(makeWsWithIcon('icons/user.png'))
+    expect(dsl).toContain('icon "icons/user.png"')
+  })
+
+  it('path-style icon survives serialize → parse roundtrip', () => {
+    const ws = makeWsWithIcon('icons/user.png')
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(parsed.views.configuration.styles.elements[0].icon).toBe('icons/user.png')
+  })
+
+  it('plain icon name survives serialize → parse roundtrip', () => {
+    const ws = makeWsWithIcon('db-icon')
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(parsed.views.configuration.styles.elements[0].icon).toBe('db-icon')
   })
 })
 
