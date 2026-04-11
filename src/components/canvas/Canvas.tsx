@@ -41,6 +41,10 @@ const RF_DEFAULT_EDGE_OPTIONS = { type: 'relationship', reconnectable: true }
 const RF_PAN_ON_DRAG_DEFAULT = [0]
 const RF_PAN_ON_DRAG_SPACE = [0, 1, 2]
 
+// Constant style for the zero-size SVG that holds the arrow marker definition.
+// Hoisted so React never re-creates it on render.
+const MARKER_SVG_STYLE: React.CSSProperties = { position: 'absolute', width: 0, height: 0, overflow: 'hidden' }
+
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
 function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
   const map = new Map<string, ElementStyle>()
@@ -765,6 +769,13 @@ export default function Canvas() {
   const [minimapVisible, setMinimapVisible] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(null)
 
+  const minimapStyle = useMemo<React.CSSProperties>(() => ({
+    backgroundColor: 'var(--color-surface-1)',
+    opacity: minimapMode === 'always' || minimapVisible ? 1 : 0,
+    transition: 'opacity 300ms ease',
+    pointerEvents: minimapMode === 'always' || minimapVisible ? 'auto' : 'none',
+  }), [minimapMode, minimapVisible])
+
   const onMoveStart = useCallback(() => {
     setMinimapVisible(true)
     if (hideTimer.current) clearTimeout(hideTimer.current)
@@ -960,16 +971,11 @@ export default function Canvas() {
             nodeStrokeWidth={3}
             zoomable
             pannable
-            style={{
-              backgroundColor: 'var(--color-surface-1)',
-              opacity: minimapMode === 'always' || minimapVisible ? 1 : 0,
-              transition: 'opacity 300ms ease',
-              pointerEvents: minimapMode === 'always' || minimapVisible ? 'auto' : 'none',
-            }}
+            style={minimapStyle}
           />
         )}
         {/* Custom arrow marker — zero-size so it doesn't occupy canvas space */}
-        <svg style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+        <svg style={MARKER_SVG_STYLE}>
           <defs>
             <marker
               id="c4-arrow"

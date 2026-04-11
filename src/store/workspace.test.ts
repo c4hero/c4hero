@@ -952,6 +952,36 @@ describe('duplicateElements', () => {
     const newIds = useWorkspaceStore.getState().duplicateElements(['nonexistent'])
     expect(newIds).toHaveLength(0)
   })
+
+  it('duplicates relationships between elements in the selection', () => {
+    // Add a relationship from alice → api in the model
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'Uses')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const origRelId = ws0.model.relationships[0].id
+
+    // Duplicate both elements together
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice', 'api'])
+    expect(newIds).toHaveLength(2)
+
+    const ws = useWorkspaceStore.getState().workspace!
+    // A new relationship should have been created between the two clones
+    const cloneRel = ws.model.relationships.find(r => r.id !== origRelId)
+    expect(cloneRel).toBeDefined()
+    expect(newIds).toContain(cloneRel!.sourceId)
+    expect(newIds).toContain(cloneRel!.destinationId)
+  })
+
+  it('does not duplicate relationships to elements outside the selection', () => {
+    // Relationship from alice → api; only duplicate alice
+    useWorkspaceStore.getState().addRelationship('alice', 'api', 'Uses')
+    const ws0 = useWorkspaceStore.getState().workspace!
+    const relsBefore = ws0.model.relationships.length
+
+    useWorkspaceStore.getState().duplicateElements(['alice'])
+    const ws = useWorkspaceStore.getState().workspace!
+    // No new relationship: api is not in the selection, so the relationship is not cloned
+    expect(ws.model.relationships).toHaveLength(relsBefore)
+  })
 })
 
 // ─── drillInto & navigateBack ────────────────────────────────────────

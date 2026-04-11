@@ -517,6 +517,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const view = findView(ws, s.activeViewKey)
       if (!view) return s
 
+      // Map from original element ID → new clone ID, built as we go
+      const idMapping = new Map<string, string>()
+
       for (const id of ids) {
         const element = findElement(ws, id)
         if (!element) continue
@@ -525,6 +528,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         const offsetX = (inView?.x ?? 200) + 60
         const offsetY = (inView?.y ?? 200) + 30
         const newId = nanoid(8)
+        idMapping.set(id, newId)
         newIds.push(newId)
 
         if (element.type === 'person') {
@@ -571,6 +575,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         }
 
         view.elements.push({ id: newId, x: offsetX, y: offsetY })
+      }
+
+      // Duplicate relationships that connect two elements within the duplicated set.
+      // This preserves the internal connectivity of the cloned selection.
+      for (const rel of ws.model.relationships) {
+        const newSourceId = idMapping.get(rel.sourceId)
+        const newDestId = idMapping.get(rel.destinationId)
+        if (newSourceId && newDestId) {
+          const newRelId = nanoid(8)
+          ws.model.relationships.push({
+            ...structuredClone(rel),
+            id: newRelId,
+            sourceId: newSourceId,
+            destinationId: newDestId,
+          })
+          view.relationships.push({ id: newRelId })
+        }
       }
 
       if (newIds.length === 0) return s
