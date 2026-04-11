@@ -81,6 +81,9 @@ export function useRouteSync() {
           selectedElementIds: [],
           selectedRelationshipId: null,
         })
+      } else {
+        // Invalid view key in URL — correct it to the current active view
+        navigate(buildCanvasPath(activeViewKey), { replace: true })
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,11 +156,14 @@ export function useRefreshRedirect() {
 
       // 4. Restore the active view from the URL (loadWorkspace picks the first
       //    view; override it if the URL specifies one that actually exists).
+      //    If the key is invalid, the URL will be corrected by the sync effect.
       if (urlViewKey) {
         const allViews = allViewsOf(parsed)
         if (allViews.some(v => v.key === urlViewKey)) {
           useWorkspaceStore.getState().setActiveView(urlViewKey)
         }
+        // else: invalid key — activeViewKey remains the first view, and the
+        // useRouteSync effect will replace the URL with the correct path
       }
     })().catch((err) => {
       console.error('Refresh recovery failed:', err)
