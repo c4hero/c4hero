@@ -2450,6 +2450,17 @@ describe('drillInto', () => {
     useWorkspaceStore.getState().drillInto(systemId)
     expect(useWorkspaceStore.getState().selectedElementIds).toHaveLength(0)
   })
+
+  it('drills into a component view when called on a container', () => {
+    // Create a container in 'api' and a component view for that container
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const compViewKey = useWorkspaceStore.getState().addView('component', containerId, 'Web Components')
+    // Switch active view back to the container view so we can drill into the container
+    useWorkspaceStore.getState().setActiveView(containerViewKey)
+    useWorkspaceStore.getState().drillInto(containerId)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(compViewKey)
+    expect(useWorkspaceStore.getState().viewHistory).toContain(containerViewKey)
+  })
 })
 
 describe('navigateBack', () => {

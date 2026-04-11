@@ -337,6 +337,47 @@ workspace {
     expect(rel.tags).toContain('async')
   })
 
+  it('parses relationship with description and technology as block-body keywords', () => {
+    // Structurizr also supports description/technology as keywords inside the block body,
+    // not just as inline positional args. Block form overrides any inline value.
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api {
+      description "Authenticates"
+      technology "OAuth2"
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const rel = workspace.model.relationships[0]
+    expect(rel.description).toBe('Authenticates')
+    expect(rel.technology).toBe('OAuth2')
+  })
+
+  it('block-body description overrides inline positional description', () => {
+    // If both are present, the block keyword takes precedence (per comment in parser.ts).
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api "inline-description" {
+      description "block-description"
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const rel = workspace.model.relationships[0]
+    expect(rel.description).toBe('block-description')
+  })
+
   it('parses relationship with description only', () => {
     const dsl = `
 workspace {
