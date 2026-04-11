@@ -1526,3 +1526,100 @@ describe('updateElementLive', () => {
     expect(useWorkspaceStore.getState().canUndo()).toBe(false)
   })
 })
+
+// ─── renameTag / removeTagGlobal ────────────────────────────────────────────
+
+describe('renameTag', () => {
+  function makeWsWithTag(): Workspace {
+    const ws = makeWorkspace()
+    ws.model.people[0].tags = ['Element', 'Person', 'VIP']
+    ws.model.relationships.push({ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship', 'VIP'], properties: {} })
+    ws.views.configuration.styles.elements.push({ tag: 'VIP', background: '#ff0000' })
+    return ws
+  }
+
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWsWithTag())
+  })
+
+  it('renames tag on all elements', () => {
+    useWorkspaceStore.getState().renameTag('VIP', 'Premium')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.people[0].tags).toContain('Premium')
+    expect(ws.model.people[0].tags).not.toContain('VIP')
+  })
+
+  it('renames tag on all relationships', () => {
+    useWorkspaceStore.getState().renameTag('VIP', 'Premium')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.relationships[0].tags).toContain('Premium')
+    expect(ws.model.relationships[0].tags).not.toContain('VIP')
+  })
+
+  it('renames matching element style tag', () => {
+    useWorkspaceStore.getState().renameTag('VIP', 'Premium')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.configuration.styles.elements[0].tag).toBe('Premium')
+  })
+
+  it('is a no-op when old and new names are the same', () => {
+    const before = JSON.stringify(useWorkspaceStore.getState().workspace)
+    useWorkspaceStore.getState().renameTag('VIP', 'VIP')
+    expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(before)
+  })
+
+  it('supports undo', () => {
+    useWorkspaceStore.getState().renameTag('VIP', 'Premium')
+    useWorkspaceStore.getState().undo()
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.people[0].tags).toContain('VIP')
+    expect(ws.model.people[0].tags).not.toContain('Premium')
+  })
+})
+
+describe('removeTagGlobal', () => {
+  function makeWsWithTag(): Workspace {
+    const ws = makeWorkspace()
+    ws.model.people[0].tags = ['Element', 'Person', 'VIP']
+    ws.model.relationships.push({ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship', 'VIP'], properties: {} })
+    ws.views.configuration.styles.elements.push({ tag: 'VIP', background: '#ff0000' })
+    return ws
+  }
+
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWsWithTag())
+  })
+
+  it('removes tag from all elements', () => {
+    useWorkspaceStore.getState().removeTagGlobal('VIP')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.people[0].tags).not.toContain('VIP')
+    expect(ws.model.people[0].tags).toContain('Element')
+  })
+
+  it('removes tag from all relationships', () => {
+    useWorkspaceStore.getState().removeTagGlobal('VIP')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.relationships[0].tags).not.toContain('VIP')
+    expect(ws.model.relationships[0].tags).toContain('Relationship')
+  })
+
+  it('removes matching element style', () => {
+    useWorkspaceStore.getState().removeTagGlobal('VIP')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.configuration.styles.elements).toHaveLength(0)
+  })
+
+  it('is a no-op for built-in tags (Person cannot be removed)', () => {
+    const before = JSON.stringify(useWorkspaceStore.getState().workspace)
+    useWorkspaceStore.getState().removeTagGlobal('Person')
+    expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(before)
+  })
+
+  it('supports undo', () => {
+    useWorkspaceStore.getState().removeTagGlobal('VIP')
+    useWorkspaceStore.getState().undo()
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.people[0].tags).toContain('VIP')
+  })
+})
