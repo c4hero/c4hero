@@ -1140,6 +1140,19 @@ class ContextAwareParser {
                     }
                     continue
                 }
+                // Unknown keyword/identifier — skip through end of line (stopping before any
+                // inline LBRACE) and any following brace block so the block's closing RBRACE
+                // isn't mistaken for the relationship body's own RBRACE.
+                if (this.peek().type === 'KEYWORD' || this.peek().type === 'IDENTIFIER') {
+                    this.advance()
+                    while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+                        this.advance()
+                    }
+                    if (this.peekType() === 'NEWLINE') this.advance()
+                    this.skipNewlines()
+                    if (this.check('LBRACE')) this.skipBraceBlock()
+                    continue
+                }
                 this.advance()
             }
             this.skipNewlines()

@@ -470,3 +470,52 @@ workspace {
     expect(workspace.views.systemLandscapeViews[0].elements.length).toBeGreaterThan(0)
   })
 })
+
+describe('unknown brace block in relationship body does not eat the relationship closing RBRACE', () => {
+  it('unknown keyword with brace block in relationship body does not drop subsequent tags', () => {
+    // Before the fix: the inner `}` of the unknown block terminated the relationship
+    // body loop, leaving subsequent directives (tags, etc.) unparsed.
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api "uses" {
+      unknownExtension {
+        key "value"
+      }
+      tags "Important"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0]
+    expect(rel).toBeDefined()
+    expect(rel.description).toBe('uses')
+    expect(rel.tags).toContain('Important')
+  })
+
+  it('unknown identifier with inline brace block in relationship body does not drop subsequent tags', () => {
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+    alice -> api "uses" {
+      unknownPlugin "config" { key "value" }
+      tags "Critical"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0]
+    expect(rel).toBeDefined()
+    expect(rel.tags).toContain('Critical')
+  })
+})
