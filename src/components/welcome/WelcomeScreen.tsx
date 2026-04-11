@@ -671,40 +671,32 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     useWorkspaceStore.getState().confirmDelete(
       `Delete "${filename}"? This cannot be undone.`,
       async () => {
-        console.log('[delete] start', filename)
         // If the workspace being deleted is currently loaded, close it first.
         // This cancels any pending auto-save timer that would otherwise
         // recreate the file after we delete it.
         const store = useWorkspaceStore.getState()
-        console.log('[delete] active filename:', store.activeWorkspaceFilename)
         if (store.activeWorkspaceFilename === filename) {
-          console.log('[delete] closing active workspace')
           store.closeWorkspace()
         }
 
         const dir = getCurrentDirHandle()
-        console.log('[delete] dir handle:', dir?.name)
         if (dir) {
           try {
             await dir.removeEntry(filename)
-            console.log('[delete] removeEntry succeeded for', filename)
           } catch (err) {
-            console.error('[delete] removeEntry FAILED for', filename, err)
+            console.error('[delete] removeEntry failed for', filename, err)
             setErrorMsg(`Failed to delete "${filename}". ${(err as Error).message ?? ''}`)
             listCurrentDSLFiles().then(setFolderWorkspaces)
             return
           }
           // Sidecar may or may not exist — ignore NotFoundError
           const sc = sidecarName(filename)
-          await dir.removeEntry(sc).catch((err) => console.log('[delete] sidecar removeEntry skipped:', err?.name ?? err))
-        } else {
-          console.warn('[delete] no dir handle available')
+          await dir.removeEntry(sc).catch(() => { /* sidecar didn't exist, that's fine */ })
         }
 
         // Re-list from disk rather than optimistically filtering, so any
         // files that failed to delete reappear in the UI.
         const fresh = await listCurrentDSLFiles()
-        console.log('[delete] re-listed files:', fresh.map(f => f.name))
         setFolderWorkspaces(fresh)
       }
     )

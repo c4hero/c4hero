@@ -77,20 +77,16 @@ export default function FloatingToolRail() {
   // overlay inside it cannot catch clicks on sibling panels).
   useEffect(() => {
     if (!addPanelOpen && !arrangePanelOpen) return
-    console.log('[toolrail] outside-click listener attached', { addPanelOpen, arrangePanelOpen })
     function handlePointerDown(e: PointerEvent) {
       const target = e.target as Node
-      console.log('[toolrail] pointerdown', (target as Element)?.tagName, { addPanelOpen, arrangePanelOpen })
       if (addPanelOpen) {
         const inFlyout = addElementFlyoutRef.current?.contains(target)
         const onTrigger = addBtnRef.current?.contains(target)
-        console.log('[toolrail] add check', { inFlyout, onTrigger })
         if (!inFlyout && !onTrigger) setAddPanelOpen(false)
       }
       if (arrangePanelOpen) {
         const inFlyout = arrangeFlyoutRef.current?.contains(target)
         const onTrigger = arrangeBtnRef.current?.contains(target)
-        console.log('[toolrail] arrange check', { inFlyout, onTrigger })
         if (!inFlyout && !onTrigger) setArrangePanelOpen(false)
       }
     }

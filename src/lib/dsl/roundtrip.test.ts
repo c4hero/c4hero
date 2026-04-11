@@ -25,12 +25,7 @@ describe('DSL relationship round-trip', () => {
   it('preserves relationships through serialize → parse', () => {
     const ws = makeWs()
     const dsl = serializeDSL(ws)
-    console.log('DSL output:\n' + dsl)
     const { workspace: parsed, errors } = parseDSL(dsl)
-    console.log('Errors:', errors)
-    console.log('People IDs:', parsed.model.people.map(p => p.id))
-    console.log('System IDs:', parsed.model.softwareSystems.map(s => s.id))
-    console.log('Rels:', JSON.stringify(parsed.model.relationships))
     expect(errors).toHaveLength(0)
     expect(parsed.model.relationships).toHaveLength(1)
     const rel = parsed.model.relationships[0]
