@@ -933,3 +933,112 @@ workspace {
     expect(view.elements).toHaveLength(2)
   })
 })
+
+describe('DSL parser — block-form tags keyword', () => {
+  it('container with block tags keyword parses extra tags', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      db = container "DB" {
+        tags "Database"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const container = workspace.model.softwareSystems[0].containers[0]
+    expect(container.tags).toContain('Element')
+    expect(container.tags).toContain('Container')
+    expect(container.tags).toContain('Database')
+  })
+
+  it('softwareSystem with block tags keyword parses extra tags', () => {
+    const dsl = `
+workspace {
+  model {
+    ext = softwareSystem "External" {
+      tags "ThirdParty"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const sys = workspace.model.softwareSystems[0]
+    expect(sys.tags).toContain('Software System')
+    expect(sys.tags).toContain('ThirdParty')
+  })
+
+  it('component with block tags keyword parses extra tags', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      api = container "API" {
+        ctrl = component "Controller" {
+          tags "Spring MVC"
+        }
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const comp = workspace.model.softwareSystems[0].containers[0].components[0]
+    expect(comp.tags).toContain('Component')
+    expect(comp.tags).toContain('Spring MVC')
+  })
+
+  it('block tags with comma-separated values in a single string are each added individually', () => {
+    // The serializer emits tags as "Tag1,Tag2" — a comma-separated string.
+    // The parser must split on comma and add each tag separately.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      q = container "Queue" {
+        tags "MessageBus,Async"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const container = workspace.model.softwareSystems[0].containers[0]
+    expect(container.tags).toContain('MessageBus')
+    expect(container.tags).toContain('Async')
+    // Should NOT contain the raw unsplit string
+    expect(container.tags).not.toContain('MessageBus,Async')
+  })
+
+  it('block tags with inline positional tags combine correctly', () => {
+    // Inline positional arg "VIP" AND block tags "Premium" — both should appear
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice" "" "VIP" {
+      tags "Premium"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const alice = workspace.model.people[0]
+    expect(alice.tags).toContain('VIP')
+    expect(alice.tags).toContain('Premium')
+    // No duplicates
+    expect(alice.tags.filter(t => t === 'VIP')).toHaveLength(1)
+    expect(alice.tags.filter(t => t === 'Premium')).toHaveLength(1)
+  })
+})
