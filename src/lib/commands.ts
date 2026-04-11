@@ -114,6 +114,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'edit',
       icon: Undo2,
       shortcut: `${mod}Z`,
+      when: () => store().canUndo(),
       execute: () => store().undo(),
     },
     {
@@ -122,6 +123,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'edit',
       icon: Redo2,
       shortcut: `${mod}⇧Z`,
+      when: () => store().canRedo(),
       execute: () => store().redo(),
     },
     {
