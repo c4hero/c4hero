@@ -35,6 +35,23 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
 
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
 
+  // Count how many model relationships each out-of-view element has to in-view elements.
+  // Elements with a count > 0 will auto-wire those connections on add.
+  const connectionCountMap = useMemo(() => {
+    const counts = new Map<string, number>()
+    if (!workspace || !activeViewKey) return counts
+    const v = getActiveView(workspace, activeViewKey)
+    if (!v) return counts
+    const viewIds = new Set(v.elements.map(e => e.id))
+    for (const rel of workspace.model.relationships) {
+      const srcIn = viewIds.has(rel.sourceId)
+      const dstIn = viewIds.has(rel.destinationId)
+      if (srcIn && !dstIn) counts.set(rel.destinationId, (counts.get(rel.destinationId) ?? 0) + 1)
+      if (dstIn && !srcIn) counts.set(rel.sourceId, (counts.get(rel.sourceId) ?? 0) + 1)
+    }
+    return counts
+  }, [workspace, activeViewKey])
+
   if (!workspace || !activeViewKey) return null
 
   const creatableTypes = getCreatableTypes(workspace, activeViewKey)
@@ -270,17 +287,34 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
                       // Don't close — user may want to add multiple
                     }}
                     className="flyout-item"
-                    style={{
-                      padding: '5px 8px',
-                    }}
+                    style={{ padding: '5px 8px' }}
+                    title={connectionCountMap.has(el.id)
+                      ? `Auto-wires ${connectionCountMap.get(el.id)} connection${connectionCountMap.get(el.id) !== 1 ? 's' : ''} to existing view elements`
+                      : el.name}
                   >
                     <span style={{ color: TYPE_COLORS[el.type], display: 'flex', flexShrink: 0 }}>
                       {TYPE_ICONS[el.type]}
                     </span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {el.name}
                     </span>
-                    <Plus size={12} style={{ marginLeft: 'auto', color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                    {(connectionCountMap.get(el.id) ?? 0) > 0 && (
+                      <span
+                        style={{
+                          fontSize: 'var(--text-xxs)',
+                          fontWeight: 700,
+                          color: 'var(--color-accent)',
+                          background: 'var(--color-accent-glow)',
+                          borderRadius: 99,
+                          padding: '1px 5px',
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        ↔{connectionCountMap.get(el.id)}
+                      </span>
+                    )}
+                    <Plus size={12} style={{ flexShrink: 0, color: 'var(--color-text-muted)', opacity: 0.6 }} />
                   </button>
                 ))}
               </div>
