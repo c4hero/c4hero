@@ -80,6 +80,7 @@ export function useRouteSync() {
           activeViewKey: viewFromUrl,
           selectedElementIds: [],
           selectedRelationshipId: null,
+          selectedGroupId: null,
         })
       } else {
         // Invalid view key in URL — correct it to the current active view
