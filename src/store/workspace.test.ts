@@ -1042,6 +1042,33 @@ describe('addRelationship — auto-add to views containing both endpoints', () =
     const count = view.relationships.filter(r => r.id === relId).length
     expect(count).toBe(1)
   })
+
+  it('delete → re-add cycle produces exactly 1 relationship in model and view (no phantom duplication)', () => {
+    const key = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    useWorkspaceStore.getState().setActiveView(key)
+
+    // Add
+    const relId1 = useWorkspaceStore.getState().addRelationship('alice', 'api', 'first call')
+    let ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.relationships).toHaveLength(1)
+
+    // Delete
+    useWorkspaceStore.getState().deleteRelationship(relId1)
+    ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.relationships).toHaveLength(0)
+    const viewAfterDelete = ws.views.systemLandscapeViews.find(v => v.key === key)!
+    expect(viewAfterDelete.relationships).toHaveLength(0)
+
+    // Re-add
+    const relId2 = useWorkspaceStore.getState().addRelationship('alice', 'api', 'second call')
+    ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.relationships).toHaveLength(1)
+    expect(ws.model.relationships[0].id).toBe(relId2)
+    const viewAfterReadd = ws.views.systemLandscapeViews.find(v => v.key === key)!
+    // Must appear exactly once — no phantom from the old deleted relationship
+    expect(viewAfterReadd.relationships.filter(r => r.id === relId2)).toHaveLength(1)
+    expect(viewAfterReadd.relationships).toHaveLength(1)
+  })
 })
 
 // ─── addPerson/addSoftwareSystem landscape view auto-add ─────────────
