@@ -32,7 +32,6 @@ describe('DSL relationship round-trip', () => {
     expect(rel.sourceId).toBe(parsed.model.people[0].id)
     expect(rel.destinationId).toBe(parsed.model.softwareSystems[0].id)
   })
-})
 
   it('view element IDs are consistent with model element IDs after parse', () => {
     const ws = makeWs()
@@ -74,6 +73,7 @@ describe('DSL relationship round-trip', () => {
     expect(modelRel!.sourceId).toBe(personId)
     expect(modelRel!.destinationId).toBe(sysId)
   })
+})
 
 // ─── Big Bank Round-trip ──────────────────────────────────────────────
 
