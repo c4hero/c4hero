@@ -561,7 +561,7 @@ class ContextAwareParser {
                     continue
                 }
 
-                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties') {
+                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives') {
                     this.parseElementPropertyOnElement(sys, kw)
                     continue
                 }
@@ -682,7 +682,7 @@ class ContextAwareParser {
                     continue
                 }
 
-                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties') {
+                if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives') {
                     this.parseElementPropertyOnElement(container, kw)
                     continue
                 }
