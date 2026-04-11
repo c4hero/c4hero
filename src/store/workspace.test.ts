@@ -3061,3 +3061,67 @@ describe('updateRelationship — tags', () => {
     expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
   })
 })
+
+// ─── addContainer — extraTag parameter ───────────────────────────────────────
+
+describe('addContainer — extraTag parameter', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('addContainer with extraTag appends the custom tag after built-in tags', () => {
+    const id = useWorkspaceStore.getState().addContainer('api', 'DB', undefined, 'Database')
+    const ws = useWorkspaceStore.getState().workspace!
+    const container = ws.model.softwareSystems.find(s => s.id === 'api')!.containers.find(c => c.id === id)!
+    expect(container.tags).toEqual(['Element', 'Container', 'Database'])
+  })
+
+  it('addContainer without extraTag has exactly the two built-in tags', () => {
+    const id = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const ws = useWorkspaceStore.getState().workspace!
+    const container = ws.model.softwareSystems.find(s => s.id === 'api')!.containers.find(c => c.id === id)!
+    expect(container.tags).toEqual(['Element', 'Container'])
+  })
+})
+
+// ─── duplicateElements — softwareSystem with containers ──────────────────────
+
+describe('duplicateElements — softwareSystem with containers', () => {
+  let viewKey: string
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+      viewHistory: [],
+    })
+    viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'api')
+  })
+
+  it('duplicated softwareSystem clones its containers with new IDs', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const newIds = useWorkspaceStore.getState().duplicateElements(['api'])
+    expect(newIds).toHaveLength(1)
+    const ws = useWorkspaceStore.getState().workspace!
+    const clone = ws.model.softwareSystems.find(s => s.id === newIds[0])!
+    expect(clone.containers).toHaveLength(1)
+    expect(clone.containers[0].id).not.toBe(containerId)
+    expect(clone.containers[0].name).toBe('Web')
+  })
+
+  it('duplicated softwareSystem is auto-added to sibling systemLandscape views', () => {
+    const viewKey2 = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape 2')
+    const newIds = useWorkspaceStore.getState().duplicateElements(['api'])
+    expect(newIds).toHaveLength(1)
+    const ws = useWorkspaceStore.getState().workspace!
+    const sibling = ws.views.systemLandscapeViews.find(v => v.key === viewKey2)!
+    expect(sibling.elements.some(e => e.id === newIds[0])).toBe(true)
+  })
+})

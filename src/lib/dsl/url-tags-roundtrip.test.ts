@@ -153,3 +153,155 @@ workspace "test" {
     expect(rel?.tags).toContain('Custom')
   })
 })
+
+describe('element custom tag roundtrip', () => {
+  it('person custom tag survives serialize → parse', () => {
+    const ws: Workspace = {
+      name: 'test',
+      model: {
+        people: [
+          { id: 'p1', type: 'person', name: 'Staff', tags: ['Element', 'Person', 'Employee'], properties: {} },
+        ],
+        softwareSystems: [],
+        relationships: [],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    const { workspace, errors } = parseDSL(serializeDSL(ws))
+    expect(errors).toEqual([])
+    const person = workspace.model.people.find(p => p.name === 'Staff')
+    expect(person?.tags).toContain('Employee')
+    expect(person?.tags).toContain('Person')
+  })
+
+  it('softwareSystem custom tag survives serialize → parse', () => {
+    const ws: Workspace = {
+      name: 'test',
+      model: {
+        people: [],
+        softwareSystems: [
+          { id: 'sys', type: 'softwareSystem', name: 'Payments', tags: ['Element', 'Software System', 'External'], properties: {}, containers: [] },
+        ],
+        relationships: [],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    const { workspace, errors } = parseDSL(serializeDSL(ws))
+    expect(errors).toEqual([])
+    const sys = workspace.model.softwareSystems.find(s => s.name === 'Payments')
+    expect(sys?.tags).toContain('External')
+    expect(sys?.tags).toContain('Software System')
+  })
+
+  it('container custom tag survives serialize → parse', () => {
+    const ws: Workspace = {
+      name: 'test',
+      model: {
+        people: [],
+        softwareSystems: [
+          {
+            id: 'sys', type: 'softwareSystem', name: 'System', tags: ['Element', 'Software System'], properties: {},
+            containers: [
+              { id: 'db', type: 'container', name: 'DB', tags: ['Element', 'Container', 'Database'], properties: {}, components: [] },
+            ],
+          },
+        ],
+        relationships: [],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    const { workspace, errors } = parseDSL(serializeDSL(ws))
+    expect(errors).toEqual([])
+    const db = workspace.model.softwareSystems[0].containers.find(c => c.name === 'DB')
+    expect(db?.tags).toContain('Database')
+    expect(db?.tags).toContain('Container')
+  })
+
+  it('component custom tag survives serialize → parse', () => {
+    const ws: Workspace = {
+      name: 'test',
+      model: {
+        people: [],
+        softwareSystems: [
+          {
+            id: 'sys', type: 'softwareSystem', name: 'System', tags: ['Element', 'Software System'], properties: {},
+            containers: [
+              {
+                id: 'api', type: 'container', name: 'API', tags: ['Element', 'Container'], properties: {},
+                components: [
+                  { id: 'ctrl', type: 'component', name: 'Controller', tags: ['Element', 'Component', 'Spring MVC'], properties: {} },
+                ],
+              },
+            ],
+          },
+        ],
+        relationships: [],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    const { workspace, errors } = parseDSL(serializeDSL(ws))
+    expect(errors).toEqual([])
+    const ctrl = workspace.model.softwareSystems[0].containers[0].components.find(c => c.name === 'Controller')
+    expect(ctrl?.tags).toContain('Spring MVC')
+    expect(ctrl?.tags).toContain('Component')
+  })
+
+  it('multiple custom tags on a single element all survive serialize → parse', () => {
+    const ws: Workspace = {
+      name: 'test',
+      model: {
+        people: [],
+        softwareSystems: [
+          {
+            id: 'sys', type: 'softwareSystem', name: 'System', tags: ['Element', 'Software System'], properties: {},
+            containers: [
+              { id: 'q', type: 'container', name: 'Queue', tags: ['Element', 'Container', 'MessageBus', 'Async'], properties: {}, components: [] },
+            ],
+          },
+        ],
+        relationships: [],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    const { workspace, errors } = parseDSL(serializeDSL(ws))
+    expect(errors).toEqual([])
+    const q = workspace.model.softwareSystems[0].containers.find(c => c.name === 'Queue')
+    expect(q?.tags).toContain('MessageBus')
+    expect(q?.tags).toContain('Async')
+  })
+})
