@@ -1,9 +1,13 @@
 import { create } from 'zustand'
 import { customAlphabet } from 'nanoid'
 
-// IDs must not contain hyphens: the DSL serializer sanitizes `-` → `_`, which
-// would change the ID on first serialize→parse roundtrip, breaking references.
-const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', 8)
+// IDs must be valid Structurizr DSL identifiers from the moment they are created
+// so they survive a serialize → parse roundtrip without any sanitization:
+//   - No hyphens: the serializer maps `-` → `_`, changing the ID.
+//   - No leading digits: the serializer prepends `e` to digit-prefixed IDs,
+//     changing them (e.g. `0abc1234` → var name `e0abc1234` → new ID `e0abc1234`).
+// Using only letters guarantees IDs are always valid as-is.
+const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 8)
 import type {
   Workspace, ModelElement, Relationship, View, Group,
   Person, SoftwareSystem, Container, Component,

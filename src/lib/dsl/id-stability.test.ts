@@ -80,4 +80,27 @@ describe('element ID stability through serialize → parse roundtrip', () => {
     expect(rel.sourceId).toBe('personABC1')
     expect(rel.destinationId).toBe('sysXYZ9876')
   })
+
+  it('digit-prefixed IDs do NOT survive roundtrip unchanged (demonstrates the pre-fix bug)', () => {
+    // The serializer prepends `e` to IDs starting with a digit to produce a valid
+    // DSL identifier (e.g. `0abc1234` → varName `e0abc1234`). After parsing the
+    // element receives ID `e0abc1234`, not `0abc1234`.
+    const ws = makeWsWithId('0abc1234', 'zXyW5678')
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const parsedPersonId = parsed.model.people[0].id
+    expect(parsedPersonId).toBe('e0abc1234') // `e` prefix was added, original lost
+    expect(parsedPersonId).not.toBe('0abc1234')
+  })
+
+  it('letter-only IDs survive roundtrip unchanged (no e-prefix needed)', () => {
+    // IDs composed only of letters are already valid DSL identifiers — no sanitization.
+    const ws = makeWsWithId('abcDefGh', 'XyZwVuTs')
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.people[0].id).toBe('abcDefGh')
+    expect(parsed.model.softwareSystems[0].id).toBe('XyZwVuTs')
+  })
 })
