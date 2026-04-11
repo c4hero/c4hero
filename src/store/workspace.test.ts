@@ -442,6 +442,26 @@ describe('Element CRUD', () => {
     expect(useWorkspaceStore.getState().selectedElementIds).toContain(id)
   })
 
+  it('addContainer creates a container and selects it', () => {
+    const sysId = useWorkspaceStore.getState().addSoftwareSystem('MySys')
+    const id = useWorkspaceStore.getState().addContainer(sysId, 'WebApp')
+    const ws = useWorkspaceStore.getState().workspace!
+    const sys = ws.model.softwareSystems.find(s => s.id === sysId)!
+    expect(sys.containers.find(c => c.id === id)).toBeDefined()
+    expect(useWorkspaceStore.getState().selectedElementIds).toContain(id)
+  })
+
+  it('addComponent creates a component and selects it', () => {
+    const sysId = useWorkspaceStore.getState().addSoftwareSystem('MySys2')
+    const containerId = useWorkspaceStore.getState().addContainer(sysId, 'API')
+    const id = useWorkspaceStore.getState().addComponent(containerId, 'AuthService')
+    const ws = useWorkspaceStore.getState().workspace!
+    const sys = ws.model.softwareSystems.find(s => s.id === sysId)!
+    const container = sys.containers.find(c => c.id === containerId)!
+    expect(container.components.find(c => c.id === id)).toBeDefined()
+    expect(useWorkspaceStore.getState().selectedElementIds).toContain(id)
+  })
+
   it('updateElement updates name and description', () => {
     useWorkspaceStore.getState().updateElement('alice', { name: 'Alice Smith', description: 'Lead dev' })
     const ws = useWorkspaceStore.getState().workspace!

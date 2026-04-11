@@ -102,17 +102,22 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     }
     const applyToElement = (id: string, data: SidecarElement) => {
       const safe = sanitize(data)
+      // Explicit property-by-property assignment — no Object.assign, no prototype risk.
+      const applyProps = (el: { status?: ElementStatus; owner?: string }) => {
+        if (safe.status !== undefined) el.status = safe.status
+        if (safe.owner !== undefined) el.owner = safe.owner
+      }
       // People
       for (const p of workspace.model.people) {
-        if (p.id === id) { Object.assign(p, safe); return }
+        if (p.id === id) { applyProps(p); return }
       }
       // Systems, containers, components
       for (const sys of workspace.model.softwareSystems) {
-        if (sys.id === id) { Object.assign(sys, safe); return }
+        if (sys.id === id) { applyProps(sys); return }
         for (const c of sys.containers) {
-          if (c.id === id) { Object.assign(c, safe); return }
+          if (c.id === id) { applyProps(c); return }
           for (const comp of c.components) {
-            if (comp.id === id) { Object.assign(comp, safe); return }
+            if (comp.id === id) { applyProps(comp); return }
           }
         }
       }

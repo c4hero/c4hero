@@ -411,7 +411,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
       system.containers.push(container)
       addToCurrentView(ws, s.activeViewKey, id, position)
-      return { ...pushUndo(s), workspace: ws, focusElementId: id }
+      return { ...pushUndo(s), workspace: ws, focusElementId: id, selectedElementIds: [id], selectedRelationshipId: null, selectedGroupId: null }
     })
     get().revalidateScope()
     announce('Container created')
@@ -429,7 +429,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Component'], properties: {} }
           container.components.push(comp)
           addToCurrentView(ws, s.activeViewKey, id, position)
-          return { ...pushUndo(s), workspace: ws, focusElementId: id }
+          return { ...pushUndo(s), workspace: ws, focusElementId: id, selectedElementIds: [id], selectedRelationshipId: null, selectedGroupId: null }
         }
       }
       return s
