@@ -47,15 +47,15 @@ class SerializerContext {
         const model = this.workspace.model
 
         for (const person of model.people) {
-            this.registerElement(person.id, person.name)
+            this.registerElement(person.id)
         }
 
         for (const sys of model.softwareSystems) {
-            this.registerElement(sys.id, sys.name)
+            this.registerElement(sys.id)
             for (const container of sys.containers) {
-                this.registerElement(container.id, container.name)
+                this.registerElement(container.id)
                 for (const comp of container.components) {
-                    this.registerElement(comp.id, comp.name)
+                    this.registerElement(comp.id)
                 }
             }
         }
@@ -63,9 +63,9 @@ class SerializerContext {
 
     private usedVarNames = new Set<string>()
 
-    private registerElement(id: string, name: string): void {
+    private registerElement(id: string): void {
         this.allElementIds.add(id)
-        // Prefer the element's own ID as the DSL variable name so that IDs
+        // Use the element's own ID as the DSL variable name so that IDs
         // survive a serialize → parse roundtrip (critical for sidecar data).
         // Sanitize to make it a valid identifier:
         //   - replace hyphens and other invalid chars with underscores
@@ -82,23 +82,6 @@ class SerializerContext {
         }
         this.idToVar.set(id, varName)
         this.usedVarNames.add(varName)
-    }
-
-    /** Convert a human name to a unique valid DSL identifier */
-    private toVarName(name: string): string {
-        // Sanitize: lowercase, replace spaces/special chars with underscores, strip leading digits
-        let base = name
-            .toLowerCase()
-            .replace(/[^a-z0-9_]/g, '_')
-            .replace(/^[0-9]+/, '')
-            .replace(/_+/g, '_')
-            .replace(/^_+|_+$/g, '')
-        if (!base) base = 'element'
-        // Ensure uniqueness by appending a counter if needed
-        if (!this.usedVarNames.has(base)) return base
-        let i = 2
-        while (this.usedVarNames.has(`${base}_${i}`)) i++
-        return `${base}_${i}`
     }
 
     private indent(): string {
