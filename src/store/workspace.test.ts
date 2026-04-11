@@ -1983,6 +1983,14 @@ describe('removeTagGlobal', () => {
     expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(before)
   })
 
+  it('is a no-op for the Database built-in tag', () => {
+    // Database is used to render container nodes as cylinders — removing it globally
+    // would silently break all database containers, so it must be protected.
+    const before = JSON.stringify(useWorkspaceStore.getState().workspace)
+    useWorkspaceStore.getState().removeTagGlobal('Database')
+    expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(before)
+  })
+
   it('supports undo', () => {
     useWorkspaceStore.getState().removeTagGlobal('VIP')
     useWorkspaceStore.getState().undo()
