@@ -127,7 +127,7 @@ export default function BaseC4Node({
 
       {/* Row 2: description */}
       {desc && (
-        <p style={{ fontSize: resolvedFontSize != null ? `${Math.round(resolvedFontSize * 0.78)}px` : '11px', color: 'var(--color-text-muted)', margin: '6px 0 0', lineHeight: '1.4' }}>
+        <p style={{ fontSize: resolvedFontSize != null ? `${Math.round(resolvedFontSize * 0.78)}px` : 'var(--text-xs-plus)', color: 'var(--color-text-muted)', margin: '6px 0 0', lineHeight: '1.4' }}>
           {desc}
         </p>
       )}
@@ -144,7 +144,7 @@ export default function BaseC4Node({
           {chipLabel}
         </span>
         {technology && (
-          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{technology}</span>
+          <span style={{ fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)' }}>{technology}</span>
         )}
       </div>
 

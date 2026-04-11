@@ -170,6 +170,7 @@ export default function ScopePickerDialog({
           </span>
           <button
             onClick={onCancel}
+            aria-label="Close dialog"
             style={{
               width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: 6, border: 'none', background: 'transparent',
@@ -200,7 +201,7 @@ export default function ScopePickerDialog({
                 style={{
                   width: '100%', padding: '10px 14px',
                   borderRadius: 10, fontSize: 14, fontWeight: 500,
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'var(--glass-overlay-xs)',
                   border: '1px solid var(--color-border-hover, rgba(88,166,255,0.25))',
                   color: 'var(--color-text-primary)',
                   outline: 'none',
@@ -264,7 +265,7 @@ export default function ScopePickerDialog({
                 style={{
                   width: '100%', padding: '10px 14px',
                   borderRadius: 10, fontSize: 13,
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'var(--glass-overlay-xs)',
                   border: '1px solid var(--color-border)',
                   color: 'var(--color-text-primary)',
                   outline: 'none', resize: 'none',
@@ -277,7 +278,7 @@ export default function ScopePickerDialog({
           {/* Right column — animated diagram preview */}
           <div style={{
             width: 210, flexShrink: 0,
-            background: 'rgba(0,0,0,0.3)',
+            background: 'var(--color-backdrop)',
             borderRadius: 12,
             border: '1px solid var(--color-border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -310,7 +311,7 @@ export default function ScopePickerDialog({
               disabled={!canSubmit}
               style={{
                 padding: '8px 22px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                background: canSubmit ? 'var(--color-accent)' : 'rgba(88,166,255,0.2)',
+                background: canSubmit ? 'var(--color-accent)' : 'var(--color-accent-glow)',
                 color: canSubmit ? '#0d1117' : 'var(--color-text-muted)',
                 border: 'none', cursor: canSubmit ? 'pointer' : 'default',
                 transition: 'background 150ms',
