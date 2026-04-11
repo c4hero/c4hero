@@ -10,7 +10,6 @@ vi.mock('@/lib/ai', () => ({
 
 vi.mock('lucide-react', () => ({
   X: () => null,
-  MoreHorizontal: () => null,
   Plus: () => null,
   ArrowRight: () => null,
   ExternalLink: () => null,
@@ -106,15 +105,9 @@ describe('RightPanel', () => {
     render(<RightPanel />)
 
     // The X button is mocked to return null, but onClose is passed to button onClick
-    // We need to find the close button — since X icon is mocked to null, look by title or position
-    // The close button has onClick={onClose} and class btn-icon
+    // We need to find the close button — since X icon is mocked to null, look by aria-label
     const buttons = screen.getAllByRole('button')
-    // The close button is the last btn-icon in the header area
-    // Find by iterating: header close button is second after MoreHorizontal
-    // Since both icons are null, we search by presence of onClick
-    // Let's click the last btn-icon button in the header (onClose button)
-    // Header has: MoreHorizontal btn + X btn (close)
-    // We'll click all buttons to find the one that clears selection
+    // We'll click all btn-icon buttons to find the one that clears selection
     await act(async () => {
       // Tab buttons also exist; the close button is the one that calls clearSelection
       // The close button is positioned after MoreHorizontal in the header

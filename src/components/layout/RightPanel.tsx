@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, LineStyle, Location, Group } from '@/types/model'
-import { X, MoreHorizontal, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, Layers, Trash2 } from 'lucide-react'
+import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, Layers, Trash2 } from 'lucide-react'
 import { generateDescription, getAIConfig } from '@/lib/ai'
 import { TYPE_LABELS, TYPE_COLORS } from '@/lib/elementMeta'
 
@@ -183,8 +183,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
           <div className="text-[11px]" style={{ color: typeColor }}>{TYPE_LABELS[element.type]}</div>
         </div>
         <div className="flex items-center gap-1">
-          <button className="btn-icon !min-h-7 !min-w-7 !p-1"><MoreHorizontal size={14} /></button>
-          <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1"><X size={14} /></button>
+          <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close panel"><X size={14} /></button>
         </div>
       </div>
 
@@ -309,6 +308,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                     rel="noopener noreferrer"
                     className="btn-icon !min-h-8 !min-w-8 !p-1.5 shrink-0"
                     title="Open URL"
+                    aria-label="Open URL in new tab"
                   >
                     <ExternalLink size={14} />
                   </a>
@@ -374,7 +374,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
           </div>
           <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Relationship</div>
         </div>
-        <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1"><X size={14} /></button>
+        <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close panel"><X size={14} /></button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -561,6 +561,7 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
           onClick={addTag}
           disabled={!newTag.trim()}
           className="btn-icon !min-h-7 !min-w-7 !p-1 disabled:opacity-30"
+          aria-label="Add tag"
         >
           <Plus size={14} />
         </button>
@@ -626,7 +627,7 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
         >
           <Trash2 size={12} />
         </button>
-        <button onClick={onClose} className="btn-icon !min-h-6 !min-w-6 !p-1" title="Close">
+        <button onClick={onClose} className="btn-icon !min-h-6 !min-w-6 !p-1" title="Close" aria-label="Close panel">
           <X size={12} />
         </button>
       </div>
