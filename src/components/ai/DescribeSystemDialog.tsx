@@ -83,7 +83,7 @@ export default function DescribeSystemDialog({ onClose }: { onClose: () => void 
       />
 
       {error && (
-        <div className="mt-3 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)', background: 'rgba(239,68,68,0.08)' }}>
+        <div className="mt-3 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)', background: 'var(--color-tint-error)' }}>
           {error}
         </div>
       )}

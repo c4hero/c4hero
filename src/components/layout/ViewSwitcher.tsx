@@ -196,14 +196,14 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                     >
                       {isRenaming ? (
                         <button onClick={e => { e.stopPropagation(); renameView(v.key, renameValue.trim() || v.title || v.key); setRenamingViewKey(null) }}
-                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'rgba(34,197,94,0.15)', border: 'none', cursor: 'pointer', color: 'var(--color-success)' }} title="Save">
+                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'var(--color-tint-success)', border: 'none', cursor: 'pointer', color: 'var(--color-success)' }} title="Save rename" aria-label="Confirm rename">
                           <Check size={13} />
                         </button>
                       ) : (
                         <button onClick={e => { e.stopPropagation(); setRenamingViewKey(v.key); setRenameValue(v.title ?? v.key) }}
                           className="hover-lift"
                           style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', transition: 'background 0.12s, color 0.12s' }}
-                          title="Rename">
+                          title="Rename view" aria-label={`Rename view ${v.title ?? v.key}`}>
                           <Pencil size={13} />
                         </button>
                       )}
@@ -211,7 +211,8 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
                         disabled={views.length <= 1}
                         className="hover-danger"
                         style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: 'transparent', border: 'none', cursor: views.length > 1 ? 'pointer' : 'default', color: 'var(--color-text-muted)', opacity: views.length <= 1 ? 0.3 : 1, transition: 'background 0.12s, color 0.12s' }}
-                        title={views.length <= 1 ? 'Cannot delete last view' : 'Delete view'}>
+                        title={views.length <= 1 ? 'Cannot delete last view' : `Delete view ${v.title ?? v.key}`}
+                        aria-label={views.length <= 1 ? 'Cannot delete last view' : `Delete view ${v.title ?? v.key}`}>
                         <Trash2 size={13} />
                       </button>
                     </div>

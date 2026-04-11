@@ -52,7 +52,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
           padding: '5px 10px',
           borderRadius: 'var(--radius-sm)',
           border: '1px solid var(--color-border)',
-          background: isDone ? 'rgba(34,197,94,0.12)' : 'var(--color-surface-2)',
+          background: isDone ? 'var(--color-tint-success)' : 'var(--color-surface-2)',
           color: isDone ? 'var(--color-success)' : 'var(--color-text-secondary)',
           fontSize: 'var(--text-xs)',
           fontWeight: 500,

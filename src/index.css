@@ -48,6 +48,10 @@
   --color-status-deprecated: #f97316;
   --color-status-removed: #ef4444;
 
+  /* Semantic tint backgrounds */
+  --color-tint-success: rgba(34, 197, 94, 0.12);
+  --color-tint-error: rgba(239, 68, 68, 0.08);
+
   /* Feedback colors */
   --color-error: #ef4444;
   --color-warning: #f97316;
