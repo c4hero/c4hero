@@ -2216,6 +2216,12 @@ describe('updateElementStyle and removeElementStyle', () => {
     expect(styles).toHaveLength(1)
     expect(styles[0].tag).toBe('VIP')
   })
+
+  it('removeElementStyle is a no-op (no undo) when the tag style does not exist', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().removeElementStyle('NonExistentTag')
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
+  })
 })
 
 describe('setActiveTagFilter and setActiveStatusFilter', () => {

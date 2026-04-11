@@ -1114,6 +1114,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (BUILTIN_TAGS.has(tag)) return s // Built-in tag styles cannot be removed
     const ws = cloneWs(s)
     if (!ws) return s
+    const exists = ws.views.configuration.styles.elements.some((es) => es.tag === tag)
+    if (!exists) return s
     ws.views.configuration.styles.elements = ws.views.configuration.styles.elements.filter((es) => es.tag !== tag)
     return { ...pushUndo(s), workspace: ws }
   }),
