@@ -727,6 +727,16 @@ describe('view CRUD', () => {
     expect(useWorkspaceStore.getState().activeViewKey).toBeNull()
   })
 
+  it('deleteView falls back to the first remaining view when the active view is deleted', () => {
+    // View A is created first; view B becomes active
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View A')
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View B')
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(keyB)
+    // Delete view B — should fall back to view A (the first remaining view)
+    useWorkspaceStore.getState().deleteView(keyB)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(keyA)
+  })
+
   it('deleteView removes the key from viewHistory to prevent ghost navigation', () => {
     const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View A')
     const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View B')
