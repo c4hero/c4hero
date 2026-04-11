@@ -341,6 +341,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       pendingDelete: null,  // dismiss any in-flight delete confirmation from a previous workspace
       undoStack: [],
       redoStack: [],
+      lastSavedUndoLength: 0, // reset so the save indicator doesn't inherit a stale saved position
       // Clear view filters so they don't bleed from a previous workspace
       activeTagFilter: null,
       activeStatusFilter: null,
