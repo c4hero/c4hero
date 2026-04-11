@@ -461,6 +461,8 @@ describe('Workspace with autoLayout BT direction round-trip', () => {
     const view = parsed.views.systemLandscapeViews[0]
     expect(view.autoLayout).toBeDefined()
     expect(view.autoLayout!.direction).toBe('BT')
+    expect(view.autoLayout!.rankSeparation).toBe(300)
+    expect(view.autoLayout!.nodeSeparation).toBe(100)
   })
 
   it('preserves autoLayout LR through serialize → parse', () => {
