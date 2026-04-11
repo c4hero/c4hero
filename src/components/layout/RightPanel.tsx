@@ -260,7 +260,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                     {aiLoading ? 'Generating...' : 'Generate with AI'}
                   </button>
                   {aiError && (
-                    <div className="mt-1 rounded px-2 py-1 text-[10px]" style={{ color: 'var(--color-error)', background: 'rgba(239,68,68,0.08)' }}>
+                    <div className="mt-1 rounded px-2 py-1 text-[10px]" style={{ color: 'var(--color-error)', background: 'var(--color-tint-error)' }}>
                       {aiError}
                     </div>
                   )}

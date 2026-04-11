@@ -1414,7 +1414,7 @@ function NewCollectionDialog({
             style={{
               width: '100%', padding: '10px 14px',
               borderRadius: 10, fontSize: 14, fontWeight: 500,
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--glass-overlay-xs)',
               border: '1px solid var(--color-border-hover, rgba(88,166,255,0.25))',
               color: 'var(--color-text-primary)',
               outline: 'none',
@@ -1425,7 +1425,7 @@ function NewCollectionDialog({
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Folder:</span>
             <code style={{
               fontSize: 11, padding: '2px 8px', borderRadius: 6,
-              background: 'rgba(255,255,255,0.05)',
+              background: 'var(--glass-overlay-sm)',
               border: '1px solid var(--color-border)',
               color: canSubmit ? 'var(--color-accent)' : 'var(--color-text-muted)',
               fontFamily: 'monospace',
@@ -1445,7 +1445,7 @@ function NewCollectionDialog({
             disabled={!canSubmit}
             style={{
               padding: '8px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: canSubmit ? 'var(--color-accent)' : 'rgba(88,166,255,0.2)',
+              background: canSubmit ? 'var(--color-accent)' : 'var(--color-accent-glow)',
               color: canSubmit ? '#0d1117' : 'var(--color-text-muted)',
               border: 'none', cursor: canSubmit ? 'pointer' : 'default',
               transition: 'background 150ms',

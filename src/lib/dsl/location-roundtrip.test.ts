@@ -64,6 +64,24 @@ workspace {
   })
 })
 
+describe('serializer emits native location keyword', () => {
+  it('External person serializes as "location External" not properties block', () => {
+    const ws = makeWs()
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('location External')
+    expect(dsl).not.toContain('c4hero.location')
+  })
+
+  it('External softwareSystem serializes as "location External" not properties block', () => {
+    const ws = makeWs()
+    const dsl = serializeDSL(ws)
+    // Both person Alice and system ExtSys are External; both should use location External
+    const locationCount = (dsl.match(/location External/g) ?? []).length
+    expect(locationCount).toBe(2)
+    expect(dsl).not.toContain('"c4hero.location"')
+  })
+})
+
 describe('External location roundtrip', () => {
   it('External person survives serialize → parse', () => {
     const ws = makeWs()

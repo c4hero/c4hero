@@ -224,13 +224,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
-            if (isExternal) {
-                this.emit('properties {')
-                this.depth++
-                this.emit(`"c4hero.location" "External"`)
-                this.depth--
-                this.emit('}')
-            }
+            if (isExternal) this.emit('location External')
             this.depth--
             this.emit('}')
         } else {
@@ -259,13 +253,7 @@ class SerializerContext {
             this.depth++
 
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
-            if (isExternal) {
-                this.emit('properties {')
-                this.depth++
-                this.emit(`"c4hero.location" "External"`)
-                this.depth--
-                this.emit('}')
-            }
+            if (isExternal) this.emit('location External')
 
             for (let i = 0; i < sys.containers.length; i++) {
                 if (i > 0) this.emitBlank()
