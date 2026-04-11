@@ -687,6 +687,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     })
     if (newIds.length > 0) {
       announce(newIds.length === 1 ? 'Element duplicated' : `${newIds.length} elements duplicated`)
+      get().revalidateScope()
     }
     return newIds
   },
