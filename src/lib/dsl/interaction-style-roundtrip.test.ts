@@ -183,3 +183,68 @@ describe('relationship lineStyle roundtrip', () => {
     expect(rel?.interactionStyle).toBe('Asynchronous')
   })
 })
+
+describe('relationship description and technology as block keywords', () => {
+  it('description keyword inside block overrides inline positional description', () => {
+    // Some Structurizr DSL files use keyword form inside blocks instead of positional form.
+    // c4hero's serializer always uses positional, but the parser must handle both for compat.
+    const dsl = `
+workspace {
+  model {
+    user = person "User"
+    api = softwareSystem "API"
+    user -> api "Calls" {
+      description "Detailed description"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0]
+    expect(rel?.description).toBe('Detailed description')
+  })
+
+  it('technology keyword inside block is parsed', () => {
+    const dsl = `
+workspace {
+  model {
+    user = person "User"
+    api = softwareSystem "API"
+    user -> api {
+      technology "REST/HTTPS"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0]
+    expect(rel?.technology).toBe('REST/HTTPS')
+  })
+
+  it('description and technology both as block keywords', () => {
+    const dsl = `
+workspace {
+  model {
+    user = person "User"
+    api = softwareSystem "API"
+    user -> api {
+      description "Sends requests"
+      technology "gRPC"
+      interactionStyle Asynchronous
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0]
+    expect(rel?.description).toBe('Sends requests')
+    expect(rel?.technology).toBe('gRPC')
+    expect(rel?.interactionStyle).toBe('Asynchronous')
+  })
+})

@@ -1024,6 +1024,21 @@ class ContextAwareParser {
                     }
                     continue
                 }
+                // 'description' in relationship body (Structurizr keyword form)
+                // Prefer the block keyword over any inline positional description already read.
+                if (this.peekType() === 'KEYWORD' && this.peekValue().toLowerCase() === 'description') {
+                    this.advance()
+                    const val = this.readOptionalString()
+                    if (val !== undefined) rel.description = val
+                    continue
+                }
+                // 'technology' in relationship body (Structurizr keyword form)
+                if (this.peekType() === 'KEYWORD' && this.peekValue().toLowerCase() === 'technology') {
+                    this.advance()
+                    const val = this.readOptionalString()
+                    if (val !== undefined) rel.technology = val
+                    continue
+                }
                 // 'url' in relationship body
                 if (this.peekType() === 'KEYWORD' && this.peekValue().toLowerCase() === 'url') {
                     this.advance()
