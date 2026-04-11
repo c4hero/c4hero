@@ -598,3 +598,106 @@ describe('Navigation', () => {
     expect(useWorkspaceStore.getState().canRedo()).toBe(true)
   })
 })
+
+describe('toggleElementInView', () => {
+  let viewKey: string
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+    })
+    viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+  })
+
+  it('adds element to view when not already present', () => {
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(view?.elements.some(e => e.id === 'alice')).toBe(true)
+  })
+
+  it('removes element from view when already present', () => {
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(view?.elements.some(e => e.id === 'alice')).toBe(false)
+  })
+
+  it('supports undo after toggle', () => {
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice')
+    useWorkspaceStore.getState().undo()
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(view?.elements.some(e => e.id === 'alice')).toBe(false)
+  })
+})
+
+describe('renameView', () => {
+  let viewKey: string
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+    })
+    viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+  })
+
+  it('renames a view by key', () => {
+    useWorkspaceStore.getState().renameView(viewKey, 'Updated Title')
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(view?.title).toBe('Updated Title')
+  })
+
+  it('is a no-op for non-existent key', () => {
+    useWorkspaceStore.getState().renameView('nonexistent', 'Whatever')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.systemLandscapeViews.find(v => v.title === 'Whatever')).toBeUndefined()
+  })
+
+  it('supports undo', () => {
+    useWorkspaceStore.getState().renameView(viewKey, 'New Name')
+    useWorkspaceStore.getState().undo()
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
+    expect(view?.title).toBe('Landscape')
+  })
+})
+
+describe('updateWorkspaceMeta', () => {
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+    })
+  })
+
+  it('updates workspace name', () => {
+    useWorkspaceStore.getState().updateWorkspaceMeta({ name: 'Renamed' })
+    expect(useWorkspaceStore.getState().workspace?.name).toBe('Renamed')
+  })
+
+  it('updates workspace description', () => {
+    useWorkspaceStore.getState().updateWorkspaceMeta({ description: 'A great system.' })
+    expect(useWorkspaceStore.getState().workspace?.description).toBe('A great system.')
+  })
+
+  it('supports undo', () => {
+    useWorkspaceStore.getState().updateWorkspaceMeta({ name: 'Changed' })
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().workspace?.name).toBe('Test')
+  })
+})
