@@ -379,7 +379,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const person: Person = { id, type: 'person', name: uniqueElementName(name, ws), tags: ['Person'], properties: {}, location: location ?? 'Internal' }
       ws.model.people.push(person)
       addToCurrentView(ws, s.activeViewKey, id, position)
-      return { ...pushUndo(s), workspace: ws, focusElementId: id }
+      return { ...pushUndo(s), workspace: ws, focusElementId: id, selectedElementIds: [id], selectedRelationshipId: null, selectedGroupId: null }
     })
     announce('Person created')
     return id
@@ -393,7 +393,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const system: SoftwareSystem = { id, type: 'softwareSystem', name: uniqueElementName(name, ws), tags: ['Software System'], properties: {}, containers: [], location: location ?? 'Internal' }
       ws.model.softwareSystems.push(system)
       addToCurrentView(ws, s.activeViewKey, id, position)
-      return { ...pushUndo(s), workspace: ws, focusElementId: id }
+      return { ...pushUndo(s), workspace: ws, focusElementId: id, selectedElementIds: [id], selectedRelationshipId: null, selectedGroupId: null }
     })
     get().revalidateScope()
     announce('System created')

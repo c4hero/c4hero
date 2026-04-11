@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, LineStyle, Location, Group } from '@/types/model'
 import { X, MoreHorizontal, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, Layers, Trash2 } from 'lucide-react'
@@ -358,7 +358,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
   const workspace = useWorkspaceStore((s) => s.workspace)
   const updateRelationship = useWorkspaceStore((s) => s.updateRelationship)
 
-  const elementMap = workspace ? buildElementMap(workspace) : new Map()
+  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
   const source = elementMap.get(relationship.sourceId)
   const dest = elementMap.get(relationship.destinationId)
 
@@ -435,9 +435,9 @@ function ElementRelationsTab({ elementId }: { elementId: string }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
 
-  if (!workspace) return null
+  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
 
-  const elementMap = buildElementMap(workspace)
+  if (!workspace) return null
   const rels = workspace.model.relationships.filter(
     (r) => r.sourceId === elementId || r.destinationId === elementId,
   )
@@ -578,9 +578,9 @@ function GroupProperties({ group, onClose }: { group: Group; onClose: () => void
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const [addSearch, setAddSearch] = useState('')
 
-  if (!workspace) return null
+  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
 
-  const elementMap = buildElementMap(workspace)
+  if (!workspace) return null
 
   // Elements currently in the group
   const members = group.elementIds

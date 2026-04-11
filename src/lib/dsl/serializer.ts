@@ -335,7 +335,18 @@ class SerializerContext {
         if (rel.description) parts.push(`"${this.escapeString(rel.description)}"`)
         if (rel.technology) parts.push(`"${this.escapeString(rel.technology)}"`)
 
-        this.emit(parts.join(' '))
+        // Emit a block only when interactionStyle is explicitly set. Synchronous is the
+        // Structurizr default so we only need to persist Asynchronous, but we persist
+        // any explicit value to preserve user intent.
+        if (rel.interactionStyle) {
+            this.emit(`${parts.join(' ')} {`)
+            this.depth++
+            this.emit(`interactionStyle ${rel.interactionStyle}`)
+            this.depth--
+            this.emit('}')
+        } else {
+            this.emit(parts.join(' '))
+        }
     }
 
     // ─── Views ──────────────────────────────────────────────────────

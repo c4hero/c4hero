@@ -8,14 +8,34 @@ interface Props {
 }
 
 export default function ConfirmDeleteDialog({ message, onConfirm, onCancel }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     confirmRef.current?.focus()
+
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onCancel()
-      if (e.key === 'Enter') onConfirm()
+      if (e.key === 'Escape') { onCancel(); return }
+      if (e.key === 'Enter') { onConfirm(); return }
+
+      // Focus trap: keep Tab inside the dialog
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter(el => !el.hasAttribute('disabled'))
+        if (focusable.length === 0) { e.preventDefault(); return }
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+        }
+      }
     }
+
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onConfirm, onCancel])
@@ -29,8 +49,10 @@ export default function ConfirmDeleteDialog({ message, onConfirm, onCancel }: Pr
       />
       {/* Dialog */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="confirm-delete-title"
         className="glass-panel-solid"
         style={{
           position: 'fixed',
@@ -56,7 +78,7 @@ export default function ConfirmDeleteDialog({ message, onConfirm, onCancel }: Pr
             <Trash2 size={15} style={{ color: 'var(--color-error)' }} />
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', marginBottom: 4 }}>
+            <div id="confirm-delete-title" style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', marginBottom: 4 }}>
               Confirm delete
             </div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>

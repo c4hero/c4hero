@@ -10,6 +10,7 @@ import type {
     Container,
     Component,
     Relationship,
+    InteractionStyle,
     View,
     ViewType,
     AutoLayout,
@@ -909,6 +910,19 @@ class ContextAwareParser {
                     this.advance()
                     this.skipNewlines()
                     this.skipBraceBlock()
+                    continue
+                }
+                // 'interactionStyle' is not a reserved keyword so it arrives as IDENTIFIER
+                if ((this.peekType() === 'IDENTIFIER' || this.peekType() === 'KEYWORD') &&
+                    this.peekValue().toLowerCase() === 'interactionstyle') {
+                    this.advance()
+                    const valTok = this.peek()
+                    if (valTok.type === 'IDENTIFIER' || valTok.type === 'KEYWORD') {
+                        const raw = this.advance().value
+                        if (raw === 'Synchronous' || raw === 'Asynchronous') {
+                            rel.interactionStyle = raw as InteractionStyle
+                        }
+                    }
                     continue
                 }
                 this.advance()
