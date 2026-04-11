@@ -53,6 +53,11 @@ export default function MultiSelectBar() {
   const left = Math.max(8, Math.min(pos.x - BAR_W / 2, vpW - BAR_W - 8))
   const top = Math.max(64, pos.y - BAR_H - OFFSET_Y)
 
+  // Align flyout: if the bar is near the top of the viewport, open the
+  // flyout downward so it doesn't get clipped above.
+  const ALIGN_FLYOUT_H = 220
+  const alignOpenDownward = top < ALIGN_FLYOUT_H + 16
+
   function handleAlign(mode: 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom') {
     const rfNodes = reactFlow.getNodes().filter(n => selectedElementIds.includes(n.id))
     if (rfNodes.length < 2) return
@@ -91,7 +96,7 @@ export default function MultiSelectBar() {
   const btnStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     height: '100%', padding: '0 10px',
-    background: 'transparent', border: 'none', cursor: 'pointer',
+    border: 'none', cursor: 'pointer',
     color: 'var(--color-text-secondary)',
     fontSize: 'var(--text-sm)', gap: 5,
     transition: 'color 0.12s, background 0.12s',
@@ -135,7 +140,17 @@ export default function MultiSelectBar() {
           {alignOpen && (
             <>
               <div style={{ position: 'fixed', inset: 0, zIndex: 53 }} onClick={() => setAlignOpen(false)} />
-              <div className="glass-flyout" style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', zIndex: 54, marginBottom: 6, padding: 4, minWidth: 170 }}>
+              <div className="glass-flyout" style={{
+                position: 'absolute',
+                ...(alignOpenDownward
+                  ? { top: '100%', marginTop: 6 }
+                  : { bottom: '100%', marginBottom: 6 }),
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 54,
+                padding: 4,
+                minWidth: 170,
+              }}>
                 <div style={{ padding: '4px 10px 6px', fontSize: 'var(--text-xxs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text-muted)' }}>
                   Align {count} elements
                 </div>

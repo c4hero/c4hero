@@ -303,13 +303,12 @@ describe('activeWorkspaceFilename', () => {
     expect(useWorkspaceStore.getState().activeWorkspaceFilename).toBeNull()
   })
 
-  it('closeWorkspace does not reset activeWorkspaceFilename (it persists across close)', () => {
-    // Per the store implementation, closeWorkspace does NOT reset activeWorkspaceFilename
+  it('closeWorkspace clears activeWorkspaceFilename', () => {
+    // Must clear alongside workspace — otherwise useAutoSave's pending timer
+    // can recreate a deleted file using the stale filename.
     useWorkspaceStore.getState().setActiveWorkspaceFilename('foo.dsl')
     useWorkspaceStore.getState().closeWorkspace()
-    // closeWorkspace sets workspace=null but doesn't touch activeWorkspaceFilename
-    // This is the actual behavior — test documents it
-    expect(useWorkspaceStore.getState().activeWorkspaceFilename).toBe('foo.dsl')
+    expect(useWorkspaceStore.getState().activeWorkspaceFilename).toBeNull()
   })
 })
 

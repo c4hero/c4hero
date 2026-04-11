@@ -72,6 +72,7 @@ interface WorkspaceState extends UndoState {
   // Workspace lifecycle
   loadWorkspace: (workspace: Workspace) => void
   closeWorkspace: () => void
+  updateWorkspaceMeta: (patch: { name?: string; description?: string }) => void
 
   // Navigation
   setActiveView: (key: string) => void
@@ -311,6 +312,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   closeWorkspace: () =>
     set({
       workspace: null,
+      activeWorkspaceFilename: null,
       activeViewKey: null,
       viewHistory: [],
       selectedElementIds: [],
@@ -320,6 +322,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       redoStack: [],
     }),
 
+  updateWorkspaceMeta: (patch) => set((s) => {
+    const ws = cloneWs(s)
+    if (!ws) return s
+    if (patch.name !== undefined) ws.name = patch.name
+    if (patch.description !== undefined) ws.description = patch.description
+    return { ...pushUndo(s), workspace: ws }
+  }),
+
   // ─── Navigation ─────────────────────────────────────────────────
 
   setActiveView: (key) => set({ activeViewKey: key, selectedElementIds: [], selectedRelationshipId: null }),
@@ -328,6 +338,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!s.workspace || !s.activeViewKey) return s
     const childView = findChildView(s.workspace, elementId)
     if (!childView) return s
+    // No-op if the "child" view is the one we're already on. This happens when
+    // drilling on a system inside its own systemContext view and no container
+    // view exists — findChildView falls back to the same systemContext view.
+    if (childView.key === s.activeViewKey) return s
     return {
       activeViewKey: childView.key,
       viewHistory: [...s.viewHistory, s.activeViewKey],
@@ -870,13 +884,19 @@ export function getRelationshipById(
   return workspace.model.relationships.find(r => r.id === id)
 }
 
-function findChildView(workspace: Workspace, elementId: string): View | undefined {
+function findChildView(workspace: Workspace, elementId: string, currentViewKey?: string | null): View | undefined {
   const element = findElement(workspace, elementId)
   if (!element) return undefined
 
   if (element.type === 'softwareSystem') {
-    return workspace.views.containerViews.find(v => v.softwareSystemId === elementId)
-      ?? workspace.views.systemContextViews.find(v => v.softwareSystemId === elementId)
+    // Prefer a container view; only fall back to a systemContext view if it's
+    // not the one the user is already on (otherwise drilling is a no-op and
+    // creates duplicate keys in the breadcrumb).
+    const container = workspace.views.containerViews.find(v => v.softwareSystemId === elementId)
+    if (container) return container
+    const context = workspace.views.systemContextViews.find(v => v.softwareSystemId === elementId)
+    if (context && context.key !== currentViewKey) return context
+    return undefined
   }
   if (element.type === 'container') {
     return workspace.views.componentViews.find(v => v.containerId === elementId)

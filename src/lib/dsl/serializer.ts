@@ -207,26 +207,38 @@ class SerializerContext {
     private serializePerson(person: Person): void {
         const varName = this.idToVar.get(person.id)
         const extraTags = this.getExtraTags(person.tags, ['Element', 'Person'])
+        const isExternal = person.location === 'External'
 
         const parts: string[] = []
         parts.push('person')
         parts.push(`"${this.escapeString(person.name)}"`)
-        if (person.description) parts.push(`"${this.escapeString(person.description)}"`)
+        if (person.description || extraTags || isExternal) {
+            parts.push(`"${this.escapeString(person.description ?? '')}"`)
+        }
         if (extraTags) parts.push(`"${extraTags}"`)
 
-        const line = parts.join(' ')
+        const prefix = varName ? `${varName} = ` : ''
 
-        if (varName) {
-            this.emit(`${varName} = ${line}`)
+        if (isExternal) {
+            this.emit(`${prefix}${parts.join(' ')} {`)
+            this.depth++
+            this.emit('properties {')
+            this.depth++
+            this.emit(`"c4hero.location" "External"`)
+            this.depth--
+            this.emit('}')
+            this.depth--
+            this.emit('}')
         } else {
-            this.emit(line)
+            this.emit(`${prefix}${parts.join(' ')}`)
         }
     }
 
     private serializeSoftwareSystem(sys: SoftwareSystem): void {
         const varName = this.idToVar.get(sys.id)
         const extraTags = this.getExtraTags(sys.tags, ['Element', 'Software System'])
-        const hasBody = sys.containers.length > 0
+        const isExternal = sys.location === 'External'
+        const hasBody = sys.containers.length > 0 || isExternal
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -241,6 +253,14 @@ class SerializerContext {
         if (hasBody) {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
+
+            if (isExternal) {
+                this.emit('properties {')
+                this.depth++
+                this.emit(`"c4hero.location" "External"`)
+                this.depth--
+                this.emit('}')
+            }
 
             for (let i = 0; i < sys.containers.length; i++) {
                 if (i > 0) this.emitBlank()

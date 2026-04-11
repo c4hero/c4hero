@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { useWorkspaceStore, getAllViews, getBreadcrumb } from '@/store/workspace'
+import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import type { View } from '@/types/model'
 import {
   ChevronDown,
-  ChevronRight,
   Plus,
   Pencil,
   Trash2,
@@ -37,15 +36,10 @@ export { VIEW_TYPE_LABELS, LEVEL_BADGE }
 export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: ViewSwitcherProps) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const viewHistory = useWorkspaceStore((s) => s.viewHistory)
-  const navigateBack = useWorkspaceStore((s) => s.navigateBack)
 
   if (!workspace) return null
 
   const views = getAllViews(workspace)
-  const breadcrumb = activeViewKey
-    ? getBreadcrumb(workspace, viewHistory, activeViewKey)
-    : []
   const activeView = views.find((v) => v.key === activeViewKey)
 
   return (
@@ -58,6 +52,7 @@ export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: View
           aria-haspopup="true"
           aria-label="Switch view"
           className="hover-subtle"
+          data-active={open ? 'true' : undefined}
           style={{
             padding: '0 12px',
             height: 44,
@@ -69,40 +64,13 @@ export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: View
             fontSize: 'var(--text-base)',
             fontWeight: 700,
             color: 'var(--color-text-primary)',
-            background: 'transparent',
+            border: 'none',
             cursor: 'pointer',
             transition: 'background 0.12s',
             minWidth: 0,
             overflow: 'hidden',
           }}
         >
-          {breadcrumb.length > 1 && (
-            <>
-              {breadcrumb.slice(0, -1).map((crumb, i) => (
-                <span key={crumb.key} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                  {i > 0 && <ChevronRight size={10} style={{ color: 'var(--color-text-muted)' }} />}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      const steps = breadcrumb.length - 1 - i
-                      for (let s = 0; s < steps; s++) navigateBack()
-                      onClose()
-                    }}
-                    style={{
-                      fontSize: 'var(--text-sm)',
-                      color: 'var(--color-text-muted)',
-                      background: 'transparent',
-                      cursor: 'pointer',
-                      border: 'none',
-                    }}
-                  >
-                    {crumb.label}
-                  </button>
-                </span>
-              ))}
-              <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-            </>
-          )}
           <span
             style={{
               overflow: 'hidden',

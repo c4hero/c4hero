@@ -2,23 +2,34 @@ import { useEffect, useRef, useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, getCurrentFileHandle } from '@/lib/fileIO'
+import { getCurrentDirHandle } from '@/lib/folderIO'
 import { announce } from '@/lib/announce'
 import { TriangleAlert } from 'lucide-react'
 
+/** The workspace is linked to a file if EITHER:
+ *  - A single-file handle is open (file-picker mode), OR
+ *  - A folder handle is open AND an active filename is set (collection mode). */
+function isWorkspaceLinked(activeFilename: string | null): boolean {
+  if (getCurrentFileHandle() !== null) return true
+  if (getCurrentDirHandle() !== null && activeFilename) return true
+  return false
+}
+
 export default function SaveIndicator() {
   const workspace = useWorkspaceStore((s) => s.workspace)
+  const activeFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
   const isDirty = useWorkspaceStore((s) => s.undoStack.length > 0)
   const lastSavedUndoLength = useWorkspaceStore((s) => s.lastSavedUndoLength)
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [hasFileHandle, setHasFileHandle] = useState(() => getCurrentFileHandle() !== null)
+  const [hasFileHandle, setHasFileHandle] = useState(() => isWorkspaceLinked(activeFilename))
   const savedUndoLengthRef = useRef(0)
   const savedFlashTimer = useRef<ReturnType<typeof setTimeout>>(null)
 
-  // Sync hasFileHandle whenever it may change
+  // Sync hasFileHandle whenever state changes that affects the link
   useEffect(() => {
-    setHasFileHandle(getCurrentFileHandle() !== null)
-  }, [saveStatus])
+    setHasFileHandle(isWorkspaceLinked(activeFilename))
+  }, [saveStatus, activeFilename])
 
   async function handleSave() {
     if (!workspace) return
@@ -70,6 +81,7 @@ export default function SaveIndicator() {
   return (
     <button
       onClick={handleSave}
+      className="hover-subtle"
       style={{
         width: showWarningIcon ? 40 : 36,
         height: '100%',
@@ -77,7 +89,6 @@ export default function SaveIndicator() {
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'pointer',
-        background: 'transparent',
         border: 'none',
         borderRight: '1px solid var(--color-border)',
         flexShrink: 0,

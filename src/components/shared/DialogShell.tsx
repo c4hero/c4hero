@@ -37,7 +37,12 @@ export default function DialogShell({ onClose, ariaLabel, children, className, s
         aria-modal="true"
         aria-label={ariaLabel}
         className={className}
-        style={style}
+        // position: relative + z-index ensures the panel stacks above the
+        // absolutely-positioned backdrop sibling. stopPropagation is a
+        // defensive guard so clicks inside the panel never bubble to a
+        // potential handler on the outer container.
+        style={{ position: 'relative', zIndex: 1, ...style }}
+        onClick={(e) => e.stopPropagation()}
       >
         {children}
       </div>

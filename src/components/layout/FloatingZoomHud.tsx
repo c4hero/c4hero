@@ -65,7 +65,6 @@ function ZoomHudBtn({
         alignItems: 'center',
         justifyContent: 'center',
         color: 'var(--color-text-muted)',
-        background: 'transparent',
         cursor: 'pointer',
         transition: 'background 0.12s, color 0.12s',
         border: 'none',

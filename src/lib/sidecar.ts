@@ -18,6 +18,8 @@ interface SidecarRelationship {
 
 interface SidecarViewElement {
   pinned?: boolean
+  x?: number
+  y?: number
 }
 
 interface SidecarView {
@@ -67,7 +69,10 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
     const viewElements: Record<string, SidecarViewElement> = {}
     for (const el of view.elements) {
       if (el.pinned) {
-        viewElements[el.id] = { pinned: true }
+        const entry: SidecarViewElement = { pinned: true }
+        if (el.x !== undefined) entry.x = el.x
+        if (el.y !== undefined) entry.y = el.y
+        viewElements[el.id] = entry
         hasData = true
       }
     }
@@ -134,7 +139,11 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       if (!viewData?.elements) continue
       for (const el of view.elements) {
         const elData = viewData.elements[el.id]
-        if (elData?.pinned) el.pinned = true
+        if (elData?.pinned) {
+          el.pinned = true
+          if (elData.x !== undefined) el.x = elData.x
+          if (elData.y !== undefined) el.y = elData.y
+        }
       }
     }
   }

@@ -59,18 +59,22 @@ function Hint({ id, children, onDismiss }: { id: string; children: React.ReactNo
 
   return (
     <div
-      className="glass-panel absolute bottom-16 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 px-4 py-2.5 text-xs"
+      className="absolute bottom-20 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 px-2 py-1 text-[11px] pointer-events-auto"
       style={{
-        color: 'var(--color-text-secondary)',
-        animation: 'fadeIn 300ms ease',
+        color: 'var(--color-text-muted)',
+        opacity: 0.55,
+        background: 'transparent',
+        animation: 'fadeIn 400ms ease',
       }}
     >
       {children}
       <button
         onClick={() => onDismiss(id)}
-        className="ml-1 opacity-50 transition-opacity hover:opacity-100"
+        className="opacity-40 transition-opacity hover:opacity-80"
+        aria-label="Dismiss hint"
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit' }}
       >
-        <X size={12} />
+        <X size={10} />
       </button>
     </div>
   )

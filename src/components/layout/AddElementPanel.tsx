@@ -131,22 +131,20 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string; color: string; dashed?: boolean; disabled?: boolean; disabledTitle?: string; onClick: () => void }[]
 
   return (
-    <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={onClose} />
-      <div
-        className="glass-flyout"
-        style={{
-          position: 'absolute',
-          left: 56,
-          top: 0,
-          zIndex: 50,
-          width: 280,
-          maxHeight: 420,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+    <div
+      className="glass-flyout"
+      style={{
+        position: 'absolute',
+        left: 56,
+        top: 0,
+        zIndex: 50,
+        width: 280,
+        maxHeight: 420,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
         {/* Create new section */}
         <div style={{ padding: '10px 12px 8px' }}>
           <div
@@ -288,8 +286,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
             ))
           )}
         </div>
-      </div>
-    </>
+    </div>
   )
 }
 

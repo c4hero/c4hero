@@ -61,7 +61,19 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.viewHistory.length > 0) { store.navigateBack() }
   },
   'Backspace': (store) => {
-    if (store.selectedElementIds.length === 0 && store.viewHistory.length > 0) {
+    if (store.selectedRelationshipId) {
+      store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
+      return
+    }
+    if (store.selectedElementIds.length > 0) {
+      const count = store.selectedElementIds.length
+      store.confirmDelete(
+        count === 1 ? 'Delete this element?' : `Delete ${count} elements?`,
+        () => store.deleteElements(store.selectedElementIds)
+      )
+      return
+    }
+    if (store.viewHistory.length > 0) {
       store.navigateBack()
     }
   },
@@ -136,7 +148,6 @@ export function useKeyboardShortcuts() {
       const store = useWorkspaceStore.getState()
       const target = e.target as HTMLElement
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable
-      const mod = e.metaKey || e.ctrlKey
 
       // Meta shortcuts (work even in inputs)
       const metaCombo = getKeyCombo(e)
@@ -148,21 +159,6 @@ export function useKeyboardShortcuts() {
 
       // Don't handle remaining shortcuts when typing in inputs
       if (isInput) return
-
-      // Backspace with selection → delete (special case: also matches 'Backspace' nav)
-      if (e.key === 'Backspace' && !mod && store.selectedElementIds.length > 0) {
-        e.preventDefault()
-        if (store.selectedRelationshipId) {
-          store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
-          return
-        }
-        const count = store.selectedElementIds.length
-        store.confirmDelete(
-          count === 1 ? 'Delete this element?' : `Delete ${count} elements?`,
-          () => store.deleteElements(store.selectedElementIds)
-        )
-        return
-      }
 
       // Global shortcuts
       const combo = getKeyCombo(e)

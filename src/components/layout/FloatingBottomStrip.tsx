@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useWorkspaceStore, getActiveView, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
 import type { ElementStatus, ElementStyle } from '@/types/model'
 import { Tag, Activity, X, Palette, Pencil, Plus, Check, AlertTriangle } from 'lucide-react'
@@ -143,7 +144,7 @@ export default function FloatingBottomStrip() {
                     fontSize: 'var(--text-xs)',
                     fontWeight: 600,
                     color: isActive ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
-                    background: isActive ? (tagStyle?.background ?? 'var(--color-accent)') : 'transparent',
+                    ...(isActive ? { background: tagStyle?.background ?? 'var(--color-accent)' } : {}),
                     cursor: 'pointer',
                     transition: 'background 0.12s, color 0.12s',
                     border: 'none',
@@ -165,7 +166,7 @@ export default function FloatingBottomStrip() {
               style={{
                 width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 'var(--radius-sm)',
-                background: tagManagerOpen ? 'rgba(88,166,255,0.12)' : 'transparent',
+                ...(tagManagerOpen ? { background: 'rgba(88,166,255,0.12)' } : {}),
                 color: tagManagerOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: 'pointer', border: 'none', transition: 'background 0.1s, color 0.1s',
               }}
@@ -192,12 +193,16 @@ export default function FloatingBottomStrip() {
                     display: 'flex', alignItems: 'center', gap: 6,
                     fontSize: 'var(--text-xs)', fontWeight: 600,
                     color: isActive ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
-                    background: isActive ? opt.color : 'transparent',
+                    ...(isActive ? { background: opt.color } : {}),
                     cursor: 'pointer', transition: 'background 0.12s, color 0.12s', border: 'none',
                     opacity: viewStatuses.includes(opt.value) || isActive ? 1 : 0.4,
                   }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: isActive ? 'var(--glass-bg)' : opt.color,
+                    flexShrink: 0,
+                  }} />
                   {opt.label}
                 </button>
               )
@@ -480,7 +485,7 @@ function ModeTab({ icon, label, active, onClick, isFirst }: {
         height: '100%', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 5,
         fontSize: 'var(--text-xs)', fontWeight: 600,
         color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-        background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
+        ...(active ? { background: 'rgba(255,255,255,0.06)' } : {}),
         borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
         cursor: 'pointer', border: 'none', transition: 'color 0.12s, background 0.12s',
         borderRadius: isFirst ? 'var(--radius-lg) 0 0 var(--radius-lg)' : 0,
@@ -615,6 +620,24 @@ function ColorPicker({ value, onChange, presets }: {
   value: string; onChange: (value: string) => void; presets: string[]
 }) {
   const [showPresets, setShowPresets] = useState(false)
+  const swatchRef = useRef<HTMLButtonElement>(null)
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null)
+
+  // Popup dimensions: 6 items per row × 22px + gaps + padding
+  const POPUP_W = 158
+  const POPUP_H = 64
+
+  useEffect(() => {
+    if (!showPresets || !swatchRef.current) return
+    const rect = swatchRef.current.getBoundingClientRect()
+    // Prefer above the swatch; if not enough room, flip below
+    const roomAbove = rect.top
+    const preferAbove = roomAbove >= POPUP_H + 8
+    const top = preferAbove ? rect.top - POPUP_H - 4 : rect.bottom + 4
+    // Align left edge to swatch, but keep within viewport
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - POPUP_W - 8))
+    setPopupPos({ top, left })
+  }, [showPresets])
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, position: 'relative' }}>
@@ -626,13 +649,27 @@ function ColorPicker({ value, onChange, presets }: {
         style={{ flex: 1, height: 26, padding: '0 8px', paddingLeft: 26, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
       />
       <button
+        ref={swatchRef}
         onClick={() => setShowPresets((o) => !o)}
         style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, borderRadius: 3, border: '1px solid var(--color-border)', background: value || 'transparent', cursor: 'pointer', padding: 0 }}
       />
-      {showPresets && (
+      {showPresets && popupPos && createPortal(
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 201 }} onClick={() => setShowPresets(false)} />
-          <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 202, marginBottom: 4, padding: 6, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface-1)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setShowPresets(false)} />
+          <div style={{
+            position: 'fixed',
+            top: popupPos.top,
+            left: popupPos.left,
+            zIndex: 9999,
+            padding: 6,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface-1)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, 22px)',
+            gap: 4,
+          }}>
             {presets.map((c) => (
               <button key={c} onClick={() => { onChange(c); setShowPresets(false) }}
                 style={{ width: 22, height: 22, borderRadius: 'var(--radius-sm)', border: value === c ? '2px solid var(--color-accent)' : '1px solid var(--color-border)', background: c, cursor: 'pointer', padding: 0 }}
@@ -643,7 +680,8 @@ function ColorPicker({ value, onChange, presets }: {
               <X size={10} />
             </button>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )

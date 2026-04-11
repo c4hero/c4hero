@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
-import { getCurrentDirHandle } from '@/lib/folderIO'
+import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile } from '@/lib/folderIO'
+import { parseDSL } from '@/lib/dsl'
+import { parseSidecar, applySidecar } from '@/lib/sidecar'
 
 /**
  * URL pattern:
@@ -86,8 +88,10 @@ export function useRouteSync() {
 }
 
 /**
- * On hard refresh at a canvas URL, the workspace won't be in memory yet.
- * Redirect back to collection or startup after a brief wait.
+ * On hard refresh at a canvas URL, the workspace isn't in memory.
+ * Try to restore it from disk: reopen the persisted folder handle by slug,
+ * read the workspace's .dsl file (+ sidecar), parse, load, and restore the
+ * active view. Only if that fails do we redirect to collection/startup.
  */
 export function useRefreshRedirect() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -95,16 +99,72 @@ export function useRefreshRedirect() {
   const location = useLocation()
 
   useEffect(() => {
-    const isCanvasPath = location.pathname.match(/^\/collection\/[^/]+\/[^/]+/)
-    if (isCanvasPath && !workspace) {
-      const timer = setTimeout(() => {
-        if (!useWorkspaceStore.getState().workspace) {
-          const slug = getCurrentDirHandle()?.name
-          navigate(slug ? `/collection/${slug}` : '/', { replace: true })
+    const match = location.pathname.match(/^\/collection\/([^/]+)\/([^/]+)(?:\/(.+))?$/)
+    if (!match) return
+    if (workspace) return
+
+    const collectionSlug = decodeURIComponent(match[1])
+    const workspaceSlug = decodeURIComponent(match[2])
+    const urlViewKey = match[3] ? decodeURIComponent(match[3]) : null
+    const filename = `${workspaceSlug}.dsl`
+
+    let cancelled = false
+
+    ;(async () => {
+      // 1. Restore the folder handle (persisted in IndexedDB)
+      const existing = getCurrentDirHandle()
+      let handle = existing && existing.name === collectionSlug ? existing : null
+      if (!handle) {
+        handle = await restoreDirHandleByName(collectionSlug)
+      }
+      if (cancelled) return
+
+      if (!handle) {
+        // Folder not found or permission denied — fall back to startup
+        navigate('/', { replace: true })
+        return
+      }
+
+      // 2. Read the workspace DSL file (+ sidecar)
+      const file = await readDSLFile(filename)
+      if (cancelled) return
+
+      if (!file) {
+        // File is gone — fall back to collection home
+        navigate(`/collection/${collectionSlug}`, { replace: true })
+        return
+      }
+
+      // 3. Parse, apply sidecar, load into store
+      const { workspace: parsed, errors } = parseDSL(file.content)
+      if (errors.length > 0) console.warn('DSL parse warnings:', errors)
+      if (!parsed) {
+        navigate(`/collection/${collectionSlug}`, { replace: true })
+        return
+      }
+      if (!parsed.name) parsed.name = workspaceSlug
+      if (file.sidecarJson) {
+        const sidecar = parseSidecar(file.sidecarJson)
+        if (sidecar) applySidecar(parsed, sidecar)
+      }
+
+      useWorkspaceStore.getState().loadWorkspace(parsed)
+      useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+
+      // 4. Restore the active view from the URL (loadWorkspace picks the first
+      //    view; override it if the URL specifies one that actually exists).
+      if (urlViewKey) {
+        const allViews = allViewsOf(parsed)
+        if (allViews.some(v => v.key === urlViewKey)) {
+          useWorkspaceStore.getState().setActiveView(urlViewKey)
         }
-      }, 300)
-      return () => clearTimeout(timer)
-    }
+      }
+    })().catch((err) => {
+      console.error('Refresh recovery failed:', err)
+      if (!cancelled) navigate('/', { replace: true })
+    })
+
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 }

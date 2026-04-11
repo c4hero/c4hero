@@ -150,7 +150,10 @@ function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
   const [showEdit, setShowEdit] = useState(false)
   const label = ws.name.replace(/\.dsl$/, '')
   const accent = (ws.scope && SCOPE_COLORS[ws.scope]) ?? '#64748b'
-  const scopeLabel = ws.scope === 'landscape' ? 'Landscape' : ws.scope === 'softwaresystem' ? 'System' : 'Unscoped'
+  const scopeLabel =
+    ws.scope === 'landscape' ? 'Landscape'
+    : ws.scope === 'softwaresystem' ? 'System Context'
+    : 'Unscoped'
 
   return (
     <>
@@ -176,6 +179,32 @@ function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
           position: 'relative', overflow: 'hidden',
         }}>
           <MiniDiagram elements={ws.elements} accent={accent} />
+          {/* Scope badge - top left */}
+          <div
+            title={`Scope: ${scopeLabel}`}
+            style={{
+              position: 'absolute', top: 6, left: 6,
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '3px 7px',
+              borderRadius: 999,
+              border: `1px solid ${ws.scope ? `color-mix(in srgb, ${accent} 45%, transparent)` : 'var(--color-border)'}`,
+              background: ws.scope ? `color-mix(in srgb, ${accent} 15%, rgba(0,0,0,0.55))` : 'rgba(0,0,0,0.55)',
+              color: ws.scope ? accent : 'var(--color-text-muted)',
+              fontSize: 9,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: accent,
+              flexShrink: 0,
+              opacity: ws.scope ? 1 : 0.4,
+            }} />
+            {scopeLabel}
+          </div>
           {/* Edit button - top right */}
           <button
             onClick={(e) => { e.stopPropagation(); setShowEdit(true) }}
@@ -199,9 +228,10 @@ function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
             {label}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--color-text-muted)' }}>
-            <span style={{ color: accent, fontWeight: 600 }}>{scopeLabel}</span>
-            {(ws.elementCount ?? 0) > 0 && <span>· {ws.elementCount} el</span>}
-            {(ws.viewCount ?? 0) > 0 && <span>· {ws.viewCount}v</span>}
+            {(ws.elementCount ?? 0) > 0 && <span>{ws.elementCount} el</span>}
+            {(ws.elementCount ?? 0) > 0 && (ws.viewCount ?? 0) > 0 && <span>·</span>}
+            {(ws.viewCount ?? 0) > 0 && <span>{ws.viewCount} view{ws.viewCount === 1 ? '' : 's'}</span>}
+            {(ws.elementCount ?? 0) === 0 && (ws.viewCount ?? 0) === 0 && <span>Empty</span>}
           </div>
         </div>
       </div>
@@ -641,13 +671,41 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     useWorkspaceStore.getState().confirmDelete(
       `Delete "${filename}"? This cannot be undone.`,
       async () => {
-        const dir = getCurrentDirHandle()
-        if (dir) {
-          await dir.removeEntry(filename).catch(() => {})
-          const sc = sidecarName(filename)
-          await dir.removeEntry(sc).catch(() => {})
+        console.log('[delete] start', filename)
+        // If the workspace being deleted is currently loaded, close it first.
+        // This cancels any pending auto-save timer that would otherwise
+        // recreate the file after we delete it.
+        const store = useWorkspaceStore.getState()
+        console.log('[delete] active filename:', store.activeWorkspaceFilename)
+        if (store.activeWorkspaceFilename === filename) {
+          console.log('[delete] closing active workspace')
+          store.closeWorkspace()
         }
-        setFolderWorkspaces((prev) => prev.filter((f) => f.name !== filename))
+
+        const dir = getCurrentDirHandle()
+        console.log('[delete] dir handle:', dir?.name)
+        if (dir) {
+          try {
+            await dir.removeEntry(filename)
+            console.log('[delete] removeEntry succeeded for', filename)
+          } catch (err) {
+            console.error('[delete] removeEntry FAILED for', filename, err)
+            setErrorMsg(`Failed to delete "${filename}". ${(err as Error).message ?? ''}`)
+            listCurrentDSLFiles().then(setFolderWorkspaces)
+            return
+          }
+          // Sidecar may or may not exist — ignore NotFoundError
+          const sc = sidecarName(filename)
+          await dir.removeEntry(sc).catch((err) => console.log('[delete] sidecar removeEntry skipped:', err?.name ?? err))
+        } else {
+          console.warn('[delete] no dir handle available')
+        }
+
+        // Re-list from disk rather than optimistically filtering, so any
+        // files that failed to delete reappear in the UI.
+        const fresh = await listCurrentDSLFiles()
+        console.log('[delete] re-listed files:', fresh.map(f => f.name))
+        setFolderWorkspaces(fresh)
       }
     )
   }
@@ -691,11 +749,11 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     setShowScopePicker(true)
   }
 
-  async function handleBlankWorkspaceFromPicker(scope: WorkspaceScope, name: string, openAfter: boolean = true) {
+  async function handleBlankWorkspaceFromPicker(scope: WorkspaceScope, name: string, openAfter: boolean = true, description: string = '') {
     setShowScopePicker(false)
-    const ws = createBlankWorkspace()
+    const ws = createBlankWorkspace(scope)
     ws.name = name.trim() || 'workspace'
-    ws.scope = scope
+    if (description.trim()) ws.description = description.trim()
     const filename = `${slugifyName(ws.name) || 'workspace'}.dsl`
     const dir = getCurrentDirHandle()
     if (dir) {

@@ -19,19 +19,23 @@ export class WorkspaceHelper {
 
   async loadSample() {
     await this.goto()
-    await this.page.getByText('Explore sample').click()
-    // Wait for canvas to be ready
+    // Directly load the Big Bank sample via test helper exposed in dev mode
+    await this.page.evaluate(() => (window as Record<string, unknown>).__testLoadSample?.())
     await this.page.locator('.react-flow').waitFor({ state: 'visible' })
   }
 
   async loadBlank() {
     await this.goto()
-    await this.page.getByText('Blank workspace').click()
+    // Directly load a blank workspace via test helper exposed in dev mode
+    await this.page.evaluate(() => (window as Record<string, unknown>).__testLoadBlank?.())
     await this.page.locator('.react-flow').waitFor({ state: 'visible' })
   }
 
   async getNodeByName(name: string) {
-    return this.page.locator('.react-flow__node').filter({ hasText: name })
+    // Use exact text matching so 'New System' does not match 'New System 2'
+    return this.page.locator('.react-flow__node').filter({
+      has: this.page.getByText(name, { exact: true }),
+    })
   }
 
   async getEdgeCount() {
@@ -66,9 +70,64 @@ export class WorkspaceHelper {
     await expect(this.page.locator('.glass-panel-solid').last().getByText(name).first()).toBeVisible()
   }
 
+  /** Zoom to fit — ensures all nodes are visible before interaction */
+  async fitView() {
+    await this.page.getByRole('button', { name: 'Zoom to fit' }).click()
+    await this.page.waitForTimeout(400)
+  }
+
   /** Open search dialog */
   async openSearch() {
     await this.page.keyboard.press('Control+k')
     await expect(this.page.getByPlaceholder('Search elements, views...')).toBeVisible()
+  }
+
+  /**
+   * Connect two nodes by dragging from the source node's center handle to a target handle.
+   * Hovers the source to reveal handles, then drags to a visible target handle on the target node.
+   * Ends the drag ON a target handle (not just the node center) to ensure React Flow detects
+   * the connection regardless of zoom level.
+   */
+  async connectNodes(sourceName: string, targetName: string) {
+    const sourceNode = await this.getNodeByName(sourceName)
+    const targetNode = await this.getNodeByName(targetName)
+
+    // Hover to reveal source handles
+    await sourceNode.hover()
+    await this.page.waitForTimeout(300)
+
+    // Find any center source handle (slot b = center handle, any side)
+    const sourceHandle = sourceNode.locator('[data-handleid$="-b-source"]').first()
+    await sourceHandle.waitFor({ state: 'attached' })
+
+    // Find a target handle on the target node — use any center target handle
+    const targetHandle = targetNode.locator('[data-handleid$="-b-target"]').first()
+    await targetHandle.waitFor({ state: 'attached' })
+
+    const handleBox = await sourceHandle.boundingBox()
+    const targetHandleBox = await targetHandle.boundingBox()
+
+    if (!handleBox || !targetHandleBox) throw new Error('Could not get bounding boxes for connect drag')
+
+    const startX = handleBox.x + handleBox.width / 2
+    const startY = handleBox.y + handleBox.height / 2
+    // End directly on the target handle center so React Flow detects it regardless of zoom
+    const endX = targetHandleBox.x + targetHandleBox.width / 2
+    const endY = targetHandleBox.y + targetHandleBox.height / 2
+
+    // Perform slow drag so React Flow registers proximity detection
+    await this.page.mouse.move(startX, startY)
+    await this.page.mouse.down()
+    // Move in steps so React Flow can detect handles along the way
+    const steps = 15
+    for (let i = 1; i <= steps; i++) {
+      await this.page.mouse.move(
+        startX + ((endX - startX) * i) / steps,
+        startY + ((endY - startY) * i) / steps,
+      )
+    }
+    await this.page.mouse.up()
+    // Give React Flow time to process the connection
+    await this.page.waitForTimeout(300)
   }
 }

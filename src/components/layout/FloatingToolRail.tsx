@@ -16,9 +16,9 @@ import {
 } from 'lucide-react'
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
+import AddElementPanel from '@/components/layout/AddElementPanel'
 
 const CanvasSettingsDialog = lazy(() => import('@/components/settings/CanvasSettingsDialog'))
-const AddElementPanel = lazy(() => import('@/components/layout/AddElementPanel'))
 
 const DIRECTION_ICONS: Record<LayoutDirection, React.ReactNode> = {
   TB: <ArrowDown size={14} />,
@@ -72,6 +72,34 @@ export default function FloatingToolRail() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
 
+  // Outside-click closes any open flyout. Document-level listener works across
+  // stacking contexts (the tool rail is z:50 like other floating UI, so a fixed
+  // overlay inside it cannot catch clicks on sibling panels).
+  useEffect(() => {
+    if (!addPanelOpen && !arrangePanelOpen) return
+    console.log('[toolrail] outside-click listener attached', { addPanelOpen, arrangePanelOpen })
+    function handlePointerDown(e: PointerEvent) {
+      const target = e.target as Node
+      console.log('[toolrail] pointerdown', (target as Element)?.tagName, { addPanelOpen, arrangePanelOpen })
+      if (addPanelOpen) {
+        const inFlyout = addElementFlyoutRef.current?.contains(target)
+        const onTrigger = addBtnRef.current?.contains(target)
+        console.log('[toolrail] add check', { inFlyout, onTrigger })
+        if (!inFlyout && !onTrigger) setAddPanelOpen(false)
+      }
+      if (arrangePanelOpen) {
+        const inFlyout = arrangeFlyoutRef.current?.contains(target)
+        const onTrigger = arrangeBtnRef.current?.contains(target)
+        console.log('[toolrail] arrange check', { inFlyout, onTrigger })
+        if (!inFlyout && !onTrigger) setArrangePanelOpen(false)
+      }
+    }
+    // Use pointerdown in the capture phase so nothing else can stop propagation
+    // before we see the event.
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [addPanelOpen, arrangePanelOpen])
+
   // Focus management: move focus into flyout when opened, return to trigger when closed
   useFlyoutFocus(addPanelOpen, addElementFlyoutRef, addBtnRef, lastOpenPanel, 'add')
   useFlyoutFocus(arrangePanelOpen, arrangeFlyoutRef, arrangeBtnRef, lastOpenPanel, 'arrange')
@@ -119,9 +147,7 @@ export default function FloatingToolRail() {
         />
         {addPanelOpen && (
           <div ref={addElementFlyoutRef}>
-            <Suspense fallback={<LoadingDot />}>
-              <AddElementPanel onClose={() => setAddPanelOpen(false)} />
-            </Suspense>
+            <AddElementPanel onClose={() => setAddPanelOpen(false)} />
           </div>
         )}
       </div>
@@ -256,7 +282,7 @@ const RailBtn = forwardRef<HTMLButtonElement, {
         justifyContent: 'center',
         borderRadius: 10,
         margin: '1px 4px',
-        background: active ? 'rgba(88,166,255,0.12)' : 'transparent',
+        ...(active ? { background: 'rgba(88,166,255,0.12)' } : {}),
         color: active ? 'var(--color-accent)' : color ?? 'var(--color-text-muted)',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'background 0.12s, color 0.12s',

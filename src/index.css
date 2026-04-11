@@ -67,8 +67,10 @@
   --radius-lg: 12px;
   --radius-xl: 14px;
 
-  /* Backdrop */
-  --color-backdrop: rgba(0, 0, 0, 0.65);
+  /* Backdrop — used by DialogShell for lightweight dialogs (settings,
+     create form, etc.). Destructive/critical dialogs hard-code a darker
+     value inline for more emphasis. */
+  --color-backdrop: rgba(0, 0, 0, 0.3);
 
   /* Font size scale */
   --text-xxs: 9px;
@@ -222,8 +224,8 @@ body {
   min-height: 32px;
 }
 
-.btn-icon:hover {
-  background: var(--color-surface-3);
+.btn-icon:hover:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.06);
   color: var(--color-text-primary);
 }
 
@@ -258,25 +260,35 @@ body {
 /* ─── Hover utilities ─────────────────────────────────────── */
 
 /* Subtle hover — barely visible, for inline triggers like logo */
-.hover-subtle:hover {
-  background: rgba(255, 255, 255, 0.04);
+.hover-subtle:hover:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* Surface-2 hover — for list items in flyouts */
-.hover-surface-2:hover {
+.hover-surface-2:hover:not([data-active="true"]) {
   background: var(--color-surface-2);
   color: var(--color-text-primary);
 }
 
 /* Surface-3 hover — for section headers, icon buttons */
-.hover-surface:hover {
-  background: var(--color-surface-3);
+.hover-surface:hover:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* Light lift hover — for toolbar buttons, zoom controls */
-.hover-lift:hover {
-  background: var(--color-surface-3);
+.hover-lift:hover:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.06);
   color: var(--color-text-primary);
+}
+
+/* Active state — accent tint shown when the button's dropdown/dialog is open.
+   Used alongside any hover utility via `data-active="true"`. */
+.hover-subtle[data-active="true"],
+.hover-surface[data-active="true"],
+.hover-lift[data-active="true"],
+.btn-icon[data-active="true"] {
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--color-accent);
 }
 
 /* Danger hover — for delete actions */
@@ -300,17 +312,17 @@ body {
  * Use data-active="true" on the element to suppress hover.
  */
 .hover-lift-inactive:not([data-active="true"]):hover {
-  background: var(--color-surface-3);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--color-text-primary);
 }
 
 .hover-subtle-inactive:not([data-active="true"]):hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--color-text-primary);
 }
 
 .hover-surface-inactive:not([data-active="true"]):hover {
-  background: var(--color-surface-3);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--color-text-primary);
 }
 
@@ -545,14 +557,27 @@ body {
   pointer-events: none !important;
 }
 
-/* When React Flow is in connecting mode, show target handles as glowing zones and re-enable as drop targets */
-.react-flow__node.connectable .c4-handle-target:not(.c4-handle-hidden-extra),
-.connecting .c4-handle-target:not(.c4-handle-hidden-extra) {
+/* When React Flow v12 is in connecting mode, valid target handles get class .connectionindicator.
+   Show them as glowing drop zones and re-enable pointer events so React Flow's proximity detection works. */
+.react-flow__handle.connectionindicator.c4-handle-target:not(.c4-handle-hidden-extra) {
   opacity: 1;
   background: var(--color-accent-glow) !important;
   border-radius: 50%;
   border: 2px solid var(--color-accent) !important;
   pointer-events: auto !important;
+}
+
+/* ─── Selection rect ───────────────────────────────────────── */
+/* Expand the selection outline so it floats past the nodes' borders
+   instead of hugging them. Applies both to the rubber-band rectangle
+   and the post-selection bounding box. */
+.react-flow__selection,
+.react-flow__nodesselection-rect {
+  border: none !important;
+  outline: 1px dashed rgba(88, 166, 255, 0.65);
+  outline-offset: 10px;
+  background: rgba(88, 166, 255, 0.05) !important;
+  border-radius: 6px;
 }
 
 /* ─── Scrollbar ────────────────────────────────────────────── */

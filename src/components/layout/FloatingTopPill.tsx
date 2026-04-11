@@ -4,6 +4,7 @@ import LoadingDot from '@/components/shared/LoadingDot'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
 import { serializeDSL } from '@/lib/dsl'
+import { createBlankWorkspace } from '@/lib/templates'
 import { saveDSLFile } from '@/lib/fileIO'
 import { announce } from '@/lib/announce'
 import SaveIndicator from '@/components/layout/SaveIndicator'
@@ -206,7 +207,9 @@ export default function FloatingTopPill() {
           display: 'flex',
           alignItems: 'center',
           minWidth: 0,
-          overflow: 'visible',
+          // Clip button backgrounds to the pill's rounded corners so an active
+          // button's fill follows the pill's curve flush against its border.
+          overflow: 'hidden',
         }}
       >
         {/* Logo — click to go home */}
@@ -222,7 +225,6 @@ export default function FloatingTopPill() {
             alignItems: 'center',
             borderRight: '1px solid var(--color-border)',
             cursor: 'pointer',
-            background: 'transparent',
             border: 'none',
             transition: 'background 0.12s',
             flexShrink: 0,
@@ -235,6 +237,7 @@ export default function FloatingTopPill() {
         <button
           onClick={() => wsPickerOpen ? setWsPickerOpen(false) : openWsPicker()}
           className="hover-subtle"
+          data-active={wsPickerOpen ? 'true' : undefined}
           style={{
             padding: '0 10px',
             height: '100%',
@@ -245,7 +248,6 @@ export default function FloatingTopPill() {
             minWidth: 0,
             overflow: 'hidden',
             flexShrink: 1,
-            background: wsPickerOpen ? 'rgba(255,255,255,0.04)' : 'transparent',
             border: 'none',
             cursor: 'pointer',
           }}
@@ -387,6 +389,7 @@ export default function FloatingTopPill() {
             <button
               onClick={() => { setExportDialogOpen(o => !o); useWorkspaceStore.getState().setCommandPaletteOpen(false); setViewDropdownOpen(false); setWsPickerOpen(false) }}
               className="btn-icon"
+              data-active={exportDialogOpen ? 'true' : undefined}
               style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40, minHeight: 44 }}
               title="Export"
               aria-label="Export"
@@ -397,6 +400,7 @@ export default function FloatingTopPill() {
             {/* Keyboard shortcuts */}
             <button
               className="btn-icon"
+              data-active={commandPaletteOpen ? 'true' : undefined}
               style={{
                 width: 40,
                 height: 44,
@@ -428,6 +432,9 @@ export default function FloatingTopPill() {
         <WorkspaceSwitcherPanel
           entries={wsFiles}
           activeFilename={activeFilename}
+          currentName={workspace?.name ?? ''}
+          currentDescription={workspace?.description ?? ''}
+          onUpdateMeta={(patch) => useWorkspaceStore.getState().updateWorkspaceMeta(patch)}
           onSelect={handleSwitchWorkspace}
           onNewWorkspace={() => { setWsPickerOpen(false); setShowNewWorkspace(true) }}
           onManageWorkspaces={handleManageWorkspaces}
@@ -453,20 +460,16 @@ export default function FloatingTopPill() {
       {showNewWorkspace && (
         <Suspense fallback={<LoadingDot />}>
           <ScopePickerDialog
-            onConfirm={async (scope, name, openAfter) => {
+            onConfirm={async (scope, name, openAfter, description) => {
               setShowNewWorkspace(false)
-              const filename = `${slugifyName(name) || 'workspace'}.dsl`
-              const scopeLine = scope !== 'none' ? `\n    configuration {\n        scope ${scope}\n    }\n` : ''
-              const dsl = `workspace "${name}" {\n    model {\n    }\n    views {${scopeLine}\n    }\n}`
-              const ok = await writeDSLFile(filename, dsl)
-              if (!ok) return
+              const ws = createBlankWorkspace(scope)
+              ws.name = name.trim() || 'workspace'
+              if (description.trim()) ws.description = description.trim()
+              const filename = `${slugifyName(ws.name) || 'workspace'}.dsl`
+              const ok = await writeDSLFile(filename, serializeDSL(ws))
               if (openAfter) {
-                const { workspace: ws } = parseDSL(dsl)
-                if (ws) {
-                  if (!ws.name) ws.name = name
-                  loadWorkspace(ws)
-                  useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
-                }
+                loadWorkspace(ws)
+                if (ok) useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
               }
             }}
             onCancel={() => setShowNewWorkspace(false)}
@@ -551,6 +554,9 @@ function ScopeIcon({ scope, size = 20 }: { scope?: string; size?: number }) {
 function WorkspaceSwitcherPanel({
   entries,
   activeFilename,
+  currentName,
+  currentDescription,
+  onUpdateMeta,
   onSelect,
   onNewWorkspace,
   onManageWorkspaces,
@@ -559,6 +565,9 @@ function WorkspaceSwitcherPanel({
 }: {
   entries: WsEntry[]
   activeFilename: string | null
+  currentName: string
+  currentDescription: string
+  onUpdateMeta: (patch: { name?: string; description?: string }) => void
   onSelect: (filename: string) => Promise<void>
   onNewWorkspace: () => void
   onManageWorkspaces: () => void
@@ -566,11 +575,67 @@ function WorkspaceSwitcherPanel({
   onClose: () => void
 }) {
   const hasFolderHandle = !!getCurrentDirHandle()
+  const [editName, setEditName] = useState(currentName)
+  const [editDesc, setEditDesc] = useState(currentDescription)
+
+  // Sync local state when the current workspace changes
+  useEffect(() => { setEditName(currentName) }, [currentName])
+  useEffect(() => { setEditDesc(currentDescription) }, [currentDescription])
+
+  function commitName() {
+    const trimmed = editName.trim()
+    if (trimmed && trimmed !== currentName) {
+      onUpdateMeta({ name: trimmed })
+    } else {
+      setEditName(currentName)
+    }
+  }
+
+  function commitDescription() {
+    if (editDesc !== currentDescription) {
+      onUpdateMeta({ description: editDesc })
+    }
+  }
 
   return (
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 48 }} onClick={onClose} />
+      <div style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }} onClick={onClose} />
       <div className="shade-panel" style={{ zIndex: 49, display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }}>
+
+        {/* Current workspace properties — editable */}
+        <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>
+            Current workspace
+          </span>
+          <input
+            value={editName}
+            onChange={e => setEditName(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur() } }}
+            placeholder="Untitled workspace"
+            style={{
+              padding: '8px 10px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-primary)',
+              outline: 'none',
+            }}
+          />
+          <textarea
+            value={editDesc}
+            onChange={e => setEditDesc(e.target.value)}
+            onBlur={commitDescription}
+            placeholder="Add a description…"
+            rows={2}
+            style={{
+              padding: '8px 10px', borderRadius: 8, fontSize: 12,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-secondary)',
+              outline: 'none', resize: 'none', fontFamily: 'inherit',
+            }}
+          />
+        </div>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', padding: '14px 16px 10px' }}>
@@ -652,7 +717,7 @@ function WorkspaceSwitcherPanel({
             style={{
               flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 7,
               fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)',
-              background: 'transparent', border: 'none', cursor: 'pointer',
+              border: 'none', cursor: 'pointer',
             }}
           >
             <Plus size={14} />
@@ -665,7 +730,7 @@ function WorkspaceSwitcherPanel({
             style={{
               flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 7,
               fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)',
-              background: 'transparent', border: 'none', cursor: 'pointer',
+              border: 'none', cursor: 'pointer',
             }}
           >
             <LayoutGrid size={14} />
@@ -680,7 +745,7 @@ function WorkspaceSwitcherPanel({
                 style={{
                   flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 7,
                   fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)',
-                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  border: 'none', cursor: 'pointer',
                 }}
               >
                 <FolderSymlink size={14} />

@@ -84,64 +84,69 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      {/* Startup — no collection open */}
-      <Route path="/" element={
-        <Suspense fallback={<LoadingDot />}>
-          <WelcomeScreen initialView="startup" />
-        </Suspense>
-      } />
-
-      {/* Collection home — folder open, pick/create workspace */}
-      <Route path="/collection/:slug" element={
-        <Suspense fallback={<LoadingDot />}>
-          <WelcomeScreen initialView="collection" />
-        </Suspense>
-      } />
-      <Route path="/collection" element={
-        <Suspense fallback={<LoadingDot />}>
-          <WelcomeScreen initialView="collection" />
-        </Suspense>
-      } />
-
-      {/* Canvas — collection/workspace/view (viewKey optional) */}
-      <Route path="/collection/:collectionSlug/:workspaceSlug/:viewKey?" element={
-        workspace ? (
-          <ReactFlowProvider>
-            <a href="#c4hero-canvas" className="sr-only">Skip to main content</a>
-            <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
-              <main id="c4hero-canvas" aria-label="Architecture diagram canvas" style={{ position: 'absolute', inset: 0 }}>
-                <Canvas />
-              </main>
-              <nav aria-label="Workspace navigation"><FloatingTopPill /></nav>
-              <MultiSelectBar />
-              <nav aria-label="Tools"><FloatingToolRail /></nav>
-              <FloatingViewsPanel />
-              <aside aria-label="Element inspector"><FloatingInspector /></aside>
-              <FloatingBottomStrip />
-              <FloatingZoomHud />
-              <CanvasHints />
-              <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
-              <div className="commit-hash">{__COMMIT_HASH__}</div>
-            </div>
-            {searchOpen && <Suspense fallback={<LoadingDot />}><SearchDialog /></Suspense>}
-            {pendingDelete && (
-              <ConfirmDeleteDialog
-                message={pendingDelete.message}
-                onConfirm={() => { pendingDelete.onConfirm(); cancelDelete() }}
-                onCancel={cancelDelete}
-              />
-            )}
-          </ReactFlowProvider>
-        ) : (
+    <>
+      <Routes>
+        {/* Startup — no collection open */}
+        <Route path="/" element={
           <Suspense fallback={<LoadingDot />}>
-            <LoadingDot />
+            <WelcomeScreen initialView="startup" />
           </Suspense>
-        )
-      } />
+        } />
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Collection home — folder open, pick/create workspace */}
+        <Route path="/collection/:slug" element={
+          <Suspense fallback={<LoadingDot />}>
+            <WelcomeScreen initialView="collection" />
+          </Suspense>
+        } />
+        <Route path="/collection" element={
+          <Suspense fallback={<LoadingDot />}>
+            <WelcomeScreen initialView="collection" />
+          </Suspense>
+        } />
+
+        {/* Canvas — collection/workspace/view (viewKey optional) */}
+        <Route path="/collection/:collectionSlug/:workspaceSlug/:viewKey?" element={
+          workspace ? (
+            <ReactFlowProvider>
+              <a href="#c4hero-canvas" className="sr-only">Skip to main content</a>
+              <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
+                <main id="c4hero-canvas" aria-label="Architecture diagram canvas" style={{ position: 'absolute', inset: 0 }}>
+                  <Canvas />
+                </main>
+                <nav aria-label="Workspace navigation"><FloatingTopPill /></nav>
+                <MultiSelectBar />
+                <nav aria-label="Tools"><FloatingToolRail /></nav>
+                <FloatingViewsPanel />
+                <aside aria-label="Element inspector"><FloatingInspector /></aside>
+                <FloatingBottomStrip />
+                <FloatingZoomHud />
+                <CanvasHints />
+                <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
+                <div className="commit-hash">{__COMMIT_HASH__}</div>
+              </div>
+              {searchOpen && <Suspense fallback={<LoadingDot />}><SearchDialog /></Suspense>}
+            </ReactFlowProvider>
+          ) : (
+            <Suspense fallback={<LoadingDot />}>
+              <LoadingDot />
+            </Suspense>
+          )
+        } />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      {/* Global confirm-delete dialog — rendered outside routes so it works
+          from the welcome/collection screens too (e.g. delete workspace file). */}
+      {pendingDelete && (
+        <ConfirmDeleteDialog
+          message={pendingDelete.message}
+          onConfirm={() => { pendingDelete.onConfirm(); cancelDelete() }}
+          onCancel={cancelDelete}
+        />
+      )}
+    </>
   )
 }

@@ -96,18 +96,19 @@ export default function NodeHandles() {
           return (
             <span key={`${side}-${slot}`}>
               <Handle
-                type="source"
-                position={pos}
-                id={sourceId}
-                className={sourceClass}
-                style={getHandleStyle(side, slot)}
-                aria-hidden="true"
-              />
-              <Handle
                 type="target"
                 position={pos}
                 id={targetId}
                 className={targetClass}
+                style={getHandleStyle(side, slot)}
+                isConnectableStart={false}
+                aria-hidden="true"
+              />
+              <Handle
+                type="source"
+                position={pos}
+                id={sourceId}
+                className={sourceClass}
                 style={getHandleStyle(side, slot)}
                 aria-hidden="true"
               />
