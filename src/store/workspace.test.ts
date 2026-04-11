@@ -566,6 +566,20 @@ describe('view CRUD', () => {
     const view = ws.views.systemContextViews.find(v => v.key === key)!
     expect(view.softwareSystemId).toBe('api')
   })
+
+  it('deleteView is a no-op (no undo) when the key does not exist', () => {
+    const key = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'My View')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    const prevActiveKey = useWorkspaceStore.getState().activeViewKey
+    useWorkspaceStore.getState().deleteView('nonexistent-key')
+    const state = useWorkspaceStore.getState()
+    // View still present
+    expect(state.workspace!.views.systemLandscapeViews.some(v => v.key === key)).toBe(true)
+    // No phantom undo pushed
+    expect(state.undoStack).toHaveLength(undoBefore)
+    // activeViewKey unchanged
+    expect(state.activeViewKey).toBe(prevActiveKey)
+  })
 })
 
 // ─── addView component view auto-populate ────────────────────────────

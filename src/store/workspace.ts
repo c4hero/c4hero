@@ -904,13 +904,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const ws = cloneWs(s)
     if (!ws) return s
     // Find which array contains the key and only filter that one
+    let found = false
     for (const arrKey of VIEW_ARRAY_KEYS) {
       const idx = ws.views[arrKey].findIndex(v => v.key === key)
       if (idx !== -1) {
         ws.views[arrKey].splice(idx, 1)
+        found = true
         break
       }
     }
+    if (!found) return s
     const newActiveKey = s.activeViewKey === key ? getFirstViewKey(ws) : s.activeViewKey
     // Remove the deleted key from navigation history so navigateBack never lands on a ghost view
     const newHistory = s.viewHistory.filter(k => k !== key)
