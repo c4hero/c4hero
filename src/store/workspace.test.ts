@@ -1141,6 +1141,34 @@ describe('Element CRUD', () => {
     expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
   })
 
+  it('deleteElements removes relationships referencing a container inside a deleted system', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'DB')
+    useWorkspaceStore.getState().addRelationship('alice', containerId, 'reads')
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(1)
+    // Deleting the parent system should cascade to the container relationship
+    useWorkspaceStore.getState().deleteElements(['api'])
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
+  })
+
+  it('deleteElements removes relationships referencing a component inside a deleted system', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const compId = useWorkspaceStore.getState().addComponent(containerId, 'Handler')
+    useWorkspaceStore.getState().addRelationship('alice', compId, 'calls')
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(1)
+    // Deleting the grandparent system cascades through container → component
+    useWorkspaceStore.getState().deleteElements(['api'])
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
+  })
+
+  it('deleteElements removes relationships referencing a component inside a deleted container', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const compId = useWorkspaceStore.getState().addComponent(containerId, 'Handler')
+    useWorkspaceStore.getState().addRelationship('alice', compId, 'calls')
+    // Deleting only the container should also remove the component relationship
+    useWorkspaceStore.getState().deleteElements([containerId])
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
+  })
+
   it('deleteElements removes group memberships for deleted elements', () => {
     useWorkspaceStore.getState().addGroup('Team', ['alice', 'api'])
     useWorkspaceStore.getState().deleteElements(['alice'])

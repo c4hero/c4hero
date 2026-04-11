@@ -520,17 +520,32 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (!ws) return s
       const idSet = new Set(ids)
 
-      // Collect container IDs that will be implicitly removed (children of deleted systems)
+      // Collect container and component IDs that will be implicitly removed so that
+      // relationships referencing them (and scoped views) are cleaned up correctly.
       const deletedContainerIds = new Set<string>()
+      const deletedComponentIds = new Set<string>()
       for (const sys of ws.model.softwareSystems) {
         if (idSet.has(sys.id)) {
-          for (const c of sys.containers) deletedContainerIds.add(c.id)
+          for (const c of sys.containers) {
+            deletedContainerIds.add(c.id)
+            for (const comp of c.components) deletedComponentIds.add(comp.id)
+          }
         } else {
           for (const c of sys.containers) {
-            if (idSet.has(c.id)) deletedContainerIds.add(c.id)
+            if (idSet.has(c.id)) {
+              deletedContainerIds.add(c.id)
+              for (const comp of c.components) deletedComponentIds.add(comp.id)
+            } else {
+              for (const comp of c.components) {
+                if (idSet.has(comp.id)) deletedComponentIds.add(comp.id)
+              }
+            }
           }
         }
       }
+
+      // Build the full set of element IDs being removed (direct + implicit children)
+      const allDeletedIds = new Set([...idSet, ...deletedContainerIds, ...deletedComponentIds])
 
       ws.model.people = ws.model.people.filter(p => !idSet.has(p.id))
       ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
@@ -543,11 +558,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         return true
       })
       ws.model.relationships = ws.model.relationships.filter(
-        r => !idSet.has(r.sourceId) && !idSet.has(r.destinationId)
+        r => !allDeletedIds.has(r.sourceId) && !allDeletedIds.has(r.destinationId)
       )
       const survivingRelIds = new Set(ws.model.relationships.map(r => r.id))
       forEachView(ws, (v) => {
-        v.elements = v.elements.filter(e => !idSet.has(e.id))
+        v.elements = v.elements.filter(e => !allDeletedIds.has(e.id))
         v.relationships = v.relationships.filter(r => survivingRelIds.has(r.id))
       })
       // Remove scoped views whose scope element was deleted
@@ -563,7 +578,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       )
       ws.model.groups = ws.model.groups.map(g => ({
         ...g,
-        elementIds: g.elementIds.filter(eid => !idSet.has(eid)),
+        elementIds: g.elementIds.filter(eid => !allDeletedIds.has(eid)),
       }))
       // If the active view was among the ones just removed, fall back to the first remaining view.
       // Also purge stale keys from viewHistory so navigateBack never jumps to a ghost view.
