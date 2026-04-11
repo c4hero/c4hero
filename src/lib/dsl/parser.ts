@@ -405,6 +405,9 @@ class ContextAwareParser {
             } else {
                 this.advance()
                 this.skipToNextLine()
+                // Unknown configuration properties may have a nested brace block (e.g. users { ... })
+                this.skipNewlines()
+                if (this.check('LBRACE')) this.skipBraceBlock()
             }
         }
     }

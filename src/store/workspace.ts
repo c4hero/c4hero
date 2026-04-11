@@ -351,8 +351,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   updateWorkspaceMeta: (patch) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
-    if (patch.name !== undefined) ws.name = patch.name
-    if (patch.description !== undefined) ws.description = patch.description
+    let changed = false
+    if (patch.name !== undefined && ws.name !== patch.name) { ws.name = patch.name; changed = true }
+    if (patch.description !== undefined && ws.description !== patch.description) { ws.description = patch.description; changed = true }
+    if (!changed) return s
     return { ...pushUndo(s), workspace: ws }
   }),
 
@@ -966,7 +968,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     let found = false
     for (const arr of [ws.views.systemLandscapeViews, ws.views.systemContextViews, ws.views.containerViews, ws.views.componentViews] as { key: string; title?: string }[][]) {
       const v = arr.find(v => v.key === key)
-      if (v) { v.title = title; found = true; break }
+      if (v) {
+        if (v.title === title) return s // no-op: title unchanged
+        v.title = title
+        found = true
+        break
+      }
     }
     if (!found) return s
     return { ...pushUndo(s), workspace: ws }

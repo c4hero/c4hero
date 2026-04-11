@@ -1540,6 +1540,15 @@ describe('renameView', () => {
     const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews.find(v => v.key === viewKey)
     expect(view?.title).toBe('Landscape')
   })
+
+  it('is a no-op (no undo entry) when title is unchanged', () => {
+    // First rename to set a known title
+    useWorkspaceStore.getState().renameView(viewKey, 'Same Title')
+    const undoLengthAfterFirst = useWorkspaceStore.getState().undoStack.length
+    // Renaming to the same title again should not push another undo entry
+    useWorkspaceStore.getState().renameView(viewKey, 'Same Title')
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoLengthAfterFirst)
+  })
 })
 
 describe('duplicateView', () => {
@@ -1639,6 +1648,19 @@ describe('updateWorkspaceMeta', () => {
     useWorkspaceStore.getState().updateWorkspaceMeta({ name: 'Changed' })
     useWorkspaceStore.getState().undo()
     expect(useWorkspaceStore.getState().workspace?.name).toBe('Test')
+  })
+
+  it('is a no-op (no undo entry) when name is already the same value', () => {
+    const before = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateWorkspaceMeta({ name: 'Test' }) // 'Test' is the makeWorkspace() default
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(before)
+  })
+
+  it('is a no-op (no undo entry) when description is already the same value', () => {
+    useWorkspaceStore.getState().updateWorkspaceMeta({ description: 'First set' })
+    const before = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateWorkspaceMeta({ description: 'First set' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(before)
   })
 })
 

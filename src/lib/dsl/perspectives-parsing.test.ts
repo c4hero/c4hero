@@ -179,3 +179,29 @@ workspace {
     expect(elementIds).not.toContain(workspace.model.softwareSystems.find(s => s.name === 'Other')!.id)
   })
 })
+
+describe('configuration block with nested sub-blocks', () => {
+  it('configuration block with nested users sub-block is skipped without errors', () => {
+    // Structurizr DSL supports `users { ... }` inside `configuration` for access control.
+    // The parser should skip unknown nested blocks without corrupting parse state.
+    const dsl = `
+workspace {
+  model {
+    api = softwareSystem "API"
+  }
+  views {}
+  configuration {
+    scope softwareSystem
+    users {
+      user1 "read"
+      user2 "read,write"
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    // Scope should be recognized despite the unknown nested block
+    expect(workspace.scope).toBe('softwaresystem')
+    expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
+  })
+})
