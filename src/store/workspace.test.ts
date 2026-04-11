@@ -534,6 +534,18 @@ describe('view CRUD', () => {
     expect(useWorkspaceStore.getState().activeViewKey).toBeNull()
   })
 
+  it('deleteView removes the key from viewHistory to prevent ghost navigation', () => {
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View A')
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View B')
+    // Simulate having drilled into View B from View A
+    useWorkspaceStore.setState({ viewHistory: [keyA] })
+    useWorkspaceStore.getState().setActiveView(keyB)
+    // Now delete View A while it's in history
+    useWorkspaceStore.getState().deleteView(keyA)
+    // viewHistory should no longer contain keyA
+    expect(useWorkspaceStore.getState().viewHistory).not.toContain(keyA)
+  })
+
   it('addView with type systemContext includes scopeId as softwareSystemId', () => {
     const key = useWorkspaceStore.getState().addView('systemContext', 'api', 'Context View')
     const ws = useWorkspaceStore.getState().workspace!
@@ -1112,6 +1124,19 @@ describe('Element CRUD', () => {
     const newActive = useWorkspaceStore.getState().activeViewKey
     expect(newActive).not.toBe(containerViewKey)
     expect(newActive).toBe(landscapeKey)
+  })
+
+  it('deleteElements purges orphaned view keys from viewHistory', () => {
+    const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    const containerViewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    // Put the container view key into history (as if user drilled from landscape → container)
+    useWorkspaceStore.setState({ viewHistory: [landscapeKey] })
+    useWorkspaceStore.getState().setActiveView(containerViewKey)
+
+    // Delete 'api' — removes the container view
+    useWorkspaceStore.getState().deleteElements(['api'])
+    const history = useWorkspaceStore.getState().viewHistory
+    expect(history).not.toContain(containerViewKey)
   })
 })
 

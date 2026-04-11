@@ -553,15 +553,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         ...g,
         elementIds: g.elementIds.filter(eid => !idSet.has(eid)),
       }))
-      // If the active view was among the ones just removed, fall back to the first remaining view
+      // If the active view was among the ones just removed, fall back to the first remaining view.
+      // Also purge stale keys from viewHistory so navigateBack never jumps to a ghost view.
       const activeStillExists = s.activeViewKey ? !!findView(ws, s.activeViewKey) : false
       const newActiveKey = activeStillExists ? s.activeViewKey : getFirstViewKey(ws)
+      const newHistory = s.viewHistory.filter(k => !!findView(ws, k))
       return {
         ...pushUndo(s),
         workspace: ws,
         selectedElementIds: [],
         selectedRelationshipId: null,
         activeViewKey: newActiveKey,
+        viewHistory: newHistory,
       }
     })
     get().revalidateScope()
@@ -907,7 +910,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
     }
     const newActiveKey = s.activeViewKey === key ? getFirstViewKey(ws) : s.activeViewKey
-    return { ...pushUndo(s), workspace: ws, activeViewKey: newActiveKey }
+    // Remove the deleted key from navigation history so navigateBack never lands on a ghost view
+    const newHistory = s.viewHistory.filter(k => k !== key)
+    return { ...pushUndo(s), workspace: ws, activeViewKey: newActiveKey, viewHistory: newHistory }
   }),
 
   renameView: (key, title) => set((s) => {
