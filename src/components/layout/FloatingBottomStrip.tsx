@@ -490,8 +490,9 @@ function ModeTab({ icon, label, active, onClick, isFirst }: {
         fontSize: 'var(--text-xs)', fontWeight: 600,
         color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
         ...(active ? { background: 'var(--glass-overlay-xs)' } : {}),
+        border: 'none',
         borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
-        cursor: 'pointer', border: 'none', transition: 'color 0.12s, background 0.12s',
+        cursor: 'pointer', transition: 'color 0.12s, background 0.12s',
         borderRadius: isFirst ? 'var(--radius-lg) 0 0 var(--radius-lg)' : 0,
       }}
     >

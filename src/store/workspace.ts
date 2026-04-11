@@ -657,10 +657,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         properties: {},
       }
       ws.model.relationships.push(rel)
-      // Add to current view
-      if (s.activeViewKey) {
-        const view = findView(ws, s.activeViewKey)
-        if (view) view.relationships.push({ id })
+      // Add to every view that already contains both endpoints
+      for (const view of allViewsOf(ws)) {
+        const viewElIds = new Set(view.elements.map(e => e.id))
+        if (viewElIds.has(sourceId) && viewElIds.has(destinationId)) {
+          if (!view.relationships.some(r => r.id === id)) {
+            view.relationships.push({ id })
+          }
+        }
       }
       return { ...pushUndo(s), workspace: ws, selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null }
     })

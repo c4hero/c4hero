@@ -520,6 +520,53 @@ describe('addView component view — external actor auto-populate', () => {
   })
 })
 
+// ─── addRelationship cross-view auto-add ─────────────────────────────
+
+describe('addRelationship — auto-add to views containing both endpoints', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('adds relationship to every view that already has both endpoints', () => {
+    // Create two views both containing alice and api
+    const key1 = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View 1')
+    const key2 = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'View 2')
+    useWorkspaceStore.getState().setActiveView(key1)
+
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const ws = useWorkspaceStore.getState().workspace!
+
+    const v1 = ws.views.systemLandscapeViews.find(v => v.key === key1)!
+    const v2 = ws.views.systemLandscapeViews.find(v => v.key === key2)!
+    expect(v1.relationships.some(r => r.id === relId)).toBe(true)
+    expect(v2.relationships.some(r => r.id === relId)).toBe(true)
+  })
+
+  it('does not add relationship to views missing one endpoint', () => {
+    const key = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    useWorkspaceStore.getState().setActiveView(key)
+    // Remove alice from the view
+    useWorkspaceStore.getState().toggleElementInView(key, 'alice')
+
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.systemLandscapeViews.find(v => v.key === key)!
+    expect(view.relationships.some(r => r.id === relId)).toBe(false)
+  })
+
+  it('does not duplicate the relationship in the active view', () => {
+    const key = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    useWorkspaceStore.getState().setActiveView(key)
+
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.systemLandscapeViews.find(v => v.key === key)!
+    // Should appear exactly once
+    const count = view.relationships.filter(r => r.id === relId).length
+    expect(count).toBe(1)
+  })
+})
+
 // ─── Undo/redo after relationship mutations ──────────────────────────
 
 describe('Undo/redo after relationship mutations', () => {
