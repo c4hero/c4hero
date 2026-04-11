@@ -1519,6 +1519,27 @@ describe('Element CRUD', () => {
     expect(sys.name).toBe('API 2')
   })
 
+  it('addPerson with position stores x,y in the active view element', () => {
+    // The active view must exist before adding, otherwise addToCurrentView is a no-op
+    const viewKey = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    const id = useWorkspaceStore.getState().addPerson('Bob', { x: 42, y: 99 })
+    const ws = useWorkspaceStore.getState().workspace!
+    const el = ws.views.systemLandscapeViews.find(v => v.key === viewKey)!.elements.find(e => e.id === id)!
+    expect(el).toBeDefined()
+    expect(el.x).toBe(42)
+    expect(el.y).toBe(99)
+  })
+
+  it('addContainer with position stores x,y in the active view element', () => {
+    const viewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const id = useWorkspaceStore.getState().addContainer('api', 'Web App', { x: 150, y: 300 })
+    const ws = useWorkspaceStore.getState().workspace!
+    const el = ws.views.containerViews.find(v => v.key === viewKey)!.elements.find(e => e.id === id)!
+    expect(el).toBeDefined()
+    expect(el.x).toBe(150)
+    expect(el.y).toBe(300)
+  })
+
   it('updateElement updates name and description', () => {
     useWorkspaceStore.getState().updateElement('alice', { name: 'Alice Smith', description: 'Lead dev' })
     const ws = useWorkspaceStore.getState().workspace!
@@ -2241,6 +2262,29 @@ describe('duplicateElements', () => {
     const view = ws.views.systemLandscapeViews.find(v => v.key === viewKey)!
     const cloneInView = view.elements.find(e => e.id === newIds[0])
     expect(cloneInView).toBeDefined()
+  })
+
+  it('positions clone at (200+60, 200+30) when original has no position in the view', () => {
+    // beforeEach removes alice from the view via toggleElementInView, so inView → undefined.
+    // The fallback: offsetX = (undefined?.x ?? 200) + 60 = 260, offsetY = (undefined?.y ?? 200) + 30 = 230
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice'])
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    const cloneInView = view.elements.find(e => e.id === newIds[0])!
+    expect(cloneInView.x).toBe(260)
+    expect(cloneInView.y).toBe(230)
+  })
+
+  it('positions clone at (originalX+60, originalY+30) when original is in the view with known coordinates', () => {
+    // Re-add alice to the view and pin her at a known position
+    useWorkspaceStore.getState().toggleElementInView(viewKey, 'alice') // alice is currently out → adds her back
+    useWorkspaceStore.getState().updateNodePosition('alice', 80, 60)
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice'])
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.systemLandscapeViews.find(v => v.key === viewKey)!
+    const cloneInView = view.elements.find(e => e.id === newIds[0])!
+    expect(cloneInView.x).toBe(80 + 60) // 140
+    expect(cloneInView.y).toBe(60 + 30)  // 90
   })
 
   it('selects the duplicated elements', () => {
