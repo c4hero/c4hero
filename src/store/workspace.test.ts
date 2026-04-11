@@ -2172,6 +2172,15 @@ describe('duplicateView', () => {
     expect(copy.containerId).toBe(containerId)
     expect(copy.containerId).toBe(original.containerId)
   })
+
+  it('preserves autoLayout direction when duplicating a view', () => {
+    // Change the source view direction to LR, then duplicate — copy must have LR too
+    useWorkspaceStore.getState().setLayoutDirection(viewKey, 'LR')
+    const newKey = useWorkspaceStore.getState().duplicateView(viewKey)
+    const ws = useWorkspaceStore.getState().workspace!
+    const copy = ws.views.systemLandscapeViews.find(v => v.key === newKey)!
+    expect(copy.autoLayout?.direction).toBe('LR')
+  })
 })
 
 describe('updateWorkspaceMeta', () => {
@@ -2797,6 +2806,40 @@ describe('removeTagGlobal', () => {
     const prevUndoLength = useWorkspaceStore.getState().undoStack.length
     useWorkspaceStore.getState().removeTagGlobal('NonExistentTag99')
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(prevUndoLength)
+  })
+
+  it('removes tag from containers', () => {
+    // Attach a custom tag to a container and confirm removeTagGlobal strips it
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Cache')
+    useWorkspaceStore.setState((s) => {
+      const ws = s.workspace ? { ...s.workspace, model: structuredClone(s.workspace.model) } : s.workspace
+      if (!ws) return s
+      const container = ws.model.softwareSystems.find(sys => sys.id === 'api')!.containers.find(c => c.id === containerId)!
+      container.tags = ['Element', 'Container', 'VIP']
+      return { workspace: ws }
+    })
+    useWorkspaceStore.getState().removeTagGlobal('VIP')
+    const ws = useWorkspaceStore.getState().workspace!
+    const container = ws.model.softwareSystems.find(sys => sys.id === 'api')!.containers.find(c => c.id === containerId)!
+    expect(container.tags).not.toContain('VIP')
+    expect(container.tags).toContain('Container')
+  })
+
+  it('removes tag from components', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Backend')
+    const compId = useWorkspaceStore.getState().addComponent(containerId, 'Handler')
+    useWorkspaceStore.setState((s) => {
+      const ws = s.workspace ? { ...s.workspace, model: structuredClone(s.workspace.model) } : s.workspace
+      if (!ws) return s
+      const comp = ws.model.softwareSystems.find(sys => sys.id === 'api')!.containers.find(c => c.id === containerId)!.components.find(comp => comp.id === compId)!
+      comp.tags = ['Element', 'Component', 'VIP']
+      return { workspace: ws }
+    })
+    useWorkspaceStore.getState().removeTagGlobal('VIP')
+    const ws = useWorkspaceStore.getState().workspace!
+    const comp = ws.model.softwareSystems.find(sys => sys.id === 'api')!.containers.find(c => c.id === containerId)!.components.find(c => c.id === compId)!
+    expect(comp.tags).not.toContain('VIP')
+    expect(comp.tags).toContain('Component')
   })
 })
 
