@@ -1117,4 +1117,31 @@ workspace {
     expect(workspace.model.people).toHaveLength(1)
     expect(workspace.model.softwareSystems).toHaveLength(1)
   })
+
+  it('view elements after an unknown annotation brace block are not lost', () => {
+    // Regression: unknown keyword with a brace block inside a view body used to consume
+    // the view's closing RBRACE, losing all include/exclude statements that followed.
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    api = softwareSystem "API"
+  }
+  views {
+    systemLandscape "sl" "Landscape" {
+      unknownAnnotation "value" {
+        someKey "someValue"
+      }
+      include alice
+      include api
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = workspace.views.systemLandscapeViews[0]
+    expect(view.elements.some(e => e.id === 'alice')).toBe(true)
+    expect(view.elements.some(e => e.id === 'api')).toBe(true)
+  })
 })
