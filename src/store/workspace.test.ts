@@ -592,6 +592,15 @@ describe('confirmDelete and pendingDelete', () => {
     pendingDelete!.onConfirm()
     expect(fn).toHaveBeenCalledOnce()
   })
+
+  it('loadWorkspace dismisses any in-flight delete dialog from the previous session', () => {
+    // Confirm a delete to set pendingDelete
+    useWorkspaceStore.getState().confirmDelete('Delete element?', vi.fn())
+    expect(useWorkspaceStore.getState().pendingDelete).not.toBeNull()
+    // Loading a new workspace must clear the stale dialog
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
+  })
 })
 
 // ─── multiSelectMode ────────────────────────────────────────────────
