@@ -360,6 +360,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       pendingDelete: null, // dismiss any in-flight delete confirmation dialog
       undoStack: [],
       redoStack: [],
+      scopeViolations: [],
     }),
 
   updateWorkspaceMeta: (patch) => set((s) => {
