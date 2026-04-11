@@ -34,9 +34,22 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
 
     const addId = (id: string) => { if (!ids.includes(id)) ids.push(id) }
 
-    if (view.type === 'systemLandscape' || view.type === 'systemContext') {
+    if (view.type === 'systemLandscape') {
+        // Landscape: show everything — all people and software systems
         for (const p of model.people) addId(p.id)
         for (const s of model.softwareSystems) addId(s.id)
+    } else if (view.type === 'systemContext' && view.softwareSystemId) {
+        // System context: the scoped system + all elements directly connected to it.
+        // Mirrors the Structurizr spec and the store's addView logic for systemContext.
+        const scopeId = view.softwareSystemId
+        addId(scopeId)
+        const connectedIds = new Set<string>()
+        for (const rel of model.relationships) {
+            if (rel.sourceId === scopeId) connectedIds.add(rel.destinationId)
+            if (rel.destinationId === scopeId) connectedIds.add(rel.sourceId)
+        }
+        for (const p of model.people) { if (connectedIds.has(p.id)) addId(p.id) }
+        for (const s of model.softwareSystems) { if (s.id !== scopeId && connectedIds.has(s.id)) addId(s.id) }
     } else if (view.type === 'container' && view.softwareSystemId) {
         for (const p of model.people) addId(p.id)
         for (const s of model.softwareSystems) {

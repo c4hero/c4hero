@@ -127,3 +127,55 @@ workspace {
     expect(container).toBeDefined()
   })
 })
+
+describe('wildcard expansion in views', () => {
+  it('systemLandscape include * expands to all people and systems', () => {
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    bob = person "Bob"
+    api = softwareSystem "API"
+    store = softwareSystem "Store"
+  }
+  views {
+    systemLandscape "sl" {
+      include *
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const view = workspace.views.systemLandscapeViews[0]
+    expect(view.elements).toHaveLength(4) // alice, bob, api, store
+  })
+
+  it('systemContext include * expands only to the scoped system and directly connected elements', () => {
+    const dsl = `
+workspace {
+  model {
+    alice = person "Alice"
+    unrelated = person "Unrelated"
+    api = softwareSystem "API"
+    other = softwareSystem "Other"
+    alice -> api "uses"
+  }
+  views {
+    systemContext api "ctx" {
+      include *
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const view = workspace.views.systemContextViews[0]
+    const elementIds = view.elements.map(e => e.id)
+    // Should include: api (scope) + alice (connected). NOT unrelated or other.
+    expect(elementIds).toContain(workspace.model.softwareSystems.find(s => s.name === 'API')!.id)
+    expect(elementIds).toContain(workspace.model.people.find(p => p.name === 'Alice')!.id)
+    expect(elementIds).not.toContain(workspace.model.people.find(p => p.name === 'Unrelated')!.id)
+    expect(elementIds).not.toContain(workspace.model.softwareSystems.find(s => s.name === 'Other')!.id)
+  })
+})

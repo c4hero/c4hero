@@ -33,11 +33,9 @@ workspace "Test" {
     expect(view.elements.some(e => e.id === apiId)).toBe(true)
   })
 
-  it('systemContext include * expands to all people and systems (not just related ones)', () => {
-    // NOTE: The current expandWildcard implementation treats systemContext the same as
-    // systemLandscape — it includes ALL people and ALL software systems, regardless of
-    // whether they have a direct relationship to the scoped system. This test documents
-    // that existing behavior.
+  it('systemContext include * expands to the scoped system plus directly connected elements only', () => {
+    // Structurizr semantics: for a system context view, include * means the scoped system
+    // plus all elements with a direct relationship to it — not the full landscape.
     const dsl = `
 workspace "Test" {
   model {
@@ -62,11 +60,12 @@ workspace "Test" {
     const bobId = workspace.model.people.find(p => p.name === 'Bob')!.id
     const apiId = workspace.model.softwareSystems.find(s => s.name === 'API')!.id
     const externalId = workspace.model.softwareSystems.find(s => s.name === 'External')!.id
-    // All four elements appear — even bob and external who have no relationship to api
-    expect(view.elements.some(e => e.id === aliceId)).toBe(true)
-    expect(view.elements.some(e => e.id === bobId)).toBe(true)
+    // api (scope) and alice (directly connected) should appear
     expect(view.elements.some(e => e.id === apiId)).toBe(true)
-    expect(view.elements.some(e => e.id === externalId)).toBe(true)
+    expect(view.elements.some(e => e.id === aliceId)).toBe(true)
+    // bob and external have no relationship to api — they should NOT appear
+    expect(view.elements.some(e => e.id === bobId)).toBe(false)
+    expect(view.elements.some(e => e.id === externalId)).toBe(false)
   })
 
   it('container include * expands to containers of the scoped system', () => {
