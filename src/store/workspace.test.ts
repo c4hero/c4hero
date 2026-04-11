@@ -1951,6 +1951,17 @@ describe('renameTag', () => {
     expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(before)
   })
 
+  it('is a no-op (no undo) for built-in tags', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().renameTag('Person', 'Human')
+    const ws = useWorkspaceStore.getState().workspace!
+    // Built-in tag was NOT renamed
+    expect(ws.model.people[0].tags).toContain('Person')
+    expect(ws.model.people[0].tags).not.toContain('Human')
+    // No undo entry pushed
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
+  })
+
   it('supports undo', () => {
     useWorkspaceStore.getState().renameTag('VIP', 'Premium')
     useWorkspaceStore.getState().undo()

@@ -1122,6 +1122,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   }),
   renameTag: (oldTag, newTag) => set((s) => {
     if (!newTag.trim() || oldTag === newTag) return s
+    if (BUILTIN_TAGS.has(oldTag)) return s // Built-in tags cannot be renamed
     const ws = cloneWs(s)
     if (!ws) return s
     forEachElement(ws, (el) => { el.tags = el.tags.map(t => t === oldTag ? newTag : t) })
