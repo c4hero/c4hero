@@ -1975,6 +1975,45 @@ describe('duplicateView', () => {
     // No phantom undo entry was pushed
     expect(state.undoStack).toHaveLength(prevUndoLength)
   })
+
+  it('preserves softwareSystemId when duplicating a container view', () => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+    })
+    const containerViewKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const newKey = useWorkspaceStore.getState().duplicateView(containerViewKey)
+    const ws = useWorkspaceStore.getState().workspace!
+    const original = ws.views.containerViews.find(v => v.key === containerViewKey)!
+    const copy = ws.views.containerViews.find(v => v.key === newKey)!
+    expect(copy.softwareSystemId).toBe('api')
+    expect(copy.softwareSystemId).toBe(original.softwareSystemId)
+  })
+
+  it('preserves containerId when duplicating a component view', () => {
+    useWorkspaceStore.setState({
+      workspace: makeWorkspace(),
+      activeViewKey: null,
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+      undoStack: [],
+      redoStack: [],
+    })
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Frontend')
+    const compViewKey = useWorkspaceStore.getState().addView('component', containerId, 'Frontend Components')
+    const newKey = useWorkspaceStore.getState().duplicateView(compViewKey)
+    const ws = useWorkspaceStore.getState().workspace!
+    const original = ws.views.componentViews.find(v => v.key === compViewKey)!
+    const copy = ws.views.componentViews.find(v => v.key === newKey)!
+    expect(copy.containerId).toBe(containerId)
+    expect(copy.containerId).toBe(original.containerId)
+  })
 })
 
 describe('updateWorkspaceMeta', () => {
@@ -2358,6 +2397,7 @@ describe('getCreatableTypes', () => {
     const result = getCreatableTypes(ws, key)
     expect(result.canCreatePerson).toBe(false)
     expect(result.canCreateSystem).toBe(false)
+    expect(result.canCreateContainer).toBeNull()
     expect(result.canCreateComponent).toBe(containerId)
   })
 })

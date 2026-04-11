@@ -1435,7 +1435,6 @@ export function getCreatableTypes(workspace: Workspace, activeViewKey: string | 
       result.canCreateContainer = view.softwareSystemId ?? null
       break
     case 'component':
-      result.canCreateContainer = view.softwareSystemId ?? null
       result.canCreateComponent = view.containerId ?? null
       break
   }
