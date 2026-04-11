@@ -564,7 +564,7 @@ class ContextAwareParser {
     private parsePerson(varName?: string): Person | null {
         this.advance() // consume 'person'
         const name = this.readString()
-        const description = this.readOptionalString()
+        const description = this.readOptionalString() || undefined
         const tagsStr = this.readOptionalString()
 
         const id = varName ?? nextId()
@@ -593,7 +593,7 @@ class ContextAwareParser {
     private parseSoftwareSystem(varName?: string, model?: Model): SoftwareSystem | null {
         this.advance() // consume 'softwareSystem'
         const name = this.readString()
-        const description = this.readOptionalString()
+        const description = this.readOptionalString() || undefined
         const tagsStr = this.readOptionalString()
 
         const id = varName ?? nextId()
@@ -724,8 +724,8 @@ class ContextAwareParser {
     private parseContainer(varName?: string, model?: Model): Container | null {
         this.advance() // consume 'container'
         const name = this.readString()
-        const description = this.readOptionalString()
-        const technology = this.readOptionalString()
+        const description = this.readOptionalString() || undefined
+        const technology = this.readOptionalString() || undefined
         const tagsStr = this.readOptionalString()
 
         const id = varName ?? nextId()
@@ -852,8 +852,8 @@ class ContextAwareParser {
     private parseComponent(varName?: string): Component | null {
         this.advance() // consume 'component'
         const name = this.readString()
-        const description = this.readOptionalString()
-        const technology = this.readOptionalString()
+        const description = this.readOptionalString() || undefined
+        const technology = this.readOptionalString() || undefined
         const tagsStr = this.readOptionalString()
 
         const id = varName ?? nextId()
@@ -1013,8 +1013,8 @@ class ContextAwareParser {
             return null
         }
 
-        const description = this.readOptionalString()
-        const technology = this.readOptionalString()
+        const description = this.readOptionalString() || undefined
+        const technology = this.readOptionalString() || undefined
         const tagsStr = this.readOptionalString()
 
         const sourceId = this.resolveRef(sourceToken.value)
