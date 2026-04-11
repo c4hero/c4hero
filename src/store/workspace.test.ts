@@ -1616,6 +1616,12 @@ describe('removeTagGlobal', () => {
     expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(before)
   })
 
+  it('is a no-op for the Relationship built-in tag', () => {
+    const before = JSON.stringify(useWorkspaceStore.getState().workspace)
+    useWorkspaceStore.getState().removeTagGlobal('Relationship')
+    expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(before)
+  })
+
   it('supports undo', () => {
     useWorkspaceStore.getState().removeTagGlobal('VIP')
     useWorkspaceStore.getState().undo()

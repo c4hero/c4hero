@@ -11,8 +11,10 @@ import type { ScopeViolation } from '@/lib/scopeValidation'
 
 // ─── Built-in Tags ──────────────────────────────────────────────────
 
-/** Tags that always exist and whose styles cannot be removed */
-export const BUILTIN_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component'])
+/** Tags that always exist and whose styles cannot be removed.
+ *  'Relationship' is the built-in tag for all relationships and is
+ *  included here so removeTagGlobal can't strip it from the model. */
+export const BUILTIN_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component', 'Relationship'])
 
 // ─── Undo History ────────────────────────────────────────────────────
 
