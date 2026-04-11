@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useWorkspaceStore, getBreadcrumb } from './workspace'
+import { useWorkspaceStore, getBreadcrumb, getCreatableTypes } from './workspace'
 import type { Workspace } from '@/types/model'
 
 function makeWorkspace(): Workspace {
@@ -1755,6 +1755,65 @@ describe('getBreadcrumb', () => {
     ws.views.systemLandscapeViews[0].title = undefined
     const crumbs = getBreadcrumb(ws, [], keyA)
     expect(crumbs[0].label).toBe(keyA)
+  })
+})
+
+// ─── getCreatableTypes ──────────────────────────────────────────────
+
+describe('getCreatableTypes', () => {
+  let ws: Workspace
+
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    ws = useWorkspaceStore.getState().workspace!
+  })
+
+  it('returns all false for null activeViewKey', () => {
+    const result = getCreatableTypes(ws, null)
+    expect(result.canCreatePerson).toBe(false)
+    expect(result.canCreateSystem).toBe(false)
+    expect(result.canCreateContainer).toBeNull()
+    expect(result.canCreateComponent).toBeNull()
+  })
+
+  it('systemLandscape view: person and system are creatable', () => {
+    const key = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Landscape')
+    ws = useWorkspaceStore.getState().workspace!
+    const result = getCreatableTypes(ws, key)
+    expect(result.canCreatePerson).toBe(true)
+    expect(result.canCreateSystem).toBe(true)
+    expect(result.canCreateContainer).toBeNull()
+    expect(result.canCreateComponent).toBeNull()
+  })
+
+  it('systemContext view: person and system are creatable', () => {
+    const key = useWorkspaceStore.getState().addView('systemContext', 'api', 'Context')
+    ws = useWorkspaceStore.getState().workspace!
+    const result = getCreatableTypes(ws, key)
+    expect(result.canCreatePerson).toBe(true)
+    expect(result.canCreateSystem).toBe(true)
+    expect(result.canCreateContainer).toBeNull()
+    expect(result.canCreateComponent).toBeNull()
+  })
+
+  it('container view: person, system, and container (with systemId) are creatable', () => {
+    const key = useWorkspaceStore.getState().addView('container', 'api', 'Containers')
+    ws = useWorkspaceStore.getState().workspace!
+    const result = getCreatableTypes(ws, key)
+    expect(result.canCreatePerson).toBe(true)
+    expect(result.canCreateSystem).toBe(true)
+    expect(result.canCreateContainer).toBe('api')
+    expect(result.canCreateComponent).toBeNull()
+  })
+
+  it('component view: component (with containerId) is creatable', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Frontend')
+    const key = useWorkspaceStore.getState().addView('component', containerId, 'Components')
+    ws = useWorkspaceStore.getState().workspace!
+    const result = getCreatableTypes(ws, key)
+    expect(result.canCreatePerson).toBe(false)
+    expect(result.canCreateSystem).toBe(false)
+    expect(result.canCreateComponent).toBe(containerId)
   })
 })
 
