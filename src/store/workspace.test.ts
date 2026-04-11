@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useWorkspaceStore, getBreadcrumb, getCreatableTypes } from './workspace'
+import { useWorkspaceStore, getBreadcrumb, getCreatableTypes, buildElementMap, buildRelationshipMap, canDrillInto, getRelationshipById, getSelectedElement } from './workspace'
 import type { Workspace } from '@/types/model'
 
 function makeWorkspace(): Workspace {
@@ -3478,5 +3478,175 @@ describe('loadWorkspace — edge cases', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(0)
     expect(useWorkspaceStore.getState().redoStack).toHaveLength(0)
+  })
+})
+
+// ─── buildElementMap ──────────────────────────────────────────────────
+
+describe('buildElementMap', () => {
+  it('maps all people by ID', () => {
+    const ws = makeWorkspace()
+    const map = buildElementMap(ws)
+    expect(map.has('alice')).toBe(true)
+    expect(map.get('alice')!.name).toBe('Alice')
+  })
+
+  it('maps all softwareSystems by ID', () => {
+    const ws = makeWorkspace()
+    const map = buildElementMap(ws)
+    expect(map.has('api')).toBe(true)
+    expect(map.get('api')!.type).toBe('softwareSystem')
+  })
+
+  it('maps nested containers by ID', () => {
+    const ws = makeWorkspace()
+    ws.model.softwareSystems[0].containers = [
+      { id: 'db', type: 'container', name: 'Database', tags: ['Container'], properties: {}, components: [] },
+    ]
+    const map = buildElementMap(ws)
+    expect(map.has('db')).toBe(true)
+    expect(map.get('db')!.name).toBe('Database')
+  })
+
+  it('maps nested components (inside containers) by ID', () => {
+    const ws = makeWorkspace()
+    ws.model.softwareSystems[0].containers = [
+      {
+        id: 'web', type: 'container', name: 'Web App', tags: ['Container'], properties: {},
+        components: [
+          { id: 'ctrl', type: 'component', name: 'Controller', tags: ['Component'], properties: {} },
+        ],
+      },
+    ]
+    const map = buildElementMap(ws)
+    expect(map.has('ctrl')).toBe(true)
+    expect(map.get('ctrl')!.name).toBe('Controller')
+  })
+
+  it('returns an empty map when model has no elements', () => {
+    const ws = makeWorkspace()
+    ws.model.people = []
+    ws.model.softwareSystems = []
+    const map = buildElementMap(ws)
+    expect(map.size).toBe(0)
+  })
+})
+
+// ─── buildRelationshipMap ─────────────────────────────────────────────
+
+describe('buildRelationshipMap', () => {
+  it('maps all relationships by ID', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships = [
+      { id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} },
+      { id: 'r2', sourceId: 'api', destinationId: 'alice', tags: ['Relationship'], properties: {} },
+    ]
+    const map = buildRelationshipMap(ws)
+    expect(map.has('r1')).toBe(true)
+    expect(map.has('r2')).toBe(true)
+    expect(map.get('r1')!.sourceId).toBe('alice')
+  })
+
+  it('returns an empty map when there are no relationships', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships = []
+    const map = buildRelationshipMap(ws)
+    expect(map.size).toBe(0)
+  })
+})
+
+// ─── canDrillInto ─────────────────────────────────────────────────────
+
+describe('canDrillInto', () => {
+  it('returns false for a person (never has child views)', () => {
+    const ws = makeWorkspace()
+    expect(canDrillInto(ws, 'alice')).toBe(false)
+  })
+
+  it('returns false for a softwareSystem with no scoped views', () => {
+    const ws = makeWorkspace()
+    // No systemContext or container views exist → no child view
+    expect(canDrillInto(ws, 'api')).toBe(false)
+  })
+
+  it('returns true for a softwareSystem that has a container view', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    useWorkspaceStore.getState().addView('container', 'api', 'Containers')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(canDrillInto(ws, 'api')).toBe(true)
+  })
+
+  it('returns true for a softwareSystem that has a systemContext view', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(canDrillInto(ws, 'api')).toBe(true)
+  })
+
+  it('returns true for a container that has a component view', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+    useWorkspaceStore.getState().addView('component', containerId, 'Components')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(canDrillInto(ws, containerId)).toBe(true)
+  })
+
+  it('returns false for a container with no component view', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(canDrillInto(ws, containerId)).toBe(false)
+  })
+
+  it('returns false for an unknown element ID', () => {
+    const ws = makeWorkspace()
+    expect(canDrillInto(ws, 'does-not-exist')).toBe(false)
+  })
+})
+
+// ─── getRelationshipById ──────────────────────────────────────────────
+
+describe('getRelationshipById', () => {
+  it('returns the relationship when found', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships = [
+      { id: 'rel-1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} },
+    ]
+    const rel = getRelationshipById(ws, 'rel-1')
+    expect(rel).toBeDefined()
+    expect(rel!.sourceId).toBe('alice')
+  })
+
+  it('returns undefined when not found', () => {
+    const ws = makeWorkspace()
+    expect(getRelationshipById(ws, 'ghost-rel')).toBeUndefined()
+  })
+})
+
+// ─── getSelectedElement ───────────────────────────────────────────────
+
+describe('getSelectedElement', () => {
+  it('returns undefined when selectedIds is empty', () => {
+    const ws = makeWorkspace()
+    expect(getSelectedElement(ws, [])).toBeUndefined()
+  })
+
+  it('returns the element for the first selected ID', () => {
+    const ws = makeWorkspace()
+    const el = getSelectedElement(ws, ['alice'])
+    expect(el).toBeDefined()
+    expect(el!.name).toBe('Alice')
+  })
+
+  it('returns the first element when multiple IDs are selected', () => {
+    const ws = makeWorkspace()
+    // alice is first in model
+    const el = getSelectedElement(ws, ['alice', 'api'])
+    expect(el!.id).toBe('alice')
+  })
+
+  it('returns undefined when the ID is not found in the model', () => {
+    const ws = makeWorkspace()
+    expect(getSelectedElement(ws, ['ghost-id'])).toBeUndefined()
   })
 })
