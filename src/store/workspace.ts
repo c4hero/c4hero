@@ -217,32 +217,37 @@ function findElement(ws: Workspace, id: string): ModelElement | undefined {
 type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>>
   & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string }
 
-/** Apply a patch to an element in-place. Shared by updateElement and updateElementLive. */
-/** Returns true if the element was found and patched, false if no element with that ID exists. */
+/** Apply a patch to an element in-place. Shared by updateElement and updateElementLive.
+ *  Returns true only when the element was found AND at least one field changed.
+ *  Returning false (either element not found, or no-op patch) prevents phantom undo entries. */
 function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): boolean {
-  let found = false
+  let changed = false
   forEachElement(ws, (el) => {
     if (el.id !== id) return false
-    found = true
     // Use 'key in patch' for fields that can be legitimately cleared to undefined.
     // This distinguishes { status: undefined } (clear) from {} (leave unchanged),
     // which matters because the UI passes { status: undefined } when the user
     // deselects a value (e.g. clears description or picks "no status").
-    if (patch.name !== undefined) el.name = patch.name   // name is required; never cleared
-    if ('description' in patch) el.description = patch.description
-    if (patch.tags !== undefined) el.tags = patch.tags
-    if ('status' in patch) el.status = patch.status
-    if ('owner' in patch) el.owner = patch.owner
-    if ('url' in patch) el.url = patch.url
+    if (patch.name !== undefined && el.name !== patch.name) { el.name = patch.name; changed = true }
+    if ('description' in patch && el.description !== patch.description) { el.description = patch.description; changed = true }
+    if (patch.tags !== undefined) {
+      const tagsChanged = patch.tags.length !== el.tags.length || patch.tags.some((t, i) => t !== el.tags[i])
+      if (tagsChanged) { el.tags = patch.tags; changed = true }
+    }
+    if ('status' in patch && el.status !== patch.status) { el.status = patch.status; changed = true }
+    if ('owner' in patch && el.owner !== patch.owner) { el.owner = patch.owner; changed = true }
+    if ('url' in patch && el.url !== patch.url) { el.url = patch.url; changed = true }
     if (patch.location !== undefined && (el.type === 'person' || el.type === 'softwareSystem')) {
-      (el as Person | SoftwareSystem).location = patch.location
+      const cur = (el as Person | SoftwareSystem).location
+      if (cur !== patch.location) { (el as Person | SoftwareSystem).location = patch.location; changed = true }
     }
     if (patch.technology !== undefined && (el.type === 'container' || el.type === 'component')) {
-      (el as Container | Component).technology = patch.technology
+      const cur = (el as Container | Component).technology
+      if (cur !== patch.technology) { (el as Container | Component).technology = patch.technology; changed = true }
     }
     return true
   })
-  return found
+  return changed
 }
 
 /** The four view-type array keys — used wherever we need to iterate or locate views by type */

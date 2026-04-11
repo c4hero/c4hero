@@ -424,6 +424,36 @@ describe('Relationship and container mutations', () => {
     expect(rel.description).toBeUndefined()
   })
 
+  it('updateElement is a no-op (no undo entry) when name is already the same value', () => {
+    // Alice starts with name 'Alice' — patching with the same string should not push undo
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElement('alice', { name: 'Alice' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('updateElement is a no-op when description is already undefined', () => {
+    // Alice has no description — patching description: undefined is a no-op
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElement('alice', { description: undefined })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('updateElement is NOT a no-op when description is explicitly cleared (undefined replaces existing value)', () => {
+    // First give Alice a description, then clear it — that IS a real change
+    useWorkspaceStore.getState().updateElement('alice', { description: 'Tech lead' })
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElement('alice', { description: undefined })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+    expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')!.description).toBeUndefined()
+  })
+
+  it('updateElement is NOT a no-op when name actually changes', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().updateElement('alice', { name: 'Alice Smith' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+    expect(useWorkspaceStore.getState().workspace!.model.people.find(p => p.id === 'alice')!.name).toBe('Alice Smith')
+  })
+
   it('addContainer creates container under the specified softwareSystem', () => {
     useWorkspaceStore.getState().addContainer('api', 'Auth Service', undefined, undefined)
     const ws = useWorkspaceStore.getState().workspace!
