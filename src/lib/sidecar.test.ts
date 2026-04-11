@@ -58,12 +58,13 @@ describe('extractSidecar', () => {
     // If there were also a relationship with lineStyle we'd get a result, but no elements key
   })
 
-  it('captures relationship lineStyle', () => {
+  it('does NOT include lineStyle in sidecar (lineStyle is now in DSL)', () => {
     const ws = makeWorkspace()
     ws.model.relationships[0].lineStyle = 'Curved'
+    // lineStyle is serialized in the DSL — extractSidecar should not duplicate it.
+    // The sidecar reader still applies it for backward-compat migration.
     const result = extractSidecar(ws)
-    expect(result).not.toBeNull()
-    expect(result!.relationships?.['rel-1']?.lineStyle).toBe('Curved')
+    expect(result).toBeNull()
   })
 
   it('captures pinned view elements', () => {
@@ -76,7 +77,7 @@ describe('extractSidecar', () => {
 
   it('version is always 1 when there is sidecar data', () => {
     const ws = makeWorkspace()
-    ws.model.relationships[0].lineStyle = 'Curved'
+    ws.views.systemLandscapeViews[0].elements[0].pinned = true
     const result = extractSidecar(ws)
     expect(result!.version).toBe(1)
   })
@@ -192,7 +193,7 @@ describe('parseSidecar', () => {
 describe('serializeSidecar / parseSidecar round-trip', () => {
   it('serializes and deserializes sidecar data correctly', () => {
     const ws = makeWorkspace()
-    // status is now in DSL — not extracted to sidecar
+    // status, owner, and lineStyle are all in DSL now — none are extracted to sidecar
     ws.model.relationships[0].lineStyle = 'Straight'
     ws.views.systemLandscapeViews[0].elements[0].pinned = true
 
@@ -202,8 +203,8 @@ describe('serializeSidecar / parseSidecar round-trip', () => {
 
     expect(parsed).not.toBeNull()
     expect(parsed!.version).toBe(1)
-    expect(parsed!.elements).toBeUndefined() // status/owner no longer in sidecar
-    expect(parsed!.relationships?.['rel-1']?.lineStyle).toBe('Straight')
+    expect(parsed!.elements).toBeUndefined()      // status/owner no longer in sidecar
+    expect(parsed!.relationships).toBeUndefined() // lineStyle no longer in sidecar
     expect(parsed!.views?.['sl1']?.elements?.['alice']?.pinned).toBe(true)
   })
 

@@ -50,19 +50,9 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
   let hasData = false
 
-  // Note: status and owner are now serialized in the DSL — not duplicated here.
-  // SidecarElement + the applySidecar reader are kept for backward-compat migration
-  // of existing sidecar files written by older versions of c4hero.
-
-  // Relationships: lineStyle
-  const relationships: Record<string, SidecarRelationship> = {}
-  for (const rel of workspace.model.relationships) {
-    if (rel.lineStyle) {
-      relationships[rel.id] = { lineStyle: rel.lineStyle }
-      hasData = true
-    }
-  }
-  if (Object.keys(relationships).length > 0) sidecar.relationships = relationships
+  // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
+  // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
+  // migration of existing sidecar files written by older versions of c4hero.
 
   // Views: pinned elements
   const views: Record<string, SidecarView> = {}
