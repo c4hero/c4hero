@@ -590,6 +590,76 @@ describe('addRelationship — auto-add to views containing both endpoints', () =
   })
 })
 
+// ─── addContainer/addComponent cross-view auto-add ───────────────────
+
+describe('addContainer — auto-add to all container views scoped to same system', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('auto-adds to other container views scoped to the same system', () => {
+    // Create two container views for 'api'
+    const keyA = useWorkspaceStore.getState().addView('container', 'api', 'Containers A')
+    const keyB = useWorkspaceStore.getState().addView('container', 'api', 'Containers B')
+    useWorkspaceStore.getState().setActiveView(keyA)
+
+    // Add a container while view A is active
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web App')
+    const ws = useWorkspaceStore.getState().workspace!
+    const viewA = ws.views.containerViews.find(v => v.key === keyA)!
+    const viewB = ws.views.containerViews.find(v => v.key === keyB)!
+
+    // Should appear in both views
+    expect(viewA.elements.some(e => e.id === containerId)).toBe(true)
+    expect(viewB.elements.some(e => e.id === containerId)).toBe(true)
+  })
+
+  it('does not auto-add to container views scoped to a different system', () => {
+    const otherId = useWorkspaceStore.getState().addSoftwareSystem('Other')
+    const keyOther = useWorkspaceStore.getState().addView('container', otherId, 'Other Containers')
+    const keyApi = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    useWorkspaceStore.getState().setActiveView(keyApi)
+
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web App')
+    const ws = useWorkspaceStore.getState().workspace!
+    const viewOther = ws.views.containerViews.find(v => v.key === keyOther)!
+    expect(viewOther.elements.some(e => e.id === containerId)).toBe(false)
+  })
+})
+
+describe('addComponent — auto-add to all component views scoped to same container', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('auto-adds to other component views scoped to the same container', () => {
+    const containerId = useWorkspaceStore.getState().addContainer('api', 'Web App')
+    const keyA = useWorkspaceStore.getState().addView('component', containerId, 'Components A')
+    const keyB = useWorkspaceStore.getState().addView('component', containerId, 'Components B')
+    useWorkspaceStore.getState().setActiveView(keyA)
+
+    const compId = useWorkspaceStore.getState().addComponent(containerId, 'Auth Handler')
+    const ws = useWorkspaceStore.getState().workspace!
+    const viewA = ws.views.componentViews.find(v => v.key === keyA)!
+    const viewB = ws.views.componentViews.find(v => v.key === keyB)!
+    expect(viewA.elements.some(e => e.id === compId)).toBe(true)
+    expect(viewB.elements.some(e => e.id === compId)).toBe(true)
+  })
+
+  it('does not auto-add to component views scoped to a different container', () => {
+    const containerA = useWorkspaceStore.getState().addContainer('api', 'Web App')
+    const containerB = useWorkspaceStore.getState().addContainer('api', 'DB')
+    const keyB = useWorkspaceStore.getState().addView('component', containerB, 'DB Components')
+    const keyA = useWorkspaceStore.getState().addView('component', containerA, 'Web Components')
+    useWorkspaceStore.getState().setActiveView(keyA)
+
+    const compId = useWorkspaceStore.getState().addComponent(containerA, 'Auth Handler')
+    const ws = useWorkspaceStore.getState().workspace!
+    const viewB = ws.views.componentViews.find(v => v.key === keyB)!
+    expect(viewB.elements.some(e => e.id === compId)).toBe(false)
+  })
+})
+
 // ─── Undo/redo after relationship mutations ──────────────────────────
 
 describe('Undo/redo after relationship mutations', () => {

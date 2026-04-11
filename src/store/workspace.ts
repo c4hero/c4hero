@@ -419,6 +419,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
       system.containers.push(container)
       addToCurrentView(ws, s.activeViewKey, id, position)
+      // Also auto-add to all other container views scoped to the same system
+      for (const v of ws.views.containerViews) {
+        if (v.softwareSystemId === systemId && v.key !== s.activeViewKey) {
+          if (!v.elements.some(e => e.id === id)) v.elements.push({ id })
+        }
+      }
       return { ...pushUndo(s), workspace: ws, focusElementId: id, selectedElementIds: [id], selectedRelationshipId: null, selectedGroupId: null }
     })
     get().revalidateScope()
@@ -437,6 +443,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Component'], properties: {} }
           container.components.push(comp)
           addToCurrentView(ws, s.activeViewKey, id, position)
+          // Also auto-add to all other component views scoped to the same container
+          for (const v of ws.views.componentViews) {
+            if (v.containerId === containerId && v.key !== s.activeViewKey) {
+              if (!v.elements.some(e => e.id === id)) v.elements.push({ id })
+            }
+          }
           return { ...pushUndo(s), workspace: ws, focusElementId: id, selectedElementIds: [id], selectedRelationshipId: null, selectedGroupId: null }
         }
       }
