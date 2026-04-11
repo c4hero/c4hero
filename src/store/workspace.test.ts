@@ -646,6 +646,26 @@ describe('UI toggles', () => {
     useWorkspaceStore.getState().toggleViewsPanel()
     expect(useWorkspaceStore.getState().viewsPanelOpen).toBe(!before)
   })
+
+  it('setCanvasSettingsOpen opens settings and closes command palette', () => {
+    useWorkspaceStore.setState({ commandPaletteOpen: true })
+    useWorkspaceStore.getState().setCanvasSettingsOpen(true)
+    expect(useWorkspaceStore.getState().canvasSettingsOpen).toBe(true)
+    expect(useWorkspaceStore.getState().commandPaletteOpen).toBe(false)
+  })
+
+  it('setAddElementPanelOpen opens panel and closes command palette', () => {
+    useWorkspaceStore.setState({ commandPaletteOpen: true })
+    useWorkspaceStore.getState().setAddElementPanelOpen(true)
+    expect(useWorkspaceStore.getState().addElementPanelOpen).toBe(true)
+    expect(useWorkspaceStore.getState().commandPaletteOpen).toBe(false)
+  })
+
+  it('setAddElementPanelOpen false closes the panel', () => {
+    useWorkspaceStore.setState({ addElementPanelOpen: true })
+    useWorkspaceStore.getState().setAddElementPanelOpen(false)
+    expect(useWorkspaceStore.getState().addElementPanelOpen).toBe(false)
+  })
 })
 
 // ─── Navigation ──────────────────────────────────────────────────────
