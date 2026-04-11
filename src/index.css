@@ -72,6 +72,8 @@
   --glass-overlay-xs: rgba(255, 255, 255, 0.04);
   --glass-overlay-sm: rgba(255, 255, 255, 0.08);
   --glass-overlay-md: rgba(255, 255, 255, 0.1);
+  /* Faint accent-tint for group node backgrounds (nearly invisible tint) */
+  --color-tint-accent-faint: rgba(88, 166, 255, 0.006);
 
   /* Transparent text colors — for elements rendered directly on canvas */
   --color-text-dim: rgba(255, 255, 255, 0.35);

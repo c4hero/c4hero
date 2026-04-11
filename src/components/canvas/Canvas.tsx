@@ -29,7 +29,7 @@ const edgeTypes: EdgeTypes = {
 
 const KBD_STYLE: React.CSSProperties = {
   padding: '2px 7px', borderRadius: 6,
-  background: 'var(--glass-overlay-sm)', border: '1px solid rgba(255,255,255,0.12)',
+  background: 'var(--glass-overlay-sm)', border: '1px solid var(--glass-overlay-md)',
   fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: '18px',
 }
 

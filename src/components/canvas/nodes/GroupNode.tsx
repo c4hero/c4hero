@@ -19,7 +19,7 @@ function GroupNode({ data, selected }: NodeProps & { data: GroupNodeData }) {
         border: selected
           ? '2px dashed var(--color-accent)'
           : '2px dashed var(--color-border-hover)',
-        background: 'rgba(88, 166, 255, 0.006)',
+        background: 'var(--color-tint-accent-faint)',
         transition: 'border-color 200ms ease',
       }}
     >
