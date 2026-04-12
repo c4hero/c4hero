@@ -10,6 +10,7 @@ import {
   createEventDrivenTemplate,
 } from '@/lib/templates'
 import { openDSLFile, hasFileSystemAccess, isWorkspaceShape } from '@/lib/fileIO'
+import { createLogger } from '@/lib/logger'
 import {
   openFolder,
   readDSLFile,
@@ -42,6 +43,8 @@ import AISettingsDialog from '@/components/ai/AISettingsDialog'
 import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
 
 const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDialog'))
+
+const log = createLogger('WelcomeScreen')
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -549,7 +552,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
             elementCount = els.length
             viewCount = [...ws.views.systemLandscapeViews, ...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews].length
           }
-        } catch { /* ignore */ }
+        } catch (err) { log.warn('Failed to parse DSL metadata for file listing', err) }
         files.push({ name, modifiedAt, scope, elementCount, viewCount, elements: els })
       }
     }

@@ -23,6 +23,12 @@ const LINE_STYLE_OPTIONS: LineStyle[] = ['Curved', 'Straight', 'Orthogonal']
 
 type PanelTab = 'properties' | 'relations' | 'tags'
 
+const PANEL_TABS: { id: PanelTab; label: string }[] = [
+  { id: 'properties', label: 'Properties' },
+  { id: 'relations', label: 'Relations' },
+  { id: 'tags', label: 'Tags' },
+]
+
 export default function RightPanel() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const selectedIds = useWorkspaceStore((s) => s.selectedElementIds)
@@ -189,11 +195,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
 
       {/* Tabs */}
       <div className="flex border-b px-1" style={{ borderColor: 'var(--color-border)' }} role="tablist" aria-label="Element details">
-        {([
-          { id: 'properties' as PanelTab, label: 'Properties' },
-          { id: 'relations' as PanelTab, label: 'Relations' },
-          { id: 'tags' as PanelTab, label: 'Tags' },
-        ]).map(({ id, label }) => (
+        {PANEL_TABS.map(({ id, label }) => (
           <button
             key={id}
             role="tab"

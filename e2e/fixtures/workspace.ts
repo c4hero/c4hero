@@ -21,6 +21,8 @@ export class WorkspaceHelper {
     await this.goto()
     // Directly load the Big Bank sample via test helper exposed in dev mode
     await this.page.evaluate(() => (window as Record<string, unknown>).__testLoadSample?.())
+    // Wait for store→effect→navigate chain to land on a canvas route
+    await this.page.waitForURL(/\/collection\//, { timeout: 5000 })
     await this.page.locator('.react-flow').waitFor({ state: 'visible' })
   }
 
@@ -28,6 +30,7 @@ export class WorkspaceHelper {
     await this.goto()
     // Directly load a blank workspace via test helper exposed in dev mode
     await this.page.evaluate(() => (window as Record<string, unknown>).__testLoadBlank?.())
+    await this.page.waitForURL(/\/collection\//, { timeout: 5000 })
     await this.page.locator('.react-flow').waitFor({ state: 'visible' })
   }
 
@@ -73,7 +76,19 @@ export class WorkspaceHelper {
   /** Zoom to fit — ensures all nodes are visible before interaction */
   async fitView() {
     await this.page.getByRole('button', { name: 'Zoom to fit' }).click()
-    await this.page.waitForTimeout(400)
+    // Wait for the viewport transform to settle after fit-view animation
+    await this.page.locator('.react-flow__viewport').evaluate((el) =>
+      new Promise<void>((resolve) => {
+        let last = el.getAttribute('transform') ?? el.style.transform
+        const check = () => {
+          const cur = el.getAttribute('transform') ?? el.style.transform
+          if (cur === last) { resolve(); return }
+          last = cur
+          requestAnimationFrame(check)
+        }
+        requestAnimationFrame(check)
+      }),
+    )
   }
 
   /** Open search dialog */
@@ -94,7 +109,6 @@ export class WorkspaceHelper {
 
     // Hover to reveal source handles
     await sourceNode.hover()
-    await this.page.waitForTimeout(300)
 
     // Find any center source handle (slot b = center handle, any side)
     const sourceHandle = sourceNode.locator('[data-handleid$="-b-source"]').first()
@@ -127,7 +141,9 @@ export class WorkspaceHelper {
       )
     }
     await this.page.mouse.up()
-    // Give React Flow time to process the connection
-    await this.page.waitForTimeout(300)
+    // Wait for React Flow to process the connection (new edge appears)
+    await this.page.locator('.react-flow__edge').first().waitFor({ state: 'attached', timeout: 3000 }).catch(() => {
+      // Edge may already exist from a prior connection; swallow if count is unchanged
+    })
   }
 }

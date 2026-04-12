@@ -19,10 +19,12 @@ export default defineConfig({
   server: {
     port: 3007,
     allowedHosts: ['appv2.c4hero.com'],
-    hmr: {
-      clientPort: 443,
-      protocol: 'wss',
-    },
+    // HMR over wss:443 is only correct when served via Cloudflare Tunnel on
+    // appv2.c4hero.com. For plain localhost dev (and E2E), leave HMR as the
+    // default so the browser connects to ws://localhost:3007 without errors.
+    hmr: process.env.VITE_HMR_TUNNEL
+      ? { clientPort: 443, protocol: 'wss' }
+      : undefined,
   },
   test: {
     globals: true,

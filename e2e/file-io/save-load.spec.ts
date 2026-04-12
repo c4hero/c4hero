@@ -12,10 +12,11 @@ test.describe('File I/O', () => {
 
   test('workspace persists to localStorage for crash recovery', async ({ workspace }) => {
     await workspace.loadSample()
-    // Wait for auto-save debounce (1 second)
-    await workspace.page.waitForTimeout(1500)
-    // Check localStorage
-    const saved = await workspace.page.evaluate(() => localStorage.getItem('c4hero_crash_recovery'))
+    // Wait for auto-save to write to localStorage after its debounce period
+    const saved = await workspace.page.waitForFunction(
+      () => localStorage.getItem('c4hero_crash_recovery'),
+      { timeout: 5000 },
+    ).then(h => h.jsonValue())
     expect(saved).not.toBeNull()
   })
 })

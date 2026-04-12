@@ -253,7 +253,15 @@ function TagManagerPanel({
 
   return (
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 99,
+          background: 'transparent', border: 'none', padding: 0, cursor: 'default',
+        }}
+      />
       <div
         className="glass-panel-solid"
         style={{
@@ -660,7 +668,15 @@ function ColorPicker({ value, onChange, presets }: {
       />
       {showPresets && popupPos && createPortal(
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setShowPresets(false)} />
+          <button
+            type="button"
+            aria-label="Close presets"
+            onClick={() => setShowPresets(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 9998,
+              background: 'transparent', border: 'none', padding: 0, cursor: 'default',
+            }}
+          />
           <div style={{
             position: 'fixed',
             top: popupPos.top,

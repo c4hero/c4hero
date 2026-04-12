@@ -10,7 +10,6 @@ test.describe('Context Menu', () => {
 
   test('right-click on node shows delete option', async ({ workspace }) => {
     await workspace.loadSample()
-    await workspace.page.waitForTimeout(500)
     // Use the ATM node which should be visible in the landscape view
     const node = workspace.page.locator('.react-flow__node', { hasText: 'ATM' })
     await node.waitFor({ state: 'visible' })
@@ -18,7 +17,6 @@ test.describe('Context Menu', () => {
     if (box) {
       await workspace.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' })
     }
-    await workspace.page.waitForTimeout(300)
     // Context menu has a fixed z-[90] container with menu items
     await expect(workspace.page.locator('.fixed.z-\\[90\\]').getByText('Delete')).toBeVisible()
   })

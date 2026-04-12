@@ -24,7 +24,7 @@ import {
 import { useSettingsStore } from '@/store/settings'
 
 import { listDSLFiles, readDSLFile, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/folderIO'
-import { parseDSL, serializeDSL as _serializeDSL } from '@/lib/dsl'
+import { parseDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
 import { useNavigate } from 'react-router-dom'
 
@@ -88,7 +88,7 @@ export default function FloatingTopPill() {
           counts['system'] = (counts['system'] ?? 0) + 1
           for (const c of s.containers) {
             counts['container'] = (counts['container'] ?? 0) + 1
-            for (const _ of c.components) counts['component'] = (counts['component'] ?? 0) + 1
+            counts['component'] = (counts['component'] ?? 0) + c.components.length
           }
         }
         const elementCounts = Object.entries(counts).map(([type, count]) => ({ type, count }))
@@ -145,8 +145,6 @@ export default function FloatingTopPill() {
 
   if (!workspace) return null
 
-  const views = getAllViews(workspace)
-  const activeView = views.find((v) => v.key === activeViewKey)
   const wsName = workspace.name ?? 'workspace'
 
   async function handleExport(format: 'dsl' | 'json' | 'png' | 'svg', theme: ExportTheme = 'dark') {
@@ -603,7 +601,15 @@ function WorkspaceSwitcherPanel({
 
   return (
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }} onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Close panel"
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto',
+          background: 'transparent', border: 'none', padding: 0, cursor: 'default',
+        }}
+      />
       <div className="shade-panel" style={{ zIndex: 49, display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }}>
 
         {/* Current workspace properties — editable */}

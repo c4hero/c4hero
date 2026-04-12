@@ -11,7 +11,8 @@ test.describe('Left Panel', () => {
     // Switch to Containers view via left panel
     const containersView = workspace.page.locator('button', { hasText: 'Containers' }).first()
     await containersView.click()
-    await workspace.page.waitForTimeout(300)
+    // Wait for canvas to update with new view's nodes
+    await workspace.page.locator('.react-flow__node').first().waitFor({ state: 'visible' })
     const afterCount = await workspace.getNodeCount()
     expect(afterCount).toBeGreaterThan(0)
   })
@@ -20,7 +21,6 @@ test.describe('Left Panel', () => {
     await workspace.loadSample()
     // Click the "Model" tab - look for it by its text directly
     await workspace.page.locator('button').filter({ hasText: /^Model$/ }).first().click()
-    await workspace.page.waitForTimeout(300)
     // Should show system names in the model tree
     await expect(workspace.page.getByText('Internet Banking System').first()).toBeVisible()
   })

@@ -3,6 +3,9 @@ import { createLogger } from '@/lib/logger'
 const log = createLogger('ai')
 const API_TIMEOUT_MS = 30_000
 
+const ANTHROPIC_API_URL: string = (import.meta.env.VITE_ANTHROPIC_API_URL as string | undefined) ?? 'https://api.anthropic.com/v1/messages'
+const OPENAI_API_URL: string = (import.meta.env.VITE_OPENAI_API_URL as string | undefined) ?? 'https://api.openai.com/v1/chat/completions'
+
 function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
@@ -62,7 +65,7 @@ ${context ? `Context: ${context}` : ''}
 Respond with ONLY the description text, no quotes or explanation.`
 
   if (config.provider === 'anthropic') {
-    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithTimeout(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -86,7 +89,7 @@ Respond with ONLY the description text, no quotes or explanation.`
   }
 
   if (config.provider === 'openai') {
-    const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchWithTimeout(OPENAI_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -130,7 +133,7 @@ Requirements:
 Respond with ONLY the Structurizr DSL code, no explanation or markdown.`
 
   if (config.provider === 'anthropic') {
-    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithTimeout(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -154,7 +157,7 @@ Respond with ONLY the Structurizr DSL code, no explanation or markdown.`
   }
 
   if (config.provider === 'openai') {
-    const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchWithTimeout(OPENAI_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -15,6 +15,8 @@ export default memo(function StatusDot({ status }: { status?: ElementStatus }) {
       className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full border border-white/20"
       style={{ background: STATUS_COLORS[status] }}
       title={status}
+      role="img"
+      aria-label={`Status: ${status}`}
       data-testid="status-dot"
     />
   )

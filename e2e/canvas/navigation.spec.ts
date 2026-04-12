@@ -6,7 +6,6 @@ test.describe('Canvas Navigation', () => {
     // Double-click Internet Banking System to drill into container view
     await workspace.doubleClickNode('Internet Banking System')
     // Should see container-level nodes like API Application
-    await workspace.page.waitForTimeout(500)
     const apiNode = await workspace.getNodeByName('API Application')
     await expect(apiNode).toBeVisible()
   })
@@ -14,10 +13,10 @@ test.describe('Canvas Navigation', () => {
   test('backspace navigates back', async ({ workspace }) => {
     await workspace.loadSample()
     await workspace.doubleClickNode('Internet Banking System')
-    await workspace.page.waitForTimeout(500)
+    // Wait for drill-down to complete
+    await expect(await workspace.getNodeByName('API Application')).toBeVisible()
     // Navigate back
     await workspace.page.keyboard.press('Backspace')
-    await workspace.page.waitForTimeout(300)
     // Should be back at landscape - ATM visible again
     const atm = await workspace.getNodeByName('ATM')
     await expect(atm).toBeVisible()

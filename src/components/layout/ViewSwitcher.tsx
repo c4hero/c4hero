@@ -34,7 +34,7 @@ interface ViewSwitcherProps {
 
 export { VIEW_TYPE_LABELS, LEVEL_BADGE }
 
-export default function ViewSwitcher({ isMobile, open, onToggle, onClose }: ViewSwitcherProps) {
+export default function ViewSwitcher({ isMobile, open, onToggle }: ViewSwitcherProps) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
 
@@ -131,7 +131,15 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
 
   return (
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }} onClick={() => { onClose(); setRenamingViewKey(null) }} />
+      <button
+        type="button"
+        aria-label="Close view switcher"
+        onClick={() => { onClose(); setRenamingViewKey(null) }}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto',
+          background: 'transparent', border: 'none', padding: 0, cursor: 'default',
+        }}
+      />
       <div
         className="shade-panel"
         style={{

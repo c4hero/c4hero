@@ -12,13 +12,13 @@ const log = createLogger('global')
 
 // Test helpers — only exposed in dev mode for E2E tests
 if (import.meta.env.DEV) {
-  ;(window as Record<string, unknown>).__testLoadSample = () => {
+  ;(window as unknown as Record<string, unknown>).__testLoadSample = () => {
     useWorkspaceStore.getState().loadWorkspace(createBigBankSample())
   }
-  ;(window as Record<string, unknown>).__testLoadBlank = () => {
+  ;(window as unknown as Record<string, unknown>).__testLoadBlank = () => {
     useWorkspaceStore.getState().loadWorkspace(createBlankWorkspace())
   }
-  ;(window as Record<string, unknown>).__testGetWorkspace = () => {
+  ;(window as unknown as Record<string, unknown>).__testGetWorkspace = () => {
     return useWorkspaceStore.getState().workspace
   }
 }

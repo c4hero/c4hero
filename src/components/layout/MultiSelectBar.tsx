@@ -70,14 +70,22 @@ export default function MultiSelectBar() {
       w: n.measured?.width ?? 200,
       h: n.measured?.height ?? 100,
     }))
+    // Single-pass min/max computation for both axes (avoids 2-3× repeated .map() scans)
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (const p of positions) {
+      if (p.x < minX) minX = p.x
+      if (p.x + p.w > maxX) maxX = p.x + p.w
+      if (p.y < minY) minY = p.y
+      if (p.y + p.h > maxY) maxY = p.y + p.h
+    }
     let refVal: number = 0
     switch (mode) {
-      case 'left':     refVal = Math.min(...positions.map(p => p.x)); break
-      case 'right':    refVal = Math.max(...positions.map(p => p.x + p.w)); break
-      case 'center-x': refVal = (Math.min(...positions.map(p => p.x)) + Math.max(...positions.map(p => p.x + p.w))) / 2; break
-      case 'top':      refVal = Math.min(...positions.map(p => p.y)); break
-      case 'bottom':   refVal = Math.max(...positions.map(p => p.y + p.h)); break
-      case 'center-y': refVal = (Math.min(...positions.map(p => p.y)) + Math.max(...positions.map(p => p.y + p.h))) / 2; break
+      case 'left':     refVal = minX; break
+      case 'right':    refVal = maxX; break
+      case 'center-x': refVal = (minX + maxX) / 2; break
+      case 'top':      refVal = minY; break
+      case 'bottom':   refVal = maxY; break
+      case 'center-y': refVal = (minY + maxY) / 2; break
     }
     const alignedPositions: { id: string; x: number; y: number }[] = []
     reactFlow.setNodes(nodes => nodes.map(n => {
@@ -147,7 +155,15 @@ export default function MultiSelectBar() {
           </button>
           {alignOpen && (
             <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 53 }} onClick={() => setAlignOpen(false)} />
+              <button
+                type="button"
+                aria-label="Close align menu"
+                onClick={() => setAlignOpen(false)}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 53,
+                  background: 'transparent', border: 'none', padding: 0, cursor: 'default',
+                }}
+              />
               <div className="glass-flyout" style={{
                 position: 'absolute',
                 ...(alignOpenDownward

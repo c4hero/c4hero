@@ -11,7 +11,6 @@ test.describe('View Management', () => {
     await workspace.page.locator('button', { hasText: 'Create View' }).last().click()
 
     // Dialog should close and new view should be active
-    await workspace.page.waitForTimeout(300)
     await expect(workspace.page.locator('h2', { hasText: 'Create View' })).not.toBeVisible()
   })
 
@@ -22,7 +21,8 @@ test.describe('View Management', () => {
     // Switch to Containers view via left panel
     const containersView = workspace.page.locator('button', { hasText: 'Containers' }).first()
     await containersView.click()
-    await workspace.page.waitForTimeout(300)
+    // Wait for canvas to update with new view's nodes
+    await workspace.page.locator('.react-flow__node').first().waitFor({ state: 'visible' })
     const containerNodes = await workspace.getNodeCount()
 
     // Container view typically has more nodes (includes containers + external systems)

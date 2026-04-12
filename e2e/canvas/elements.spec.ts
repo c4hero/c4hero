@@ -16,7 +16,6 @@ test.describe('Canvas Elements', () => {
   test('clicking a node selects it and shows in right panel', async ({ workspace }) => {
     await workspace.loadSample()
     await workspace.clickNode('Personal Banking Customer')
-    await workspace.page.waitForTimeout(300)
     // Right panel should show the element name and Properties tab
     await expect(workspace.page.getByTestId('element-status')).toBeVisible()
   })

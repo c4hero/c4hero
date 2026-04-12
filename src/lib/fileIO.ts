@@ -66,7 +66,7 @@ export function removeRecentFolder(name: string): void {
   const filtered = getRecentFolders().filter(f => f.name !== name)
   try {
     localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(filtered))
-  } catch { /* ignore */ }
+  } catch (err) { log.warn('Failed to remove recent folder from localStorage', err) }
 }
 
 export function pruneRecentFolders(validNames: string[]): void {
@@ -74,7 +74,7 @@ export function pruneRecentFolders(validNames: string[]): void {
   const filtered = getRecentFolders().filter(f => validSet.has(f.name))
   try {
     localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(filtered))
-  } catch { /* ignore */ }
+  } catch (err) { log.warn('Failed to prune recent folders in localStorage', err) }
 }
 
 export function addRecentFolder({ name, path, displayName }: { name: string; path: string; displayName?: string }) {
