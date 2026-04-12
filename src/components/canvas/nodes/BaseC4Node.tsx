@@ -111,13 +111,13 @@ export default function BaseC4Node({
               <LayoutGrid size={11} aria-hidden="true" />
             </button>
           )}
-          {canDrill && childCount !== undefined && childCount > 0 && (
+          {childCount !== undefined && childCount > 0 && (
             <button
               className="c4-node-action-btn nodrag"
               style={{ color: resolvedTypeColor }}
               onClick={(e) => { e.stopPropagation(); onDrillIn?.(element.id) }}
-              title={`View ${childCount} children`}
-              aria-label={`Drill into ${element.name}, ${childCount} children`}
+              title={canDrill ? `Zoom in · ${childCount} children` : `Zoom in · create a new view for ${childCount} children`}
+              aria-label={`Zoom into ${element.name}`}
             >
               <ZoomIn size={11} aria-hidden="true" />
             </button>

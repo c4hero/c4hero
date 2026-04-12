@@ -20,11 +20,18 @@ function allowedViewTypes(scope: string | undefined) {
 export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const addView = useWorkspaceStore((s) => s.addView)
+  // Optional pre-populated defaults (used by the zoom-in "Customize…" flow).
+  const defaults = useWorkspaceStore((s) => s.createViewDefaults)
+  const setCreateViewDefaults = useWorkspaceStore((s) => s.setCreateViewDefaults)
 
   const viewTypes = allowedViewTypes(workspace?.scope)
-  const [type, setType] = useState<ViewType>(viewTypes[0].value)
+  // Seed state from `defaults` when provided, otherwise fall back to the first
+  // allowed view type. The initial-state functions are only called once, so a
+  // later change to `defaults` won't reseed; the Customize… flow sets defaults
+  // BEFORE opening the dialog, so this is correct.
+  const [type, setType] = useState<ViewType>(() => defaults?.type ?? viewTypes[0].value)
   const [title, setTitle] = useState('')
-  const [scopeId, setScopeId] = useState('')
+  const [scopeId, setScopeId] = useState<string>(() => defaults?.scopeId ?? '')
 
   if (!workspace) return null
 
@@ -46,19 +53,25 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
 
   const handleCreate = () => {
     addView(type, needsScope ? scopeId || undefined : undefined, title || undefined)
+    setCreateViewDefaults(null) // consume the zoom defaults so the next open starts fresh
+    onClose()
+  }
+
+  const handleClose = () => {
+    setCreateViewDefaults(null)
     onClose()
   }
 
   return (
     <DialogShell
-      onClose={onClose}
+      onClose={handleClose}
       ariaLabel="Create View"
       className="relative w-full max-w-sm rounded-xl border p-5 shadow-2xl"
       style={{ background: 'var(--color-surface-1)', borderColor: 'var(--color-border)' }}
     >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold">Create View</h2>
-          <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close dialog"><X size={14} /></button>
+          <button onClick={handleClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close dialog"><X size={14} /></button>
         </div>
 
         <div className="space-y-3">

@@ -55,6 +55,11 @@ interface WorkspaceState extends UndoState {
   pendingDelete: { message: string; onConfirm: () => void } | null
   confirmDelete: (message: string, onConfirm: () => void) => void
   cancelDelete: () => void
+  /** Active zoom-in confirm prompt: shown when the user clicks zoom on an element
+   *  that has children but no corresponding child view. */
+  pendingZoomConfirm: { elementId: string; elementName: string; targetType: 'container' | 'component' } | null
+  /** Optional defaults to pre-populate CreateViewDialog with, used by the zoom "Customize…" flow. */
+  createViewDefaults: { type: ViewType; scopeId?: string } | null
   presentationMode: boolean
   lastSavedUndoLength: number
   setLastSavedUndoLength: (n: number) => void
@@ -87,6 +92,17 @@ interface WorkspaceState extends UndoState {
   // Navigation
   setActiveView: (key: string) => void
   drillInto: (elementId: string) => void
+  /** Zoom into a drillable element. If a child view exists, navigate to it (like drillInto).
+   *  Otherwise, set pendingZoomConfirm so the UI can prompt the user to create one. */
+  zoomInto: (elementId: string) => void
+  /** Accept the pending zoom confirm: create the target view and navigate to it. */
+  confirmZoomCreate: () => void
+  /** Dismiss the pending zoom confirm without creating a view. */
+  cancelZoomConfirm: () => void
+  /** Convert the pending zoom confirm into CreateViewDialog defaults + open the dialog
+   *  (the "Customize…" escape hatch on the zoom confirm prompt). */
+  openCreateViewFromZoom: () => void
+  setCreateViewDefaults: (defaults: { type: ViewType; scopeId?: string } | null) => void
   navigateBack: () => void
 
   // Selection
@@ -302,6 +318,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   addElementPanelOpen: false,
   createViewDialogOpen: false,
   pendingDelete: null,
+  pendingZoomConfirm: null,
+  createViewDefaults: null,
   lastSavedUndoLength: 0,
   setLastSavedUndoLength: (n) => set({ lastSavedUndoLength: n }),
   presentationMode: false,
@@ -339,6 +357,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedGroupId: null,
       focusElementId: null, // prevent stale scroll-to signal from a previous workspace
       pendingDelete: null,  // dismiss any in-flight delete confirmation from a previous workspace
+      pendingZoomConfirm: null,
+      createViewDefaults: null,
       undoStack: [],
       redoStack: [],
       lastSavedUndoLength: 0, // reset so the save indicator doesn't inherit a stale saved position
@@ -360,6 +380,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedGroupId: null,
       focusElementId: null,
       pendingDelete: null, // dismiss any in-flight delete confirmation dialog
+      pendingZoomConfirm: null,
+      createViewDefaults: null,
       undoStack: [],
       redoStack: [],
       scopeViolations: [],
@@ -395,6 +417,60 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedGroupId: null,
     }
   }),
+
+  zoomInto: (elementId) => {
+    const s = get()
+    if (!s.workspace || !s.activeViewKey) return
+    // Existing child view? Navigate like drillInto.
+    const childView = findChildView(s.workspace, elementId, s.activeViewKey)
+    if (childView && childView.key !== s.activeViewKey) {
+      get().drillInto(elementId)
+      return
+    }
+    // No child view yet — figure out what type we *would* create.
+    const target = getZoomTarget(s.workspace, elementId)
+    if (!target) return // not drillable (person/component/external/etc.)
+    set({
+      pendingZoomConfirm: { elementId, elementName: target.elementName, targetType: target.targetType },
+    })
+  },
+
+  confirmZoomCreate: () => {
+    const s = get()
+    const pending = s.pendingZoomConfirm
+    if (!pending || !s.workspace) return
+    // Build a friendly title and create the view.
+    const viewTypeName = pending.targetType === 'container' ? 'Container' : 'Component'
+    const title = `${pending.elementName} — ${viewTypeName}s`
+    // addView auto-populates elements and switches to the new view. It also
+    // pushes an undo entry. We want the new view to be drillable-from the
+    // current view, so preserve viewHistory.
+    const prevActive = s.activeViewKey
+    get().addView(pending.targetType, pending.elementId, title)
+    // Restore breadcrumb history so navigateBack returns to the caller view.
+    if (prevActive) {
+      set((curr) => ({
+        viewHistory: [...curr.viewHistory, prevActive],
+        pendingZoomConfirm: null,
+      }))
+    } else {
+      set({ pendingZoomConfirm: null })
+    }
+  },
+
+  cancelZoomConfirm: () => set({ pendingZoomConfirm: null }),
+
+  openCreateViewFromZoom: () => {
+    const pending = get().pendingZoomConfirm
+    if (!pending) return
+    set({
+      pendingZoomConfirm: null,
+      createViewDefaults: { type: pending.targetType, scopeId: pending.elementId },
+      createViewDialogOpen: true,
+    })
+  },
+
+  setCreateViewDefaults: (defaults) => set({ createViewDefaults: defaults }),
 
   navigateBack: () => set((s) => {
     if (s.viewHistory.length === 0) return s
@@ -1405,6 +1481,27 @@ function findChildView(workspace: Workspace, elementId: string, currentViewKey?:
 
 export function canDrillInto(workspace: Workspace, elementId: string): boolean {
   return findChildView(workspace, elementId) !== undefined
+}
+
+/** Determine whether an element can be "zoomed into" — i.e. it has children that
+ *  could be shown in a child view. Unlike canDrillInto, this does NOT require the
+ *  child view to already exist; the zoom-in flow prompts to create one if missing.
+ *
+ *  Returns the element name and the view type that would be created, or null if
+ *  the element has no children (persons, components, containers with no components, etc.). */
+export function getZoomTarget(
+  workspace: Workspace,
+  elementId: string,
+): { elementName: string; targetType: 'container' | 'component' } | null {
+  const element = findElement(workspace, elementId)
+  if (!element) return null
+  if (element.type === 'softwareSystem' && element.containers.length > 0) {
+    return { elementName: element.name, targetType: 'container' }
+  }
+  if (element.type === 'container' && element.components.length > 0) {
+    return { elementName: element.name, targetType: 'component' }
+  }
+  return null
 }
 
 export function getBreadcrumb(workspace: Workspace, viewHistory: string[], activeViewKey: string | null): { key: string; label: string }[] {

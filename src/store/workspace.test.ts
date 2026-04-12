@@ -3837,3 +3837,162 @@ describe('focusElementId', () => {
     expect(useWorkspaceStore.getState().focusElementId).toBeNull()
   })
 })
+
+describe('zoomInto + pendingZoomConfirm', () => {
+  function makeWorkspaceWithContainer(): Workspace {
+    return {
+      name: 'Test',
+      model: {
+        people: [],
+        softwareSystems: [
+          {
+            id: 'sys1', type: 'softwareSystem', name: 'Internet Banking', tags: ['Element', 'Software System'], properties: {},
+            containers: [
+              { id: 'c1', type: 'container', name: 'Web App', tags: ['Element', 'Container'], properties: {}, components: [] },
+              { id: 'c2', type: 'container', name: 'API', tags: ['Element', 'Container'], properties: {},
+                components: [{ id: 'comp1', type: 'component', name: 'AuthService', tags: ['Element', 'Component'], properties: {} }],
+              },
+            ],
+          },
+          // An empty system (no containers) — should not be zoomable.
+          { id: 'sys2', type: 'softwareSystem', name: 'Empty', tags: ['Element', 'Software System'], properties: {}, containers: [] },
+        ],
+        relationships: [],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [{
+          type: 'systemLandscape', key: 'landscape', title: 'Landscape',
+          elements: [{ id: 'sys1' }, { id: 'sys2' }],
+          relationships: [], autoLayout: { direction: 'TB' },
+        }],
+        systemContextViews: [],
+        containerViews: [],
+        componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    } as unknown as Workspace
+  }
+
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspaceWithContainer())
+  })
+
+  it('zoomInto navigates when a child view already exists', () => {
+    // Create a container view first so drill works
+    useWorkspaceStore.getState().addView('container', 'sys1', 'Containers')
+    // Go back to landscape
+    useWorkspaceStore.getState().setActiveView('landscape')
+    const before = useWorkspaceStore.getState().activeViewKey
+    expect(before).toBe('landscape')
+
+    useWorkspaceStore.getState().zoomInto('sys1')
+
+    const state = useWorkspaceStore.getState()
+    expect(state.activeViewKey).not.toBe('landscape')
+    expect(state.pendingZoomConfirm).toBeNull()
+    // The previous view is now in viewHistory (for navigateBack)
+    expect(state.viewHistory).toContain('landscape')
+  })
+
+  it('zoomInto sets pendingZoomConfirm when no child view exists (system→container)', () => {
+    useWorkspaceStore.getState().zoomInto('sys1')
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).not.toBeNull()
+    expect(state.pendingZoomConfirm?.elementId).toBe('sys1')
+    expect(state.pendingZoomConfirm?.elementName).toBe('Internet Banking')
+    expect(state.pendingZoomConfirm?.targetType).toBe('container')
+    // Active view did not change.
+    expect(state.activeViewKey).toBe('landscape')
+  })
+
+  it('zoomInto sets pendingZoomConfirm for container→component drill target', () => {
+    useWorkspaceStore.getState().zoomInto('c2')
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).not.toBeNull()
+    expect(state.pendingZoomConfirm?.elementId).toBe('c2')
+    expect(state.pendingZoomConfirm?.targetType).toBe('component')
+  })
+
+  it('zoomInto is a no-op for a system with no containers', () => {
+    useWorkspaceStore.getState().zoomInto('sys2')
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).toBeNull()
+  })
+
+  it('zoomInto is a no-op for a container with no components', () => {
+    useWorkspaceStore.getState().zoomInto('c1')
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).toBeNull()
+  })
+
+  it('confirmZoomCreate creates a container view, navigates, and preserves history', () => {
+    useWorkspaceStore.getState().zoomInto('sys1')
+    expect(useWorkspaceStore.getState().pendingZoomConfirm).not.toBeNull()
+
+    useWorkspaceStore.getState().confirmZoomCreate()
+
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).toBeNull()
+    // A new container view was created and is now active.
+    const containerViews = state.workspace!.views.containerViews
+    expect(containerViews).toHaveLength(1)
+    expect(containerViews[0].softwareSystemId).toBe('sys1')
+    expect(state.activeViewKey).toBe(containerViews[0].key)
+    // viewHistory remembers the landscape so navigateBack works.
+    expect(state.viewHistory).toContain('landscape')
+  })
+
+  it('confirmZoomCreate creates a component view for a container', () => {
+    useWorkspaceStore.getState().zoomInto('c2')
+    useWorkspaceStore.getState().confirmZoomCreate()
+
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).toBeNull()
+    const compViews = state.workspace!.views.componentViews
+    expect(compViews).toHaveLength(1)
+    expect(compViews[0].containerId).toBe('c2')
+  })
+
+  it('cancelZoomConfirm clears the pending confirm without creating a view', () => {
+    useWorkspaceStore.getState().zoomInto('sys1')
+    expect(useWorkspaceStore.getState().pendingZoomConfirm).not.toBeNull()
+
+    useWorkspaceStore.getState().cancelZoomConfirm()
+
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).toBeNull()
+    expect(state.workspace!.views.containerViews).toHaveLength(0)
+  })
+
+  it('openCreateViewFromZoom consumes the pending confirm and opens the full dialog with defaults', () => {
+    useWorkspaceStore.getState().zoomInto('sys1')
+
+    useWorkspaceStore.getState().openCreateViewFromZoom()
+
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).toBeNull()
+    expect(state.createViewDialogOpen).toBe(true)
+    expect(state.createViewDefaults).toEqual({ type: 'container', scopeId: 'sys1' })
+  })
+
+  it('openCreateViewFromZoom is a no-op when no confirm is pending', () => {
+    // Ensure clean state — beforeEach loadWorkspace doesn't reset createViewDialogOpen.
+    useWorkspaceStore.setState({ createViewDialogOpen: false, createViewDefaults: null, pendingZoomConfirm: null })
+    useWorkspaceStore.getState().openCreateViewFromZoom()
+    const state = useWorkspaceStore.getState()
+    expect(state.createViewDialogOpen).toBe(false)
+    expect(state.createViewDefaults).toBeNull()
+  })
+
+  it('loadWorkspace clears stale pendingZoomConfirm and createViewDefaults', () => {
+    useWorkspaceStore.getState().zoomInto('sys1')
+    useWorkspaceStore.setState({ createViewDefaults: { type: 'container', scopeId: 'sys1' } })
+
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspaceWithContainer())
+
+    const state = useWorkspaceStore.getState()
+    expect(state.pendingZoomConfirm).toBeNull()
+    expect(state.createViewDefaults).toBeNull()
+  })
+})

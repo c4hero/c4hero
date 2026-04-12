@@ -14,6 +14,7 @@ import FloatingBottomStrip from '@/components/layout/FloatingBottomStrip'
 import FloatingZoomHud from '@/components/layout/FloatingZoomHud'
 import MultiSelectBar from '@/components/layout/MultiSelectBar'
 import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
+import ZoomConfirmDialog from '@/components/shared/ZoomConfirmDialog'
 import Canvas from '@/components/canvas/Canvas'
 import CanvasHints from '@/components/canvas/CanvasHints'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
@@ -62,6 +63,35 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace])
 
+  // Canvas element shared between the with- and without-viewKey canvas routes
+  const canvasElement = workspace ? (
+    <ReactFlowProvider>
+      <a href="#c4hero-canvas" className="sr-only">Skip to main content</a>
+      <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
+        <main id="c4hero-canvas" aria-label="Architecture diagram canvas" style={{ position: 'absolute', inset: 0 }}>
+          <ErrorBoundary label="Canvas error" onHome={() => useWorkspaceStore.getState().closeWorkspace()}>
+            <Canvas />
+          </ErrorBoundary>
+        </main>
+        <nav aria-label="Workspace navigation"><FloatingTopPill /></nav>
+        <MultiSelectBar />
+        <nav aria-label="Tools"><FloatingToolRail /></nav>
+        <FloatingViewsPanel />
+        <aside aria-label="Element inspector"><FloatingInspector /></aside>
+        <FloatingBottomStrip />
+        <FloatingZoomHud />
+        <CanvasHints />
+        <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
+        <div className="commit-hash">{__COMMIT_HASH__}</div>
+      </div>
+      {searchOpen && <Suspense fallback={<LoadingDot />}><SearchDialog /></Suspense>}
+    </ReactFlowProvider>
+  ) : (
+    <Suspense fallback={<LoadingDot />}>
+      <LoadingDot />
+    </Suspense>
+  )
+
   // Presentation mode — fullscreen canvas
   if (presentationMode && workspace) {
     return (
@@ -108,36 +138,11 @@ export default function App() {
           </Suspense>
         } />
 
-        {/* Canvas — collection/workspace/view (viewKey optional) */}
-        <Route path="/collection/:collectionSlug/:workspaceSlug/:viewKey?" element={
-          workspace ? (
-            <ReactFlowProvider>
-              <a href="#c4hero-canvas" className="sr-only">Skip to main content</a>
-              <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
-                <main id="c4hero-canvas" aria-label="Architecture diagram canvas" style={{ position: 'absolute', inset: 0 }}>
-                  <ErrorBoundary label="Canvas error" onHome={() => useWorkspaceStore.getState().closeWorkspace()}>
-                    <Canvas />
-                  </ErrorBoundary>
-                </main>
-                <nav aria-label="Workspace navigation"><FloatingTopPill /></nav>
-                <MultiSelectBar />
-                <nav aria-label="Tools"><FloatingToolRail /></nav>
-                <FloatingViewsPanel />
-                <aside aria-label="Element inspector"><FloatingInspector /></aside>
-                <FloatingBottomStrip />
-                <FloatingZoomHud />
-                <CanvasHints />
-                <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
-                <div className="commit-hash">{__COMMIT_HASH__}</div>
-              </div>
-              {searchOpen && <Suspense fallback={<LoadingDot />}><SearchDialog /></Suspense>}
-            </ReactFlowProvider>
-          ) : (
-            <Suspense fallback={<LoadingDot />}>
-              <LoadingDot />
-            </Suspense>
-          )
-        } />
+        {/* Canvas — matches /collection/:slug/:ws and /collection/:slug/:ws/:view.
+            Two explicit routes (no optional param) — react-router v7's `:viewKey?`
+            syntax didn't reliably match when the optional segment was absent. */}
+        <Route path="/collection/:collectionSlug/:workspaceSlug" element={canvasElement} />
+        <Route path="/collection/:collectionSlug/:workspaceSlug/:viewKey" element={canvasElement} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -152,6 +157,10 @@ export default function App() {
           onCancel={cancelDelete}
         />
       )}
+
+      {/* Zoom-in confirm — shown when a user clicks zoom on an element with
+          no existing child view. Offers fast create or "Customize…" for full control. */}
+      <ZoomConfirmDialog />
     </>
   )
 }

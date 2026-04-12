@@ -514,8 +514,10 @@ export default function Canvas() {
 
   // Stable callback refs — avoid new function references every render which would
   // invalidate expensive useMemos that depend on them.
+  // Uses zoomInto (not drillInto) so that clicking the zoom button on a system
+  // with no container view prompts the user to create one instead of silently doing nothing.
   const stableDrillInto = useCallback((elementId: string) => {
-    useWorkspaceStore.getState().drillInto(elementId)
+    useWorkspaceStore.getState().zoomInto(elementId)
   }, [])
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null)
@@ -812,10 +814,10 @@ export default function Canvas() {
 
   const onNodeDoubleClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      const ws = useWorkspaceStore.getState().workspace
-      if (ws && buildDrillableSet(ws).has(node.id)) {
-        useWorkspaceStore.getState().drillInto(node.id)
-      }
+      // zoomInto handles both cases: navigate to existing child view, or prompt
+      // to create one if none exists. Internally no-ops if the element has no
+      // children (person/component/etc.).
+      useWorkspaceStore.getState().zoomInto(node.id)
     },
     [],
   )
