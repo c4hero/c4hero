@@ -1,4 +1,4 @@
-import type { Workspace, View, ElementInView, ModelElement } from '@/types/model'
+import type { Workspace, ElementInView, ModelElement } from '@/types/model'
 
 /** Generate sensible default views for a workspace that has none.
  *
