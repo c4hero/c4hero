@@ -28,7 +28,7 @@
 
   /* External element colors */
   --color-type-external: #9ca3af;
-  --color-tint-external: rgba(156, 163, 175, 0.06);
+  --color-tint-external: #1f232a;
   --color-border-external: rgba(107, 114, 128, 0.5);
 
   /* C4 type background tints */
@@ -479,6 +479,14 @@ body {
   opacity: 1;
 }
 
+/* Touch devices have no hover — surface the actions permanently so the zoom
+ * button is reachable without a hover state. */
+@media (hover: none) {
+  .c4-node-actions {
+    opacity: 1;
+  }
+}
+
 .c4-node-action-btn {
   display: inline-flex;
   align-items: center;
@@ -496,6 +504,17 @@ body {
 .c4-node-action-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.18);
+}
+
+.c4-node-view-count {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+  padding: 0 4px;
+  user-select: none;
 }
 
 .c4-node-badge {

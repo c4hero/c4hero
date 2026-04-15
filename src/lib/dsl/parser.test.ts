@@ -712,7 +712,7 @@ describe('DSL parser — edge cases', () => {
     expect(workspace.model.softwareSystems).toHaveLength(0)
   })
 
-  it('workspace with only model (no views) parses ok', () => {
+  it('workspace with only model (no views) parses ok and synthesises auto views', () => {
     const dsl = `
 workspace {
   model {
@@ -725,7 +725,13 @@ workspace {
     expect(errors).toHaveLength(0)
     expect(workspace.model.people).toHaveLength(1)
     expect(workspace.model.softwareSystems).toHaveLength(1)
-    expect(workspace.views.systemLandscapeViews).toHaveLength(0)
+    // No views in the DSL → parser synthesises sensible defaults so the canvas
+    // has something to render. They're flagged autoView so they don't get
+    // serialized back into the source DSL.
+    expect(workspace.views.systemLandscapeViews).toHaveLength(1)
+    expect(workspace.views.systemLandscapeViews[0].autoView).toBe(true)
+    expect(workspace.views.systemContextViews).toHaveLength(1)
+    expect(workspace.views.systemContextViews[0].autoView).toBe(true)
   })
 
   it('nested groups in model (group inside group context)', () => {

@@ -13,7 +13,7 @@ import {
   BackgroundVariant,
   reconnectEdge,
 } from '@xyflow/react'
-import dagre from '@dagrejs/dagre'
+import { applyAutoLayout } from '@/lib/canvasLayout'
 import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, allViewsOf } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import { THEMES } from '@/lib/themes'
@@ -99,9 +99,12 @@ function getRelationshipStyle(
   return matched
 }
 
-/** Get child count for drill-down hint */
+/** Get child count for drill-down hint. External systems are opaque and excluded. */
 function getChildCount(element: ModelElement): number | undefined {
-  if (element.type === 'softwareSystem') return element.containers.length
+  if (element.type === 'softwareSystem') {
+    if (element.location === 'External') return undefined
+    return element.containers.length
+  }
   if (element.type === 'container') return element.components.length
   return undefined
 }
@@ -250,6 +253,10 @@ function buildBoundaryNode(
   laidOutNodes: Node[],
 ): Node | null {
   const BOUNDARY_PADDING = 32
+  // Header has 2 lines (name + type label) + internal padding; needs more
+  // headroom than the side/bottom padding so the subtitle isn't covered by the
+  // topmost member node.
+  const BOUNDARY_PADDING_TOP = 64
 
   // Build position+size map from laid-out element nodes only
   const nodeMap = new Map<string, { x: number; y: number; w: number; h: number }>()
@@ -280,8 +287,11 @@ function buildBoundaryNode(
         return {
           id: '__scope_boundary__',
           type: 'boundary',
-          position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING },
-          style: { width: (maxX - minX) + BOUNDARY_PADDING * 2, height: (maxY - minY) + BOUNDARY_PADDING * 2 },
+          position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING_TOP },
+          style: {
+            width: (maxX - minX) + BOUNDARY_PADDING * 2,
+            height: (maxY - minY) + BOUNDARY_PADDING_TOP + BOUNDARY_PADDING,
+          },
           data: { name: scopeSystem.name, typeLabel: 'Software System' },
           zIndex: -2,
           selectable: false,
@@ -310,8 +320,11 @@ function buildBoundaryNode(
         return {
           id: '__scope_boundary__',
           type: 'boundary',
-          position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING },
-          style: { width: (maxX - minX) + BOUNDARY_PADDING * 2, height: (maxY - minY) + BOUNDARY_PADDING * 2 },
+          position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING_TOP },
+          style: {
+            width: (maxX - minX) + BOUNDARY_PADDING * 2,
+            height: (maxY - minY) + BOUNDARY_PADDING_TOP + BOUNDARY_PADDING,
+          },
           data: { name: scopeContainer.name, typeLabel: 'Container' },
           zIndex: -2,
           selectable: false,
@@ -454,44 +467,6 @@ function buildEdges(
   return edges
 }
 
-/** Auto-layout unpinned nodes using dagre. Pinned nodes keep their positions.
- *  A node is only treated as pinned when it has BOTH pinned=true AND saved x/y.
- *  If pinned=true but positions are missing (e.g. loaded from DSL with no sidecar),
- *  the node is re-laid out by dagre rather than stacking at origin. */
-function applyAutoLayout(
-  nodes: Node[],
-  edges: Edge[],
-  view: View,
-  direction: string = 'TB',
-): Node[] {
-  const pinnedIds = new Set(
-    view.elements.filter(e => e.pinned && e.x !== undefined && e.y !== undefined).map(e => e.id),
-  )
-  const hasUnpinned = nodes.some(n => !pinnedIds.has(n.id))
-  if (!hasUnpinned) return nodes
-
-  const g = new dagre.graphlib.Graph()
-  g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: direction, ranksep: 300, nodesep: 250 })
-
-  for (const node of nodes) {
-    g.setNode(node.id, { width: 200, height: 100 })
-  }
-  for (const edge of edges) {
-    g.setEdge(edge.source, edge.target)
-  }
-
-  dagre.layout(g)
-
-  return nodes.map((node) => {
-    if (pinnedIds.has(node.id)) return node
-    const pos = g.node(node.id)
-    return {
-      ...node,
-      position: { x: pos.x - 100, y: pos.y - 50 },
-    }
-  })
-}
 
 export default function Canvas() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -585,7 +560,7 @@ export default function Canvas() {
     }
 
     // 3. Auto-layout: position unpinned nodes, keep pinned ones
-    const laidOut = applyAutoLayout(rawNodes, tempEdges, view, direction)
+    const laidOut = applyAutoLayout(rawNodes, tempEdges, view, workspace.model.groups, direction)
 
     // 4. Build group background nodes and scope boundary using post-layout positions
     const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut)
@@ -617,6 +592,45 @@ export default function Canvas() {
   useEffect(() => { workspaceRef.current = workspace }, [workspace])
   useEffect(() => { viewRef.current = view }, [view])
 
+  // Rebuild group + boundary overlays using real measured node sizes. Polls
+  // until React Flow has finished measuring; safe to call after any change
+  // that mutates the group set or node sizes.
+  //
+  // Two sources of truth diverge here and we need to stitch them: positions
+  // live in React state (`prev` inside the functional setNodes), measured
+  // dimensions live in React Flow's internal store (rf.getNodes()). Reading
+  // positions from rf produces a group rectangle that lags one render behind
+  // the layout; reading measurements from prev gives undefined sizes (the
+  // rebuild collapses to default 200x100).
+  const rebuildOverlays = useCallback(() => {
+    const rf = rfInitInstance.current ?? reactFlowInstance
+    const contentNodes = rf.getNodes().filter(
+      n => n.id !== '__scope_boundary__' && !n.id.startsWith('group-')
+    )
+    if (contentNodes.length === 0 || !contentNodes.every(n => n.measured?.width && n.measured?.height)) {
+      requestAnimationFrame(rebuildOverlays)
+      return
+    }
+    const ws = workspaceRef.current
+    const v = viewRef.current
+    if (!ws) return
+    const measuredById = new Map<string, { width?: number; height?: number }>()
+    for (const n of rf.getNodes()) {
+      if (n.measured?.width && n.measured?.height) measuredById.set(n.id, n.measured)
+    }
+    setNodes((prev) => {
+      const contentOnly = prev
+        .filter(n => !n.id.startsWith('group-') && n.id !== '__scope_boundary__')
+        .map(n => ({ ...n, measured: measuredById.get(n.id) ?? n.measured }))
+      const updatedGroups = buildGroupNodes(ws, ws.model.groups, contentOnly)
+      const updatedBoundary = v ? buildBoundaryNode(ws, v, contentOnly) : null
+      const overlays: typeof prev = []
+      if (updatedBoundary) overlays.push(updatedBoundary as typeof prev[0])
+      overlays.push(...updatedGroups as typeof prev)
+      return [...contentOnly, ...overlays]
+    })
+  }, [reactFlowInstance, setNodes])
+
   const fitContentNodes = useCallback(() => {
     if (!fitPending.current) return
     const rf = rfInitInstance.current ?? reactFlowInstance
@@ -636,22 +650,9 @@ export default function Canvas() {
       return
     }
 
-    // All conditions met — update group/boundary sizes with real measured dimensions, then fit
     fitPending.current = false
-
-    // Rebuild group + boundary nodes now that we have real measured sizes
-    const ws = workspaceRef.current
-    const v = viewRef.current
-    const measuredLaidOut = rf.getNodes()
-    const updatedGroups = ws ? buildGroupNodes(ws, ws.model.groups, measuredLaidOut) : []
-    const updatedBoundary = ws && v ? buildBoundaryNode(ws, v, measuredLaidOut) : null
-    setNodes((prev) => {
-      const contentOnly = prev.filter(n => !n.id.startsWith('group-') && n.id !== '__scope_boundary__')
-      const overlays: typeof prev = []
-      if (updatedBoundary) overlays.push(updatedBoundary as typeof prev[0])
-      overlays.push(...updatedGroups as typeof prev)
-      return [...contentOnly, ...overlays]
-    })
+    // Rebuild overlays first so the bbox is correct before refitting.
+    rebuildOverlays()
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
     for (const n of contentNodes) {
@@ -675,7 +676,7 @@ export default function Canvas() {
       { x: width / 2 - (minX + boundsW / 2) * zoom, y: height / 2 - (minY + boundsH / 2) * zoom, zoom },
       { duration: 300 }
     )
-  }, [reactFlowInstance])
+  }, [reactFlowInstance, rebuildOverlays])
 
   // Sync nodes/edges when workspace changes.
   // Only trigger a viewport refit on structural changes: view switch, element count change,
@@ -689,8 +690,14 @@ export default function Canvas() {
       lastFitSignal.current = signal
       fitPending.current = true
       requestAnimationFrame(fitContentNodes)
+    } else {
+      // Structural identity unchanged but the model may have mutated in ways
+      // that affect overlays (e.g. addGroup). Always rebuild group/boundary
+      // bboxes from real measurements so they don't get stuck on default
+      // 200×100 sizes from the initial dagre output.
+      requestAnimationFrame(rebuildOverlays)
     }
-  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, activeViewKey, view, layoutVersion])
+  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, rebuildOverlays, activeViewKey, view, layoutVersion])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes)

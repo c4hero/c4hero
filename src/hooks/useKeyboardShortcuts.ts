@@ -53,7 +53,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
       }
     })
   },
-  'f': (store) => {
+  'p': (store) => {
     if (store.workspace) store.setPresentationMode(!store.presentationMode)
   },
   'Escape': (store) => {

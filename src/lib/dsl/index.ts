@@ -10,6 +10,7 @@ import type { Workspace } from '@/types/model'
 import { parse } from './parser'
 import type { ParseError } from './parser'
 import { serialize } from './serializer'
+import { generateDefaultViews } from './auto-views'
 
 export type { ParseError }
 
@@ -26,7 +27,12 @@ export interface ParseDSLResult {
  * even when errors are present.
  */
 export function parseDSL(input: string): ParseDSLResult {
-    return parse(input)
+    const result = parse(input)
+    // If the DSL declared no views, synthesise sensible defaults so the canvas
+    // has something to render. Generated views are flagged `autoView: true` and
+    // are not serialized back, preserving DSL roundtrip identity.
+    generateDefaultViews(result.workspace)
+    return result
 }
 
 /**

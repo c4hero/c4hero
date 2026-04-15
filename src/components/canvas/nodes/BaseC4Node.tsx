@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  LayoutGrid, ZoomIn,
+  ZoomIn,
   Database, Circle, Hexagon, Diamond, UserRound, Bot, Folder, Globe, Smartphone,
 } from 'lucide-react'
 import type { C4NodeData } from './types'
@@ -101,22 +101,27 @@ export default function BaseC4Node({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }} className="c4-node-actions">
           {viewCount > 1 && (
-            <button
-              className="c4-node-action-btn nodrag"
+            <span
+              className="c4-node-view-count nodrag"
               style={{ color: resolvedTypeColor }}
               title={`Appears in ${viewCount} views`}
               aria-label={`${element.name} appears in ${viewCount} views`}
-              onClick={(e) => e.stopPropagation()}
             >
-              <LayoutGrid size={11} aria-hidden="true" />
-            </button>
+              {viewCount}×
+            </span>
           )}
-          {childCount !== undefined && childCount > 0 && (
+          {childCount !== undefined && (
             <button
               className="c4-node-action-btn nodrag"
               style={{ color: resolvedTypeColor }}
               onClick={(e) => { e.stopPropagation(); onDrillIn?.(element.id) }}
-              title={canDrill ? `Zoom in · ${childCount} children` : `Zoom in · create a new view for ${childCount} children`}
+              title={
+                canDrill
+                  ? `Zoom in · ${childCount} children`
+                  : childCount === 0
+                    ? 'Zoom in · create a new view'
+                    : `Zoom in · create a new view for ${childCount} children`
+              }
               aria-label={`Zoom into ${element.name}`}
             >
               <ZoomIn size={11} aria-hidden="true" />

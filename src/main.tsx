@@ -21,6 +21,22 @@ if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__testGetWorkspace = () => {
     return useWorkspaceStore.getState().workspace
   }
+  ;(window as unknown as Record<string, unknown>).__testRelayout = (direction?: 'TB' | 'BT' | 'LR' | 'RL') => {
+    const s = useWorkspaceStore.getState()
+    if (s.activeViewKey) s.resetAndRelayout(s.activeViewKey, direction)
+  }
+  ;(window as unknown as Record<string, unknown>).__testAddGroup = (name: string, ids: string[]) => {
+    return useWorkspaceStore.getState().addGroup(name, ids)
+  }
+  ;(window as unknown as Record<string, unknown>).__testSetView = (key: string) => {
+    useWorkspaceStore.getState().setActiveView(key)
+  }
+  ;(window as unknown as Record<string, unknown>).__testParseAndLoad = async (dsl: string) => {
+    const mod = await import('./lib/dsl')
+    const { workspace } = mod.parseDSL(dsl)
+    if (!workspace.name) workspace.name = 'test'
+    useWorkspaceStore.getState().loadWorkspace(workspace)
+  }
 }
 
 // Global unhandled error handlers

@@ -89,6 +89,14 @@ export interface AutoLayout {
 export interface View {
   type: ViewType
   key: string
+  /** True when `key` was synthesised by the parser because the DSL omitted one.
+   *  The serializer skips emitting auto keys so the source DSL roundtrips
+   *  byte-identical for views without explicit keys. */
+  autoKey?: boolean
+  /** True when this entire view was synthesised by the parser because the DSL
+   *  defined no views at all. The serializer skips auto views so the source
+   *  DSL roundtrips unchanged; users still see them on the canvas. */
+  autoView?: boolean
   title?: string
   description?: string
   softwareSystemId?: string

@@ -399,25 +399,32 @@ class SerializerContext {
         const views = this.workspace.views
         let needsBlank = false
 
+        // Skip parser-synthesised views — they exist to give the canvas
+        // something to render when the DSL declares no views; serializing them
+        // would mutate the source DSL.
         for (const view of views.systemLandscapeViews) {
+            if (view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
         }
 
         for (const view of views.systemContextViews) {
+            if (view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
         }
 
         for (const view of views.containerViews) {
+            if (view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
         }
 
         for (const view of views.componentViews) {
+            if (view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
@@ -465,7 +472,9 @@ class SerializerContext {
             }
         }
 
-        if (view.key) parts.push(`"${this.escapeString(view.key)}"`)
+        // Skip parser-synthesised keys so DSL without explicit view keys
+        // roundtrips byte-identical.
+        if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
         if (view.title) parts.push(`"${this.escapeString(view.title)}"`)
 
         this.emit(`${parts.join(' ')} {`)

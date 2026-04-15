@@ -122,6 +122,40 @@ function nextId(): string {
     return `p${globalIdCounter}`
 }
 
+/** Generate a stable, unique view key when the DSL doesn't provide one.
+ *  Mirrors the Structurizr default-key convention (Type-ScopeRef) and falls
+ *  back to a numeric suffix on collision. Empty/missing keys break navigation
+ *  in the workspace store, so we always assign one. */
+function ensureViewKey(view: View, viewsContainer: ViewsContainer, elementRef: string | undefined): void {
+    if (view.key) return
+    const typeKey =
+        view.type === 'systemLandscape' ? 'SystemLandscape'
+        : view.type === 'systemContext' ? 'SystemContext'
+        : view.type === 'container' ? 'Containers'
+        : 'Components'
+    const base = elementRef ? `${typeKey}-${elementRef}` : typeKey
+    const existing = [
+        ...viewsContainer.systemLandscapeViews,
+        ...viewsContainer.systemContextViews,
+        ...viewsContainer.containerViews,
+        ...viewsContainer.componentViews,
+    ]
+    let candidate = base
+    let suffix = 2
+    while (existing.some(v => v.key === candidate)) {
+        candidate = `${base}-${suffix++}`
+    }
+    view.key = candidate
+    view.autoKey = true
+}
+
+interface ViewsContainer {
+    systemLandscapeViews: View[]
+    systemContextViews: View[]
+    containerViews: View[]
+    componentViews: View[]
+}
+
 // ─── Parser Implementation ──────────────────────────────────────────
 
 const MAX_DEPTH = 50
@@ -1239,22 +1273,34 @@ class ContextAwareParser {
 
                 if (kw === 'systemlandscape') {
                     const view = this.parseSystemLandscapeView()
-                    if (view) views.systemLandscapeViews.push(view)
+                    if (view) {
+                        ensureViewKey(view, views,undefined)
+                        views.systemLandscapeViews.push(view)
+                    }
                     continue
                 }
                 if (kw === 'systemcontext') {
                     const view = this.parseElementView('systemContext')
-                    if (view) views.systemContextViews.push(view)
+                    if (view) {
+                        ensureViewKey(view, views,view.softwareSystemId)
+                        views.systemContextViews.push(view)
+                    }
                     continue
                 }
                 if (kw === 'container') {
                     const view = this.parseElementView('container')
-                    if (view) views.containerViews.push(view)
+                    if (view) {
+                        ensureViewKey(view, views,view.softwareSystemId)
+                        views.containerViews.push(view)
+                    }
                     continue
                 }
                 if (kw === 'component') {
                     const view = this.parseElementView('component')
-                    if (view) views.componentViews.push(view)
+                    if (view) {
+                        ensureViewKey(view, views,view.containerId)
+                        views.componentViews.push(view)
+                    }
                     continue
                 }
                 if (kw === 'styles') {

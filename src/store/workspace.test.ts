@@ -1423,7 +1423,7 @@ describe('undo/redo — activeViewKey stays valid', () => {
 
   it('redo falls back to first valid view if current key is not in the redo target', () => {
     // Build: add A, add B, undo B (active=A), undo A (active=null or first), redo A (active must be valid)
-    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'First View')
+    useWorkspaceStore.getState().addView('systemLandscape', undefined, 'First View')
     useWorkspaceStore.getState().addView('systemLandscape', undefined, 'Second View')
     // Undo twice — workspace has no views, active = null
     useWorkspaceStore.getState().undo() // removes B
@@ -3854,7 +3854,7 @@ describe('zoomInto + pendingZoomConfirm', () => {
               },
             ],
           },
-          // An empty system (no containers) — should not be zoomable.
+          // An empty system — still zoomable; zoomInto should prompt to create an empty container view.
           { id: 'sys2', type: 'softwareSystem', name: 'Empty', tags: ['Element', 'Software System'], properties: {}, containers: [] },
         ],
         relationships: [],
@@ -3914,16 +3914,20 @@ describe('zoomInto + pendingZoomConfirm', () => {
     expect(state.pendingZoomConfirm?.targetType).toBe('component')
   })
 
-  it('zoomInto is a no-op for a system with no containers', () => {
+  it('zoomInto prompts to create a container view for a system with no containers', () => {
     useWorkspaceStore.getState().zoomInto('sys2')
     const state = useWorkspaceStore.getState()
-    expect(state.pendingZoomConfirm).toBeNull()
+    expect(state.pendingZoomConfirm).not.toBeNull()
+    expect(state.pendingZoomConfirm?.elementId).toBe('sys2')
+    expect(state.pendingZoomConfirm?.targetType).toBe('container')
   })
 
-  it('zoomInto is a no-op for a container with no components', () => {
+  it('zoomInto prompts to create a component view for a container with no components', () => {
     useWorkspaceStore.getState().zoomInto('c1')
     const state = useWorkspaceStore.getState()
-    expect(state.pendingZoomConfirm).toBeNull()
+    expect(state.pendingZoomConfirm).not.toBeNull()
+    expect(state.pendingZoomConfirm?.elementId).toBe('c1')
+    expect(state.pendingZoomConfirm?.targetType).toBe('component')
   })
 
   it('confirmZoomCreate creates a container view, navigates, and preserves history', () => {

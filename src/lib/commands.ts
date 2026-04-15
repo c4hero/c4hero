@@ -269,7 +269,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       label: 'Presentation Mode',
       category: 'view',
       icon: Presentation,
-      shortcut: 'F',
+      shortcut: 'P',
       keywords: ['fullscreen', 'present', 'focus'],
       execute: () => {
         const s = store()

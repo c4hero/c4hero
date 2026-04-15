@@ -1483,22 +1483,23 @@ export function canDrillInto(workspace: Workspace, elementId: string): boolean {
   return findChildView(workspace, elementId) !== undefined
 }
 
-/** Determine whether an element can be "zoomed into" — i.e. it has children that
- *  could be shown in a child view. Unlike canDrillInto, this does NOT require the
- *  child view to already exist; the zoom-in flow prompts to create one if missing.
+/** Determine whether an element can be "zoomed into". Unlike canDrillInto, this
+ *  does NOT require a child view (or even child elements) to exist — the zoom-in
+ *  flow prompts to create one, and empty views are a valid starting point for
+ *  adding the first containers/components.
  *
- *  Returns the element name and the view type that would be created, or null if
- *  the element has no children (persons, components, containers with no components, etc.). */
+ *  Returns the element name and the view type that would be created, or null for
+ *  elements that are leaves in the C4 hierarchy (persons, components, externals). */
 export function getZoomTarget(
   workspace: Workspace,
   elementId: string,
 ): { elementName: string; targetType: 'container' | 'component' } | null {
   const element = findElement(workspace, elementId)
   if (!element) return null
-  if (element.type === 'softwareSystem' && element.containers.length > 0) {
+  if (element.type === 'softwareSystem' && element.location !== 'External') {
     return { elementName: element.name, targetType: 'container' }
   }
-  if (element.type === 'container' && element.components.length > 0) {
+  if (element.type === 'container') {
     return { elementName: element.name, targetType: 'component' }
   }
   return null
