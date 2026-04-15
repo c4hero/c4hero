@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import LoadingDot from '@/components/shared/LoadingDot'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
@@ -18,6 +18,7 @@ import ZoomConfirmDialog from '@/components/shared/ZoomConfirmDialog'
 import Canvas from '@/components/canvas/Canvas'
 import CanvasHints from '@/components/canvas/CanvasHints'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
+import NotFound from '@/components/shared/NotFound'
 import { loadFromLocalStorage } from '@/lib/fileIO'
 import { restoreDirHandle, getCurrentDirHandle } from '@/lib/folderIO'
 
@@ -144,8 +145,8 @@ export default function App() {
         <Route path="/collection/:collectionSlug/:workspaceSlug" element={canvasElement} />
         <Route path="/collection/:collectionSlug/:workspaceSlug/:viewKey" element={canvasElement} />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Fallback — friendly 404 */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
 
       {/* Global confirm-delete dialog — rendered outside routes so it works
