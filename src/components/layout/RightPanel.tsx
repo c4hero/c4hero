@@ -417,38 +417,80 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
           <EditableField value={relationship.technology ?? ''} placeholder="e.g. REST/HTTP, gRPC..." aria-label="Technology" onCommit={(v) => updateRelationship(relationship.id, { technology: v || undefined })} />
         </div>
         <div>
-          <FieldLabel htmlFor="rel-interaction">Interaction Style</FieldLabel>
-          <select
-            id="rel-interaction"
-            value={relationship.interactionStyle ?? 'Synchronous'}
-            onChange={(e) => updateRelationship(relationship.id, { interactionStyle: e.target.value as 'Synchronous' | 'Asynchronous' })}
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{
-              background: 'var(--color-surface-2)',
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text-primary)',
-            }}
-          >
-            <option value="Synchronous">Synchronous</option>
-            <option value="Asynchronous">Asynchronous</option>
-          </select>
+          <FieldLabel>Interaction Style</FieldLabel>
+          <div className="flex gap-1.5">
+            {(['Synchronous', 'Asynchronous'] as const).map(is => {
+              const active = (relationship.interactionStyle ?? 'Synchronous') === is
+              return (
+                <button
+                  key={is}
+                  onClick={() => updateRelationship(relationship.id, { interactionStyle: is })}
+                  title={is}
+                  aria-label={`Interaction style: ${is}`}
+                  className="flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-[10px] font-medium transition-colors"
+                  style={{
+                    flex: 1,
+                    background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
+                    borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                    color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <svg width="36" height="16" viewBox="0 0 36 16" fill="none">
+                    {is === 'Synchronous' ? (
+                      <>
+                        <line x1="2" y1="8" x2="34" y2="8" stroke="currentColor" strokeWidth="1.5" />
+                        <polyline points="28,3 34,8 28,13" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                      </>
+                    ) : (
+                      <>
+                        <line x1="2" y1="8" x2="34" y2="8" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
+                        <polyline points="28,3 34,8 28,13" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                      </>
+                    )}
+                  </svg>
+                  {is === 'Synchronous' ? 'Sync' : 'Async'}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div>
-          <FieldLabel htmlFor="rel-linestyle">Line Style</FieldLabel>
-          <select
-            id="rel-linestyle"
-            value={relationship.lineStyle ?? 'Curved'}
-            onChange={(e) => updateRelationship(relationship.id, { lineStyle: e.target.value as LineStyle })}
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            data-testid="line-style"
-            style={{
-              background: 'var(--color-surface-2)',
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text-primary)',
-            }}
-          >
-            {LINE_STYLE_OPTIONS.map(ls => <option key={ls} value={ls}>{ls}</option>)}
-          </select>
+          <FieldLabel>Line Style</FieldLabel>
+          <div className="flex gap-1.5" data-testid="line-style">
+            {LINE_STYLE_OPTIONS.map(ls => {
+              const active = (relationship.lineStyle ?? 'Curved') === ls
+              return (
+                <button
+                  key={ls}
+                  onClick={() => updateRelationship(relationship.id, { lineStyle: ls })}
+                  title={ls}
+                  aria-label={`Line style: ${ls}`}
+                  className="flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-[10px] font-medium transition-colors"
+                  style={{
+                    flex: 1,
+                    background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
+                    borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                    color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <svg width="36" height="16" viewBox="0 0 36 16" fill="none">
+                    {ls === 'Curved' && (
+                      <path d="M2 14 C12 14, 12 2, 18 2 S24 14, 34 14" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                    )}
+                    {ls === 'Straight' && (
+                      <line x1="2" y1="14" x2="34" y2="2" stroke="currentColor" strokeWidth="1.5" />
+                    )}
+                    {ls === 'Orthogonal' && (
+                      <polyline points="2,14 2,2 34,2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                    )}
+                  </svg>
+                  {ls}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div>
           <FieldLabel>URL</FieldLabel>
