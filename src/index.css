@@ -397,6 +397,19 @@ body {
   filter: drop-shadow(0 0 12px rgba(88, 166, 255, 0.25));
 }
 
+/* ─── Line clamp utilities ─────────────────────────────────── */
+
+.line-clamp-1,
+.line-clamp-2,
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.line-clamp-1 { -webkit-line-clamp: 1; }
+.line-clamp-2 { -webkit-line-clamp: 2; }
+.line-clamp-3 { -webkit-line-clamp: 3; }
+
 /* ─── C4 Node cards ────────────────────────────────────────── */
 
 .c4-node {

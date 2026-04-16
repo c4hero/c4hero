@@ -101,6 +101,7 @@ function RelationshipEdge({
           strokeDasharray: isDashed ? '6 4' : undefined,
           opacity: relStyle?.opacity,
         }}
+        markerStart="url(#c4-dot)"
         markerEnd="url(#c4-arrow)"
       />
       {/* Label — shown when either description or technology is present */}

@@ -10,6 +10,7 @@ import InlineName from './InlineName'
 import NodeHandles from './NodeHandles'
 import ZoomHoverCard from './ZoomHoverCard'
 import { useWorkspaceStore } from '@/store/workspace'
+import { useZoomLevel } from '@/hooks/useZoomLevel'
 
 /** Map Structurizr shape names to Lucide icons */
 const SHAPE_ICON_MAP: Record<string, LucideIcon> = {
@@ -81,6 +82,13 @@ export default function BaseC4Node({
   // Font size from tag style (pixels)
   const resolvedFontSize = style?.fontSize
 
+  // Semantic zoom: show different detail levels based on viewport zoom
+  const zoomLevel = useZoomLevel()
+  const isCompact = zoomLevel === 'compact'
+  const isFull = zoomLevel === 'full'
+  const nameClamp = isCompact ? 1 : isFull ? undefined : 2
+  const descClamp = isCompact ? undefined : isFull ? undefined : 3
+
   return (
     <div
       className={`c4-node relative ${selected ? 'selected' : ''}`}
@@ -99,7 +107,7 @@ export default function BaseC4Node({
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <ResolvedIcon size={16} aria-hidden="true" style={{ flexShrink: 0, color: resolvedTypeColor }} />
         <div style={{ flex: 1, minWidth: 0, ...(resolvedFontSize != null && { fontSize: `${resolvedFontSize}px` }) }}>
-          <InlineName elementId={element.id} name={element.name} />
+          <InlineName elementId={element.id} name={element.name} lineClamp={nameClamp} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }} className="c4-node-actions">
           {viewCount > 1 && (
@@ -118,9 +126,12 @@ export default function BaseC4Node({
         </div>
       </div>
 
-      {/* Row 2: description */}
-      {desc && (
-        <p style={{ fontSize: resolvedFontSize != null ? `${Math.round(resolvedFontSize * 0.78)}px` : 'var(--text-xs-plus)', color: 'var(--color-text-muted)', margin: '6px 0 0', lineHeight: '1.4' }}>
+      {/* Row 2: description (hidden in compact mode) */}
+      {desc && !isCompact && (
+        <p
+          className={descClamp ? `line-clamp-${descClamp}` : undefined}
+          style={{ fontSize: resolvedFontSize != null ? `${Math.round(resolvedFontSize * 0.78)}px` : 'var(--text-xs-plus)', color: style?.color ?? 'var(--color-text-muted)', margin: '6px 0 0', lineHeight: '1.4' }}
+        >
           {desc}
         </p>
       )}
@@ -136,8 +147,8 @@ export default function BaseC4Node({
         >
           {chipLabel}
         </span>
-        {technology && (
-          <span style={{ fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)' }}>{technology}</span>
+        {technology && !isCompact && (
+          <span style={{ fontSize: 'var(--text-xs-plus)', color: style?.color ?? 'var(--color-text-muted)' }}>{technology}</span>
         )}
       </div>
 

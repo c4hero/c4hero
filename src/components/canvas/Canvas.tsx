@@ -712,7 +712,12 @@ export default function Canvas() {
     if (fitPending.current) {
       requestAnimationFrame(fitContentNodes)
     }
-  }, [onNodesChange, fitContentNodes])
+    // When content nodes get measured/resized, rebuild group/boundary overlays
+    // so they wrap the actual rendered sizes, not the 200×100 dagre defaults.
+    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && c.id !== '__scope_boundary__')) {
+      requestAnimationFrame(rebuildOverlays)
+    }
+  }, [onNodesChange, fitContentNodes, rebuildOverlays])
 
   // Center view on newly created element
   const focusElementId = useWorkspaceStore((s) => s.focusElementId)
@@ -986,6 +991,16 @@ export default function Canvas() {
               orient="auto-start-reverse"
             >
               <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-edge)" />
+            </marker>
+            <marker
+              id="c4-dot"
+              viewBox="0 0 10 10"
+              refX="5"
+              refY="5"
+              markerWidth={6}
+              markerHeight={6}
+            >
+              <circle cx="5" cy="5" r="4" fill="var(--color-edge)" />
             </marker>
           </defs>
         </svg>
