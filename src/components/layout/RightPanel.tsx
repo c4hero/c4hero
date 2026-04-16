@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, LineStyle, Location, Group } from '@/types/model'
 import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, Layers, Trash2, ChevronRight } from 'lucide-react'
@@ -138,6 +138,185 @@ function EditableField({ value, placeholder, onCommit, onLiveChange, multiline, 
   )
 }
 
+// ─── Technology Field with autocomplete ─────────────────────────────
+
+/** Collect all unique technology strings from the workspace, with usage counts. */
+function useTechnologySuggestions(): { tech: string; count: number }[] {
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  return useMemo(() => {
+    if (!workspace) return []
+    const counts = new Map<string, number>()
+    const bump = (raw?: string) => {
+      if (!raw) return
+      for (const t of raw.split(',')) {
+        const trimmed = t.trim()
+        if (trimmed) counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1)
+      }
+    }
+    for (const sys of workspace.model.softwareSystems) {
+      for (const c of sys.containers) {
+        bump(c.technology)
+        for (const comp of c.components) bump(comp.technology)
+      }
+    }
+    for (const rel of workspace.model.relationships) bump(rel.technology)
+    return Array.from(counts.entries())
+      .map(([tech, count]) => ({ tech, count }))
+      .sort((a, b) => b.count - a.count || a.tech.localeCompare(b.tech))
+  }, [workspace])
+}
+
+function TechnologyField({ value, placeholder, onCommit, onLiveChange, 'aria-label': ariaLabel }: {
+  value: string
+  placeholder?: string
+  onCommit: (val: string) => void
+  onLiveChange?: (val: string) => void
+  'aria-label'?: string
+}) {
+  const [draft, setDraft] = useState(value)
+  const [focused, setFocused] = useState(false)
+  const [selectedIdx, setSelectedIdx] = useState(-1)
+  const suggestions = useTechnologySuggestions()
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Sync external changes only when not focused
+  if (!focused && draft !== value) setDraft(value)
+
+  // Extract the token currently being typed (after the last comma)
+  const parts = draft.split(',')
+  const currentToken = parts[parts.length - 1].trimStart()
+  const alreadyUsed = new Set(parts.slice(0, -1).map((p) => p.trim().toLowerCase()))
+
+  // Filter suggestions: match current token, exclude already-used in this field
+  const filtered = currentToken
+    ? suggestions.filter(
+        (s) => s.tech.toLowerCase().includes(currentToken.toLowerCase()) && !alreadyUsed.has(s.tech.toLowerCase()),
+      )
+    : suggestions.filter((s) => !alreadyUsed.has(s.tech.toLowerCase()))
+
+  const showDropdown = focused && filtered.length > 0
+
+  // Reset selection when filtered list changes
+  useEffect(() => { setSelectedIdx(-1) }, [currentToken])
+
+  const acceptSuggestion = (tech: string) => {
+    const prefix = parts.slice(0, -1).map((p) => p.trim()).filter(Boolean)
+    const next = [...prefix, tech].join(', ')
+    setDraft(next)
+    onLiveChange?.(next)
+    onCommit(next)
+    inputRef.current?.focus()
+  }
+
+  const handleChange = (newVal: string) => {
+    setDraft(newVal)
+    onLiveChange?.(newVal)
+  }
+
+  const handleBlur = () => {
+    // Delay so click on dropdown registers before blur hides it
+    setTimeout(() => {
+      if (!wrapperRef.current?.contains(document.activeElement)) {
+        setFocused(false)
+        onCommit(draft)
+      }
+    }, 150)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showDropdown && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      setSelectedIdx((prev) => {
+        if (e.key === 'ArrowDown') return Math.min(prev + 1, filtered.length - 1)
+        return Math.max(prev - 1, -1)
+      })
+      return
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (selectedIdx >= 0 && selectedIdx < filtered.length) {
+        acceptSuggestion(filtered[selectedIdx].tech)
+        setSelectedIdx(-1)
+      } else {
+        onCommit(draft)
+      }
+      return
+    }
+    if (e.key === 'Escape') {
+      if (showDropdown) {
+        setSelectedIdx(-1)
+        // Just close dropdown, don't revert
+      } else {
+        setDraft(value)
+        onLiveChange?.(value)
+        ;(e.target as HTMLElement).blur()
+      }
+    }
+  }
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
+        style={{
+          background: focused ? 'var(--color-surface-3)' : 'var(--color-surface-2)',
+          borderColor: focused ? 'var(--color-accent)' : 'var(--color-border)',
+          color: 'var(--color-text-primary)',
+        }}
+      />
+      {showDropdown && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: 'var(--glass-bg-heavy)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            maxHeight: 160,
+            overflowY: 'auto',
+            zIndex: 60,
+            backdropFilter: 'blur(12px)',
+            padding: '4px 0',
+          }}
+        >
+          {filtered.slice(0, 12).map((s, i) => (
+            <button
+              key={s.tech}
+              onMouseDown={(e) => { e.preventDefault(); acceptSuggestion(s.tech) }}
+              className="flyout-item"
+              style={{
+                padding: '5px 10px',
+                width: '100%',
+                background: i === selectedIdx ? 'var(--glass-overlay-sm)' : undefined,
+              }}
+            >
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {s.tech}
+              </span>
+              <span style={{ fontSize: 'var(--text-xxs)', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                {s.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Element Properties ──────────────────────────────────────────────
 
 function ElementProperties({ element, onClose }: { element: ModelElement; onClose: () => void }) {
@@ -243,7 +422,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             {hasTech && (
               <div>
                 <FieldLabel>Technology</FieldLabel>
-                <EditableField value={tech ?? ''} placeholder="e.g. React, PostgreSQL..." aria-label="Technology" onLiveChange={(v) => updateElementLive(element.id, { technology: v })} onCommit={(v) => updateTech(element.id, v)} />
+                <TechnologyField value={tech ?? ''} placeholder="e.g. React, PostgreSQL..." aria-label="Technology" onLiveChange={(v) => updateElementLive(element.id, { technology: v })} onCommit={(v) => updateTech(element.id, v)} />
               </div>
             )}
             <div>
@@ -414,7 +593,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
         </div>
         <div>
           <FieldLabel>Technology</FieldLabel>
-          <EditableField value={relationship.technology ?? ''} placeholder="e.g. REST/HTTP, gRPC..." aria-label="Technology" onCommit={(v) => updateRelationship(relationship.id, { technology: v || undefined })} />
+          <TechnologyField value={relationship.technology ?? ''} placeholder="e.g. REST/HTTP, gRPC..." aria-label="Technology" onCommit={(v) => updateRelationship(relationship.id, { technology: v || undefined })} />
         </div>
         <div>
           <FieldLabel>Interaction Style</FieldLabel>
