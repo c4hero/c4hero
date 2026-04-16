@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
 import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile } from '@/lib/folderIO'
+import { loadFromLocalStorage } from '@/lib/fileIO'
 import { parseDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
 
@@ -124,7 +125,18 @@ export function useRefreshRedirect() {
       if (cancelled) return
 
       if (!handle) {
-        // Folder not found or permission denied — fall back to startup
+        // FSAPI unavailable (mobile) or permission denied — try localStorage
+        const recovered = loadFromLocalStorage()
+        if (recovered) {
+          useWorkspaceStore.getState().loadWorkspace(recovered)
+          if (urlViewKey) {
+            const allViews = allViewsOf(recovered)
+            if (allViews.some(v => v.key === urlViewKey)) {
+              useWorkspaceStore.getState().setActiveView(urlViewKey)
+            }
+          }
+          return
+        }
         navigate('/', { replace: true })
         return
       }
