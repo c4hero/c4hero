@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, buildElementMap } from '@/store/workspace'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
 import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
@@ -32,6 +33,13 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const toggleElementInView = useWorkspaceStore((s) => s.toggleElementInView)
   const [search, setSearch] = useState('')
+  const isMobile = useBreakpoint() === 'mobile'
+
+  // On mobile, clear selection after adding so the inspector doesn't auto-open
+  const afterAdd = useCallback(() => {
+    if (isMobile) useWorkspaceStore.getState().clearSelection()
+    onClose()
+  }, [isMobile, onClose])
 
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
 
@@ -96,7 +104,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
       icon: <UserRound size={20} />,
       label: 'Person',
       color: 'var(--color-type-person)',
-      onClick: () => { useWorkspaceStore.getState().addPerson('New Person'); onClose() },
+      onClick: () => { useWorkspaceStore.getState().addPerson('New Person'); afterAdd() },
     },
     creatableTypes.canCreatePerson && {
       key: 'ext-person',
@@ -104,14 +112,14 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
       label: 'External Person',
       color: 'var(--color-type-external)',
       dashed: true,
-      onClick: () => { useWorkspaceStore.getState().addPerson('New External Person', undefined, 'External'); onClose() },
+      onClick: () => { useWorkspaceStore.getState().addPerson('New External Person', undefined, 'External'); afterAdd() },
     },
     creatableTypes.canCreateSystem && {
       key: 'system',
       icon: <Globe size={20} />,
       label: 'System',
       color: 'var(--color-type-system)',
-      onClick: () => { useWorkspaceStore.getState().addSoftwareSystem('New System'); onClose() },
+      onClick: () => { useWorkspaceStore.getState().addSoftwareSystem('New System'); afterAdd() },
     },
     creatableTypes.canCreateSystem && {
       key: 'ext-system',
@@ -119,7 +127,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
       label: 'External System',
       color: 'var(--color-type-external)',
       dashed: true,
-      onClick: () => { useWorkspaceStore.getState().addSoftwareSystem('New External System', undefined, 'External'); onClose() },
+      onClick: () => { useWorkspaceStore.getState().addSoftwareSystem('New External System', undefined, 'External'); afterAdd() },
     },
     creatableTypes.canCreateContainer !== null && {
       key: 'container',
@@ -131,7 +139,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
       onClick: () => {
         if (!containersAllowed) return
         useWorkspaceStore.getState().addContainer(creatableTypes.canCreateContainer!, 'New Container')
-        onClose()
+        afterAdd()
       },
     },
     creatableTypes.canCreateComponent !== null && {
@@ -144,7 +152,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
       onClick: () => {
         if (!containersAllowed) return
         useWorkspaceStore.getState().addComponent(creatableTypes.canCreateComponent!, 'New Component')
-        onClose()
+        afterAdd()
       },
     },
   ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string; color: string; dashed?: boolean; disabled?: boolean; disabledTitle?: string; onClick: () => void }[]
@@ -207,7 +215,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
                         undefined,
                         sub.tag,
                       )
-                      onClose()
+                      afterAdd()
                     }}
                   />
                 ))}
