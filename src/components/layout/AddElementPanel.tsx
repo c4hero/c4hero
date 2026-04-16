@@ -17,6 +17,7 @@ import {
   Smartphone,
   HardDrive,
   Monitor,
+  ChevronDown,
 } from 'lucide-react'
 
 const CONTAINER_SUBTYPES = [
@@ -33,6 +34,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const toggleElementInView = useWorkspaceStore((s) => s.toggleElementInView)
   const [search, setSearch] = useState('')
+  const [createExpanded, setCreateExpanded] = useState(true)
   const isMobile = useBreakpoint() === 'mobile'
 
   // On mobile, clear selection after adding so the inspector doesn't auto-open
@@ -172,55 +174,77 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
         overflow: 'hidden',
       }}
     >
-        {/* Create new section */}
+        {/* Create new section (collapsible) */}
         <div style={{ padding: '10px 12px 8px' }}>
-          <div
-            className="flyout-label"
-            style={{ marginBottom: 8 }}
+          <button
+            onClick={() => setCreateExpanded((v) => !v)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              width: '100%',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              marginBottom: createExpanded ? 8 : 0,
+            }}
           >
-            Create new
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {createCards.map((card) => (
-              <CreateChip
-                key={card.key}
-                icon={card.icon}
-                label={card.label}
-                color={card.color}
-                dashed={card.dashed}
-                disabled={card.disabled}
-                disabledTitle={card.disabledTitle}
-                onClick={card.onClick}
-              />
-            ))}
-          </div>
-          {creatableTypes.canCreateContainer !== null && containersAllowed && (
-            <div style={{ marginTop: 8 }}>
-              <div
-                className="flyout-label"
-                style={{ marginBottom: 5 }}
-              >
-                Common containers
-              </div>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {CONTAINER_SUBTYPES.map((sub) => (
-                  <SubtypeChip
-                    key={sub.key}
-                    icon={sub.icon}
-                    label={sub.label}
-                    onClick={() => {
-                      useWorkspaceStore.getState().addContainer(
-                        creatableTypes.canCreateContainer!,
-                        `New ${sub.label}`,
-                        undefined,
-                        sub.tag,
-                      )
-                      afterAdd()
-                    }}
+            <ChevronDown
+              size={12}
+              style={{
+                color: 'var(--color-text-muted)',
+                transition: 'transform 0.15s ease',
+                transform: createExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+              }}
+            />
+            <span className="flyout-label" style={{ margin: 0 }}>Create new</span>
+          </button>
+          {createExpanded && (
+            <>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {createCards.map((card) => (
+                  <CreateChip
+                    key={card.key}
+                    icon={card.icon}
+                    label={card.label}
+                    color={card.color}
+                    dashed={card.dashed}
+                    disabled={card.disabled}
+                    disabledTitle={card.disabledTitle}
+                    onClick={card.onClick}
                   />
                 ))}
               </div>
-            </div>
+              {creatableTypes.canCreateContainer !== null && containersAllowed && (
+                <div style={{ marginTop: 8 }}>
+                  <div
+                    className="flyout-label"
+                    style={{ marginBottom: 5 }}
+                  >
+                    Common containers
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {CONTAINER_SUBTYPES.map((sub) => (
+                      <SubtypeChip
+                        key={sub.key}
+                        icon={sub.icon}
+                        label={sub.label}
+                        onClick={() => {
+                          useWorkspaceStore.getState().addContainer(
+                            creatableTypes.canCreateContainer!,
+                            `New ${sub.label}`,
+                            undefined,
+                            sub.tag,
+                          )
+                          afterAdd()
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -251,7 +275,12 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value
+                setSearch(val)
+                if (val.trim()) setCreateExpanded(false)
+                else setCreateExpanded(true)
+              }}
               placeholder="Filter elements..."
               style={{
                 flex: 1,
