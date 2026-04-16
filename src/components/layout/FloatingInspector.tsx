@@ -10,7 +10,7 @@ export default function FloatingInspector() {
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const isMobile = useBreakpoint() === 'mobile'
 
-  if (!workspace || multiSelectMode || isMobile) return null
+  if (!workspace || multiSelectMode) return null
 
   const hasElement = selectedIds.length > 0 && getSelectedElement(workspace, selectedIds) !== undefined
   const hasRelationship = selectedRelId !== null && getRelationshipById(workspace, selectedRelId) !== undefined
@@ -18,6 +18,35 @@ export default function FloatingInspector() {
 
   // Only render when a node, relationship, or group is explicitly selected
   const visible = hasElement || hasRelationship || hasGroup
+
+  if (isMobile) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 'max(14px, calc(env(safe-area-inset-bottom, 0px) + 8px))',
+          left: 14,
+          right: 14,
+          zIndex: 50,
+          maxHeight: '40dvh',
+          overflowY: 'auto',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--color-border)',
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(var(--glass-blur))',
+          WebkitBackdropFilter: 'blur(var(--glass-blur))',
+          boxShadow: 'var(--glass-shadow)',
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0)' : 'translateY(12px)',
+          pointerEvents: visible ? 'auto' : 'none',
+          transition: 'opacity 0.18s ease, transform 0.18s ease',
+        }}
+        aria-label="Element properties"
+      >
+        <RightPanel />
+      </div>
+    )
+  }
 
   return (
     <div
