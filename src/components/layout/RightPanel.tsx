@@ -418,7 +418,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
         </div>
         <div>
           <FieldLabel>Interaction Style</FieldLabel>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1">
             {(['Synchronous', 'Asynchronous'] as const).map(is => {
               const active = (relationship.interactionStyle ?? 'Synchronous') === is
               return (
@@ -427,7 +427,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
                   onClick={() => updateRelationship(relationship.id, { interactionStyle: is })}
                   title={is}
                   aria-label={`Interaction style: ${is}`}
-                  className="flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-[10px] font-medium transition-colors"
+                  className="flex flex-col items-center gap-0.5 rounded-md border px-2 py-1.5 text-[9px] font-medium transition-colors"
                   style={{
                     flex: 1,
                     background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
@@ -436,7 +436,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
                     cursor: 'pointer',
                   }}
                 >
-                  <svg width="36" height="16" viewBox="0 0 36 16" fill="none">
+                  <svg width="28" height="12" viewBox="0 0 36 16" fill="none">
                     {is === 'Synchronous' ? (
                       <>
                         <line x1="2" y1="8" x2="34" y2="8" stroke="currentColor" strokeWidth="1.5" />
@@ -457,7 +457,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
         </div>
         <div>
           <FieldLabel>Line Style</FieldLabel>
-          <div className="flex gap-1.5" data-testid="line-style">
+          <div className="flex gap-1" data-testid="line-style">
             {LINE_STYLE_OPTIONS.map(ls => {
               const active = (relationship.lineStyle ?? 'Curved') === ls
               return (
@@ -466,7 +466,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
                   onClick={() => updateRelationship(relationship.id, { lineStyle: ls })}
                   title={ls}
                   aria-label={`Line style: ${ls}`}
-                  className="flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-[10px] font-medium transition-colors"
+                  className="flex flex-col items-center gap-0.5 rounded-md border px-2 py-1.5 text-[9px] font-medium transition-colors"
                   style={{
                     flex: 1,
                     background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
@@ -475,7 +475,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
                     cursor: 'pointer',
                   }}
                 >
-                  <svg width="36" height="16" viewBox="0 0 36 16" fill="none">
+                  <svg width="28" height="12" viewBox="0 0 36 16" fill="none">
                     {ls === 'Curved' && (
                       <path d="M2 14 C12 14, 12 2, 18 2 S24 14, 34 14" stroke="currentColor" strokeWidth="1.5" fill="none" />
                     )}
