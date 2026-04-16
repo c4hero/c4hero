@@ -9,13 +9,18 @@ import type { View, Group } from '@/types/model'
  *
  *  Groups are expressed as dagre compound-graph parents so that members cluster
  *  together in the final layout and the group rectangle (drawn afterwards around
- *  member bounds) stays tight without engulfing unrelated nodes. */
+ *  member bounds) stays tight without engulfing unrelated nodes.
+ *
+ *  The scope boundary (for container/component views) is also expressed as a
+ *  compound parent so that internal nodes cluster together and external nodes
+ *  are positioned outside the boundary area. */
 export function applyAutoLayout(
   nodes: Node[],
   edges: Edge[],
   view: View,
   groups: Group[],
   direction: string = 'TB',
+  boundaryInternalIds: Set<string> = new Set(),
 ): Node[] {
   const pinnedIds = new Set(
     view.elements.filter(e => e.pinned && e.x !== undefined && e.y !== undefined).map(e => e.id),
@@ -27,6 +32,14 @@ export function applyAutoLayout(
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: direction, ranksep: 300, nodesep: 250 })
 
+  // Create a compound parent for the scope boundary so dagre separates
+  // internal nodes (inside the boundary) from external nodes.
+  const hasBoundary = boundaryInternalIds.size > 0
+  const boundaryParentId = '__dagre_boundary__'
+  if (hasBoundary) {
+    g.setNode(boundaryParentId, {})
+  }
+
   // Assign dagre parent clusters for groups that have ≥2 members present in this
   // view. Matches the gate in buildGroupNodes so the layout and the drawn group
   // rectangles agree on which groups are "active".
@@ -35,15 +48,24 @@ export function applyAutoLayout(
   for (const group of groups) {
     const present = group.elementIds.filter(id => nodeIds.has(id))
     if (present.length < 2) continue
-    const parentId = `__group_${group.id}`
-    g.setNode(parentId, {})
-    for (const id of present) parentByChild.set(id, parentId)
+    const groupParentId = `__group_${group.id}`
+    g.setNode(groupParentId, {})
+    for (const id of present) parentByChild.set(id, groupParentId)
+    // Nest fully-internal groups inside the boundary parent
+    if (hasBoundary && present.every(id => boundaryInternalIds.has(id))) {
+      g.setParent(groupParentId, boundaryParentId)
+    }
   }
 
   for (const node of nodes) {
     g.setNode(node.id, { width: 200, height: 100 })
-    const parentId = parentByChild.get(node.id)
-    if (parentId) g.setParent(node.id, parentId)
+    const groupParentId = parentByChild.get(node.id)
+    if (groupParentId) {
+      g.setParent(node.id, groupParentId)
+    } else if (hasBoundary && boundaryInternalIds.has(node.id)) {
+      // Ungrouped internal node → child of boundary
+      g.setParent(node.id, boundaryParentId)
+    }
   }
   for (const edge of edges) {
     g.setEdge(edge.source, edge.target)

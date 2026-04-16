@@ -1,4 +1,5 @@
 import { useWorkspaceStore, getSelectedElement, getRelationshipById } from '@/store/workspace'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import RightPanel from '@/components/layout/RightPanel'
 
 export default function FloatingInspector() {
@@ -7,8 +8,9 @@ export default function FloatingInspector() {
   const selectedRelId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const selectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
+  const isMobile = useBreakpoint() === 'mobile'
 
-  if (!workspace || multiSelectMode) return null
+  if (!workspace || multiSelectMode || isMobile) return null
 
   const hasElement = selectedIds.length > 0 && getSelectedElement(workspace, selectedIds) !== undefined
   const hasRelationship = selectedRelId !== null && getRelationshipById(workspace, selectedRelId) !== undefined

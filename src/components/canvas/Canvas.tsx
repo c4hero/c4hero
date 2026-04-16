@@ -557,8 +557,18 @@ export default function Canvas() {
       tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
     }
 
-    // 3. Auto-layout: position unpinned nodes, keep pinned ones
-    const laidOut = applyAutoLayout(rawNodes, tempEdges, view, workspace.model.groups, direction)
+    // 3. Auto-layout: position unpinned nodes, keep pinned ones.
+    //    Compute boundary-internal IDs so dagre clusters internal nodes together
+    //    and positions external nodes outside the scope boundary.
+    let boundaryInternalIds = new Set<string>()
+    if (view.type === 'container' && view.softwareSystemId) {
+      const scopeSystem = workspace.model.softwareSystems.find(s => s.id === view.softwareSystemId)
+      if (scopeSystem) boundaryInternalIds = new Set(scopeSystem.containers.map(c => c.id))
+    } else if (view.type === 'component' && view.containerId) {
+      const scopeContainer = workspace.model.softwareSystems.flatMap(s => s.containers).find(c => c.id === view.containerId)
+      if (scopeContainer) boundaryInternalIds = new Set(scopeContainer.components.map(c => c.id))
+    }
+    const laidOut = applyAutoLayout(rawNodes, tempEdges, view, workspace.model.groups, direction, boundaryInternalIds)
 
     // 4. Build group background nodes and scope boundary using post-layout positions
     const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut)
