@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, LineStyle, Location, Group } from '@/types/model'
-import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, Layers, Trash2 } from 'lucide-react'
+import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, Layers, Trash2, ChevronRight } from 'lucide-react'
 import { generateDescription, getAIConfig } from '@/lib/ai'
 import { TYPE_LABELS, TYPE_COLORS } from '@/lib/elementMeta'
 
@@ -320,14 +320,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
 
             {/* Appears in views */}
             {appearsInViews.length > 0 && (
-              <div>
-                <FieldLabel>Appears in views</FieldLabel>
-                <div className="space-y-1">
-                  {appearsInViews.map(v => (
-                    <ViewLink key={v.key} viewKey={v.key} title={v.title ?? v.key} />
-                  ))}
-                </div>
-              </div>
+              <AppearsInViews views={appearsInViews} />
             )}
           </div>
         )}
@@ -340,16 +333,51 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   )
 }
 
+function AppearsInViews({ views }: { views: { key: string; title?: string }[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1 mb-1"
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+      >
+        <ChevronRight
+          size={12}
+          style={{
+            color: 'var(--color-text-muted)',
+            transition: 'transform 0.15s',
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+          }}
+        />
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+          Appears in views
+        </span>
+        <span className="text-[10px] font-medium" style={{ color: 'var(--color-text-muted)', marginLeft: 4 }}>
+          {views.length}
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-0.5">
+          {views.map(v => (
+            <ViewLink key={v.key} viewKey={v.key} title={v.title ?? v.key} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ViewLink({ viewKey, title }: { viewKey: string; title: string }) {
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   return (
     <button
       onClick={() => setActiveView(viewKey)}
-      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors hover:bg-[var(--color-surface-3)]"
-      style={{ color: 'var(--color-text-secondary)' }}
+      className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-[var(--color-surface-3)]"
+      style={{ color: 'var(--color-text-secondary)', textAlign: 'left' }}
     >
-      <Eye size={11} style={{ color: 'var(--color-text-muted)' }} />
-      {title}
+      <Eye size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0, marginTop: 2 }} />
+      <span>{title}</span>
     </button>
   )
 }
