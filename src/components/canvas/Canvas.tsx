@@ -21,7 +21,6 @@ import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
-import ContextMenu from './ContextMenu'
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
@@ -495,7 +494,6 @@ export default function Canvas() {
     useWorkspaceStore.getState().zoomInto(elementId)
   }, [])
 
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null)
 
   // Space-to-pan
   const [spaceHeld, setSpaceHeld] = useState(false)
@@ -847,21 +845,6 @@ export default function Canvas() {
     [updateNodePosition, setNodes],
   )
 
-  const onNodeContextMenu = useCallback(
-    (event: React.MouseEvent, node: Node) => {
-      event.preventDefault()
-      setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
-    },
-    [],
-  )
-
-  const onPaneContextMenu = useCallback(
-    (event: React.MouseEvent | MouseEvent) => {
-      event.preventDefault()
-      setContextMenu({ x: (event as MouseEvent).clientX, y: (event as MouseEvent).clientY })
-    },
-    [],
-  )
 
   // Track recent connections to prevent duplicates from multiple handle matches.
   // ReactFlow can fire onConnect several times for the same drag when a node has
@@ -893,7 +876,6 @@ export default function Canvas() {
 
   const onPaneClick = useCallback(() => {
     if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
-    setContextMenu(null)
     clearSelection()
   }, [clearSelection])
 
@@ -954,8 +936,6 @@ export default function Canvas() {
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onReconnect={onReconnect}
-        onNodeContextMenu={onNodeContextMenu}
-        onPaneContextMenu={onPaneContextMenu}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -1000,14 +980,6 @@ export default function Canvas() {
           </defs>
         </svg>
       </ReactFlow>
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          nodeId={contextMenu.nodeId}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
     </div>
   )
 }

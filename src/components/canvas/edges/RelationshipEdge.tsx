@@ -5,6 +5,7 @@ import {
   getSmoothStepPath,
   getBezierPath,
   getStraightPath,
+  Position,
   type EdgeProps,
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
@@ -14,12 +15,28 @@ interface RelationshipEdgeData {
   relationshipStyle?: RelationshipStyle
 }
 
+// React Flow places edge endpoints at the outer edge of handles, which
+// extend past the node border (handles are centered on the border via CSS
+// translate). Pull endpoints inward so arrows connect at the node border.
+const SRC_OFFSET = 4  // 8px source handle / 2
+const TGT_OFFSET = 7  // 14px target handle / 2
+
+function snapToNode(x: number, y: number, pos: Position, offset: number): [number, number] {
+  switch (pos) {
+    case Position.Left:   return [x + offset, y]
+    case Position.Right:  return [x - offset, y]
+    case Position.Top:    return [x, y + offset]
+    case Position.Bottom: return [x, y - offset]
+    default:              return [x, y]
+  }
+}
+
 function RelationshipEdge({
   id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
+  sourceX: rawSrcX,
+  sourceY: rawSrcY,
+  targetX: rawTgtX,
+  targetY: rawTgtY,
   sourcePosition,
   targetPosition,
   data,
@@ -29,6 +46,9 @@ function RelationshipEdge({
   const relStyle = data?.relationshipStyle
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
+
+  const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
+  const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
 
   // Choose path function based on lineStyle
   let edgePath: string

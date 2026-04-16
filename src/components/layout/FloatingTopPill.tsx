@@ -284,66 +284,17 @@ export default function FloatingTopPill() {
 
         {/* Mobile: hamburger / Desktop: action buttons */}
         {isMobile ? (
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button
-              onClick={() => setHamburgerOpen((o) => !o)}
-              className="btn-icon"
-              style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40 }}
-              title="More actions"
-              aria-label="More actions"
-              aria-expanded={hamburgerOpen}
-              aria-haspopup="true"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-            {hamburgerOpen && (
-              <>
-                <div
-                  style={{ position: 'fixed', inset: 0, zIndex: 49 }}
-                  onClick={() => setHamburgerOpen(false)}
-                />
-                <div
-                  role="menu"
-                  className="glass-flyout"
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: '100%',
-                    zIndex: 60,
-                    marginTop: 4,
-                    minWidth: 180,
-                    padding: '4px 0',
-                  }}
-                >
-                  <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
-                  <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
-                  <MenuItemRow
-                    icon={Command}
-                    label="Command palette"
-                    onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(true); setExportDialogOpen(false) }}
-                  />
-
-                  {showUndoRedo && (
-                    <>
-                      <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
-                      <MenuItemRow
-                        icon={Undo2}
-                        label="Undo"
-                        onClick={() => { setHamburgerOpen(false); undo() }}
-                        disabled={!canUndo}
-                      />
-                      <MenuItemRow
-                        icon={Redo2}
-                        label="Redo"
-                        onClick={() => { setHamburgerOpen(false); redo() }}
-                        disabled={!canRedo}
-                      />
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          <button
+            onClick={() => setHamburgerOpen((o) => !o)}
+            className="btn-icon"
+            style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40, flexShrink: 0 }}
+            title="More actions"
+            aria-label="More actions"
+            aria-expanded={hamburgerOpen}
+            aria-haspopup="true"
+          >
+            <MoreHorizontal size={16} />
+          </button>
         ) : (
           <>
             {/* Undo/Redo (conditional) */}
@@ -424,6 +375,51 @@ export default function FloatingTopPill() {
         )}
       </div>
       {/* Slide-down shades — siblings in the column, inherit exact pill width */}
+      {hamburgerOpen && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 49, pointerEvents: 'auto' }}
+            onClick={() => setHamburgerOpen(false)}
+          />
+          <div
+            role="menu"
+            className="glass-flyout"
+            style={{
+              pointerEvents: 'auto',
+              alignSelf: 'flex-end',
+              zIndex: 60,
+              marginTop: 4,
+              minWidth: 180,
+              padding: '4px 0',
+            }}
+          >
+            <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
+            <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+            <MenuItemRow
+              icon={Command}
+              label="Command palette"
+              onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(true); setExportDialogOpen(false) }}
+            />
+            {showUndoRedo && (
+              <>
+                <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+                <MenuItemRow
+                  icon={Undo2}
+                  label="Undo"
+                  onClick={() => { setHamburgerOpen(false); undo() }}
+                  disabled={!canUndo}
+                />
+                <MenuItemRow
+                  icon={Redo2}
+                  label="Redo"
+                  onClick={() => { setHamburgerOpen(false); redo() }}
+                  disabled={!canRedo}
+                />
+              </>
+            )}
+          </div>
+        </>
+      )}
       {viewDropdownOpen && (
         <ViewSwitcherPanel
           onClose={() => { setViewDropdownOpen(false) }}
