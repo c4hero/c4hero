@@ -299,18 +299,49 @@ function TagManagerPanel({
               No custom tags yet
             </div>
           )}
-          {tags.map((tag) => (
-            <TagRow
-              key={tag}
-              tag={tag}
-              style={getStyleForTag(tag)}
-              editingStyle={editingStyleFor === tag}
-              onEditStyle={() => setEditingStyleFor(editingStyleFor === tag ? null : tag)}
-              onCloseStyle={() => setEditingStyleFor(null)}
-              onRename={(newName) => { renameTag(tag, newName) }}
-              onDelete={() => removeTagGlobal(tag)}
-            />
-          ))}
+          {(() => {
+            const typeTags = tags.filter((t) => BUILTIN_TAGS.has(t))
+            const customTags = tags.filter((t) => !BUILTIN_TAGS.has(t))
+            return (
+              <>
+                {typeTags.length > 0 && (
+                  <>
+                    <div style={{ padding: '6px 7px 2px', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.03em' }}>Type</div>
+                    {typeTags.map((tag) => (
+                      <TagRow
+                        key={tag}
+                        tag={tag}
+                        style={getStyleForTag(tag)}
+                        builtIn
+                        editingStyle={editingStyleFor === tag}
+                        onEditStyle={() => setEditingStyleFor(editingStyleFor === tag ? null : tag)}
+                        onCloseStyle={() => setEditingStyleFor(null)}
+                        onRename={(newName) => { renameTag(tag, newName) }}
+                        onDelete={() => removeTagGlobal(tag)}
+                      />
+                    ))}
+                  </>
+                )}
+                {customTags.length > 0 && (
+                  <>
+                    <div style={{ padding: `${typeTags.length > 0 ? '10px' : '6px'} 7px 2px`, fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.03em' }}>Custom</div>
+                    {customTags.map((tag) => (
+                      <TagRow
+                        key={tag}
+                        tag={tag}
+                        style={getStyleForTag(tag)}
+                        editingStyle={editingStyleFor === tag}
+                        onEditStyle={() => setEditingStyleFor(editingStyleFor === tag ? null : tag)}
+                        onCloseStyle={() => setEditingStyleFor(null)}
+                        onRename={(newName) => { renameTag(tag, newName) }}
+                        onDelete={() => removeTagGlobal(tag)}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
+            )
+          })()}
         </div>
 
         {/* Add tag */}
@@ -362,11 +393,12 @@ function TagManagerPanel({
 // ─── Tag Row ──────────────────────────────────────────────────────────
 
 function TagRow({
-  tag, style, editingStyle,
+  tag, style, builtIn, editingStyle,
   onEditStyle, onCloseStyle, onRename, onDelete,
 }: {
   tag: string
   style: ElementStyle | undefined
+  builtIn?: boolean
   editingStyle: boolean
   onEditStyle: () => void
   onCloseStyle: () => void
@@ -400,41 +432,54 @@ function TagRow({
           border: '1px solid var(--glass-overlay-md)',
         }} />
 
-        {/* Rename input */}
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={commitRename}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur() }
-            if (e.key === 'Escape') { setDraft(tag); (e.target as HTMLElement).blur() }
-          }}
-          style={{
+        {/* Tag name: read-only label for built-in, editable input for custom */}
+        {builtIn ? (
+          <span style={{
             flex: 1, height: 26, padding: '0 7px',
-            borderRadius: 'var(--radius-sm)',
-            border: focused ? '1px solid var(--color-accent)' : '1px solid transparent',
-            background: focused ? 'var(--color-surface-3)' : 'transparent',
+            display: 'flex', alignItems: 'center',
             color: 'var(--color-text-primary)',
-            fontSize: 'var(--text-sm)', fontWeight: 500, outline: 'none',
-            transition: 'border-color 0.12s, background 0.12s',
-          }}
-        />
+            fontSize: 'var(--text-sm)', fontWeight: 500,
+          }}>
+            {tag}
+          </span>
+        ) : (
+          <>
+            <input
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur() }
+                if (e.key === 'Escape') { setDraft(tag); (e.target as HTMLElement).blur() }
+              }}
+              style={{
+                flex: 1, height: 26, padding: '0 7px',
+                borderRadius: 'var(--radius-sm)',
+                border: focused ? '1px solid var(--color-accent)' : '1px solid transparent',
+                background: focused ? 'var(--color-surface-3)' : 'transparent',
+                color: 'var(--color-text-primary)',
+                fontSize: 'var(--text-sm)', fontWeight: 500, outline: 'none',
+                transition: 'border-color 0.12s, background 0.12s',
+              }}
+            />
 
-        {/* Confirm rename (when focused and changed) */}
-        {focused && draft.trim() !== tag && (
-          <button
-            onMouseDown={(e) => { e.preventDefault(); commitRename() }}
-            aria-label="Confirm rename"
-            style={{
-              width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--color-accent-glow)', color: 'var(--color-accent)',
-              cursor: 'pointer', flexShrink: 0,
-            }}
-          >
-            <Check size={11} />
-          </button>
+            {/* Confirm rename (when focused and changed) */}
+            {focused && draft.trim() !== tag && (
+              <button
+                onMouseDown={(e) => { e.preventDefault(); commitRename() }}
+                aria-label="Confirm rename"
+                style={{
+                  width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--color-accent-glow)', color: 'var(--color-accent)',
+                  cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                <Check size={11} />
+              </button>
+            )}
+          </>
         )}
 
         {/* Style button */}
@@ -455,20 +500,22 @@ function TagRow({
           <Palette size={11} />
         </button>
 
-        {/* Delete button */}
-        <button
-          onClick={onDelete}
-          className="hover-danger"
-          style={{
-            width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 'var(--radius-sm)', border: 'none', background: 'transparent',
-            color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s, color 0.1s',
-          }}
-          title="Remove tag globally"
-          aria-label={`Remove tag "${tag}" globally`}
-        >
-          <X size={11} />
-        </button>
+        {/* Delete button (hidden for built-in type tags) */}
+        {!builtIn && (
+          <button
+            onClick={onDelete}
+            className="hover-danger"
+            style={{
+              width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 'var(--radius-sm)', border: 'none', background: 'transparent',
+              color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0, transition: 'background 0.1s, color 0.1s',
+            }}
+            title="Remove tag globally"
+            aria-label={`Remove tag "${tag}" globally`}
+          >
+            <X size={11} />
+          </button>
+        )}
       </div>
 
       {/* Inline style editor */}
