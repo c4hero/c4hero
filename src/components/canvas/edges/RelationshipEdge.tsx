@@ -115,6 +115,10 @@ function RelationshipEdge({
               maxWidth: 200,
               textAlign: 'center',
               lineHeight: 1.3,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 4,
             }}
           >
             {relationship?.description && (
@@ -126,12 +130,23 @@ function RelationshipEdge({
               </span>
             )}
             {relationship?.technology && (
-              <span
-                className={relationship?.description ? 'ml-1 text-[10px]' : 'text-[10px]'}
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                {relationship.technology}
-              </span>
+              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
+                {relationship.technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+                  <span
+                    key={t}
+                    className="c4-type-chip"
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
+                      color: 'var(--color-text-muted)',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      letterSpacing: 'normal',
+                    }}
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </EdgeLabelRenderer>
@@ -159,8 +174,22 @@ function RelationshipEdge({
               </div>
             )}
             {relationship.technology && (
-              <div className="text-[10px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                {relationship.technology}
+              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>
+                {relationship.technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+                  <span
+                    key={t}
+                    className="c4-type-chip"
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
+                      color: 'var(--color-text-muted)',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      letterSpacing: 'normal',
+                    }}
+                  >
+                    {t}
+                  </span>
+                ))}
               </div>
             )}
             {relationship.tags.filter(t => t !== 'Relationship').length > 0 && (
