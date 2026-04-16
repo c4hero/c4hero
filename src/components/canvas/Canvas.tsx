@@ -689,20 +689,28 @@ export default function Canvas() {
   // Sync nodes/edges when workspace changes.
   // Only trigger a viewport refit on structural changes: view switch, element count change,
   // or explicit relayout (layoutVersion bump). Drag-stop position saves must NOT cause refit.
+  // Non-structural changes (e.g. adding a relationship) only update edges to avoid
+  // auto-layout resetting user-positioned nodes.
   const lastFitSignal = useRef<string>('')
   useEffect(() => {
-    setNodes(initialNodes)
-    setEdges(initialEdges)
     const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}`
     if (signal !== lastFitSignal.current) {
       lastFitSignal.current = signal
+      setNodes(initialNodes)
+      setEdges(initialEdges)
       fitPending.current = true
       requestAnimationFrame(fitContentNodes)
     } else {
-      // Structural identity unchanged but the model may have mutated in ways
-      // that affect overlays (e.g. addGroup). Always rebuild group/boundary
-      // bboxes from real measurements so they don't get stuck on default
-      // 200×100 sizes from the initial dagre output.
+      // Non-structural change (e.g. new relationship, style update, rename).
+      // Only update edges and refresh node data without replacing positions.
+      setEdges(initialEdges)
+      setNodes((prev) => {
+        const dataById = new Map(initialNodes.map(n => [n.id, n.data]))
+        return prev.map(n => {
+          const newData = dataById.get(n.id)
+          return newData ? { ...n, data: newData } : n
+        })
+      })
       requestAnimationFrame(rebuildOverlays)
     }
   }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, rebuildOverlays, activeViewKey, view, layoutVersion])
