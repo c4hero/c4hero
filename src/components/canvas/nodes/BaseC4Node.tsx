@@ -107,7 +107,7 @@ export default function BaseC4Node({
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <ResolvedIcon size={16} aria-hidden="true" style={{ flexShrink: 0, color: resolvedTypeColor }} />
         <div style={{ flex: 1, minWidth: 0, ...(resolvedFontSize != null && { fontSize: `${resolvedFontSize}px` }) }}>
-          <InlineName elementId={element.id} name={element.name} lineClamp={nameClamp} />
+          <InlineName elementId={element.id} name={element.name} lineClamp={nameClamp} textColor={style?.color} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }} className="c4-node-actions">
           {viewCount > 1 && (
@@ -130,14 +130,14 @@ export default function BaseC4Node({
       {desc && !isCompact && (
         <p
           className={descClamp ? `line-clamp-${descClamp}` : undefined}
-          style={{ fontSize: resolvedFontSize != null ? `${Math.round(resolvedFontSize * 0.78)}px` : 'var(--text-xs-plus)', color: style?.color ?? 'var(--color-text-muted)', margin: '6px 0 0', lineHeight: '1.4' }}
+          style={{ fontSize: resolvedFontSize != null ? `${Math.round(resolvedFontSize * 0.78)}px` : 'var(--text-xs-plus)', color: style?.color ? `color-mix(in srgb, ${style.color} 70%, ${resolvedTint})` : 'var(--color-text-muted)', margin: '6px 0 0', lineHeight: '1.4' }}
         >
           {desc}
         </p>
       )}
 
-      {/* Row 3: type chip + technology */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
+      {/* Row 3: type chip + technology pills */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>
         <span
           className="c4-type-chip"
           style={{
@@ -147,9 +147,21 @@ export default function BaseC4Node({
         >
           {chipLabel}
         </span>
-        {technology && !isCompact && (
-          <span style={{ fontSize: 'var(--text-xs-plus)', color: style?.color ?? 'var(--color-text-muted)' }}>{technology}</span>
-        )}
+        {technology && !isCompact && technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+          <span
+            key={t}
+            className="c4-type-chip"
+            style={{
+              background: `color-mix(in srgb, ${style?.color ?? 'var(--color-text-muted)'} 10%, transparent)`,
+              color: style?.color ?? 'var(--color-text-muted)',
+              fontWeight: 600,
+              textTransform: 'none',
+              letterSpacing: 'normal',
+            }}
+          >
+            {t}
+          </span>
+        ))}
       </div>
 
       <NodeHandles />

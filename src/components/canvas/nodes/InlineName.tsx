@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, memo } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 
 /** Inline rename: displays name as text, double-click to edit */
-export default memo(function InlineName({ elementId, name, lineClamp }: { elementId: string; name: string; lineClamp?: number }) {
+export default memo(function InlineName({ elementId, name, lineClamp, textColor }: { elementId: string; name: string; lineClamp?: number; textColor?: string }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(name)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -52,6 +52,7 @@ export default memo(function InlineName({ elementId, name, lineClamp }: { elemen
   return (
     <div
       className={`c4-node-name cursor-text${lineClamp ? ` line-clamp-${lineClamp}` : ''}`}
+      style={textColor ? { color: textColor } : undefined}
       tabIndex={0}
       onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
       onKeyDown={(e) => {
