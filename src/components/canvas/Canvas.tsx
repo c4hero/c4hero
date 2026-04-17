@@ -646,12 +646,16 @@ export default function Canvas() {
   }, [reactFlowInstance, setNodes])
 
   const fitAttempts = useRef(0)
+  // The IDs we're expecting to fit to. Set by the sync effect on a structural
+  // change. Prevents a race where the rAF fires before React has committed
+  // setNodes, so rf.getNodes() still returns the previous view's nodes.
+  const expectedFitIds = useRef<Set<string> | null>(null)
   const fitContentNodes = useCallback(() => {
     if (!fitPending.current) return
 
     const tryAgain = () => {
       if (fitAttempts.current++ < MAX_MEASURE_ATTEMPTS) requestAnimationFrame(fitContentNodes)
-      else { fitPending.current = false; fitAttempts.current = 0 }
+      else { fitPending.current = false; fitAttempts.current = 0; expectedFitIds.current = null }
     }
 
     // React Flow's useReactFlow() returns a proxy that silently no-ops
@@ -667,15 +671,28 @@ export default function Canvas() {
     const { width, height } = el.getBoundingClientRect()
     if (width < 200 || height < 200) { tryAgain(); return }
 
-    // Check: all content nodes must be measured
+    // Check: React Flow's current node set matches what we scheduled the fit
+    // for. Without this, a rAF fired right after setNodes can see the PREVIOUS
+    // view's nodes (already measured) and fit to the wrong bounds.
     const contentNodes = rf.getNodes().filter(
       n => n.id !== '__scope_boundary__' && !n.id.startsWith('group-')
     )
+    const expected = expectedFitIds.current
+    if (expected) {
+      const seen = new Set(contentNodes.map(n => n.id))
+      if (seen.size !== expected.size) { tryAgain(); return }
+      for (const id of expected) {
+        if (!seen.has(id)) { tryAgain(); return }
+      }
+    }
+
+    // Check: all content nodes must be measured
     if (contentNodes.length === 0 || !contentNodes.every(n => n.measured?.width && n.measured?.height)) {
       tryAgain()
       return
     }
     fitAttempts.current = 0
+    expectedFitIds.current = null
 
     fitPending.current = false
     // Rebuild overlays first so the bbox is correct before refitting.
@@ -717,7 +734,15 @@ export default function Canvas() {
       lastFitSignal.current = signal
       setNodes(initialNodes)
       setEdges(initialEdges)
+      // Record the exact ID set we expect to fit to so fitContentNodes can
+      // verify React Flow has caught up to the new view before measuring.
+      expectedFitIds.current = new Set(
+        initialNodes
+          .filter((n) => n.id !== '__scope_boundary__' && !n.id.startsWith('group-'))
+          .map((n) => n.id),
+      )
       fitPending.current = true
+      fitAttempts.current = 0
       requestAnimationFrame(fitContentNodes)
     } else {
       // Non-structural change (e.g. new relationship, style update, rename).
