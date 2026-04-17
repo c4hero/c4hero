@@ -646,7 +646,7 @@ function TagStyleEditor({ tag, style, onClose }: {
           />
         </StyleField>
       </div>
-      {style && !BUILTIN_TAGS.has(tag) && (
+      {style && (
         <button
           onClick={() => { removeElementStyle(tag); onClose() }}
           className="hover-danger-text"
@@ -656,7 +656,7 @@ function TagStyleEditor({ tag, style, onClose }: {
             color: 'var(--color-error)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s',
           }}
         >
-          Remove style
+          {BUILTIN_TAGS.has(tag) ? 'Reset to theme default' : 'Remove style'}
         </button>
       )}
     </div>

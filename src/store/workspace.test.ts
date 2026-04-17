@@ -3051,11 +3051,13 @@ describe('updateElementStyle and removeElementStyle', () => {
     expect(styles).toHaveLength(0)
   })
 
-  it('removeElementStyle is a no-op for built-in tags', () => {
+  it('removeElementStyle resets built-in tags to theme default', () => {
+    // Built-in type tag styles fall back to the theme palette when removed,
+    // so removing them is a valid "reset" operation.
     useWorkspaceStore.getState().updateElementStyle({ tag: 'Person', background: '#ff0000' })
     useWorkspaceStore.getState().removeElementStyle('Person')
     const styles = useWorkspaceStore.getState().workspace!.views.configuration.styles.elements
-    expect(styles).toHaveLength(1)
+    expect(styles).toHaveLength(0)
   })
 
   it('removeElementStyle supports undo', () => {

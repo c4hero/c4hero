@@ -648,12 +648,18 @@ export default function Canvas() {
   const fitAttempts = useRef(0)
   const fitContentNodes = useCallback(() => {
     if (!fitPending.current) return
-    const rf = rfInitInstance.current ?? reactFlowInstance
 
     const tryAgain = () => {
       if (fitAttempts.current++ < MAX_MEASURE_ATTEMPTS) requestAnimationFrame(fitContentNodes)
       else { fitPending.current = false; fitAttempts.current = 0 }
     }
+
+    // React Flow's useReactFlow() returns a proxy that silently no-ops
+    // setViewport/fitView until onInit fires (panZoom is initialized). If we
+    // race ahead of onInit on a view switch, the fit appears to succeed but
+    // the viewport never moves. Wait for the real instance before proceeding.
+    const rf = rfInitInstance.current
+    if (!rf) { tryAgain(); return }
 
     // Check: canvas DOM must be full-size
     const el = document.querySelector('.react-flow') as HTMLElement | null
@@ -697,7 +703,7 @@ export default function Canvas() {
       { x: width / 2 - (minX + boundsW / 2) * zoom, y: height / 2 - (minY + boundsH / 2) * zoom, zoom },
       { duration: 300 }
     )
-  }, [reactFlowInstance, rebuildOverlays])
+  }, [rebuildOverlays])
 
   // Sync nodes/edges when workspace changes.
   // Only trigger a viewport refit on structural changes: view switch, element count change,
