@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "screenshots": "playwright test --config=playwright.screenshots.config.ts"
+    "screenshots": "playwright test --config=playwright.screenshots.config.ts",
+    "screenshots:full": "SCREENSHOT_CHROME=all playwright test --config=playwright.screenshots.config.ts"
   },
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",
