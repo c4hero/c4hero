@@ -656,7 +656,7 @@ function TagStyleEditor({ tag, style, onClose }: {
             color: 'var(--color-error)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s',
           }}
         >
-          {BUILTIN_TAGS.has(tag) ? 'Reset to theme default' : 'Remove style'}
+          Remove style
         </button>
       )}
     </div>
