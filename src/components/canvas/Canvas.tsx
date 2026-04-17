@@ -723,27 +723,48 @@ export default function Canvas() {
   }, [rebuildOverlays])
 
   // Sync nodes/edges when workspace changes.
-  // Only trigger a viewport refit on structural changes: view switch, element count change,
-  // or explicit relayout (layoutVersion bump). Drag-stop position saves must NOT cause refit.
-  // Non-structural changes (e.g. adding a relationship) only update edges to avoid
-  // auto-layout resetting user-positioned nodes.
-  const lastFitSignal = useRef<string>('')
+  //
+  // Fit-on-load policy: only fit the viewport the FIRST time a view is shown
+  // in this session, or when a structural change to that view has happened
+  // since its last fit (elementCount or layoutVersion changed, e.g. via add
+  // element / reset & relayout). Returning to a view you've already visited
+  // at the same element count and layout version preserves the current
+  // viewport — the user's pan/zoom from the previous view is kept.
+  //
+  // Drag-stop position saves must NOT cause refit. Non-structural changes
+  // (rename, relationship add, style edit) only update edges and node data.
+  const lastStructuralSignal = useRef<string>('')
+  const fittedSignaturesByView = useRef<Map<string, string>>(new Map())
   useEffect(() => {
     const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}`
-    if (signal !== lastFitSignal.current) {
-      lastFitSignal.current = signal
+    if (signal !== lastStructuralSignal.current) {
+      lastStructuralSignal.current = signal
+
+      // Structural change for the current view — swap nodes and edges.
       setNodes(initialNodes)
       setEdges(initialEdges)
-      // Record the exact ID set we expect to fit to so fitContentNodes can
-      // verify React Flow has caught up to the new view before measuring.
-      expectedFitIds.current = new Set(
-        initialNodes
-          .filter((n) => n.id !== '__scope_boundary__' && !n.id.startsWith('group-'))
-          .map((n) => n.id),
-      )
-      fitPending.current = true
-      fitAttempts.current = 0
-      requestAnimationFrame(fitContentNodes)
+
+      // Decide whether to refit. Fit only when THIS view hasn't been fitted
+      // yet in this session, or when its content has changed (element count
+      // or layout version) since the last fit.
+      const viewKey = activeViewKey ?? ''
+      const viewSig = `${view?.elements.length ?? 0}:${layoutVersion}`
+      const lastFitSig = fittedSignaturesByView.current.get(viewKey)
+      if (viewKey && lastFitSig !== viewSig) {
+        fittedSignaturesByView.current.set(viewKey, viewSig)
+        expectedFitIds.current = new Set(
+          initialNodes
+            .filter((n) => n.id !== '__scope_boundary__' && !n.id.startsWith('group-'))
+            .map((n) => n.id),
+        )
+        fitPending.current = true
+        fitAttempts.current = 0
+        requestAnimationFrame(fitContentNodes)
+      } else {
+        // Already fitted this view at this signature — just refresh overlays
+        // against the new node positions without touching the viewport.
+        requestAnimationFrame(rebuildOverlays)
+      }
     } else {
       // Non-structural change (e.g. new relationship, style update, rename).
       // Only update edges and refresh node data without replacing positions.
