@@ -162,7 +162,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             {hasTech && (
               <div>
                 <FieldLabel>Technology</FieldLabel>
-                <TechnologyField value={tech ?? ''} placeholder="e.g. React, PostgreSQL..." aria-label="Technology" onLiveChange={(v) => updateElementLive(element.id, { technology: v })} onCommit={(v) => updateTech(element.id, v)} />
+                <TechnologyField value={tech ?? ''} scope="element" placeholder="e.g. React, PostgreSQL..." aria-label="Technology" onLiveChange={(v) => updateElementLive(element.id, { technology: v })} onCommit={(v) => updateTech(element.id, v)} />
               </div>
             )}
             <div>
@@ -353,7 +353,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
         </div>
         <div>
           <FieldLabel>Technology</FieldLabel>
-          <TechnologyField value={relationship.technology ?? ''} placeholder="e.g. REST/HTTP, gRPC..." aria-label="Technology" onCommit={(v) => updateRelationship(relationship.id, { technology: v || undefined })} />
+          <TechnologyField value={relationship.technology ?? ''} scope="relationship" placeholder="e.g. REST/HTTP, gRPC..." aria-label="Technology" onCommit={(v) => updateRelationship(relationship.id, { technology: v || undefined })} />
         </div>
         <div>
           <FieldLabel>Interaction Style</FieldLabel>

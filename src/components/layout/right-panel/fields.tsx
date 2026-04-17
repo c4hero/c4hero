@@ -104,8 +104,15 @@ export function EditableField({
 
 // ─── Technology Field with autocomplete ─────────────────────────────
 
-/** Collect all unique technology strings from the workspace, with usage counts. */
-function useTechnologySuggestions(): { tech: string; count: number }[] {
+export type TechnologyScope = 'element' | 'relationship'
+
+/** Collect unique technology strings from the workspace with usage counts,
+ *  partitioned by scope. Element technologies (containers/components) and
+ *  relationship technologies are kept separate so the inspector's autocomplete
+ *  only suggests values appropriate for what's being edited — e.g. editing a
+ *  container won't offer "REST/HTTP" and editing a relationship won't offer
+ *  "PostgreSQL". */
+function useTechnologySuggestions(scope: TechnologyScope): { tech: string; count: number }[] {
   const workspace = useWorkspaceStore((s) => s.workspace)
   return useMemo(() => {
     if (!workspace) return []
@@ -117,17 +124,20 @@ function useTechnologySuggestions(): { tech: string; count: number }[] {
         if (trimmed) counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1)
       }
     }
-    for (const sys of workspace.model.softwareSystems) {
-      for (const c of sys.containers) {
-        bump(c.technology)
-        for (const comp of c.components) bump(comp.technology)
+    if (scope === 'element') {
+      for (const sys of workspace.model.softwareSystems) {
+        for (const c of sys.containers) {
+          bump(c.technology)
+          for (const comp of c.components) bump(comp.technology)
+        }
       }
+    } else {
+      for (const rel of workspace.model.relationships) bump(rel.technology)
     }
-    for (const rel of workspace.model.relationships) bump(rel.technology)
     return Array.from(counts.entries())
       .map(([tech, count]) => ({ tech, count }))
       .sort((a, b) => b.count - a.count || a.tech.localeCompare(b.tech))
-  }, [workspace])
+  }, [workspace, scope])
 }
 
 function splitTokens(s: string): string[] {
@@ -143,17 +153,21 @@ function joinTokens(tokens: string[]): string {
  *  input accepts new entries. Enter or comma commits the current draft;
  *  Backspace on an empty draft pops the last chip. Autocomplete pulls
  *  from technologies already in use elsewhere in the workspace. */
-export function TechnologyField({ value, placeholder, onCommit, onLiveChange, 'aria-label': ariaLabel }: {
+export function TechnologyField({ value, placeholder, onCommit, onLiveChange, scope, 'aria-label': ariaLabel }: {
   value: string
   placeholder?: string
   onCommit: (val: string) => void
   onLiveChange?: (val: string) => void
+  /** Whether this field edits an element (Container/Component) or a
+   *  Relationship. Controls which pool of workspace technologies is offered
+   *  as autocomplete suggestions. */
+  scope: TechnologyScope
   'aria-label'?: string
 }) {
   const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(-1)
-  const suggestions = useTechnologySuggestions()
+  const suggestions = useTechnologySuggestions(scope)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
