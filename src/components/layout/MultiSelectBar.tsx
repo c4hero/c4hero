@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { Node } from '@xyflow/react'
@@ -23,15 +23,12 @@ export default function MultiSelectBar() {
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const reactFlow = useReactFlow()
   const [alignOpen, setAlignOpen] = useState(false)
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
-
   const count = selectedElementIds.length
 
-  // Recompute screen position of the centroid whenever selection changes
-  useEffect(() => {
-    if (count < 2) { setPos(null); return }
+  const pos = useMemo(() => {
+    if (count < 2) return null
     const nodes = reactFlow.getNodes().filter(n => selectedElementIds.includes(n.id))
-    if (nodes.length === 0) { setPos(null); return }
+    if (nodes.length === 0) return null
 
     const minX = Math.min(...nodes.map(n => n.position.x))
     const maxX = Math.max(...nodes.map(n => n.position.x + (n.measured?.width ?? 200)))
@@ -40,8 +37,7 @@ export default function MultiSelectBar() {
     const centerFlowX = (minX + maxX) / 2
     const topFlowY = minY
 
-    const screen = reactFlow.flowToScreenPosition({ x: centerFlowX, y: topFlowY })
-    setPos({ x: screen.x, y: screen.y })
+    return reactFlow.flowToScreenPosition({ x: centerFlowX, y: topFlowY })
   }, [selectedElementIds, count, reactFlow])
 
   if (count < 2 || !pos) return null

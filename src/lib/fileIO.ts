@@ -239,7 +239,7 @@ export function saveToLocalStorage(workspace: Workspace) {
   try {
     const json = JSON.stringify(workspace)
     if (json.length > MAX_CRASH_RECOVERY_BYTES) {
-      console.warn(`Workspace too large for crash recovery (${(json.length / 1024 / 1024).toFixed(1)}MB). Skipping localStorage save.`)
+      log.warn(`Workspace too large for crash recovery (${(json.length / 1024 / 1024).toFixed(1)}MB). Skipping localStorage save.`)
       return
     }
     localStorage.setItem('c4hero_crash_recovery', json)

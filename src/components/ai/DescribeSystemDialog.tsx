@@ -4,6 +4,9 @@ import { generateWorkspaceFromDescription, getAIConfig } from '@/lib/ai'
 import { parseDSL } from '@/lib/dsl'
 import { X, Sparkles, Loader2 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai:describe')
 
 export default function DescribeSystemDialog({ onClose }: { onClose: () => void }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
@@ -27,7 +30,7 @@ export default function DescribeSystemDialog({ onClose }: { onClose: () => void 
       const dslText = await generateWorkspaceFromDescription(description)
       const { workspace, errors } = parseDSL(dslText)
       if (errors.length > 0) {
-        console.warn('AI-generated DSL parse warnings:', errors)
+        log.warn('AI-generated DSL parse warnings', errors)
       }
       if (workspace) {
         if (!workspace.name) workspace.name = 'AI-Generated Workspace'

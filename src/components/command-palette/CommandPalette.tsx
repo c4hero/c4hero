@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getCommands, CATEGORY_ORDER, CATEGORY_LABELS, type Command } from '@/lib/commands'
@@ -23,11 +23,15 @@ export default function CommandPalette() {
     inputRef.current?.focus()
   }, [])
 
+  const close = useCallback(() => {
+    setCommandPaletteOpen(false)
+  }, [setCommandPaletteOpen])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [])
+  }, [close])
 
   const allCommands = useMemo(() => getCommands(reactFlow), [reactFlow])
 
@@ -63,10 +67,6 @@ export default function CommandPalette() {
     const el = resultsRef.current?.querySelector('[data-selected="true"]')
     if (el) el.scrollIntoView({ block: 'nearest' })
   }, [selectedIndex])
-
-  function close() {
-    setCommandPaletteOpen(false)
-  }
 
   function executeCommand(cmd: Command) {
     close()

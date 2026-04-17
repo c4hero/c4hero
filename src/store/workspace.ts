@@ -16,6 +16,27 @@ import type {
 import { announce } from '@/lib/announce'
 import { validateScope } from '@/lib/scopeValidation'
 import type { ScopeViolation } from '@/lib/scopeValidation'
+import {
+  allViewsOf,
+  findViewHelper,
+  forEachElementHelper,
+  findElementHelper,
+} from './workspace-helpers'
+export { allViewsOf } from './workspace-helpers'
+export {
+  getAllViews,
+  getActiveView,
+  buildElementMap,
+  buildRelationshipMap,
+  getSelectedElement,
+  getRelationshipById,
+  canDrillInto,
+  getZoomTarget,
+  getBreadcrumb,
+  getCreatableTypes,
+} from './workspace-selectors'
+import { getFirstViewKey, findChildViewHelper as findChildView } from './workspace-selectors'
+import { getZoomTarget } from './workspace-selectors'
 
 // ─── Built-in Tags ──────────────────────────────────────────────────
 
@@ -203,40 +224,10 @@ function cloneWs(s: WorkspaceState): Workspace | null {
   return s.workspace ? structuredClone(s.workspace) : null
 }
 
-/** Get flat array of all views */
-export function allViewsOf(ws: Workspace): View[] {
-  return [
-    ...ws.views.systemLandscapeViews,
-    ...ws.views.systemContextViews,
-    ...ws.views.containerViews,
-    ...ws.views.componentViews,
-  ]
-}
-
-/** Find a view by key inside a (possibly cloned) workspace */
-function findView(ws: Workspace, key: string): View | undefined {
-  return allViewsOf(ws).find(v => v.key === key)
-}
-
-/** Iterate every element in the model tree. Callback receives the element.
- *  Return true from callback to stop early. */
-function forEachElement(ws: Workspace, fn: (el: ModelElement) => boolean | void): void {
-  for (const p of ws.model.people) { if (fn(p)) return }
-  for (const sys of ws.model.softwareSystems) {
-    if (fn(sys)) return
-    for (const c of sys.containers) {
-      if (fn(c)) return
-      for (const comp of c.components) { if (fn(comp)) return }
-    }
-  }
-}
-
-/** Find an element by ID in the model tree */
-function findElement(ws: Workspace, id: string): ModelElement | undefined {
-  let found: ModelElement | undefined
-  forEachElement(ws, (el) => { if (el.id === id) { found = el; return true } })
-  return found
-}
+// Re-alias imported helpers under the names used internally
+const findView = findViewHelper
+const forEachElement = forEachElementHelper
+const findElement = findElementHelper
 
 type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>>
   & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string }
@@ -1416,137 +1407,3 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setPresentationMode: (on) => set({ presentationMode: on }),
 }))
 
-// ─── Selectors ───────────────────────────────────────────────────────
-
-function getFirstViewKey(workspace: Workspace): string | null {
-  return allViewsOf(workspace)[0]?.key ?? null
-}
-
-export function getAllViews(workspace: Workspace): View[] {
-  return allViewsOf(workspace)
-}
-
-export function getActiveView(workspace: Workspace, key: string): View | undefined {
-  return findView(workspace, key)
-}
-
-export function buildElementMap(workspace: Workspace): Map<string, ModelElement> {
-  const map = new Map<string, ModelElement>()
-  forEachElement(workspace, (el) => { map.set(el.id, el) })
-  return map
-}
-
-export function buildRelationshipMap(workspace: Workspace): Map<string, Relationship> {
-  const map = new Map<string, Relationship>()
-  for (const rel of workspace.model.relationships) {
-    map.set(rel.id, rel)
-  }
-  return map
-}
-
-export function getSelectedElement(
-  workspace: Workspace,
-  selectedIds: string[],
-): ModelElement | undefined {
-  if (selectedIds.length === 0) return undefined
-  return findElement(workspace, selectedIds[0])
-}
-
-export function getRelationshipById(
-  workspace: Workspace,
-  id: string,
-): Relationship | undefined {
-  return workspace.model.relationships.find(r => r.id === id)
-}
-
-function findChildView(workspace: Workspace, elementId: string, currentViewKey?: string | null): View | undefined {
-  const element = findElement(workspace, elementId)
-  if (!element) return undefined
-
-  if (element.type === 'softwareSystem') {
-    // Prefer a container view; only fall back to a systemContext view if it's
-    // not the one the user is already on (otherwise drilling is a no-op and
-    // creates duplicate keys in the breadcrumb).
-    const container = workspace.views.containerViews.find(v => v.softwareSystemId === elementId)
-    if (container) return container
-    const context = workspace.views.systemContextViews.find(v => v.softwareSystemId === elementId)
-    if (context && context.key !== currentViewKey) return context
-    return undefined
-  }
-  if (element.type === 'container') {
-    return workspace.views.componentViews.find(v => v.containerId === elementId)
-  }
-  return undefined
-}
-
-export function canDrillInto(workspace: Workspace, elementId: string): boolean {
-  return findChildView(workspace, elementId) !== undefined
-}
-
-/** Determine whether an element can be "zoomed into". Unlike canDrillInto, this
- *  does NOT require a child view (or even child elements) to exist — the zoom-in
- *  flow prompts to create one, and empty views are a valid starting point for
- *  adding the first containers/components.
- *
- *  Returns the element name and the view type that would be created, or null for
- *  elements that are leaves in the C4 hierarchy (persons, components, externals). */
-export function getZoomTarget(
-  workspace: Workspace,
-  elementId: string,
-): { elementName: string; targetType: 'container' | 'component' } | null {
-  const element = findElement(workspace, elementId)
-  if (!element) return null
-  if (element.type === 'softwareSystem' && element.location !== 'External') {
-    return { elementName: element.name, targetType: 'container' }
-  }
-  if (element.type === 'container') {
-    return { elementName: element.name, targetType: 'component' }
-  }
-  return null
-}
-
-export function getBreadcrumb(workspace: Workspace, viewHistory: string[], activeViewKey: string | null): { key: string; label: string }[] {
-  const trail: { key: string; label: string }[] = []
-  for (const key of viewHistory) {
-    const view = getActiveView(workspace, key)
-    if (view) trail.push({ key, label: view.title ?? view.key })
-  }
-  if (activeViewKey) {
-    const view = getActiveView(workspace, activeViewKey)
-    if (view) trail.push({ key: activeViewKey, label: view.title ?? activeViewKey })
-  }
-  return trail
-}
-
-/** Determine what element types can be created in the current view context */
-export function getCreatableTypes(workspace: Workspace, activeViewKey: string | null): {
-  canCreatePerson: boolean
-  canCreateSystem: boolean
-  canCreateContainer: string | null // systemId if applicable
-  canCreateComponent: string | null // containerId if applicable
-} {
-  const result = { canCreatePerson: false, canCreateSystem: false, canCreateContainer: null as string | null, canCreateComponent: null as string | null }
-  if (!activeViewKey) return result
-  const view = getActiveView(workspace, activeViewKey)
-  if (!view) return result
-
-  switch (view.type) {
-    case 'systemLandscape':
-      result.canCreatePerson = true
-      result.canCreateSystem = true
-      break
-    case 'systemContext':
-      result.canCreatePerson = true
-      result.canCreateSystem = true
-      break
-    case 'container':
-      result.canCreatePerson = true
-      result.canCreateSystem = true
-      result.canCreateContainer = view.softwareSystemId ?? null
-      break
-    case 'component':
-      result.canCreateComponent = view.containerId ?? null
-      break
-  }
-  return result
-}

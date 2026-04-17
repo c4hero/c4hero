@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, getCurrentFileHandle } from '@/lib/fileIO'
@@ -23,14 +23,9 @@ export default function SaveIndicator() {
   const lastSavedUndoLength = useWorkspaceStore((s) => s.lastSavedUndoLength)
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [hasFileHandle, setHasFileHandle] = useState(() => isWorkspaceLinked(activeFilename))
-  const savedUndoLengthRef = useRef(0)
+  const [savedUndoLength, setSavedUndoLength] = useState(lastSavedUndoLength)
   const savedFlashTimer = useRef<ReturnType<typeof setTimeout>>(null)
-
-  // Sync hasFileHandle whenever state changes that affects the link
-  useEffect(() => {
-    setHasFileHandle(isWorkspaceLinked(activeFilename))
-  }, [saveStatus, activeFilename])
+  const hasFileHandle = isWorkspaceLinked(activeFilename)
 
   async function handleSave() {
     if (!workspace) return
@@ -40,7 +35,7 @@ export default function SaveIndicator() {
     const ok = await saveDSLFile(dsl, `${wsName}.dsl`)
     if (ok) {
       const n = useWorkspaceStore.getState().undoStack.length
-      savedUndoLengthRef.current = n
+      setSavedUndoLength(n)
       useWorkspaceStore.getState().setLastSavedUndoLength(n)
       setSaveStatus('saved')
       announce('File saved')
@@ -54,7 +49,7 @@ export default function SaveIndicator() {
     }
   }
 
-  const isFileDirty = isDirty && currentUndoLength !== savedUndoLengthRef.current && currentUndoLength !== lastSavedUndoLength
+  const isFileDirty = isDirty && currentUndoLength !== savedUndoLength && currentUndoLength !== lastSavedUndoLength
   const dotColor =
     saveStatus === 'saving' ? 'var(--color-info)'
     : saveStatus === 'saved' ? 'var(--color-success)'

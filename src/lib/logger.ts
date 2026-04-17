@@ -90,6 +90,7 @@ export interface LogEntry {
   message: string
   data?: unknown
   timestamp: string
+  sessionId: string
 }
 
 /** A transport receives every log entry that passes the minimum level filter. */
@@ -104,6 +105,22 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
 
 const minLevel: LogLevel = import.meta.env.DEV ? 'debug' : 'warn'
 const transports: LogTransport[] = []
+
+/** Per-session correlation ID for grouping a user's events in external transports. */
+const sessionId: string = (() => {
+  try {
+    const g = globalThis as { crypto?: Crypto }
+    if (g.crypto?.randomUUID) return g.crypto.randomUUID()
+    if (g.crypto?.getRandomValues) {
+      const bytes = new Uint8Array(8)
+      g.crypto.getRandomValues(bytes)
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    }
+  } catch { /* fall through */ }
+  return Math.random().toString(36).slice(2, 18)
+})()
+
+export function getSessionId(): string { return sessionId }
 
 // ─── Transport management ────────────────────────────────────────────
 
@@ -149,7 +166,7 @@ function emit(entry: LogEntry) {
  *  so you can filter by source in the console or in your transport. */
 export function createLogger(component: string) {
   function log(level: LogLevel, message: string, data?: unknown) {
-    emit({ level, component, message, data, timestamp: new Date().toISOString() })
+    emit({ level, component, message, data, timestamp: new Date().toISOString(), sessionId })
   }
 
   return {

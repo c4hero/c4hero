@@ -121,10 +121,11 @@ describe('ErrorBoundary', () => {
         <Throwing message="tracked error" />
       </ErrorBoundary>,
     )
-    // ErrorBoundary logs via console.error('[c4hero] render error:', ...)
+    // ErrorBoundary logs via the logger, which fans out to console.error.
+    // The console transport prefixes entries with "[c4hero][ErrorBoundary]".
     const calls = consoleError.mock.calls
     const loggedByBoundary = calls.some(
-      (args) => typeof args[0] === 'string' && args[0].includes('[c4hero] render error:'),
+      (args) => typeof args[0] === 'string' && args[0].includes('[c4hero][ErrorBoundary]'),
     )
     expect(loggedByBoundary).toBe(true)
   })

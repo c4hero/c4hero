@@ -610,15 +610,21 @@ export default function Canvas() {
   // positions from rf produces a group rectangle that lags one render behind
   // the layout; reading measurements from prev gives undefined sizes (the
   // rebuild collapses to default 200x100).
+  // Bound rAF polling so a measurement regression can't busy-loop forever.
+  const rebuildAttempts = useRef(0)
+  const MAX_MEASURE_ATTEMPTS = 60
   const rebuildOverlays = useCallback(() => {
     const rf = rfInitInstance.current ?? reactFlowInstance
     const contentNodes = rf.getNodes().filter(
       n => n.id !== '__scope_boundary__' && !n.id.startsWith('group-')
     )
     if (contentNodes.length === 0 || !contentNodes.every(n => n.measured?.width && n.measured?.height)) {
-      requestAnimationFrame(rebuildOverlays)
+      if (rebuildAttempts.current++ < MAX_MEASURE_ATTEMPTS) {
+        requestAnimationFrame(rebuildOverlays)
+      }
       return
     }
+    rebuildAttempts.current = 0
     const ws = workspaceRef.current
     const v = viewRef.current
     if (!ws) return
@@ -639,24 +645,31 @@ export default function Canvas() {
     })
   }, [reactFlowInstance, setNodes])
 
+  const fitAttempts = useRef(0)
   const fitContentNodes = useCallback(() => {
     if (!fitPending.current) return
     const rf = rfInitInstance.current ?? reactFlowInstance
 
+    const tryAgain = () => {
+      if (fitAttempts.current++ < MAX_MEASURE_ATTEMPTS) requestAnimationFrame(fitContentNodes)
+      else { fitPending.current = false; fitAttempts.current = 0 }
+    }
+
     // Check: canvas DOM must be full-size
     const el = document.querySelector('.react-flow') as HTMLElement | null
-    if (!el) { requestAnimationFrame(fitContentNodes); return }
+    if (!el) { tryAgain(); return }
     const { width, height } = el.getBoundingClientRect()
-    if (width < 200 || height < 200) { requestAnimationFrame(fitContentNodes); return }
+    if (width < 200 || height < 200) { tryAgain(); return }
 
     // Check: all content nodes must be measured
     const contentNodes = rf.getNodes().filter(
       n => n.id !== '__scope_boundary__' && !n.id.startsWith('group-')
     )
     if (contentNodes.length === 0 || !contentNodes.every(n => n.measured?.width && n.measured?.height)) {
-      requestAnimationFrame(fitContentNodes)
+      tryAgain()
       return
     }
+    fitAttempts.current = 0
 
     fitPending.current = false
     // Rebuild overlays first so the bbox is correct before refitting.

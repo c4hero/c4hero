@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { createLogger, addTransport } from './logger'
 import type { LogEntry } from './logger'
 

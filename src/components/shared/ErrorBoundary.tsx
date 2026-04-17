@@ -1,5 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { RefreshCw, Home } from 'lucide-react'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ErrorBoundary')
 
 interface Props {
   children: ReactNode
@@ -31,7 +34,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[c4hero] render error:', error, info.componentStack)
+    log.error('render error', { error, componentStack: info.componentStack })
   }
 
   handleReset = () => {

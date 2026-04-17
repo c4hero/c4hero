@@ -2,13 +2,7 @@ import { useState, useRef, useEffect, lazy, Suspense } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
-import {
-  createBigBankSample,
-  createBlankWorkspace,
-  createMicroservicesTemplate,
-  createMonolithTemplate,
-  createEventDrivenTemplate,
-} from '@/lib/templates'
+import { createBigBankSample, createBlankWorkspace } from '@/lib/templates'
 import { openDSLFile, hasFileSystemAccess, isWorkspaceShape } from '@/lib/fileIO'
 import { createLogger } from '@/lib/logger'
 import {
@@ -31,423 +25,28 @@ import {
   FolderOpen,
   FileText,
   Plus,
-  Pencil,
-  Trash2,
   ChevronRight,
-  X,
   AlertTriangle,
-  Server,
-  Radio,
 } from 'lucide-react'
 import AISettingsDialog from '@/components/ai/AISettingsDialog'
 import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
+import {
+  TemplateDialog,
+  DuplicateCollectionDialog,
+  NewCollectionDialog,
+} from './WelcomeDialogs'
+import {
+  WorkspaceCard,
+  RecentRow,
+  StartupActionCard,
+  SectionDivider,
+  type FolderWorkspace,
+  type WsThumbnailElement,
+} from './WelcomeLeaves'
 
 const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDialog'))
 
 const log = createLogger('WelcomeScreen')
-
-// ─── Types ─────────────────────────────────────────────────────────────────
-
-interface WsThumbnailElement {
-  kind: 'person' | 'system' | 'container' | 'component' | 'external'
-}
-
-interface FolderWorkspace {
-  name: string
-  modifiedAt?: number
-  scope?: string
-  elementCount?: number
-  viewCount?: number
-  editing?: boolean
-  elements?: WsThumbnailElement[]
-}
-
-// ─── Sub-components ─────────────────────────────────────────────────────────
-
-// Element kind → color (matches canvas node accents)
-const KIND_COLORS: Record<string, string> = {
-  person: '#22c55e',
-  system: '#93c5fd',
-  external: '#9ca3af',
-  container: '#14b8a6',
-  component: '#a855f7',
-}
-
-/** Renders a tiny SVG showing elements as positioned rectangles */
-function MiniDiagram({ elements, accent }: { elements?: WsThumbnailElement[], accent: string }) {
-  if (!elements || elements.length === 0) {
-    // Empty — show faint scope icon
-    return (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.2 }}>
-        <rect x="4" y="2" width="16" height="20" rx="2.5" stroke={accent} strokeWidth="1.5" />
-        <line x1="8" y1="8" x2="16" y2="8" stroke={accent} strokeWidth="1" opacity="0.6" />
-        <line x1="8" y1="12" x2="14" y2="12" stroke={accent} strokeWidth="1" opacity="0.6" />
-      </svg>
-    )
-  }
-
-  const viewW = 160
-  const viewH = 90
-  const pad = 12
-  const maxCols = Math.min(elements.length, 4)
-  const rows = Math.ceil(elements.length / maxCols)
-  const cellW = (viewW - pad * 2) / maxCols
-  const cellH = (viewH - pad * 2) / rows
-  const nodeW = Math.min(cellW - 4, 32)
-  const nodeH = Math.min(cellH - 4, 18)
-
-  return (
-    <svg width="100%" height="100%" viewBox={`0 0 ${viewW} ${viewH}`} style={{ opacity: 0.55 }}>
-      {elements.slice(0, 12).map((el, i) => {
-        const col = i % maxCols
-        const row = Math.floor(i / maxCols)
-        const cx = pad + col * cellW + cellW / 2
-        const cy = pad + row * cellH + cellH / 2
-        const color = KIND_COLORS[el.kind] ?? '#64748b'
-        const isPerson = el.kind === 'person'
-        return isPerson ? (
-          <g key={i}>
-            <circle cx={cx} cy={cy - 3} r={nodeH * 0.25} fill={color} opacity={0.7} />
-            <rect x={cx - nodeW / 2} y={cy} width={nodeW} height={nodeH * 0.6} rx={2} fill={color} opacity={0.5} />
-          </g>
-        ) : (
-          <rect
-            key={i}
-            x={cx - nodeW / 2} y={cy - nodeH / 2}
-            width={nodeW} height={nodeH}
-            rx={el.kind === 'component' ? 1 : 3}
-            fill={color} opacity={0.5}
-            stroke={color} strokeWidth={0.5} strokeOpacity={0.8}
-          />
-        )
-      })}
-      {/* Draw faint connection lines between adjacent elements */}
-      {elements.length > 1 && elements.slice(0, Math.min(elements.length - 1, 6)).map((_, i) => {
-        const col1 = i % maxCols
-        const row1 = Math.floor(i / maxCols)
-        const j = i + 1
-        const col2 = j % maxCols
-        const row2 = Math.floor(j / maxCols)
-        const x1 = pad + col1 * cellW + cellW / 2
-        const y1 = pad + row1 * cellH + cellH / 2
-        const x2 = pad + col2 * cellW + cellW / 2
-        const y2 = pad + row2 * cellH + cellH / 2
-        return <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-      })}
-    </svg>
-  )
-}
-
-// Scope colors (same as FloatingTopPill)
-const SCOPE_COLORS: Record<string, string> = {
-  softwaresystem: '#38bdf8',
-  landscape: '#a78bfa',
-}
-
-function WorkspaceCard({ ws, onOpen, onRename, onDelete }: {
-  ws: FolderWorkspace
-  onOpen: () => void
-  onRename: (newName: string) => void
-  onDelete: () => void
-}) {
-  const [showEdit, setShowEdit] = useState(false)
-  const label = ws.name.replace(/\.dsl$/, '')
-  const accent = (ws.scope && SCOPE_COLORS[ws.scope]) ?? '#64748b'
-  const scopeLabel =
-    ws.scope === 'landscape' ? 'Landscape'
-    : ws.scope === 'softwaresystem' ? 'System Context'
-    : 'Unscoped'
-
-  return (
-    <>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onOpen}
-        onKeyDown={(e) => { if (e.key === 'Enter') onOpen() }}
-        style={{
-          display: 'flex', flexDirection: 'column', borderRadius: 12, overflow: 'hidden',
-          border: `1px solid var(--color-border)`,
-          background: 'rgba(0,0,0,0.15)', cursor: 'pointer',
-          transition: 'border-color 150ms, background 150ms',
-        }}
-        className="hover-surface-card"
-      >
-        {/* Thumbnail — mini diagram */}
-        <div style={{
-          width: '100%', aspectRatio: '16/9',
-          background: 'rgba(0,0,0,0.3)',
-          borderBottom: '1px solid var(--color-border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          position: 'relative', overflow: 'hidden',
-        }}>
-          <MiniDiagram elements={ws.elements} accent={accent} />
-          {/* Scope badge - top left */}
-          <div
-            title={`Scope: ${scopeLabel}`}
-            style={{
-              position: 'absolute', top: 6, left: 6,
-              display: 'flex', alignItems: 'center', gap: 4,
-              padding: '3px 7px',
-              borderRadius: 999,
-              border: `1px solid ${ws.scope ? `color-mix(in srgb, ${accent} 45%, transparent)` : 'var(--color-border)'}`,
-              background: ws.scope ? `color-mix(in srgb, ${accent} 15%, rgba(0,0,0,0.55))` : 'rgba(0,0,0,0.55)',
-              color: ws.scope ? accent : 'var(--color-text-muted)',
-              fontSize: 9,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              backdropFilter: 'blur(4px)',
-            }}
-          >
-            <span style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: accent,
-              flexShrink: 0,
-              opacity: ws.scope ? 1 : 0.4,
-            }} />
-            {scopeLabel}
-          </div>
-          {/* Edit button - top right */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowEdit(true) }}
-            title="Edit workspace"
-            style={{
-              position: 'absolute', top: 6, right: 6,
-              width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 6, border: 'none',
-              background: 'rgba(0,0,0,0.5)', color: 'var(--color-text-muted)',
-              cursor: 'pointer', opacity: 0.7,
-              transition: 'opacity 120ms',
-            }}
-          >
-            <Pencil size={11} />
-          </button>
-        </div>
-
-        {/* Label + meta */}
-        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {label}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--color-text-muted)' }}>
-            {(ws.elementCount ?? 0) > 0 && <span>{ws.elementCount} el</span>}
-            {(ws.elementCount ?? 0) > 0 && (ws.viewCount ?? 0) > 0 && <span>·</span>}
-            {(ws.viewCount ?? 0) > 0 && <span>{ws.viewCount} view{ws.viewCount === 1 ? '' : 's'}</span>}
-            {(ws.elementCount ?? 0) === 0 && (ws.viewCount ?? 0) === 0 && <span>Empty</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* Edit dialog */}
-      {showEdit && (
-        <WorkspaceEditDialog
-          name={label}
-          onRename={(newName) => { setShowEdit(false); onRename(newName) }}
-          onDelete={() => { setShowEdit(false); onDelete() }}
-          onClose={() => setShowEdit(false)}
-        />
-      )}
-    </>
-  )
-}
-
-function WorkspaceEditDialog({ name, onRename, onDelete, onClose }: {
-  name: string
-  onRename: (newName: string) => void
-  onDelete: () => void
-  onClose: () => void
-}) {
-  const [editName, setEditName] = useState(name)
-  const dirty = editName.trim() !== name && editName.trim().length > 0
-
-  function handleSave() {
-    if (dirty) onRename(editName.trim())
-    onClose()
-  }
-
-  const mouseDownOnBackdrop = useRef(false)
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onMouseDown={(e) => { mouseDownOnBackdrop.current = e.target === e.currentTarget }}
-      onClick={(e) => { if (e.target === e.currentTarget && mouseDownOnBackdrop.current) onClose() }}
-    >
-      <div
-        style={{ width: 360, borderRadius: 16, background: 'var(--color-bg-panel,#0f1923)', border: '1px solid var(--color-border)', padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 12 }}>Edit Workspace</div>
-          <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Name</label>
-          <input
-            autoFocus
-            value={editName}
-            onChange={e => setEditName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
-            style={{
-              width: '100%', marginTop: 6, padding: '10px 12px', borderRadius: 8,
-              border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.3)',
-              color: 'var(--color-text-primary)', fontSize: 14, outline: 'none',
-            }}
-          />
-          {dirty && (
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-              File: {slugifyName(editName) || 'workspace'}.dsl
-            </div>
-          )}
-        </div>
-
-        {/* Danger zone */}
-        <div style={{ borderTop: '1px solid var(--color-border-error)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-error)' }}>
-            Danger Zone
-          </span>
-          <button
-            onClick={onDelete}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 10,
-              border: '1px solid var(--color-border-error)', background: 'var(--color-tint-error)',
-              cursor: 'pointer', textAlign: 'left',
-            }}
-          >
-            <Trash2 size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-error)' }}>Delete workspace</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Permanently remove this .dsl file</div>
-            </div>
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button className="btn-surface" onClick={onClose} style={{ padding: '8px 18px' }}>Cancel</button>
-          {dirty && (
-            <button
-              onClick={handleSave}
-              style={{
-                padding: '8px 18px', borderRadius: 8, border: 'none',
-                background: 'var(--color-accent)', color: '#fff', fontWeight: 600,
-                cursor: 'pointer', fontSize: 13,
-              }}
-            >Save</button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
-function RecentRow({
-  name,
-  displayName,
-  path,
-  onClick,
-  onRemove,
-}: {
-  name: string
-  displayName?: string
-  path: string
-  onClick: () => void
-  onRemove: () => void
-}) {
-  const label = displayName || name
-  const showSlug = displayName && displayName !== name
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left"
-      onClick={onClick}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
-    >
-      <FolderOpen
-        size={14}
-        style={{ color: 'var(--color-accent)', opacity: 0.7, flexShrink: 0 }}
-      />
-      <span className="flex-1 text-sm font-medium">{label}</span>
-      {showSlug && (
-        <span className="text-xs" style={{ color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>{path}</span>
-      )}
-      <button
-        onClick={(e) => { e.stopPropagation(); onRemove() }}
-        title="Remove from recents"
-        className="hover-danger"
-        style={{
-          width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          borderRadius: 6, border: 'none', background: 'transparent',
-          color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0,
-          transition: 'color 120ms, background 120ms',
-        }}
-      >
-        <X size={12} />
-      </button>
-    </div>
-  )
-}
-
-// ─── Template Dialog ─────────────────────────────────────────────────────────
-
-function TemplateDialog({
-  onSelect,
-  onClose,
-}: {
-  onSelect: (ws: ReturnType<typeof createBigBankSample>, name: string) => void
-  onClose: () => void
-}) {
-  const templates = [
-    { label: 'Big Bank Sample', name: 'big-bank.dsl', fn: createBigBankSample },
-    { label: 'Microservices', name: 'microservices.dsl', fn: createMicroservicesTemplate },
-    { label: 'Monolith', name: 'monolith.dsl', fn: createMonolithTemplate },
-    { label: 'Event-Driven', name: 'event-driven.dsl', fn: createEventDrivenTemplate },
-  ] as const
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div
-        className="flex flex-col gap-4 rounded-xl border p-5 shadow-xl"
-        style={{
-          background: 'var(--color-bg-primary)',
-          borderColor: 'var(--color-border)',
-          minWidth: '280px',
-          maxWidth: '400px',
-          width: '90vw',
-        }}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            Load template
-          </h2>
-          <button
-            onClick={onClose}
-            className="rounded p-1 hover:opacity-70"
-            style={{ color: 'var(--color-text-muted)' }}
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="flex flex-col gap-1">
-          {templates.map(({ label, name, fn }) => (
-            <button
-              key={name}
-              className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-3 text-left"
-              onClick={() => onSelect(fn(), name)}
-            >
-              <FileText size={15} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-              <span className="text-sm font-medium">{label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
@@ -656,7 +255,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const file = await readDSLFile(filename)
     if (!file) return
     const { workspace, errors } = parseDSL(file.content)
-    if (errors.length > 0) console.warn('DSL parse warnings:', errors)
+    if (errors.length > 0) log.warn("DSL parse warnings", errors)
     if (workspace) {
       if (!workspace.name) workspace.name = filename.replace(/\.dsl$/, '')
       if (file.sidecarJson) {
@@ -687,7 +286,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           try {
             await dir.removeEntry(filename)
           } catch (err) {
-            console.error('[delete] removeEntry failed for', filename, err)
+            log.error('removeEntry failed', { filename, err })
             setErrorMsg(`Failed to delete "${filename}". ${(err as Error).message ?? ''}`)
             listCurrentDSLFiles().then(setFolderWorkspaces)
             return
@@ -732,7 +331,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           await dir.removeEntry(sidecarName(filename)).catch(() => {})
         } catch { /* no sidecar */ }
       } catch (err) {
-        console.error('Rename failed:', err)
+        log.error('Rename failed', err)
       }
     }
     setFolderWorkspaces((prev) =>
@@ -802,7 +401,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     if (!file) return
     const content = await file.text()
     const { workspace, errors } = parseDSL(content)
-    if (errors.length > 0) console.warn('DSL parse warnings:', errors)
+    if (errors.length > 0) log.warn("DSL parse warnings", errors)
     if (workspace) {
       if (!workspace.name) workspace.name = file.name.replace(/\.dsl$/, '')
       loadWorkspace(workspace)
@@ -819,7 +418,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const file = await openDSLFile()
     if (!file) return
     const { workspace, errors } = parseDSL(file.content)
-    if (errors.length > 0) console.warn('DSL parse warnings:', errors)
+    if (errors.length > 0) log.warn("DSL parse warnings", errors)
     if (workspace) {
       if (!workspace.name) workspace.name = file.name.replace(/\.dsl$/, '')
       if (file.sidecarJson) {
@@ -1230,226 +829,5 @@ function CollectionView({
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
-function StartupActionCard({
-  icon,
-  label,
-  description,
-  onClick,
-}: {
-  icon: React.ReactNode
-  label: string
-  description: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      className="btn-surface flex-col items-start gap-4 rounded-xl p-6 text-left"
-      style={{ flex: 1 }}
-      onClick={onClick}
-    >
-      <span style={{ display: 'flex' }}>
-        {icon}
-      </span>
-      <div className="flex flex-col gap-1">
-        <span className="text-sm font-semibold">{label}</span>
-        <span className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          {description}
-        </span>
-      </div>
-    </button>
-  )
-}
 
-function SectionDivider({ label, muted }: { label: string; muted?: boolean }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div
-        className="flex-1 border-t"
-        style={{ borderColor: 'var(--color-border)' }}
-      />
-      <span
-        className="text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
-        style={{ color: muted ? 'var(--color-text-muted)' : 'var(--color-text-secondary, var(--color-text-muted))' }}
-      >
-        {label}
-      </span>
-      <div
-        className="flex-1 border-t"
-        style={{ borderColor: 'var(--color-border)' }}
-      />
-    </div>
-  )
-}
 
-// ─── Duplicate Collection Dialog ─────────────────────────────────────────────
-
-function DuplicateCollectionDialog({
-  slug,
-  onOpen,
-  onRename,
-  onCancel,
-}: {
-  slug: string
-  onOpen: () => void
-  onRename: () => void
-  onCancel: () => void
-}) {
-  return (
-    <div
-      style={{ position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'center',justifyContent:'center' }}
-      onClick={onCancel}
-    >
-      <div
-        style={{ width:380,borderRadius:16,background:'var(--color-bg-panel,#0f1923)',border:'1px solid var(--color-border)',padding:'28px 28px 24px',display:'flex',flexDirection:'column',gap:20,boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
-          <span style={{ fontSize:16,fontWeight:700,color:'var(--color-text-primary)' }}>
-            Folder already exists
-          </span>
-          <span style={{ fontSize:13,color:'var(--color-text-muted)',lineHeight:1.5 }}>
-            A folder named <code style={{ fontSize:12,padding:'1px 6px',borderRadius:5,background:'rgba(255,255,255,0.06)',border:'1px solid var(--color-border)',color:'var(--color-accent)',fontFamily:'monospace' }}>{slug}</code> already exists in that location.
-          </span>
-        </div>
-
-        <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
-          <button
-            onClick={onOpen}
-            style={{ padding:'12px 16px',borderRadius:12,border:'1px solid var(--color-border)',background:'rgba(88,166,255,0.07)',cursor:'pointer',textAlign:'left',display:'flex',flexDirection:'column',gap:3 }}
-          >
-            <span style={{ fontSize:13,fontWeight:600,color:'var(--color-text-primary)' }}>Open existing collection</span>
-            <span style={{ fontSize:11,color:'var(--color-text-muted)' }}>Use the folder that's already there</span>
-          </button>
-          <button
-            onClick={onRename}
-            style={{ padding:'12px 16px',borderRadius:12,border:'1px solid var(--color-border)',background:'rgba(255,255,255,0.02)',cursor:'pointer',textAlign:'left',display:'flex',flexDirection:'column',gap:3 }}
-          >
-            <span style={{ fontSize:13,fontWeight:600,color:'var(--color-text-primary)' }}>Choose a different name</span>
-            <span style={{ fontSize:11,color:'var(--color-text-muted)' }}>Go back and pick another name</span>
-          </button>
-        </div>
-
-        <div style={{ display:'flex',justifyContent:'flex-end' }}>
-          <button className="btn-surface" onClick={onCancel} style={{ padding:'8px 18px' }}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Keep unused icon imports from triggering lint errors
-void Server
-void Radio
-
-// ─── New Collection Dialog ────────────────────────────────────────────────────
-
-function NewCollectionDialog({
-  value,
-  onChange,
-  onConfirm,
-  onCancel,
-}: {
-  value: string
-  onChange: (v: string) => void
-  onConfirm: () => void
-  onCancel: () => void
-}) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.select(), 50)
-  }, [])
-
-  const slug = slugifyName(value)
-  const canSubmit = value.trim().length > 0
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.65)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onClick={onCancel}
-    >
-      <div
-        style={{
-          width: 380, borderRadius: 16,
-          background: 'var(--color-bg-panel, #0f1923)',
-          border: '1px solid var(--color-border)',
-          padding: '28px 28px 24px',
-          display: 'flex', flexDirection: 'column', gap: 20,
-          boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-            New collection
-          </span>
-          <span style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-            Choose a friendly name — the folder will be created using the slug below.
-          </span>
-        </div>
-
-        {/* Name input */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>
-            Display name
-          </label>
-          <input
-            ref={inputRef}
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && canSubmit) onConfirm()
-              if (e.key === 'Escape') onCancel()
-            }}
-            placeholder="My Architecture"
-            style={{
-              width: '100%', padding: '10px 14px',
-              borderRadius: 10, fontSize: 14, fontWeight: 500,
-              background: 'var(--glass-overlay-xs)',
-              border: '1px solid var(--color-border-hover, rgba(88,166,255,0.25))',
-              color: 'var(--color-text-primary)',
-              outline: 'none',
-            }}
-          />
-          {/* Live slug preview */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Folder:</span>
-            <code style={{
-              fontSize: 11, padding: '2px 8px', borderRadius: 6,
-              background: 'var(--glass-overlay-sm)',
-              border: '1px solid var(--color-border)',
-              color: canSubmit ? 'var(--color-accent)' : 'var(--color-text-muted)',
-              fontFamily: 'monospace',
-            }}>
-              {canSubmit ? slug : 'collection'}
-            </code>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="btn-surface" onClick={onCancel} style={{ padding: '8px 18px' }}>
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={!canSubmit}
-            style={{
-              padding: '8px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: canSubmit ? 'var(--color-accent)' : 'var(--color-accent-glow)',
-              color: canSubmit ? '#0d1117' : 'var(--color-text-muted)',
-              border: 'none', cursor: canSubmit ? 'pointer' : 'default',
-              transition: 'background 150ms',
-            }}
-          >
-            Choose location →
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}

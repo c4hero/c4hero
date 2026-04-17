@@ -1,9 +1,9 @@
 import { test as base, expect, type Page } from '@playwright/test'
 
 export const test = base.extend<{ workspace: WorkspaceHelper }>({
-  workspace: async ({ page }, use) => {
+  workspace: async ({ page }, runWorkspace) => {
     const helper = new WorkspaceHelper(page)
-    await use(helper)
+    await runWorkspace(helper)
   },
 })
 
@@ -98,41 +98,31 @@ export class WorkspaceHelper {
   }
 
   /**
-   * Connect two nodes by dragging from the source node's center handle to a target handle.
-   * Hovers the source to reveal handles, then drags to a visible target handle on the target node.
-   * Ends the drag ON a target handle (not just the node center) to ensure React Flow detects
-   * the connection regardless of zoom level.
+   * Connect two nodes by dragging from the source node's center handle to the
+   * target node center. This is more stable than aiming for a specific hidden
+   * target handle after the layout changes from an earlier connection.
    */
   async connectNodes(sourceName: string, targetName: string) {
     const sourceNode = await this.getNodeByName(sourceName)
     const targetNode = await this.getNodeByName(targetName)
 
-    // Hover to reveal source handles
     await sourceNode.hover()
 
-    // Find any center source handle (slot b = center handle, any side)
     const sourceHandle = sourceNode.locator('[data-handleid$="-b-source"]').first()
     await sourceHandle.waitFor({ state: 'attached' })
 
-    // Find a target handle on the target node — use any center target handle
-    const targetHandle = targetNode.locator('[data-handleid$="-b-target"]').first()
-    await targetHandle.waitFor({ state: 'attached' })
-
     const handleBox = await sourceHandle.boundingBox()
-    const targetHandleBox = await targetHandle.boundingBox()
+    const targetBox = await targetNode.boundingBox()
 
-    if (!handleBox || !targetHandleBox) throw new Error('Could not get bounding boxes for connect drag')
+    if (!handleBox || !targetBox) throw new Error('Could not get bounding boxes for connect drag')
 
     const startX = handleBox.x + handleBox.width / 2
     const startY = handleBox.y + handleBox.height / 2
-    // End directly on the target handle center so React Flow detects it regardless of zoom
-    const endX = targetHandleBox.x + targetHandleBox.width / 2
-    const endY = targetHandleBox.y + targetHandleBox.height / 2
+    const endX = targetBox.x + targetBox.width / 2
+    const endY = targetBox.y + targetBox.height / 2
 
-    // Perform slow drag so React Flow registers proximity detection
     await this.page.mouse.move(startX, startY)
     await this.page.mouse.down()
-    // Move in steps so React Flow can detect handles along the way
     const steps = 15
     for (let i = 1; i <= steps; i++) {
       await this.page.mouse.move(
@@ -141,9 +131,6 @@ export class WorkspaceHelper {
       )
     }
     await this.page.mouse.up()
-    // Wait for React Flow to process the connection (new edge appears)
-    await this.page.locator('.react-flow__edge').first().waitFor({ state: 'attached', timeout: 3000 }).catch(() => {
-      // Edge may already exist from a prior connection; swallow if count is unchanged
-    })
+    await this.page.waitForTimeout(400)
   }
 }

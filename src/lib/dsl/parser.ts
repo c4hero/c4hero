@@ -30,9 +30,15 @@ import type { Token, TokenType } from './lexer'
  * of the scoped system; component = people + systems + containers + components of the scoped container.
  */
 function expandWildcard(model: Model, view: View): ElementInView[] {
+    // Use a Set for O(1) dedup; track insertion order via a parallel array.
+    const seen = new Set<string>()
     const ids: string[] = []
 
-    const addId = (id: string) => { if (!ids.includes(id)) ids.push(id) }
+    const addId = (id: string) => {
+        if (seen.has(id)) return
+        seen.add(id)
+        ids.push(id)
+    }
 
     if (view.type === 'systemLandscape') {
         // Landscape: show everything — all people and software systems
@@ -260,6 +266,18 @@ class ContextAwareParser {
         if (this.peekType() === 'RBRACE') this.advance()
     }
 
+    /** Consume inline args (until newline/EOF/LBRACE), then skip any following brace
+     *  block. Used to gracefully ignore unknown keywords/identifiers in element bodies
+     *  without mistakenly consuming the parent's closing `}`. */
+    private skipUnknownDirective(): void {
+        while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
+            this.advance()
+        }
+        if (this.peekType() === 'NEWLINE') this.advance()
+        this.skipNewlines()
+        if (this.check('LBRACE')) this.skipBraceBlock()
+    }
+
     // ─── Registration ────────────────────────────────────────────────
 
     private registerElement(id: string, name: string, _type: string, varName?: string): void {
@@ -446,12 +464,7 @@ class ContextAwareParser {
                 this.advance()
                 // Unknown configuration properties may have a nested brace block (e.g. users { ... })
                 // Stop before LBRACE so inline `{` is not consumed by the line-skip.
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
             }
         }
     }
@@ -548,12 +561,7 @@ class ContextAwareParser {
                 }
 
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -579,21 +587,11 @@ class ContextAwareParser {
                         } else {
                             // Unknown element type (e.g. deploymentEnvironment) — skip inline
                             // args (stopping before any `{`) then skip any following brace block.
-                            while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                                this.advance()
-                            }
-                            if (this.peekType() === 'NEWLINE') this.advance()
-                            this.skipNewlines()
-                            if (this.check('LBRACE')) this.skipBraceBlock()
+                            this.skipUnknownDirective()
                         }
                     } else {
                         // After `=`, the value is not a keyword — skip inline args and any block.
-                        while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                            this.advance()
-                        }
-                        if (this.peekType() === 'NEWLINE') this.advance()
-                        this.skipNewlines()
-                        if (this.check('LBRACE')) this.skipBraceBlock()
+                        this.skipUnknownDirective()
                     }
                     continue
                 }
@@ -613,12 +611,7 @@ class ContextAwareParser {
                 this.pos = saved
                 this.advance()
                 // Stop before any inline `{` so we don't consume it with the rest of the line
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -730,12 +723,7 @@ class ContextAwareParser {
                 // then skip any brace block so the parent element's closing RBRACE is not
                 // mistakenly consumed as the inner block's.
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -757,21 +745,11 @@ class ContextAwareParser {
                         } else {
                             // Unknown element type inside softwareSystem body — skip inline
                             // args (stopping before `{`) then skip any following brace block.
-                            while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                                this.advance()
-                            }
-                            if (this.peekType() === 'NEWLINE') this.advance()
-                            this.skipNewlines()
-                            if (this.check('LBRACE')) this.skipBraceBlock()
+                            this.skipUnknownDirective()
                         }
                     } else {
                         // After `=`, value is not a keyword — skip inline args and any block.
-                        while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                            this.advance()
-                        }
-                        if (this.peekType() === 'NEWLINE') this.advance()
-                        this.skipNewlines()
-                        if (this.check('LBRACE')) this.skipBraceBlock()
+                        this.skipUnknownDirective()
                     }
                     continue
                 }
@@ -792,12 +770,7 @@ class ContextAwareParser {
                 // RBRACE is not mistakenly consumed as the inner block's closing brace.
                 this.pos = saved
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -880,12 +853,7 @@ class ContextAwareParser {
                 // then skip any brace block so the parent element's closing RBRACE is not
                 // mistakenly consumed as the inner block's.
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -905,12 +873,7 @@ class ContextAwareParser {
                     } else {
                         // Unknown element type inside container body — skip inline
                         // args (stopping before `{`) then skip any following brace block.
-                        while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                            this.advance()
-                        }
-                        if (this.peekType() === 'NEWLINE') this.advance()
-                        this.skipNewlines()
-                        if (this.check('LBRACE')) this.skipBraceBlock()
+                        this.skipUnknownDirective()
                     }
                     continue
                 }
@@ -931,12 +894,7 @@ class ContextAwareParser {
                 // RBRACE is not mistakenly consumed as the inner block's closing brace.
                 this.pos = saved
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -999,12 +957,7 @@ class ContextAwareParser {
                 // Unknown keyword: consume it and any inline args (stopping before LBRACE),
                 // then skip any brace block so the outer RBRACE isn't mistakenly consumed.
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -1240,12 +1193,7 @@ class ContextAwareParser {
                 // isn't mistaken for the relationship body's own RBRACE.
                 if (this.peek().type === 'KEYWORD' || this.peek().type === 'IDENTIFIER') {
                     this.advance()
-                    while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                        this.advance()
-                    }
-                    if (this.peekType() === 'NEWLINE') this.advance()
-                    this.skipNewlines()
-                    if (this.check('LBRACE')) this.skipBraceBlock()
+                    this.skipUnknownDirective()
                     continue
                 }
                 this.advance()
@@ -1336,23 +1284,13 @@ class ContextAwareParser {
                     continue
                 }
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
             if (token.type === 'IDENTIFIER') {
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -1509,12 +1447,7 @@ class ContextAwareParser {
                 // Unknown keyword: consume it and any inline args (stopping before LBRACE),
                 // then skip any brace block so the view's closing RBRACE is not consumed.
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 
@@ -1522,12 +1455,7 @@ class ContextAwareParser {
             // then skip any following brace block for the same reason as the KEYWORD path.
             if (token.type === 'IDENTIFIER') {
                 this.advance()
-                while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
-                    this.advance()
-                }
-                if (this.peekType() === 'NEWLINE') this.advance()
-                this.skipNewlines()
-                if (this.check('LBRACE')) this.skipBraceBlock()
+                this.skipUnknownDirective()
                 continue
             }
 

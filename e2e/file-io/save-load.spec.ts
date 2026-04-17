@@ -4,7 +4,6 @@ test.describe('File I/O', () => {
   test('Ctrl+S triggers save', async ({ workspace }) => {
     await workspace.loadSample()
     // Ctrl+S should not error (we can't easily verify the download dialog)
-    const downloadPromise = workspace.page.waitForEvent('download', { timeout: 3000 }).catch(() => null)
     await workspace.page.keyboard.press('Control+s')
     // In some environments this will trigger download, in others it won't
     // Just verify no errors

@@ -72,7 +72,7 @@ export default function FloatingToolRail() {
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [])
+  }, [setAddPanelOpen, setArrangePanelOpen])
 
   // Outside-click closes any open flyout. Document-level listener works across
   // stacking contexts (the tool rail is z:50 like other floating UI, so a fixed
@@ -96,7 +96,7 @@ export default function FloatingToolRail() {
     // before we see the event.
     document.addEventListener('pointerdown', handlePointerDown, true)
     return () => document.removeEventListener('pointerdown', handlePointerDown, true)
-  }, [addPanelOpen, arrangePanelOpen])
+  }, [addPanelOpen, arrangePanelOpen, setAddPanelOpen, setArrangePanelOpen])
 
   // Focus management: move focus into flyout when opened, return to trigger when closed
   useFlyoutFocus(addPanelOpen, addElementFlyoutRef, addBtnRef, lastOpenPanel, 'add')

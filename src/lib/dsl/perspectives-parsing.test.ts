@@ -51,7 +51,7 @@ workspace {
   views {}
 }
 `
-    const { workspace, errors } = parseDSL(dsl)
+    const { workspace } = parseDSL(dsl)
     // Parser cannot evaluate !include, but must not crash or misparse what follows
     expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
   })
@@ -66,7 +66,7 @@ workspace {
   views {}
 }
 `
-    const { workspace, errors } = parseDSL(dsl)
+    const { workspace } = parseDSL(dsl)
     expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
   })
 
@@ -80,7 +80,7 @@ workspace {
   views {}
 }
 `
-    const { workspace, errors } = parseDSL(dsl)
+    const { workspace } = parseDSL(dsl)
     expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()
   })
 })
@@ -320,7 +320,7 @@ workspace {
   }
 }
 `
-    const { workspace, errors } = parseDSL(dsl)
+    const { workspace } = parseDSL(dsl)
     // Scope should be recognized despite the unknown nested block
     expect(workspace.scope).toBe('softwaresystem')
     expect(workspace.model.softwareSystems.find(s => s.name === 'API')).toBeDefined()

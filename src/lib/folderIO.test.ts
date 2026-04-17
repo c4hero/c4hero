@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   hasFolderAccess,
   openFolder,
@@ -6,7 +6,6 @@ import {
   writeDSLFile,
   writeSidecarFile,
   listDSLFiles,
-  persistDirHandle,
   restoreDirHandle,
   getCurrentDirHandle,
 } from './folderIO'
@@ -52,15 +51,6 @@ function makeDirHandle(files: Record<string, string> = {}): FileSystemDirectoryH
     },
     queryPermission: async () => 'granted' as PermissionState,
   } as unknown as FileSystemDirectoryHandle
-}
-
-// ─── Reset currentDirHandle between tests ─────────────────────────────
-
-// Import the module to reset internal state via a clean open
-async function resetDirHandle() {
-  // We reset by mocking showDirectoryPicker to return null-ish — actually
-  // the simplest way is to call openFolder with a stub that returns nothing.
-  // Instead, just manipulate via a successful openFolder call.
 }
 
 // ─── hasFolderAccess ─────────────────────────────────────────────────
@@ -396,7 +386,7 @@ describe('readDSLFile() edge cases', () => {
 
 function makeIDBMock(idbStore: Record<string, unknown>) {
   return {
-    open: (_name: string, _version: number) => {
+    open: () => {
       const req = {
         result: {
           transaction: () => ({

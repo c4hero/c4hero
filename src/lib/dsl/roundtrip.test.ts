@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { serializeDSL, parseDSL } from './index'
-import type { Workspace } from '@/types/model'
+import type { Workspace, View } from '@/types/model'
 
 function makeWs(): Workspace {
   return {
@@ -39,7 +39,7 @@ describe('DSL relationship round-trip', () => {
       key: 'landscape', title: 'Landscape', type: 'systemLandscape',
       elements: [{ id: 'abc-123' }, { id: 'xyz-456' }],
       relationships: [], autoLayout: null
-    } as any)
+    } as View)
     const dsl = serializeDSL(ws)
     const { workspace: parsed } = parseDSL(dsl)
     const view = parsed.views.systemLandscapeViews[0]
@@ -57,7 +57,7 @@ describe('DSL relationship round-trip', () => {
       elements: [{ id: 'abc-123' }, { id: 'xyz-456' }],
       relationships: [],
       autoLayout: null
-    } as any)
+    } as View)
     const dsl = serializeDSL(ws)
     const { workspace: parsed, errors } = parseDSL(dsl)
     expect(errors).toHaveLength(0)

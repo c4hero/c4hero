@@ -209,7 +209,7 @@ describe('serializeSidecar / parseSidecar round-trip', () => {
   })
 
   it('produces valid JSON string', () => {
-    const data = extractSidecar(makeWorkspace())
+    extractSidecar(makeWorkspace())
     // Nothing to serialize → null, so use manual data
     const json = serializeSidecar({ version: 1, elements: { alice: { status: 'Live' } } })
     expect(typeof json).toBe('string')

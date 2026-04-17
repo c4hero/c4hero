@@ -4,6 +4,9 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView } from '@/store/wor
 import { serializeDSL, parseDSL } from '@/lib/dsl'
 import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { parseSidecar, applySidecar, extractSidecar, serializeSidecar } from '@/lib/sidecar'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('keyboard')
 
 type KeyHandler = (store: ReturnType<typeof useWorkspaceStore.getState>, rf: ReturnType<typeof useReactFlow> | null) => void
 
@@ -42,7 +45,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     openDSLFile().then(file => {
       if (!file) return
       const { workspace: ws, errors } = parseDSL(file.content)
-      if (errors.length > 0) console.warn('DSL parse warnings:', errors)
+      if (errors.length > 0) log.warn('DSL parse warnings', errors)
       if (ws) {
         if (!ws.name) ws.name = file.name.replace(/\.dsl$/, '')
         if (file.sidecarJson) {

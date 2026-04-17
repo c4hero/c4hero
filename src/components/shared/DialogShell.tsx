@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useCallback } from 'react'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 interface DialogShellProps {
@@ -11,11 +11,7 @@ interface DialogShellProps {
 
 export default function DialogShell({ onClose, ariaLabel, children, className, style }: DialogShellProps) {
   const trapRef = useFocusTrap<HTMLDivElement>()
-  const previouslyFocusedRef = useRef<Element | null>(null)
-
-  useEffect(() => {
-    previouslyFocusedRef.current = document.activeElement
-  }, [])
+  const previouslyFocusedRef = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null)
 
   const handleClose = useCallback(() => {
     onClose()

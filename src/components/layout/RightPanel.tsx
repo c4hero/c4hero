@@ -1,9 +1,11 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
-import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, LineStyle, Location, Group } from '@/types/model'
-import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, Layers, Trash2, ChevronRight } from 'lucide-react'
+import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, LineStyle, Location } from '@/types/model'
+import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, ChevronRight } from 'lucide-react'
 import { generateDescription, getAIConfig } from '@/lib/ai'
 import { TYPE_LABELS, TYPE_COLORS } from '@/lib/elementMeta'
+import { FieldLabel, EditableField, TechnologyField } from './right-panel/fields'
+import GroupProperties from './right-panel/GroupProperties'
 
 /** Returns the URL if it uses a safe protocol (http, https, or protocol-relative), otherwise null. */
 function getSafeUrl(raw: string): string | null {
@@ -51,268 +53,6 @@ export default function RightPanel() {
       ) : group ? (
         <GroupProperties group={group} onClose={clearSelection} />
       ) : null}
-    </div>
-  )
-}
-
-function FieldLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
-  return (
-    <label htmlFor={htmlFor} className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
-      {children}
-    </label>
-  )
-}
-
-function EditableField({ value, placeholder, onCommit, onLiveChange, multiline, 'aria-label': ariaLabel }: {
-  value: string
-  placeholder?: string
-  onCommit: (val: string) => void
-  onLiveChange?: (val: string) => void
-  multiline?: boolean
-  'aria-label'?: string
-}) {
-  const [draft, setDraft] = useState(value)
-  const [focused, setFocused] = useState(false)
-
-  const handleChange = (newVal: string) => {
-    setDraft(newVal)
-    onLiveChange?.(newVal)
-  }
-
-  const handleBlur = () => {
-    setFocused(false)
-    onCommit(draft)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !multiline) {
-      e.preventDefault()
-      onCommit(draft)
-    }
-    if (e.key === 'Escape') {
-      setDraft(value)
-      onLiveChange?.(value)
-      ;(e.target as HTMLElement).blur()
-    }
-  }
-
-  // Sync external changes only when not focused
-  if (!focused && draft !== value) setDraft(value)
-
-  const style = {
-    background: focused ? 'var(--color-surface-3)' : 'var(--color-surface-2)',
-    borderColor: focused ? 'var(--color-accent)' : 'var(--color-border)',
-    color: 'var(--color-text-primary)',
-  }
-
-  if (multiline) {
-    return (
-      <textarea
-        value={draft}
-        onChange={(e) => handleChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        rows={3}
-        className="w-full resize-none rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
-        style={style}
-      />
-    )
-  }
-
-  return (
-    <input
-      type="text"
-      value={draft}
-      onChange={(e) => handleChange(e.target.value)}
-      onFocus={() => setFocused(true)}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      placeholder={placeholder}
-      aria-label={ariaLabel}
-      className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
-      style={style}
-    />
-  )
-}
-
-// ─── Technology Field with autocomplete ─────────────────────────────
-
-/** Collect all unique technology strings from the workspace, with usage counts. */
-function useTechnologySuggestions(): { tech: string; count: number }[] {
-  const workspace = useWorkspaceStore((s) => s.workspace)
-  return useMemo(() => {
-    if (!workspace) return []
-    const counts = new Map<string, number>()
-    const bump = (raw?: string) => {
-      if (!raw) return
-      for (const t of raw.split(',')) {
-        const trimmed = t.trim()
-        if (trimmed) counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1)
-      }
-    }
-    for (const sys of workspace.model.softwareSystems) {
-      for (const c of sys.containers) {
-        bump(c.technology)
-        for (const comp of c.components) bump(comp.technology)
-      }
-    }
-    for (const rel of workspace.model.relationships) bump(rel.technology)
-    return Array.from(counts.entries())
-      .map(([tech, count]) => ({ tech, count }))
-      .sort((a, b) => b.count - a.count || a.tech.localeCompare(b.tech))
-  }, [workspace])
-}
-
-function TechnologyField({ value, placeholder, onCommit, onLiveChange, 'aria-label': ariaLabel }: {
-  value: string
-  placeholder?: string
-  onCommit: (val: string) => void
-  onLiveChange?: (val: string) => void
-  'aria-label'?: string
-}) {
-  const [draft, setDraft] = useState(value)
-  const [focused, setFocused] = useState(false)
-  const [selectedIdx, setSelectedIdx] = useState(-1)
-  const suggestions = useTechnologySuggestions()
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  // Sync external changes only when not focused
-  if (!focused && draft !== value) setDraft(value)
-
-  // Extract the token currently being typed (after the last comma)
-  const parts = draft.split(',')
-  const currentToken = parts[parts.length - 1].trimStart()
-  const alreadyUsed = new Set(parts.slice(0, -1).map((p) => p.trim().toLowerCase()))
-
-  // Filter suggestions: match current token, exclude already-used in this field
-  const filtered = currentToken
-    ? suggestions.filter(
-        (s) => s.tech.toLowerCase().includes(currentToken.toLowerCase()) && !alreadyUsed.has(s.tech.toLowerCase()),
-      )
-    : suggestions.filter((s) => !alreadyUsed.has(s.tech.toLowerCase()))
-
-  const showDropdown = focused && filtered.length > 0
-
-  // Reset selection when filtered list changes
-  useEffect(() => { setSelectedIdx(-1) }, [currentToken])
-
-  const acceptSuggestion = (tech: string) => {
-    const prefix = parts.slice(0, -1).map((p) => p.trim()).filter(Boolean)
-    const next = [...prefix, tech].join(', ')
-    setDraft(next)
-    onLiveChange?.(next)
-    onCommit(next)
-    inputRef.current?.focus()
-  }
-
-  const handleChange = (newVal: string) => {
-    setDraft(newVal)
-    onLiveChange?.(newVal)
-  }
-
-  const handleBlur = () => {
-    // Delay so click on dropdown registers before blur hides it
-    setTimeout(() => {
-      if (!wrapperRef.current?.contains(document.activeElement)) {
-        setFocused(false)
-        onCommit(draft)
-      }
-    }, 150)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (showDropdown && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-      e.preventDefault()
-      setSelectedIdx((prev) => {
-        if (e.key === 'ArrowDown') return Math.min(prev + 1, filtered.length - 1)
-        return Math.max(prev - 1, -1)
-      })
-      return
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      if (selectedIdx >= 0 && selectedIdx < filtered.length) {
-        acceptSuggestion(filtered[selectedIdx].tech)
-        setSelectedIdx(-1)
-      } else {
-        onCommit(draft)
-      }
-      return
-    }
-    if (e.key === 'Escape') {
-      if (showDropdown) {
-        setSelectedIdx(-1)
-        // Just close dropdown, don't revert
-      } else {
-        setDraft(value)
-        onLiveChange?.(value)
-        ;(e.target as HTMLElement).blur()
-      }
-    }
-  }
-
-  return (
-    <div ref={wrapperRef} style={{ position: 'relative' }}>
-      <input
-        ref={inputRef}
-        type="text"
-        value={draft}
-        onChange={(e) => handleChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
-        style={{
-          background: focused ? 'var(--color-surface-3)' : 'var(--color-surface-2)',
-          borderColor: focused ? 'var(--color-accent)' : 'var(--color-border)',
-          color: 'var(--color-text-primary)',
-        }}
-      />
-      {showDropdown && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: 4,
-            background: 'var(--glass-bg-heavy)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            maxHeight: 160,
-            overflowY: 'auto',
-            zIndex: 60,
-            backdropFilter: 'blur(12px)',
-            padding: '4px 0',
-          }}
-        >
-          {filtered.slice(0, 12).map((s, i) => (
-            <button
-              key={s.tech}
-              onMouseDown={(e) => { e.preventDefault(); acceptSuggestion(s.tech) }}
-              className="flyout-item"
-              style={{
-                padding: '5px 10px',
-                width: '100%',
-                background: i === selectedIdx ? 'var(--glass-overlay-sm)' : undefined,
-              }}
-            >
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {s.tech}
-              </span>
-              <span style={{ fontSize: 'var(--text-xxs)', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                {s.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -480,7 +220,15 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               <FieldLabel>URL</FieldLabel>
               <div className="flex items-center gap-1.5">
                 <div className="flex-1">
-                  <EditableField value={element.url ?? ''} placeholder="https://..." aria-label="URL" onLiveChange={(v) => updateElementLive(element.id, { url: v || undefined })} onCommit={(v) => updateElement(element.id, { url: v || undefined })} />
+                  <EditableField
+                    value={element.url ?? ''}
+                    placeholder="https://..."
+                    aria-label="URL"
+                    aria-invalid={!!element.url && !getSafeUrl(element.url)}
+                    aria-describedby={element.url && !getSafeUrl(element.url) ? `url-error-${element.id}` : undefined}
+                    onLiveChange={(v) => updateElementLive(element.id, { url: v || undefined })}
+                    onCommit={(v) => updateElement(element.id, { url: v || undefined })}
+                  />
                 </div>
                 {element.url && getSafeUrl(element.url) && (
                   <a
@@ -495,6 +243,15 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                   </a>
                 )}
               </div>
+              {element.url && !getSafeUrl(element.url) && (
+                <div
+                  id={`url-error-${element.id}`}
+                  role="alert"
+                  style={{ fontSize: 'var(--text-xs)', color: 'var(--color-error-text)', marginTop: 4 }}
+                >
+                  URL must start with http:// or https://
+                </div>
+              )}
             </div>
 
             {/* Appears in views */}
@@ -514,10 +271,13 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
 
 function AppearsInViews({ views }: { views: { key: string; title?: string }[] }) {
   const [open, setOpen] = useState(false)
+  const panelId = 'appears-in-views-panel'
   return (
     <div>
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls={panelId}
         className="flex w-full items-center gap-1 mb-1"
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
       >
@@ -537,7 +297,7 @@ function AppearsInViews({ views }: { views: { key: string; title?: string }[] })
         </span>
       </button>
       {open && (
-        <div className="space-y-0.5">
+        <div id={panelId} className="space-y-0.5">
           {views.map(v => (
             <ViewLink key={v.key} viewKey={v.key} title={v.title ?? v.key} />
           ))}
@@ -803,6 +563,7 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
                 {!isBuiltIn && (
                   <button
                     onClick={() => removeTag(tag)}
+                    aria-label={`Remove tag ${tag}`}
                     className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ color: 'var(--color-text-muted)', lineHeight: 1 }}
                   >
@@ -843,168 +604,3 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
 
 // ─── Group Properties ─────────────────────────────────────────────────
 
-function GroupProperties({ group, onClose }: { group: Group; onClose: () => void }) {
-  const workspace = useWorkspaceStore((s) => s.workspace)
-  const updateGroup = useWorkspaceStore((s) => s.updateGroup)
-  const deleteGroup = useWorkspaceStore((s) => s.deleteGroup)
-  const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
-  const [addSearch, setAddSearch] = useState('')
-
-  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
-
-  if (!workspace) return null
-
-  // Elements currently in the group
-  const members = group.elementIds
-    .map(id => elementMap.get(id))
-    .filter(Boolean) as ModelElement[]
-
-  // Elements NOT in the group (candidates to add)
-  const memberSet = new Set(group.elementIds)
-  const q = addSearch.toLowerCase().trim()
-  const candidates = Array.from(elementMap.values()).filter(el =>
-    !memberSet.has(el.id) &&
-    (q === '' || el.name.toLowerCase().includes(q) || el.type.toLowerCase().includes(q))
-  )
-
-  function removeMember(id: string) {
-    updateGroup(group.id, { elementIds: group.elementIds.filter(eid => eid !== id) })
-  }
-
-  function addMember(id: string) {
-    updateGroup(group.id, { elementIds: [...group.elementIds, id] })
-    setAddSearch('')
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '12px 14px 10px',
-        borderBottom: '1px solid var(--color-border)',
-      }}>
-        <Layers size={13} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-accent)', flex: 1 }}>
-          Group
-        </span>
-        <button
-          onClick={() => confirmDelete(`Delete group "${group.name}"?`, () => { deleteGroup(group.id); onClose() })}
-          className="btn-icon !min-h-6 !min-w-6 !p-1"
-          title="Delete group"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          <Trash2 size={12} />
-        </button>
-        <button onClick={onClose} className="btn-icon !min-h-6 !min-w-6 !p-1" title="Close" aria-label="Close panel">
-          <X size={12} />
-        </button>
-      </div>
-
-      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* Name */}
-        <div>
-          <FieldLabel>Name</FieldLabel>
-          <EditableField
-            value={group.name}
-            placeholder="Group name"
-            aria-label="Group name"
-            onCommit={(val) => updateGroup(group.id, { name: val })}
-          />
-        </div>
-
-        {/* Members */}
-        <div>
-          <FieldLabel>Members ({members.length})</FieldLabel>
-          {members.length === 0 ? (
-            <p style={{ fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No members yet</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {members.map(el => (
-                <div key={el.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 8px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'var(--color-surface-2)',
-                }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: TYPE_COLORS[el.type] ?? 'var(--color-accent)', flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {el.name}
-                  </span>
-                  <button
-                    onClick={() => removeMember(el.id)}
-                    style={{ color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', flexShrink: 0 }}
-                    title="Remove from group"
-                  >
-                    <X size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Add members */}
-        <div>
-          <FieldLabel>Add member</FieldLabel>
-          <input
-            type="text"
-            value={addSearch}
-            onChange={(e) => setAddSearch(e.target.value)}
-            placeholder="Search elements..."
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{
-              background: 'var(--color-surface-2)',
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text-primary)',
-              marginBottom: candidates.length > 0 ? 6 : 0,
-            }}
-          />
-          {candidates.length > 0 && (
-            <div style={{
-              maxHeight: 160,
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 1,
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--color-surface-1)',
-              padding: 4,
-            }}>
-              {candidates.slice(0, 20).map(el => (
-                <button
-                  key={el.id}
-                  onClick={() => addMember(el.id)}
-                  className="hover-surface-2"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '5px 8px',
-                    borderRadius: 5,
-                    fontSize: 'var(--text-sm)',
-                    color: 'var(--color-text-secondary)',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'background 0.12s',
-                  }}
-                >
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: TYPE_COLORS[el.type] ?? 'var(--color-accent)', flexShrink: 0 }} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{el.name}</span>
-                  <Plus size={11} style={{ marginLeft: 'auto', flexShrink: 0, color: 'var(--color-text-muted)' }} />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}

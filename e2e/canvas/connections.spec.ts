@@ -14,12 +14,14 @@ test.describe('Node Connections', () => {
     expect(firstMarkerEnd).toContain('c4-arrow')
   })
 
-  test('sample workspace edges have no markerStart (arrows are not reversed)', async ({ workspace }) => {
+  test('sample workspace edges use the custom start marker dot, not a reversed arrowhead', async ({ workspace }) => {
     await workspace.loadSample()
-    // No edges should have markerStart — arrows always go source → target
-    const reversedEdges = workspace.page.locator('.react-flow__edge path[marker-start]')
-    const count = await reversedEdges.count()
-    expect(count).toBe(0)
+    const startMarkers = workspace.page.locator('.react-flow__edge path[marker-start]')
+    const count = await startMarkers.count()
+    expect(count).toBeGreaterThan(0)
+    const firstMarkerStart = await startMarkers.first().getAttribute('marker-start')
+    expect(firstMarkerStart).toContain('c4-dot')
+    expect(firstMarkerStart).not.toContain('c4-arrow')
   })
 
   // ─── Arrow marker rendering ───────────────────────────────────────────────

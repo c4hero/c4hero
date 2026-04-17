@@ -16,12 +16,26 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('react-router')) return 'react-vendor'
+          if (/[\\/]react(?:-dom)?[\\/]/.test(id)) return 'react-vendor'
+          if (id.includes('@xyflow')) return 'xyflow'
+          if (id.includes('@dagrejs/dagre')) return 'dagre'
+        },
+      },
+    },
+  },
   server: {
-    port: 3007,
-    allowedHosts: ['appv2.c4hero.com'],
-    // HMR over wss:443 is only correct when served via Cloudflare Tunnel on
-    // appv2.c4hero.com. For plain localhost dev (and E2E), leave HMR as the
-    // default so the browser connects to ws://localhost:3007 without errors.
+    port: 3004,
+    strictPort: true,
+    allowedHosts: ['dev-app.c4hero.com', 'appv2.c4hero.com'],
+    // HMR over wss:443 is only correct when served via Cloudflare Tunnel.
+    // For plain localhost dev (and E2E), leave HMR as the default so the
+    // browser connects to ws://localhost:3004 without errors.
     hmr: process.env.VITE_HMR_TUNNEL
       ? { clientPort: 443, protocol: 'wss' }
       : undefined,

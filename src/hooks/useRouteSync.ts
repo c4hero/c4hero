@@ -5,6 +5,9 @@ import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile } from '@/lib/
 import { loadFromLocalStorage } from '@/lib/fileIO'
 import { parseDSL } from '@/lib/dsl'
 import { parseSidecar, applySidecar } from '@/lib/sidecar'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('routeSync')
 
 /**
  * URL pattern:
@@ -153,7 +156,7 @@ export function useRefreshRedirect() {
 
       // 3. Parse, apply sidecar, load into store
       const { workspace: parsed, errors } = parseDSL(file.content)
-      if (errors.length > 0) console.warn('DSL parse warnings:', errors)
+      if (errors.length > 0) log.warn('DSL parse warnings', errors)
       if (!parsed) {
         navigate(`/collection/${collectionSlug}`, { replace: true })
         return
@@ -179,7 +182,7 @@ export function useRefreshRedirect() {
         // useRouteSync effect will replace the URL with the correct path
       }
     })().catch((err) => {
-      console.error('Refresh recovery failed:', err)
+      log.error('Refresh recovery failed', err)
       if (!cancelled) navigate('/', { replace: true })
     })
 
