@@ -35,10 +35,12 @@ export default function FloatingBottomStrip() {
   // Build element map once per workspace change — shared by all derived selectors below
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
 
-  // All custom tags across entire workspace
+  // Tags to surface in the manager. Always includes the 4 C4 type tags so
+  // users can style them even when no style has been authored yet; also
+  // includes any custom tags in use and any tags that have an explicit style.
   const allWorkspaceTags = useMemo(() => {
-    if (!workspace) return []
-    const tags = new Set<string>()
+    const tags = new Set<string>(['Person', 'Software System', 'Container', 'Component'])
+    if (!workspace) return Array.from(tags)
     for (const el of elementMap.values()) {
       for (const tag of el.tags) {
         if (!DEFAULT_BUILTIN_TAGS.includes(tag)) tags.add(tag)
