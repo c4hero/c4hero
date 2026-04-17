@@ -130,6 +130,19 @@ function useTechnologySuggestions(): { tech: string; count: number }[] {
   }, [workspace])
 }
 
+function splitTokens(s: string): string[] {
+  return s.split(',').map((t) => t.trim()).filter(Boolean)
+}
+
+function joinTokens(tokens: string[]): string {
+  return tokens.join(', ')
+}
+
+/** Chip-style multi-value input used for element and relationship
+ *  `technology`. Committed values render as removable chips; a trailing
+ *  input accepts new entries. Enter or comma commits the current draft;
+ *  Backspace on an empty draft pops the last chip. Autocomplete pulls
+ *  from technologies already in use elsewhere in the workspace. */
 export function TechnologyField({ value, placeholder, onCommit, onLiveChange, 'aria-label': ariaLabel }: {
   value: string
   placeholder?: string
@@ -137,51 +150,67 @@ export function TechnologyField({ value, placeholder, onCommit, onLiveChange, 'a
   onLiveChange?: (val: string) => void
   'aria-label'?: string
 }) {
-  const [draft, setDraft] = useState(value)
+  const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(-1)
   const suggestions = useTechnologySuggestions()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const inputValue = focused ? draft : value
 
-  const parts = inputValue.split(',')
-  const currentToken = parts[parts.length - 1].trimStart()
-  const alreadyUsed = new Set(parts.slice(0, -1).map((p) => p.trim().toLowerCase()))
+  const tokens = splitTokens(value)
+  const alreadyUsed = new Set(tokens.map((t) => t.toLowerCase()))
 
-  const filtered = currentToken
+  const filtered = draft.trim()
     ? suggestions.filter(
-        (s) => s.tech.toLowerCase().includes(currentToken.toLowerCase()) && !alreadyUsed.has(s.tech.toLowerCase()),
+        (s) => s.tech.toLowerCase().includes(draft.trim().toLowerCase()) && !alreadyUsed.has(s.tech.toLowerCase()),
       )
     : suggestions.filter((s) => !alreadyUsed.has(s.tech.toLowerCase()))
 
   const showDropdown = focused && filtered.length > 0
 
-  const acceptSuggestion = (tech: string) => {
-    const prefix = parts.slice(0, -1).map((p) => p.trim()).filter(Boolean)
-    const next = [...prefix, tech].join(', ')
-    setDraft(next)
-    onLiveChange?.(next)
-    onCommit(next)
+  const commitTokens = (next: string[]) => {
+    const joined = joinTokens(next)
+    onLiveChange?.(joined)
+    onCommit(joined)
+  }
+
+  const addToken = (raw: string) => {
+    const trimmed = raw.trim()
+    if (!trimmed) return
+    if (alreadyUsed.has(trimmed.toLowerCase())) { setDraft(''); return }
+    commitTokens([...tokens, trimmed])
+    setDraft('')
+    setSelectedIdx(-1)
+  }
+
+  const removeToken = (tech: string) => {
+    commitTokens(tokens.filter((t) => t !== tech))
     inputRef.current?.focus()
   }
 
-  const handleChange = (newVal: string) => {
+  const handleDraftChange = (newVal: string) => {
+    // Commit immediately on comma
+    if (newVal.includes(',')) {
+      const parts = newVal.split(',')
+      const last = parts.pop() ?? ''
+      for (const p of parts) addToken(p)
+      setDraft(last.trimStart())
+      return
+    }
     setDraft(newVal)
     setSelectedIdx(-1)
-    onLiveChange?.(newVal)
   }
 
   const handleBlur = () => {
     setTimeout(() => {
       if (!wrapperRef.current?.contains(document.activeElement)) {
         setFocused(false)
-        onCommit(inputValue)
+        if (draft.trim()) addToken(draft)
       }
     }, 150)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (showDropdown && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       e.preventDefault()
       setSelectedIdx((prev) => {
@@ -193,45 +222,96 @@ export function TechnologyField({ value, placeholder, onCommit, onLiveChange, 'a
     if (e.key === 'Enter') {
       e.preventDefault()
       if (selectedIdx >= 0 && selectedIdx < filtered.length) {
-        acceptSuggestion(filtered[selectedIdx].tech)
-        setSelectedIdx(-1)
-      } else {
-        onCommit(inputValue)
+        addToken(filtered[selectedIdx].tech)
+      } else if (draft.trim()) {
+        addToken(draft)
       }
       return
     }
+    if (e.key === 'Backspace' && draft === '' && tokens.length > 0) {
+      e.preventDefault()
+      commitTokens(tokens.slice(0, -1))
+      return
+    }
     if (e.key === 'Escape') {
-      if (showDropdown) {
-        setSelectedIdx(-1)
-      } else {
-        setDraft(value)
-        setSelectedIdx(-1)
-        onLiveChange?.(value)
-        ;(e.target as HTMLElement).blur()
-      }
+      if (showDropdown) { setSelectedIdx(-1); return }
+      setDraft('')
+      ;(e.target as HTMLElement).blur()
     }
   }
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative' }}>
+    <div
+      ref={wrapperRef}
+      onClick={() => inputRef.current?.focus()}
+      className="w-full rounded-lg border px-2 py-1.5 text-sm transition-colors"
+      style={{
+        background: focused ? 'var(--color-surface-3)' : 'var(--color-surface-2)',
+        borderColor: focused ? 'var(--color-accent)' : 'var(--color-border)',
+        color: 'var(--color-text-primary)',
+        cursor: 'text',
+        position: 'relative',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 4,
+        minHeight: 36,
+      }}
+      aria-label={ariaLabel}
+    >
+      {tokens.map((t) => (
+        <span
+          key={t}
+          className="c4-type-chip"
+          style={{
+            background: 'color-mix(in srgb, var(--color-text-muted) 14%, transparent)',
+            color: 'var(--color-text-primary)',
+            fontWeight: 600,
+            textTransform: 'none',
+            letterSpacing: 'normal',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          {t}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); removeToken(t) }}
+            aria-label={`Remove ${t}`}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </span>
+      ))}
       <input
         ref={inputRef}
         type="text"
-        value={inputValue}
-        onChange={(e) => handleChange(e.target.value)}
-        onFocus={() => {
-          setDraft(value)
-          setFocused(true)
-        }}
+        value={draft}
+        onChange={(e) => handleDraftChange(e.target.value)}
+        onFocus={() => setFocused(true)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
+        placeholder={tokens.length === 0 ? placeholder : ''}
         style={{
-          background: focused ? 'var(--color-surface-3)' : 'var(--color-surface-2)',
-          borderColor: focused ? 'var(--color-accent)' : 'var(--color-border)',
+          flex: 1,
+          minWidth: 80,
+          border: 'none',
+          outline: 'none',
+          background: 'transparent',
           color: 'var(--color-text-primary)',
+          padding: '2px 4px',
+          fontSize: 'inherit',
         }}
       />
       {showDropdown && (
@@ -255,7 +335,8 @@ export function TechnologyField({ value, placeholder, onCommit, onLiveChange, 'a
           {filtered.slice(0, 12).map((s, i) => (
             <button
               key={s.tech}
-              onMouseDown={(e) => { e.preventDefault(); acceptSuggestion(s.tech) }}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); addToken(s.tech) }}
               className="flyout-item"
               style={{
                 padding: '5px 10px',
