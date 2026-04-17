@@ -60,18 +60,19 @@ export default function BaseC4Node({
 
   // ─── Resolve tag style overrides ──────────────────────────────────
   const ResolvedIcon = (style?.shape && SHAPE_ICON_MAP[style.shape]) || Icon
-  // External elements keep their distinct grey styling; type-level DSL styles only apply to internal elements
-  const resolvedTint = isExternal ? tint : (style?.background ?? tint)
-  const resolvedTypeColor = isExternal ? typeColor : (style?.color ?? typeColor)
+  // Theme/tag styles apply to all elements. External elements are distinguished
+  // by their dashed border and "External" chip label — not by opting out of color.
+  const resolvedTint = style?.background ?? tint
+  const resolvedTypeColor = style?.color ?? typeColor
 
-  // Border: override width/style/color individually, falling back to type defaults
-  // External elements always use their distinctive dashed border unless explicitly overridden by a custom (non-type) tag style
+  // Border: external elements keep their dashed style by default, but any explicit
+  // stroke/border from a tag style (e.g. a custom "Legacy" tag) overrides.
   const resolvedBorder = (() => {
     if (selected) return '2px solid var(--color-accent)'
-    if (isExternal || (!style?.stroke && style?.strokeWidth == null && !style?.border)) return borderStyle
+    if (!style?.stroke && style?.strokeWidth == null && !style?.border) return borderStyle
     const parts = borderStyle.split(' ')
     const width = style?.strokeWidth ?? (parseInt(parts[0]) || 2)
-    const line = style?.border?.toLowerCase() ?? parts[1] ?? 'solid'
+    const line = style?.border?.toLowerCase() ?? parts[1] ?? (isExternal ? 'dashed' : 'solid')
     const color = style?.stroke ?? parts.slice(2).join(' ')
     return `${width}px ${line} ${color}`
   })()
