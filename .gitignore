@@ -10,11 +10,16 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+playwright-report/
+test-results/
 *.local
 
 # Environment files
 .env*
 !.env.example
+
+# Claude Code local state
+.claude/
 
 # Editor directories and files
 .vscode/*
