@@ -6,7 +6,13 @@ import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
 import { createLogger, addTransport, type LogEntry } from './lib/logger'
 import { useWorkspaceStore } from './store/workspace'
-import { createBigBankSample, createBlankWorkspace } from './lib/templates'
+import {
+  createBigBankSample,
+  createBlankWorkspace,
+  createMicroservicesTemplate,
+  createMonolithTemplate,
+  createEventDrivenTemplate,
+} from './lib/templates'
 
 const log = createLogger('global')
 
@@ -36,6 +42,27 @@ if (import.meta.env.DEV) {
     const { workspace } = mod.parseDSL(dsl)
     if (!workspace.name) workspace.name = 'test'
     useWorkspaceStore.getState().loadWorkspace(workspace)
+  }
+  ;(window as unknown as Record<string, unknown>).__testLoadTemplate = (name: string) => {
+    const load = useWorkspaceStore.getState().loadWorkspace
+    switch (name) {
+      case 'bigBank':        load(createBigBankSample()); return
+      case 'microservices':  load(createMicroservicesTemplate()); return
+      case 'monolith':       load(createMonolithTemplate()); return
+      case 'eventDriven':    load(createEventDrivenTemplate()); return
+      case 'blank':          load(createBlankWorkspace()); return
+      default: throw new Error(`Unknown template: ${name}`)
+    }
+  }
+  ;(window as unknown as Record<string, unknown>).__testListViews = () => {
+    const ws = useWorkspaceStore.getState().workspace
+    if (!ws) return []
+    return [
+      ...ws.views.systemLandscapeViews.map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
+      ...ws.views.systemContextViews.map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
+      ...ws.views.containerViews.map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
+      ...ws.views.componentViews.map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
+    ]
   }
 }
 

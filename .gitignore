@@ -21,6 +21,9 @@ test-results/
 # Claude Code local state
 .claude/
 
+# Generated marketing screenshots (root-only; don't ignore e2e/screenshots/ specs)
+/screenshots/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
