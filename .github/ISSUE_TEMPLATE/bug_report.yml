@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in c4hero is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill in the
+        sections below. For security issues, do **not** file a public issue —
+        see [SECURITY.md](../SECURITY.md) instead.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One- or two-sentence description of the problem.
+      placeholder: "Dragging a connection handle on a group node fails to create an edge."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact sequence you followed. Include a minimal workspace DSL or screenshot if useful.
+      placeholder: |
+        1. Load the Big Bank sample.
+        2. Open the Container view for Internet Banking System.
+        3. Drag from Mobile App's right handle to the Mainframe Banking System node.
+        4. Release — no edge appears.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+
+  - type: input
+    id: version
+    attributes:
+      label: c4hero version / commit
+      description: Either the tag, or the commit SHA shown in the UI footer.
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser + OS
+      placeholder: "Chrome 131 on macOS 15"
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: Paste any relevant output from the browser devtools console.
+      render: shell
