@@ -2,8 +2,9 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  // Screenshot capture is an on-demand utility, not part of the regression suite.
-  testIgnore: ['**/screenshots/**'],
+  // Screenshot / walkthrough capture are on-demand utilities, not part of
+  // the regression suite.
+  testIgnore: ['**/screenshots/**', '**/walkthrough/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
