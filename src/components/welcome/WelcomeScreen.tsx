@@ -708,7 +708,7 @@ function StartupView({
           Architecture diagrams that{' '}
           <span style={{ color: 'var(--color-accent)', whiteSpace: 'nowrap' }}>live with your code.</span>
         </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', rowGap: 8, columnGap: 18 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', rowGap: 8, columnGap: 18, maxWidth: 440, margin: '0 auto' }}>
           {[
             { icon: <FileText size={11} />, label: '.dsl files' },
             { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>, label: 'Git-friendly' },
