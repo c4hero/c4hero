@@ -732,6 +732,14 @@ function StartupView({
             </span>
           ))}
         </div>
+        <a
+          href="https://c4hero.com"
+          style={{ fontSize: '12px', color: 'var(--color-text-muted)', textDecoration: 'none', marginTop: 4 }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--color-accent)' }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--color-text-muted)' }}
+        >
+          Back to c4hero.com ↗
+        </a>
       </div>
       {/* sr-only: preserves test assertion for AI describe */}
       <span className="sr-only">Describe your system with AI</span>
