@@ -1,13 +1,40 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import { execSync } from 'child_process'
 
 const commitHash = execSync('git rev-parse --short HEAD').toString().trim()
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'c4-logo.svg', 'apple-touch-icon.png'],
+      manifest: {
+        name: 'c4hero',
+        short_name: 'c4hero',
+        description: 'Design, document, and share software architecture with C4 model diagrams. Local-first, open source.',
+        theme_color: '#0d1117',
+        background_color: '#0d1117',
+        display: 'standalone',
+        start_url: '/',
+        scope: '/',
+        icons: [
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
   define: {
     __COMMIT_HASH__: JSON.stringify(commitHash),
   },
