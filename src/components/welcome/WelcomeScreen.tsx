@@ -593,26 +593,6 @@ function StartupView({
         >
           Visual architecture modelling...
         </p>
-
-        {/* Walkthrough loop — silent, auto-playing demo of canvas basics */}
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          aria-label="Demo of canvas basics: selecting an element, drilling from L1 to L2 to L3, and back"
-          className="rounded-xl border"
-          style={{
-            width: '100%',
-            maxWidth: 560,
-            borderColor: 'var(--color-border)',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
-          }}
-        >
-          <source src="/walkthrough.webm" type="video/webm" />
-          <source src="/walkthrough.mp4" type="video/mp4" />
-        </video>
       </div>
 
       {/* Collection actions */}
