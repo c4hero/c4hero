@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, expect, type Page, type Locator } from '@playwright/test'
 
 export const test = base.extend<{ workspace: WorkspaceHelper }>({
   workspace: async ({ page }, runWorkspace) => {
@@ -8,6 +8,64 @@ export const test = base.extend<{ workspace: WorkspaceHelper }>({
 })
 
 export { expect }
+
+type WorkspaceSnapshot = {
+  name?: string
+  scope?: string
+  model: {
+    people: Array<{ id: string; name: string; type: string; tags: string[]; description?: string; owner?: string; url?: string; location?: string }>
+    softwareSystems: Array<{
+      id: string
+      name: string
+      type: string
+      tags: string[]
+      description?: string
+      owner?: string
+      url?: string
+      location?: string
+      containers: Array<{
+        id: string
+        name: string
+        type: string
+        tags: string[]
+        technology?: string
+        description?: string
+        owner?: string
+        url?: string
+        components: Array<{
+          id: string
+          name: string
+          type: string
+          tags: string[]
+          technology?: string
+          description?: string
+          owner?: string
+          url?: string
+        }>
+      }>
+    }>
+    relationships: Array<{
+      id: string
+      sourceId: string
+      destinationId: string
+      description?: string
+      technology?: string
+      tags: string[]
+      interactionStyle?: string
+      lineStyle?: string
+      url?: string
+    }>
+    groups: Array<{ id: string; name: string; elementIds: string[] }>
+  }
+  views: {
+    systemLandscapeViews: Array<{ key: string; title?: string; type: string; elements: Array<{ id: string }>; relationships: Array<{ id: string }>; autoLayout?: { direction?: string } }>
+    systemContextViews: Array<{ key: string; title?: string; type: string; elements: Array<{ id: string }>; relationships: Array<{ id: string }>; autoLayout?: { direction?: string } }>
+    containerViews: Array<{ key: string; title?: string; type: string; elements: Array<{ id: string }>; relationships: Array<{ id: string }>; autoLayout?: { direction?: string } }>
+    componentViews: Array<{ key: string; title?: string; type: string; elements: Array<{ id: string }>; relationships: Array<{ id: string }>; autoLayout?: { direction?: string } }>
+  }
+}
+
+type ViewSummary = { key: string; type: string; title: string }
 
 export class WorkspaceHelper {
   constructor(public page: Page) {}
@@ -19,64 +77,96 @@ export class WorkspaceHelper {
 
   async loadSample() {
     await this.goto()
-    // Directly load the Big Bank sample via test helper exposed in dev mode
     await this.page.evaluate(() => (window as Record<string, unknown>).__testLoadSample?.())
-    // Wait for store→effect→navigate chain to land on a canvas route
     await this.page.waitForURL(/\/collection\//, { timeout: 5000 })
     await this.page.locator('.react-flow').waitFor({ state: 'visible' })
   }
 
   async loadBlank() {
     await this.goto()
-    // Directly load a blank workspace via test helper exposed in dev mode
     await this.page.evaluate(() => (window as Record<string, unknown>).__testLoadBlank?.())
     await this.page.waitForURL(/\/collection\//, { timeout: 5000 })
     await this.page.locator('.react-flow').waitFor({ state: 'visible' })
   }
 
+  async loadTemplate(name: 'bigBank' | 'microservices' | 'monolith' | 'eventDriven' | 'blank') {
+    await this.goto()
+    await this.page.evaluate((templateName) => (window as Record<string, unknown>).__testLoadTemplate?.(templateName), name)
+    await this.page.waitForURL(/\/collection\//, { timeout: 5000 })
+    await this.page.locator('.react-flow').waitFor({ state: 'visible' })
+  }
+
+  async parseAndLoad(dsl: string) {
+    await this.goto()
+    await this.page.evaluate((input) => (window as Record<string, unknown>).__testParseAndLoad?.(input), dsl)
+    await this.page.waitForURL(/\/collection\//, { timeout: 5000 })
+    await this.page.locator('.react-flow').waitFor({ state: 'visible' })
+  }
+
+  async getWorkspace() {
+    return this.page.evaluate(() => (window as Record<string, unknown>).__testGetWorkspace?.() as WorkspaceSnapshot | null)
+  }
+
+  async getViews() {
+    return this.page.evaluate(() => ((window as Record<string, unknown>).__testListViews?.() as ViewSummary[] | undefined) ?? [])
+  }
+
+  async setView(key: string) {
+    await this.page.evaluate((viewKey) => (window as Record<string, unknown>).__testSetView?.(viewKey), key)
+    await this.page.waitForTimeout(250)
+  }
+
+  async relayout(direction?: 'TB' | 'BT' | 'LR' | 'RL') {
+    await this.page.evaluate((dir) => (window as Record<string, unknown>).__testRelayout?.(dir), direction)
+    await this.page.waitForTimeout(250)
+  }
+
   async getNodeByName(name: string) {
-    // Use exact text matching so 'New System' does not match 'New System 2'
     return this.page.locator('.react-flow__node').filter({
       has: this.page.getByText(name, { exact: true }),
     })
   }
 
-  async getEdgeCount() {
-    return this.page.locator('.react-flow__edge').count()
+  getVisibleNodeByName(name: string): Locator {
+    return this.page.locator('.react-flow__node').filter({
+      has: this.page.getByText(name, { exact: true }),
+    }).first()
   }
 
   async getNodeCount() {
     return this.page.locator('.react-flow__node').count()
   }
 
+  async getEdgeCount() {
+    return this.page.locator('.react-flow__edge').count()
+  }
+
   async clickNode(name: string) {
-    const node = await this.getNodeByName(name)
-    await node.click()
+    await this.getVisibleNodeByName(name).click()
   }
 
   async doubleClickNode(name: string) {
-    const node = await this.getNodeByName(name)
-    await node.dblclick()
+    await this.getVisibleNodeByName(name).dblclick()
   }
 
   async rightClickNode(name: string) {
-    const node = await this.getNodeByName(name)
-    await node.click({ button: 'right' })
+    await this.getVisibleNodeByName(name).click({ button: 'right' })
   }
 
-  async rightClickCanvas() {
-    await this.page.locator('.react-flow__pane').click({ button: 'right', position: { x: 100, y: 100 } })
+  async clickCanvas(position = { x: 100, y: 100 }) {
+    await this.page.locator('.react-flow__pane').click({ position })
   }
 
-  /** Check that the right panel shows the given element name */
-  async expectRightPanelElement(name: string) {
-    await expect(this.page.locator('.glass-panel-solid').last().getByText(name).first()).toBeVisible()
+  async clearSelection() {
+    await this.clickCanvas({ x: 20, y: 20 })
   }
 
-  /** Zoom to fit — ensures all nodes are visible before interaction */
+  async expectInspectorFor(name: string) {
+    await expect(this.page.locator('[aria-label="Element properties"]')).toContainText(name)
+  }
+
   async fitView() {
     await this.page.getByRole('button', { name: 'Zoom to fit' }).click()
-    // Wait for the viewport transform to settle after fit-view animation
     await this.page.locator('.react-flow__viewport').evaluate((el) =>
       new Promise<void>((resolve) => {
         let last = el.getAttribute('transform') ?? el.style.transform
@@ -91,20 +181,76 @@ export class WorkspaceHelper {
     )
   }
 
-  /** Open search dialog */
   async openSearch() {
-    await this.page.keyboard.press('Control+k')
-    await expect(this.page.getByPlaceholder('Search elements, views...')).toBeVisible()
+    await this.page.keyboard.press('Control+f')
+    await expect(this.page.getByPlaceholder('Search elements, views, technology...')).toBeVisible()
   }
 
-  /**
-   * Connect two nodes by dragging from the source node's center handle to the
-   * target node center. This is more stable than aiming for a specific hidden
-   * target handle after the layout changes from an earlier connection.
-   */
+  async openCommandPalette() {
+    await this.page.keyboard.press('Control+k')
+    await expect(this.page.getByRole('dialog', { name: 'Command palette' })).toBeVisible()
+  }
+
+  async runCommand(query: string, exactLabel?: string) {
+    await this.openCommandPalette()
+    const input = this.page.getByLabel('Search commands')
+    await input.fill(query)
+    const target = exactLabel
+      ? this.page.getByRole('button', { name: new RegExp(exactLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
+      : this.page.locator('[role="dialog"][aria-label="Command palette"] button').filter({ hasText: query }).first()
+    await target.click()
+  }
+
+  async openAddElementPanel() {
+    await this.page.getByRole('button', { name: 'Add element' }).click()
+    await expect(this.page.getByText('Create new')).toBeVisible()
+  }
+
+  async addElementFromPanel(label: string) {
+    await this.openAddElementPanel()
+    await this.page.getByRole('button', { name: label, exact: true }).click()
+  }
+
+  async createView(typeLabel: string, title: string, scopeName?: string) {
+    await this.runCommand('new view', 'New View')
+    await expect(this.page.getByRole('dialog', { name: 'Create View' })).toBeVisible()
+    await this.page.locator('#cv-type').selectOption({ label: typeLabel })
+    if (scopeName) {
+      await this.page.locator('#cv-scope').selectOption({ label: scopeName })
+    }
+    await this.page.locator('#cv-title').fill(title)
+    await this.page.getByRole('button', { name: 'Create View' }).click()
+    await expect(this.page.getByRole('dialog', { name: 'Create View' })).not.toBeVisible()
+  }
+
+  async fillEditableField(label: string, value: string) {
+    const root = this.page.getByLabel(label, { exact: true }).first()
+    const tagName = await root.evaluate((el) => el.tagName.toLowerCase())
+    const field = tagName === 'input' || tagName === 'textarea' || tagName === 'select'
+      ? root
+      : root.locator('input, textarea, select').first()
+    await field.click()
+    await field.fill(value)
+    await field.press('Tab')
+  }
+
+  async selectStatus(value: string) {
+    await this.page.getByTestId('element-status').selectOption(value)
+  }
+
+  async toggleInspectorTab(name: 'Properties' | 'Relations' | 'Tags') {
+    await this.page.getByRole('tab', { name }).click()
+  }
+
+  async addTag(tag: string) {
+    await this.toggleInspectorTab('Tags')
+    await this.page.getByPlaceholder('Add tag...').fill(tag)
+    await this.page.keyboard.press('Enter')
+  }
+
   async connectNodes(sourceName: string, targetName: string) {
-    const sourceNode = await this.getNodeByName(sourceName)
-    const targetNode = await this.getNodeByName(targetName)
+    const sourceNode = this.getVisibleNodeByName(sourceName)
+    const targetNode = this.getVisibleNodeByName(targetName)
 
     await sourceNode.hover()
 
@@ -132,5 +278,38 @@ export class WorkspaceHelper {
     }
     await this.page.mouse.up()
     await this.page.waitForTimeout(400)
+  }
+
+  async selectNewestRelationship() {
+    await expect(this.page.locator('.react-flow__edge').last()).toBeVisible()
+    const path = this.page.locator('.react-flow__edge-interaction').last()
+    const box = await path.boundingBox()
+    if (!box) throw new Error('Could not find edge interaction path')
+    await this.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  }
+
+  async getElementByName(name: string) {
+    const ws = await this.getWorkspace()
+    if (!ws) return undefined
+
+    const people = ws.model.people.find((person) => person.name === name)
+    if (people) return people
+
+    for (const system of ws.model.softwareSystems) {
+      if (system.name === name) return system
+      const container = system.containers.find((item) => item.name === name)
+      if (container) return container
+      for (const item of system.containers) {
+        const component = item.components.find((child) => child.name === name)
+        if (component) return component
+      }
+    }
+
+    return undefined
+  }
+
+  async getRelationshipByDescription(description: string) {
+    const ws = await this.getWorkspace()
+    return ws?.model.relationships.find((relationship) => relationship.description === description)
   }
 }
