@@ -930,13 +930,19 @@ export default function Canvas() {
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       updateNodePosition(node.id, node.position.x, node.position.y)
-      // Rebuild group nodes to fit dragged children
+      // Rebuild overlays immediately so group and scope bounds do not disappear
+      // for a frame between the drag stop and the store-driven refresh.
       const ws = workspaceRef.current
+      const v = viewRef.current
       if (ws) {
         setNodes(prev => {
-          const nonGroup = prev.filter(n => n.type !== 'group' && n.type !== 'boundary')
-          const updatedGroups = buildGroupNodes(ws, ws.model.groups, nonGroup)
-          return [...nonGroup, ...updatedGroups]
+          const contentOnly = prev.filter(n => n.type !== 'group' && n.type !== 'boundary')
+          const updatedGroups = buildGroupNodes(ws, ws.model.groups, contentOnly)
+          const updatedBoundary = v ? buildBoundaryNode(ws, v, contentOnly) : null
+          const overlays: typeof prev = []
+          if (updatedBoundary) overlays.push(updatedBoundary as typeof prev[0])
+          overlays.push(...updatedGroups as typeof prev)
+          return [...contentOnly, ...overlays]
         })
       }
       // Reset drag flag slightly after stop so any trailing onSelectionChange is still suppressed

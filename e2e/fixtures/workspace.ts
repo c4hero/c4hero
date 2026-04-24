@@ -71,6 +71,10 @@ export class WorkspaceHelper {
   constructor(public page: Page) {}
 
   async goto() {
+    await this.page.addInitScript(() => {
+      window.localStorage.clear()
+      window.sessionStorage.clear()
+    })
     await this.page.goto('/')
     await this.page.waitForLoadState('networkidle')
   }
@@ -113,7 +117,26 @@ export class WorkspaceHelper {
 
   async setView(key: string) {
     await this.page.evaluate((viewKey) => (window as Record<string, unknown>).__testSetView?.(viewKey), key)
-    await this.page.waitForTimeout(250)
+    await this.page.waitForFunction(() => document.querySelectorAll('.react-flow__node').length > 0)
+    await this.page.locator('.react-flow__viewport').evaluate((el) =>
+      new Promise<void>((resolve) => {
+        let stableFrames = 0
+        let last = el.getAttribute('transform') ?? ''
+        const check = () => {
+          const cur = el.getAttribute('transform') ?? ''
+          if (cur === last) {
+            stableFrames += 1
+            if (stableFrames >= 2) { resolve(); return }
+          } else {
+            stableFrames = 0
+            last = cur
+          }
+          requestAnimationFrame(check)
+        }
+        requestAnimationFrame(check)
+      }),
+    )
+    await this.page.waitForTimeout(100)
   }
 
   async relayout(direction?: 'TB' | 'BT' | 'LR' | 'RL') {
@@ -170,6 +193,24 @@ export class WorkspaceHelper {
 
   async clickCanvas(position = { x: 100, y: 100 }) {
     await this.page.locator('.react-flow__pane').click({ position })
+  }
+
+  async dragNodeBy(name: string, delta: { x: number; y: number }) {
+    const node = this.getVisibleNodeByName(name)
+    const box = await node.boundingBox()
+    if (!box) throw new Error(`Could not get bounding box for node ${name}`)
+
+    const startX = box.x + box.width / 2
+    const startY = box.y + Math.min(box.height / 2, 28)
+
+    await this.page.mouse.move(startX, startY)
+    await this.page.mouse.down()
+    await this.page.mouse.move(startX + delta.x, startY + delta.y, { steps: 12 })
+    await this.page.mouse.up()
+  }
+
+  async getCanvasNodeBoxById(id: string) {
+    return this.page.locator(`.react-flow__node[data-id="${id}"]`).boundingBox()
   }
 
   async clearSelection() {
