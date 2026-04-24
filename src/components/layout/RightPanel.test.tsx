@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { Workspace } from '@/types/model'
 import RightPanel from './RightPanel'
@@ -88,6 +89,37 @@ describe('RightPanel', () => {
     render(<RightPanel />)
     // Description appears in an input field
     expect(screen.getByDisplayValue('uses')).toBeTruthy()
+  })
+
+  it('keeps relationship defaults neutral until explicitly set and allows clearing them', async () => {
+    const user = userEvent.setup()
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectRelationship('rel1')
+    render(<RightPanel />)
+
+    const defaultInteraction = screen.getByRole('button', { name: 'Interaction style: Default' })
+    const syncInteraction = screen.getByRole('button', { name: 'Interaction style: Synchronous' })
+    const defaultLineStyle = screen.getByRole('button', { name: 'Line style: Default' })
+    const straightLineStyle = screen.getByRole('button', { name: 'Line style: Straight' })
+
+    expect(defaultInteraction.getAttribute('aria-pressed')).toBe('true')
+    expect(syncInteraction.getAttribute('aria-pressed')).toBe('false')
+    expect(defaultLineStyle.getAttribute('aria-pressed')).toBe('true')
+    expect(straightLineStyle.getAttribute('aria-pressed')).toBe('false')
+
+    await user.click(screen.getByRole('button', { name: 'Interaction style: Asynchronous' }))
+    await user.click(straightLineStyle)
+
+    let relationship = useWorkspaceStore.getState().workspace?.model.relationships.find((item) => item.id === 'rel1')
+    expect(relationship?.interactionStyle).toBe('Asynchronous')
+    expect(relationship?.lineStyle).toBe('Straight')
+
+    await user.click(defaultInteraction)
+    await user.click(defaultLineStyle)
+
+    relationship = useWorkspaceStore.getState().workspace?.model.relationships.find((item) => item.id === 'rel1')
+    expect(relationship?.interactionStyle).toBeUndefined()
+    expect(relationship?.lineStyle).toBeUndefined()
   })
 
   it('shows group name when group selected', () => {

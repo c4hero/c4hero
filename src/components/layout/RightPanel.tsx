@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
-import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, LineStyle, Location } from '@/types/model'
+import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
 import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, ChevronRight } from 'lucide-react'
 import { generateDescription, getAIConfig } from '@/lib/ai'
 import { TYPE_LABELS, TYPE_COLORS } from '@/lib/elementMeta'
@@ -21,7 +21,18 @@ function getSafeUrl(raw: string): string | null {
 
 const STATUS_OPTIONS: ElementStatus[] = ['Live', 'Planned', 'Deprecated', 'Removed']
 
-const LINE_STYLE_OPTIONS: LineStyle[] = ['Curved', 'Straight', 'Orthogonal']
+const INTERACTION_STYLE_OPTIONS = [
+  { value: undefined, label: 'Default', shortLabel: 'Auto' },
+  { value: 'Synchronous' as const, label: 'Synchronous', shortLabel: 'Sync' },
+  { value: 'Asynchronous' as const, label: 'Asynchronous', shortLabel: 'Async' },
+]
+
+const LINE_STYLE_OPTIONS = [
+  { value: undefined, label: 'Default', shortLabel: 'Auto' },
+  { value: 'Curved' as const, label: 'Curved', shortLabel: 'Curved' },
+  { value: 'Straight' as const, label: 'Straight', shortLabel: 'Straight' },
+  { value: 'Orthogonal' as const, label: 'Orthogonal', shortLabel: 'Orthogonal' },
+]
 
 type PanelTab = 'properties' | 'relations' | 'tags'
 
@@ -357,15 +368,16 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
         </div>
         <div>
           <FieldLabel>Interaction Style</FieldLabel>
-          <div className="flex gap-1">
-            {(['Synchronous', 'Asynchronous'] as const).map(is => {
-              const active = (relationship.interactionStyle ?? 'Synchronous') === is
+          <div className="flex gap-1" data-testid="interaction-style">
+            {INTERACTION_STYLE_OPTIONS.map((option) => {
+              const active = relationship.interactionStyle === option.value
               return (
                 <button
-                  key={is}
-                  onClick={() => updateRelationship(relationship.id, { interactionStyle: is })}
-                  title={is}
-                  aria-label={`Interaction style: ${is}`}
+                  key={option.label}
+                  onClick={() => updateRelationship(relationship.id, { interactionStyle: option.value })}
+                  title={option.label}
+                  aria-label={`Interaction style: ${option.label}`}
+                  aria-pressed={active}
                   className="flex flex-col items-center gap-0.5 rounded-md border px-2 py-1.5 text-[9px] font-medium transition-colors"
                   style={{
                     flex: 1,
@@ -376,19 +388,26 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
                   }}
                 >
                   <svg width="28" height="12" viewBox="0 0 36 16" fill="none">
-                    {is === 'Synchronous' ? (
+                    {option.value === undefined && (
+                      <>
+                        <line x1="2" y1="8" x2="34" y2="8" stroke="currentColor" strokeWidth="1.5" opacity="0.55" />
+                        <circle cx="18" cy="8" r="2" fill="currentColor" opacity="0.7" />
+                      </>
+                    )}
+                    {option.value === 'Synchronous' && (
                       <>
                         <line x1="2" y1="8" x2="34" y2="8" stroke="currentColor" strokeWidth="1.5" />
                         <polyline points="28,3 34,8 28,13" stroke="currentColor" strokeWidth="1.5" fill="none" />
                       </>
-                    ) : (
+                    )}
+                    {option.value === 'Asynchronous' && (
                       <>
                         <line x1="2" y1="8" x2="34" y2="8" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
                         <polyline points="28,3 34,8 28,13" stroke="currentColor" strokeWidth="1.5" fill="none" />
                       </>
                     )}
                   </svg>
-                  {is === 'Synchronous' ? 'Sync' : 'Async'}
+                  {option.shortLabel}
                 </button>
               )
             })}
@@ -397,14 +416,15 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
         <div>
           <FieldLabel>Line Style</FieldLabel>
           <div className="flex gap-1" data-testid="line-style">
-            {LINE_STYLE_OPTIONS.map(ls => {
-              const active = (relationship.lineStyle ?? 'Curved') === ls
+            {LINE_STYLE_OPTIONS.map((option) => {
+              const active = relationship.lineStyle === option.value
               return (
                 <button
-                  key={ls}
-                  onClick={() => updateRelationship(relationship.id, { lineStyle: ls })}
-                  title={ls}
-                  aria-label={`Line style: ${ls}`}
+                  key={option.label}
+                  onClick={() => updateRelationship(relationship.id, { lineStyle: option.value })}
+                  title={option.label}
+                  aria-label={`Line style: ${option.label}`}
+                  aria-pressed={active}
                   className="flex flex-col items-center gap-0.5 rounded-md border px-2 py-1.5 text-[9px] font-medium transition-colors"
                   style={{
                     flex: 1,
@@ -415,17 +435,23 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
                   }}
                 >
                   <svg width="28" height="12" viewBox="0 0 36 16" fill="none">
-                    {ls === 'Curved' && (
+                    {option.value === undefined && (
+                      <>
+                        <line x1="2" y1="8" x2="34" y2="8" stroke="currentColor" strokeWidth="1.5" opacity="0.55" />
+                        <circle cx="18" cy="8" r="2" fill="currentColor" opacity="0.7" />
+                      </>
+                    )}
+                    {option.value === 'Curved' && (
                       <path d="M2 14 C12 14, 12 2, 18 2 S24 14, 34 14" stroke="currentColor" strokeWidth="1.5" fill="none" />
                     )}
-                    {ls === 'Straight' && (
+                    {option.value === 'Straight' && (
                       <line x1="2" y1="14" x2="34" y2="2" stroke="currentColor" strokeWidth="1.5" />
                     )}
-                    {ls === 'Orthogonal' && (
+                    {option.value === 'Orthogonal' && (
                       <polyline points="2,14 2,2 34,2" stroke="currentColor" strokeWidth="1.5" fill="none" />
                     )}
                   </svg>
-                  {ls}
+                  {option.shortLabel}
                 </button>
               )
             })}
