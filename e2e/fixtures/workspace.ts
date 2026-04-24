@@ -315,36 +315,48 @@ export class WorkspaceHelper {
     await this.page.keyboard.press('Enter')
   }
 
-  async connectNodes(sourceName: string, targetName: string) {
-    const sourceNode = this.getVisibleNodeByName(sourceName)
+  private async dragBetweenCenters(
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    steps = 15,
+  ) {
+    await this.page.mouse.move(start.x, start.y)
+    await this.page.mouse.down()
+    for (let i = 1; i <= steps; i++) {
+      await this.page.mouse.move(
+        start.x + ((end.x - start.x) * i) / steps,
+        start.y + ((end.y - start.y) * i) / steps,
+      )
+    }
+    await this.page.mouse.up()
+    await this.page.waitForTimeout(400)
+  }
+
+  async getNodeHandle(name: string, side: 'source' | 'target', slot: 'a' | 'b' | 'c' = 'b') {
+    const node = this.getVisibleNodeByName(name)
+    await node.hover()
+    const handle = node.locator(`[data-handleid$="-${slot}-${side}"]`).first()
+    await handle.waitFor({ state: 'attached' })
+    return handle
+  }
+
+  async dragNodeHandleToNode(sourceName: string, targetName: string, side: 'source' | 'target' = 'source') {
+    const sourceHandle = await this.getNodeHandle(sourceName, side)
     const targetNode = this.getVisibleNodeByName(targetName)
-
-    await sourceNode.hover()
-
-    const sourceHandle = sourceNode.locator('[data-handleid$="-b-source"]').first()
-    await sourceHandle.waitFor({ state: 'attached' })
 
     const handleBox = await sourceHandle.boundingBox()
     const targetBox = await targetNode.boundingBox()
 
     if (!handleBox || !targetBox) throw new Error('Could not get bounding boxes for connect drag')
 
-    const startX = handleBox.x + handleBox.width / 2
-    const startY = handleBox.y + handleBox.height / 2
-    const endX = targetBox.x + targetBox.width / 2
-    const endY = targetBox.y + targetBox.height / 2
+    await this.dragBetweenCenters(
+      { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 },
+      { x: targetBox.x + targetBox.width / 2, y: targetBox.y + targetBox.height / 2 },
+    )
+  }
 
-    await this.page.mouse.move(startX, startY)
-    await this.page.mouse.down()
-    const steps = 15
-    for (let i = 1; i <= steps; i++) {
-      await this.page.mouse.move(
-        startX + ((endX - startX) * i) / steps,
-        startY + ((endY - startY) * i) / steps,
-      )
-    }
-    await this.page.mouse.up()
-    await this.page.waitForTimeout(400)
+  async connectNodes(sourceName: string, targetName: string) {
+    await this.dragNodeHandleToNode(sourceName, targetName)
   }
 
   async reconnectEdgeEndpoint(edgeId: string, side: 'source' | 'target', newTargetName: string) {
@@ -357,22 +369,10 @@ export class WorkspaceHelper {
     const targetBox = await target.boundingBox()
     if (!anchorBox || !targetBox) throw new Error('Could not get bounding boxes for reconnect drag')
 
-    const startX = anchorBox.x + anchorBox.width / 2
-    const startY = anchorBox.y + anchorBox.height / 2
-    const endX = targetBox.x + targetBox.width / 2
-    const endY = targetBox.y + targetBox.height / 2
-
-    await this.page.mouse.move(startX, startY)
-    await this.page.mouse.down()
-    const steps = 15
-    for (let i = 1; i <= steps; i++) {
-      await this.page.mouse.move(
-        startX + ((endX - startX) * i) / steps,
-        startY + ((endY - startY) * i) / steps,
-      )
-    }
-    await this.page.mouse.up()
-    await this.page.waitForTimeout(400)
+    await this.dragBetweenCenters(
+      { x: anchorBox.x + anchorBox.width / 2, y: anchorBox.y + anchorBox.height / 2 },
+      { x: targetBox.x + targetBox.width / 2, y: targetBox.y + targetBox.height / 2 },
+    )
   }
 
   async selectNewestRelationship() {
