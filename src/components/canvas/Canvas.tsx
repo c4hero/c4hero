@@ -826,6 +826,14 @@ export default function Canvas() {
     }
   }, [])
 
+  useEffect(() => {
+    if (inspectorTimer.current) {
+      clearTimeout(inspectorTimer.current)
+      inspectorTimer.current = null
+    }
+    isDragging.current = false
+  }, [activeViewKey])
+
   const onSelectionChange = useCallback(
     ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
       // In multi-select mode, onNodeClick handles selection manually — ignore RF's selection events
@@ -907,6 +915,10 @@ export default function Canvas() {
 
   const onNodeDoubleClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
+      if (inspectorTimer.current) {
+        clearTimeout(inspectorTimer.current)
+        inspectorTimer.current = null
+      }
       // zoomInto handles both cases: navigate to existing child view, or prompt
       // to create one if none exists. Internally no-ops if the element has no
       // children (person/component/etc.).

@@ -36,11 +36,14 @@ test.describe('Canvas Elements', () => {
     expect(after).toBe(before + 1)
   })
 
-  test('deleting a selected node removes it', async ({ workspace }) => {
+  test('deleting a selected node removes it after confirmation', async ({ workspace }) => {
     await workspace.loadSample()
     const before = await workspace.getNodeCount()
     await workspace.clickNode('ATM')
-    await workspace.page.keyboard.press('Delete')
+    await workspace.expectInspectorFor('ATM')
+    await workspace.page.keyboard.press('Backspace')
+    await workspace.page.getByRole('dialog', { name: 'Confirm delete' }).getByRole('button', { name: 'Delete' }).click()
+    await expect(await workspace.getNodeByName('ATM')).toHaveCount(0)
     const after = await workspace.getNodeCount()
     expect(after).toBe(before - 1)
   })
