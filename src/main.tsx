@@ -34,6 +34,9 @@ if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__testAddGroup = (name: string, ids: string[]) => {
     return useWorkspaceStore.getState().addGroup(name, ids)
   }
+  ;(window as unknown as Record<string, unknown>).__testDeleteElements = (ids: string[]) => {
+    useWorkspaceStore.getState().deleteElements(ids)
+  }
   ;(window as unknown as Record<string, unknown>).__testSetView = (key: string) => {
     useWorkspaceStore.getState().setActiveView(key)
   }

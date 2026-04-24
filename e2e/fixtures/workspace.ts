@@ -121,6 +121,21 @@ export class WorkspaceHelper {
     await this.page.waitForTimeout(250)
   }
 
+  async addGroup(name: string, elementIds: string[]) {
+    return this.page.evaluate(
+      ({ groupName, ids }) => (window as Record<string, unknown>).__testAddGroup?.(groupName, ids) as string | undefined,
+      { groupName: name, ids: elementIds },
+    )
+  }
+
+  async deleteElements(elementIds: string[]) {
+    await this.page.evaluate(
+      (ids) => (window as Record<string, unknown>).__testDeleteElements?.(ids),
+      elementIds,
+    )
+    await this.page.waitForTimeout(250)
+  }
+
   async getNodeByName(name: string) {
     return this.page.locator('.react-flow__node').filter({
       has: this.page.getByText(name, { exact: true }),
@@ -327,5 +342,10 @@ export class WorkspaceHelper {
   async getViewByTitle(title: string) {
     const views = await this.getViews()
     return views.find((view) => view.title === title)
+  }
+
+  async getGroupByName(name: string) {
+    const ws = await this.getWorkspace()
+    return ws?.model.groups.find((group) => group.name === name)
   }
 }

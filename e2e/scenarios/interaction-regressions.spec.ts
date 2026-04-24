@@ -86,4 +86,72 @@ test.describe('Interaction regressions', () => {
     relationship = await workspace.getRelationshipByDescription('Checks balances through the web app')
     expect(relationship).toBeUndefined()
   })
+
+  test('deleting a grouped relationship endpoint updates the group membership and supports undo/redo', async ({ workspace }) => {
+    await workspace.loadBlank()
+
+    await workspace.page.keyboard.press('Shift+S')
+    await workspace.page.waitForTimeout(250)
+    await workspace.page.keyboard.press('Shift+S')
+    await workspace.fitView()
+    await workspace.connectNodes('New System', 'New System 2')
+
+    const snapshot = await workspace.getWorkspace()
+    const ids = snapshot?.model.softwareSystems.map((system) => system.id) ?? []
+    expect(ids).toHaveLength(2)
+    await workspace.addGroup('Core Systems', ids)
+
+    let group = await workspace.getGroupByName('Core Systems')
+    expect(group?.elementIds).toHaveLength(2)
+    expect(snapshot?.model.relationships).toHaveLength(1)
+
+    await workspace.deleteElements([ids[0]])
+
+    let afterDelete = await workspace.getWorkspace()
+    group = await workspace.getGroupByName('Core Systems')
+    expect(afterDelete?.model.softwareSystems).toHaveLength(1)
+    expect(afterDelete?.model.relationships).toHaveLength(0)
+    expect(group?.elementIds).toHaveLength(1)
+
+    await workspace.page.keyboard.press('Control+z')
+    let restored = await workspace.getWorkspace()
+    group = await workspace.getGroupByName('Core Systems')
+    expect(restored?.model.softwareSystems).toHaveLength(2)
+    expect(restored?.model.relationships).toHaveLength(1)
+    expect(group?.elementIds).toHaveLength(2)
+
+    await workspace.page.keyboard.press('Control+Shift+z')
+    afterDelete = await workspace.getWorkspace()
+    group = await workspace.getGroupByName('Core Systems')
+    expect(afterDelete?.model.softwareSystems).toHaveLength(1)
+    expect(afterDelete?.model.relationships).toHaveLength(0)
+    expect(group?.elementIds).toHaveLength(1)
+  })
+
+  test('deleting a scoped system falls back to another view and undo restores the scoped view', async ({ workspace }) => {
+    await workspace.loadSample()
+
+    const contextView = await workspace.getViewByTitle('System Context')
+    const snapshot = await workspace.getWorkspace()
+    const systemId = snapshot?.model.softwareSystems.find((system) => system.name === 'Internet Banking System')?.id
+    expect(contextView).toBeTruthy()
+    expect(systemId).toBeTruthy()
+    await workspace.setView(contextView!.key)
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('System Context')
+
+    await workspace.deleteElements([systemId!])
+
+    let views = await workspace.getViews()
+    expect(views.some((view) => view.key === contextView!.key)).toBe(false)
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('System Landscape')
+    await expect(workspace.getVisibleNodeByName('Internet Banking System')).not.toBeVisible()
+
+    await workspace.page.keyboard.press('Control+z')
+    views = await workspace.getViews()
+    expect(views.some((view) => view.key === contextView!.key)).toBe(true)
+
+    await workspace.setView(contextView!.key)
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('System Context')
+    await expect(workspace.getVisibleNodeByName('Internet Banking System')).toBeVisible()
+  })
 })
