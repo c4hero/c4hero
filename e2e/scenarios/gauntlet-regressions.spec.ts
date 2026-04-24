@@ -1,4 +1,96 @@
-import { test, expect } from '../fixtures/workspace'
+import { test, expect, type WorkspaceHelper } from '../fixtures/workspace'
+
+async function expectGroupToContainMembers(
+  workspace: WorkspaceHelper,
+  groupId: string,
+  memberIds: string[],
+) {
+  await workspace.page.locator(`[data-id="group-${groupId}"]`).waitFor({ state: 'visible' })
+
+  const state = await workspace.page.evaluate(
+    ({ activeGroupId, ids }) => {
+      const groupEl = document.querySelector(`[data-id="group-${activeGroupId}"]`) as HTMLElement | null
+      if (!groupEl) return null
+
+      const groupRect = groupEl.getBoundingClientRect()
+      return {
+        groupRect: {
+          left: groupRect.left,
+          right: groupRect.right,
+          top: groupRect.top,
+          bottom: groupRect.bottom,
+          width: groupRect.width,
+          height: groupRect.height,
+        },
+        members: ids.map((id) => {
+          const el = document.querySelector(`[data-id="${id}"]`) as HTMLElement | null
+          if (!el) return { id, found: false as const }
+          const rect = el.getBoundingClientRect()
+          return {
+            id,
+            found: true as const,
+            rect: {
+              left: rect.left,
+              right: rect.right,
+              top: rect.top,
+              bottom: rect.bottom,
+              width: rect.width,
+              height: rect.height,
+            },
+          }
+        }),
+      }
+    },
+    { activeGroupId: groupId, ids: memberIds },
+  )
+
+  expect(state, 'group node should stay visible').not.toBeNull()
+  if (!state) return
+
+  for (const member of state.members) {
+    expect(member, `group member ${member.id} should stay visible`).toMatchObject({ found: true })
+    if (!member.found) continue
+    expect(member.rect.left).toBeGreaterThanOrEqual(state.groupRect.left - 1)
+    expect(member.rect.top).toBeGreaterThanOrEqual(state.groupRect.top - 1)
+    expect(member.rect.right).toBeLessThanOrEqual(state.groupRect.right + 1)
+    expect(member.rect.bottom).toBeLessThanOrEqual(state.groupRect.bottom + 1)
+  }
+}
+
+async function expectEdgesToStayAttached(
+  workspace: WorkspaceHelper,
+  nodeNames: string[],
+  expectedEdgeCount?: number,
+) {
+  const edgeRects = await workspace.page.locator('.react-flow__edge-interaction').evaluateAll((els) =>
+    els.map((el) => {
+      const rect = (el as SVGGraphicsElement).getBoundingClientRect()
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      }
+    }),
+  )
+
+  if (expectedEdgeCount !== undefined) {
+    expect(edgeRects.length).toBe(expectedEdgeCount)
+  } else {
+    expect(edgeRects.length).toBeGreaterThan(0)
+  }
+
+  for (const rect of edgeRects) {
+    expect(rect.width).toBeGreaterThan(0)
+    expect(rect.height).toBeGreaterThan(0)
+  }
+
+  for (const name of nodeNames) {
+    await expect(workspace.getVisibleNodeByName(name), `${name} should stay visible`).toBeVisible()
+  }
+}
 
 test.describe('10-pass gauntlet regressions', () => {
   test('edge labels stay readable under long unbroken text and orthogonal routing', async ({ workspace }) => {
@@ -43,42 +135,72 @@ test.describe('10-pass gauntlet regressions', () => {
     await expect(workspace.page.getByText('KafkaProtocolBufferEnvelopeWithVersionNegotiation').first()).toBeVisible()
   })
 
-  test('bulk mutation workflows keep groups and relationships coherent across delete, undo, and redo', async ({ workspace }) => {
-    await workspace.loadBlank()
-    await workspace.page.keyboard.press('Shift+S')
-    await workspace.page.waitForTimeout(250)
-    await workspace.page.keyboard.press('Shift+S')
-    await workspace.page.waitForTimeout(250)
-    await workspace.page.keyboard.press('Shift+S')
-    await workspace.page.waitForTimeout(250)
+  test('bulk mutation workflows keep groups and relationships coherent across repeated mixed mutations and view switches', async ({ workspace }) => {
+    await workspace.loadSample()
+
+    const systemContextView = await workspace.getViewByTitle('System Context')
+    const systemLandscapeView = await workspace.getViewByTitle('System Landscape')
+    expect(systemContextView).toBeTruthy()
+    expect(systemLandscapeView).toBeTruthy()
+
+    await workspace.setView(systemContextView!.key)
     await workspace.fitView()
 
-    await workspace.connectNodes('New System', 'New System 2')
-    await workspace.connectNodes('New System 2', 'New System 3')
-
     let snapshot = await workspace.getWorkspace()
-    const ids = snapshot?.model.softwareSystems.map((system) => system.id) ?? []
-    expect(ids).toHaveLength(3)
+    const groupedSystems = ['Personal Banking Customer', 'Internet Banking System', 'Mainframe Banking System']
+    const groupedIds = groupedSystems.map((name) => {
+      const id = snapshot?.model.people.find((person) => person.name === name)?.id
+        ?? snapshot?.model.softwareSystems.find((system) => system.name === name)?.id
+      expect(id, `${name} should exist in the sample workspace`).toBeTruthy()
+      return id!
+    })
 
-    await workspace.addGroup('Bulk Ops', ids)
-    await workspace.deleteElements([ids[1], ids[2]])
+    const relationshipCountBeforeDelete = snapshot?.model.relationships.length ?? 0
+    expect(relationshipCountBeforeDelete).toBeGreaterThan(0)
 
+    const groupId = await workspace.addGroup('Core Banking Flow', groupedIds)
+    expect(groupId).toBeTruthy()
+    await expectGroupToContainMembers(workspace, groupId!, groupedIds)
+    await expectEdgesToStayAttached(workspace, groupedSystems)
+
+    await workspace.relayout('LR')
+    await expectGroupToContainMembers(workspace, groupId!, groupedIds)
+    await expectEdgesToStayAttached(workspace, groupedSystems)
+
+    await workspace.setView(systemLandscapeView!.key)
+    await workspace.relayout('BT')
+    await expectEdgesToStayAttached(workspace, ['Personal Banking Customer', 'Internet Banking System'])
+
+    await workspace.setView(systemContextView!.key)
+    await expectGroupToContainMembers(workspace, groupId!, groupedIds)
+    await expectEdgesToStayAttached(workspace, groupedSystems)
+
+    await workspace.deleteElements([groupedIds[2]])
     snapshot = await workspace.getWorkspace()
-    expect(snapshot?.model.softwareSystems).toHaveLength(1)
-    expect(snapshot?.model.relationships).toHaveLength(0)
-    expect(snapshot?.model.groups[0]?.elementIds).toEqual([ids[0]])
+    expect(snapshot?.model.relationships.length ?? 0).toBeLessThan(relationshipCountBeforeDelete)
+    expect(snapshot?.model.groups[0]?.elementIds).toEqual(groupedIds.slice(0, 2))
+    await expectGroupToContainMembers(workspace, groupId!, groupedIds.slice(0, 2))
+    await expectEdgesToStayAttached(workspace, groupedSystems.slice(0, 2))
 
     await workspace.page.keyboard.press('Control+z')
     snapshot = await workspace.getWorkspace()
-    expect(snapshot?.model.softwareSystems).toHaveLength(3)
-    expect(snapshot?.model.relationships).toHaveLength(2)
-    expect(snapshot?.model.groups[0]?.elementIds).toHaveLength(3)
+    expect(snapshot?.model.relationships.length).toBe(relationshipCountBeforeDelete)
+    expect(snapshot?.model.groups[0]?.elementIds).toEqual(groupedIds)
+
+    await workspace.setView(systemContextView!.key)
+    await expectGroupToContainMembers(workspace, groupId!, groupedIds)
+    await expectEdgesToStayAttached(workspace, groupedSystems)
 
     await workspace.page.keyboard.press('Control+Shift+z')
     snapshot = await workspace.getWorkspace()
-    expect(snapshot?.model.softwareSystems).toHaveLength(1)
-    expect(snapshot?.model.relationships).toHaveLength(0)
-    expect(snapshot?.model.groups[0]?.elementIds).toEqual([ids[0]])
+    expect(snapshot?.model.relationships.length ?? 0).toBeLessThan(relationshipCountBeforeDelete)
+    expect(snapshot?.model.groups[0]?.elementIds).toEqual(groupedIds.slice(0, 2))
+    await expectGroupToContainMembers(workspace, groupId!, groupedIds.slice(0, 2))
+
+    await workspace.page.keyboard.press('Control+z')
+    await workspace.relayout('TB')
+    await expectGroupToContainMembers(workspace, groupId!, groupedIds)
+    await expectEdgesToStayAttached(workspace, groupedSystems)
   })
 
   test('messy real-world DSL imports preserve borderline details needed for editing', async ({ workspace }) => {
