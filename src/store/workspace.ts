@@ -1360,7 +1360,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (elStyle) elStyle.tag = newTag
     const relStyle = ws.views.configuration.styles.relationships.find(rs => rs.tag === oldTag)
     if (relStyle) relStyle.tag = newTag
-    return { ...pushUndo(s), workspace: ws }
+    return {
+      ...pushUndo(s),
+      workspace: ws,
+      activeTagFilter: s.activeTagFilter === oldTag ? newTag : s.activeTagFilter,
+    }
   }),
 
   removeTagGlobal: (tag) => set((s) => {
@@ -1379,7 +1383,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     for (const rel of ws.model.relationships) { rel.tags = rel.tags.filter(t => t !== tag) }
     ws.views.configuration.styles.elements = ws.views.configuration.styles.elements.filter(es => es.tag !== tag)
     ws.views.configuration.styles.relationships = ws.views.configuration.styles.relationships.filter(rs => rs.tag !== tag)
-    return { ...pushUndo(s), workspace: ws }
+    return {
+      ...pushUndo(s),
+      workspace: ws,
+      activeTagFilter: s.activeTagFilter === tag ? null : s.activeTagFilter,
+    }
   }),
 
   toggleMinimap: () => set((s) => ({ minimapEnabled: !s.minimapEnabled })),

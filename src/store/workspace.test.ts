@@ -2753,6 +2753,12 @@ describe('renameTag', () => {
     expect(useWorkspaceStore.getState().undoStack).toHaveLength(undoBefore)
   })
 
+  it('updates the active tag filter when renaming the active tag', () => {
+    useWorkspaceStore.getState().setActiveTagFilter('VIP')
+    useWorkspaceStore.getState().renameTag('VIP', 'Premium')
+    expect(useWorkspaceStore.getState().activeTagFilter).toBe('Premium')
+  })
+
   it('supports undo', () => {
     useWorkspaceStore.getState().renameTag('VIP', 'Premium')
     useWorkspaceStore.getState().undo()
@@ -2820,6 +2826,12 @@ describe('removeTagGlobal', () => {
     const before = JSON.stringify(useWorkspaceStore.getState().workspace)
     useWorkspaceStore.getState().removeTagGlobal('Database')
     expect(JSON.stringify(useWorkspaceStore.getState().workspace)).toBe(before)
+  })
+
+  it('clears the active tag filter when removing the active tag', () => {
+    useWorkspaceStore.getState().setActiveTagFilter('VIP')
+    useWorkspaceStore.getState().removeTagGlobal('VIP')
+    expect(useWorkspaceStore.getState().activeTagFilter).toBeNull()
   })
 
   it('supports undo', () => {

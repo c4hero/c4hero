@@ -36,4 +36,16 @@ test.describe('Right Panel', () => {
     await workspace.page.locator('.react-flow__pane').click({ position: { x: 10, y: 10 } })
     await expect(workspace.page.getByLabel('Element properties')).toHaveCSS('pointer-events', 'none')
   })
+
+  test('multi-select mode hides the inspector until it is turned off', async ({ workspace }) => {
+    await workspace.loadSample()
+    await workspace.clickNode('Personal Banking Customer')
+    await expect(workspace.page.getByLabel('Element properties')).toHaveCSS('pointer-events', 'auto')
+
+    await workspace.page.getByRole('button', { name: /Multi-select/ }).click()
+    await expect(workspace.page.getByLabel('Element properties')).toHaveCount(0)
+
+    await workspace.page.getByRole('button', { name: /Multi-select/ }).click()
+    await expect(workspace.page.getByLabel('Element properties')).toHaveCSS('pointer-events', 'auto')
+  })
 })

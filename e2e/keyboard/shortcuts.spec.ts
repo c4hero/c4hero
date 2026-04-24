@@ -38,4 +38,14 @@ test.describe('Keyboard Shortcuts', () => {
     await workspace.page.keyboard.press('Escape')
     await expect(workspace.page.getByText(/to exit/i)).not.toBeVisible()
   })
+
+  test('Ctrl+D duplicates the selected element', async ({ workspace }) => {
+    await workspace.loadBlank()
+    await workspace.page.keyboard.press('Shift+S')
+    await workspace.clickNode('New System')
+    await workspace.page.keyboard.press('Control+d')
+
+    await expect(workspace.getVisibleNodeByName('New System copy')).toBeVisible()
+    expect(await workspace.getNodeCount()).toBe(2)
+  })
 })
