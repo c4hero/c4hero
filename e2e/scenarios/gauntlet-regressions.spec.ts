@@ -61,9 +61,22 @@ async function expectGroupToContainMembers(
 
 async function expectEdgesToStayAttached(
   workspace: WorkspaceHelper,
+  viewKey: string,
   nodeNames: string[],
   expectedEdgeCount?: number,
 ) {
+  const snapshot = await workspace.getWorkspace()
+  const activeView = [
+    ...snapshot!.views.systemLandscapeViews,
+    ...snapshot!.views.systemContextViews,
+    ...snapshot!.views.containerViews,
+    ...snapshot!.views.componentViews,
+  ].find((view) => view.key === viewKey)
+
+  expect(activeView, `view ${viewKey} should exist`).toBeTruthy()
+  if (!activeView) return
+
+  const relationshipMap = new Map(snapshot!.model.relationships.map((relationship) => [relationship.id, relationship]))
   const edgeRects = await workspace.page.locator('.react-flow__edge-interaction').evaluateAll((els) =>
     els.map((el) => {
       const rect = (el as SVGGraphicsElement).getBoundingClientRect()
@@ -87,6 +100,63 @@ async function expectEdgesToStayAttached(
   for (const rect of edgeRects) {
     expect(rect.width).toBeGreaterThan(0)
     expect(rect.height).toBeGreaterThan(0)
+  }
+
+  const geometry = await workspace.page.evaluate(({ relationships }) => {
+    const distanceToRect = (
+      point: { x: number; y: number },
+      rect: { left: number; right: number; top: number; bottom: number },
+    ) => {
+      const dx = point.x < rect.left ? rect.left - point.x : point.x > rect.right ? point.x - rect.right : 0
+      const dy = point.y < rect.top ? rect.top - point.y : point.y > rect.bottom ? point.y - rect.bottom : 0
+      return Math.hypot(dx, dy)
+    }
+
+    return relationships.map(({ id, sourceId, destinationId }) => {
+      const edge = document.querySelector(`[data-testid="rf__edge-${id}"]`) as SVGGElement | null
+      const path = (edge?.querySelector('.react-flow__edge-path') ?? edge?.querySelector('path[d]')) as SVGPathElement | null
+      const source = document.querySelector(`[data-id="${sourceId}"]`) as HTMLElement | null
+      const target = document.querySelector(`[data-id="${destinationId}"]`) as HTMLElement | null
+      const sourceRect = source?.getBoundingClientRect()
+      const targetRect = target?.getBoundingClientRect()
+      const edgeRect = path?.getBoundingClientRect()
+      const totalLength = path?.getTotalLength() ?? 0
+      const screenCtm = path?.getScreenCTM()
+      const toViewportPoint = (distance: number) => {
+        if (!path || totalLength <= 0 || !screenCtm) return null
+        const point = path.getPointAtLength(distance)
+        const transformed = new DOMPoint(point.x, point.y).matrixTransform(screenCtm)
+        return { x: transformed.x, y: transformed.y }
+      }
+      const start = toViewportPoint(0)
+      const end = toViewportPoint(totalLength)
+
+      return {
+        id,
+        sourceFound: !!sourceRect,
+        targetFound: !!targetRect,
+        edgeWidth: edgeRect?.width ?? 0,
+        edgeHeight: edgeRect?.height ?? 0,
+        sourceDistance: start && sourceRect ? distanceToRect(start, sourceRect) : Number.POSITIVE_INFINITY,
+        targetDistance: end && targetRect ? distanceToRect(end, targetRect) : Number.POSITIVE_INFINITY,
+      }
+    })
+  }, {
+    relationships: activeView.relationships.map(({ id }) => {
+      const relationship = relationshipMap.get(id)
+      expect(relationship, `relationship ${id} should exist in model`).toBeTruthy()
+      return { id, sourceId: relationship!.sourceId, destinationId: relationship!.destinationId }
+    }),
+  })
+
+  expect(geometry.length).toBe(activeView.relationships.length)
+  for (const edge of geometry) {
+    expect(edge.sourceFound, `edge ${edge.id} source node should stay visible`).toBe(true)
+    expect(edge.targetFound, `edge ${edge.id} target node should stay visible`).toBe(true)
+    expect(edge.edgeWidth, `edge ${edge.id} should have non-zero width`).toBeGreaterThan(0)
+    expect(edge.edgeHeight, `edge ${edge.id} should have non-zero height`).toBeGreaterThan(0)
+    expect(edge.sourceDistance, `edge ${edge.id} should stay attached to its source node`).toBeLessThanOrEqual(28)
+    expect(edge.targetDistance, `edge ${edge.id} should stay attached to its target node`).toBeLessThanOrEqual(28)
   }
 
   for (const name of nodeNames) {
@@ -216,26 +286,26 @@ test.describe('10-pass gauntlet regressions', () => {
     const groupId = await workspace.addGroup('Core Banking Flow', groupedIds)
     expect(groupId).toBeTruthy()
     await expectGroupToContainMembers(workspace, groupId!, groupedIds)
-    await expectEdgesToStayAttached(workspace, groupedSystems)
+    await expectEdgesToStayAttached(workspace, systemContextView!.key, groupedSystems)
 
     await workspace.relayout('LR')
     await expectGroupToContainMembers(workspace, groupId!, groupedIds)
-    await expectEdgesToStayAttached(workspace, groupedSystems)
+    await expectEdgesToStayAttached(workspace, systemContextView!.key, groupedSystems)
 
     await workspace.setView(systemLandscapeView!.key)
     await workspace.relayout('BT')
-    await expectEdgesToStayAttached(workspace, ['Personal Banking Customer', 'Internet Banking System'])
+    await expectEdgesToStayAttached(workspace, systemLandscapeView!.key, ['Personal Banking Customer', 'Internet Banking System'])
 
     await workspace.setView(systemContextView!.key)
     await expectGroupToContainMembers(workspace, groupId!, groupedIds)
-    await expectEdgesToStayAttached(workspace, groupedSystems)
+    await expectEdgesToStayAttached(workspace, systemContextView!.key, groupedSystems)
 
     await workspace.deleteElements([groupedIds[2]])
     snapshot = await workspace.getWorkspace()
     expect(snapshot?.model.relationships.length ?? 0).toBeLessThan(relationshipCountBeforeDelete)
     expect(snapshot?.model.groups[0]?.elementIds).toEqual(groupedIds.slice(0, 2))
     await expectGroupToContainMembers(workspace, groupId!, groupedIds.slice(0, 2))
-    await expectEdgesToStayAttached(workspace, groupedSystems.slice(0, 2))
+    await expectEdgesToStayAttached(workspace, systemContextView!.key, groupedSystems.slice(0, 2))
 
     await workspace.page.keyboard.press('Control+z')
     snapshot = await workspace.getWorkspace()
@@ -244,7 +314,7 @@ test.describe('10-pass gauntlet regressions', () => {
 
     await workspace.setView(systemContextView!.key)
     await expectGroupToContainMembers(workspace, groupId!, groupedIds)
-    await expectEdgesToStayAttached(workspace, groupedSystems)
+    await expectEdgesToStayAttached(workspace, systemContextView!.key, groupedSystems)
 
     await workspace.page.keyboard.press('Control+Shift+z')
     snapshot = await workspace.getWorkspace()
@@ -255,7 +325,7 @@ test.describe('10-pass gauntlet regressions', () => {
     await workspace.page.keyboard.press('Control+z')
     await workspace.relayout('TB')
     await expectGroupToContainMembers(workspace, groupId!, groupedIds)
-    await expectEdgesToStayAttached(workspace, groupedSystems)
+    await expectEdgesToStayAttached(workspace, systemContextView!.key, groupedSystems)
   })
 
   test('messy real-world DSL imports preserve borderline details needed for editing', async ({ workspace }) => {
