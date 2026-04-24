@@ -666,10 +666,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       ws.views.componentViews = ws.views.componentViews.filter(
         v => !v.containerId || (!idSet.has(v.containerId) && !deletedContainerIds.has(v.containerId))
       )
-      ws.model.groups = ws.model.groups.map(g => ({
-        ...g,
-        elementIds: g.elementIds.filter(eid => !allDeletedIds.has(eid)),
-      }))
+      ws.model.groups = ws.model.groups
+        .map(g => ({
+          ...g,
+          elementIds: g.elementIds.filter(eid => !allDeletedIds.has(eid)),
+        }))
+        .filter(g => g.elementIds.length > 0)
       // If the active view was among the ones just removed, fall back to the first remaining view.
       // Also purge stale keys from viewHistory so navigateBack never jumps to a ghost view.
       const activeStillExists = s.activeViewKey ? !!findView(ws, s.activeViewKey) : false
@@ -958,6 +960,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (rel.sourceId === newSourceId && rel.destinationId === newTargetId) return s
     rel.sourceId = newSourceId
     rel.destinationId = newTargetId
+
+    // Mirror addRelationship semantics for system context views: when one endpoint
+    // is the scoped system, ensure the other endpoint is visible so the context
+    // diagram still expresses the relationship after reconnecting.
+    for (const v of ws.views.systemContextViews) {
+      if (!v.softwareSystemId) continue
+      const scopeId = v.softwareSystemId
+      const sourceIsScope = newSourceId === scopeId
+      const destIsScope = newTargetId === scopeId
+      if (sourceIsScope || destIsScope) {
+        const actorId = sourceIsScope ? newTargetId : newSourceId
+        if (!v.elements.some(e => e.id === actorId)) {
+          v.elements.push({ id: actorId })
+        }
+      }
+    }
+
     // Sync view.relationships: keep only in views where both new endpoints exist
     forEachView(ws, (v) => {
       const elIds = new Set(v.elements.map(e => e.id))

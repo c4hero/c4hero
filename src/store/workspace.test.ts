@@ -82,6 +82,13 @@ describe('Group store actions', () => {
     expect(ws.model.groups[0].elementIds).toContain('api')
   })
 
+  it('deleteElement removes groups that become empty after member deletion', () => {
+    useWorkspaceStore.getState().addGroup('Solo', ['alice'])
+    useWorkspaceStore.getState().deleteElement('alice')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.groups).toHaveLength(0)
+  })
+
   it('selectGroup sets selectedGroupId and clears element/relationship selection', () => {
     useWorkspaceStore.setState({ selectedElementIds: ['alice'], selectedRelationshipId: 'rel1' })
     useWorkspaceStore.getState().selectGroup('g1')
@@ -359,6 +366,23 @@ describe('Relationship and container mutations', () => {
     const vA = ws.views.containerViews.find(v => v.key === keyA)!
     // Now both endpoints (c1 and c2) exist in viewA, so the relationship should be added
     expect(vA.relationships.some(r => r.id === relId)).toBe(true)
+  })
+
+  it('reconnectRelationship auto-adds the non-scope endpoint to matching system context views', () => {
+    const other = useWorkspaceStore.getState().addSoftwareSystem('Other')
+    const ctxKey = useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'other', 'uses')
+
+    const before = useWorkspaceStore.getState().workspace!.views.systemContextViews.find(v => v.key === ctxKey)!
+    expect(before.elements.some(e => e.id === 'alice')).toBe(false)
+    expect(before.relationships.some(r => r.id === relId)).toBe(false)
+
+    useWorkspaceStore.getState().reconnectRelationship(relId, 'alice', 'api')
+
+    const after = useWorkspaceStore.getState().workspace!.views.systemContextViews.find(v => v.key === ctxKey)!
+    expect(after.elements.some(e => e.id === 'alice')).toBe(true)
+    expect(after.relationships.some(r => r.id === relId)).toBe(true)
+    expect(after.elements.some(e => e.id === other)).toBe(false)
   })
 
   it('reconnectRelationship is a no-op (no undo) when endpoints are unchanged', () => {
