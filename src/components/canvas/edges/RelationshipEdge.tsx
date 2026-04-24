@@ -113,24 +113,30 @@ function RelationshipEdge({
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               maxWidth: 200,
+              padding: '4px 8px',
+              borderRadius: 10,
+              background: 'color-mix(in srgb, var(--color-canvas) 82%, transparent)',
+              boxShadow: '0 1px 2px color-mix(in srgb, black 12%, transparent)',
               textAlign: 'center',
               lineHeight: 1.3,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: 4,
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
             }}
           >
             {relationship?.description && (
               <span
                 className="text-[11px]"
-                style={{ color: 'var(--color-text-secondary)' }}
+                style={{ color: 'var(--color-text-secondary)', overflowWrap: 'anywhere', wordBreak: 'break-word' }}
               >
                 {relationship.description}
               </span>
             )}
             {relationship?.technology && (
-              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
                 {relationship.technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
                   <span
                     key={t}
@@ -141,6 +147,11 @@ function RelationshipEdge({
                       fontWeight: 600,
                       textTransform: 'none',
                       letterSpacing: 'normal',
+                      maxWidth: '100%',
+                      minWidth: 0,
+                      whiteSpace: 'normal',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
                     }}
                   >
                     {t}
@@ -174,7 +185,7 @@ function RelationshipEdge({
               </div>
             )}
             {relationship.technology && (
-              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>
+              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3, maxWidth: '100%', minWidth: 0 }}>
                 {relationship.technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
                   <span
                     key={t}
@@ -185,6 +196,11 @@ function RelationshipEdge({
                       fontWeight: 600,
                       textTransform: 'none',
                       letterSpacing: 'normal',
+                      maxWidth: '100%',
+                      minWidth: 0,
+                      whiteSpace: 'normal',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
                     }}
                   >
                     {t}

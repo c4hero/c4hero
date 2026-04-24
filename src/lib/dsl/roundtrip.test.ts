@@ -74,6 +74,43 @@ describe('DSL relationship round-trip', () => {
     expect(modelRel!.destinationId).toBe(sysId)
   })
 
+  it('preserves messy relationship metadata through serialize → parse', () => {
+    const ws = makeWs()
+    ws.model.people[0].tags.push('Ops Reviewer')
+    ws.model.softwareSystems[0].description = 'Charges cards, retries jobs, and owns awkward whitespace'
+    ws.model.relationships[0] = {
+      ...ws.model.relationships[0],
+      description: 'retries_failed_jobs_after_manual_review',
+      technology: 'KafkaProtocolBufferEnvelopeWithVersionNegotiation',
+      interactionStyle: 'Asynchronous',
+      lineStyle: 'Orthogonal',
+      url: 'https://example.com/runbooks/retries',
+      tags: ['Relationship', 'Critical Path'],
+    }
+    ws.views.systemLandscapeViews.push({
+      key: 'sl1', title: 'Messy Landscape', type: 'systemLandscape',
+      elements: [{ id: 'abc-123' }, { id: 'xyz-456' }],
+      relationships: [{ id: 'rel-1' }],
+      autoLayout: { direction: 'LR' }
+    } as View)
+
+    const dsl = serializeDSL(ws)
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+
+    expect(parsed.model.people[0].tags).toContain('Ops Reviewer')
+    expect(parsed.model.softwareSystems[0].description).toBe('Charges cards, retries jobs, and owns awkward whitespace')
+    expect(parsed.model.relationships[0]).toMatchObject({
+      description: 'retries_failed_jobs_after_manual_review',
+      technology: 'KafkaProtocolBufferEnvelopeWithVersionNegotiation',
+      interactionStyle: 'Asynchronous',
+      lineStyle: 'Orthogonal',
+      url: 'https://example.com/runbooks/retries',
+    })
+    expect(parsed.model.relationships[0].tags).toEqual(expect.arrayContaining(['Relationship', 'Critical Path']))
+    expect(parsed.views.systemLandscapeViews[0].autoLayout?.direction).toBe('LR')
+  })
+
 })
 
 // ─── Big Bank Round-trip ──────────────────────────────────────────────

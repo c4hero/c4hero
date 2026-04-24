@@ -235,6 +235,10 @@ type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' |
 /** Apply a patch to an element in-place. Shared by updateElement and updateElementLive.
  *  Returns true only when the element was found AND at least one field changed.
  *  Returning false (either element not found, or no-op patch) prevents phantom undo entries. */
+function elementExists(ws: Workspace, id: string): boolean {
+  return !!findElement(ws, id)
+}
+
 function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): boolean {
   let changed = false
   forEachElement(ws, (el) => {
@@ -696,13 +700,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => {
       const ws = cloneWs(s)
       if (!ws || !s.activeViewKey) return s
+      const uniqueIds = [...new Set(ids)]
+      if (uniqueIds.length === 0) return s
       const view = findView(ws, s.activeViewKey)
       if (!view) return s
 
       // Map from original element ID → new clone ID, built as we go
       const idMapping = new Map<string, string>()
 
-      for (const id of ids) {
+      for (const id of uniqueIds) {
         const element = findElement(ws, id)
         if (!element) continue
 
@@ -886,9 +892,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   addRelationship: (sourceId, destinationId, description, technology) => {
     const id = nanoid(8)
+    let created = false
     set((s) => {
       const ws = cloneWs(s)
       if (!ws) return s
+      if (sourceId === destinationId) return s
+      if (!elementExists(ws, sourceId) || !elementExists(ws, destinationId)) return s
       const rel: Relationship = {
         id,
         sourceId,
@@ -899,6 +908,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         properties: {},
       }
       ws.model.relationships.push(rel)
+      created = true
       // For systemContext views: if one endpoint is the scoped system, auto-add
       // the other endpoint (external actor) to the view so the context diagram stays
       // consistent — a person/system related to the scope should appear in its context view.
@@ -925,7 +935,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
       return { ...pushUndo(s), workspace: ws, selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null }
     })
-    return id
+    return created ? id : ''
   },
 
   updateRelationship: (id, patch) => set((s) => {
@@ -958,6 +968,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const rel = ws.model.relationships.find(r => r.id === id)
     if (!rel) return s
     if (rel.sourceId === newSourceId && rel.destinationId === newTargetId) return s
+    if (newSourceId === newTargetId) return s
+    if (!elementExists(ws, newSourceId) || !elementExists(ws, newTargetId)) return s
     rel.sourceId = newSourceId
     rel.destinationId = newTargetId
 

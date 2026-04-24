@@ -229,6 +229,18 @@ describe('Relationship and container mutations', () => {
     expect(rel.tags).toContain('Relationship')
   })
 
+  it('addRelationship rejects self-relationships', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'alice', 'loops')
+    expect(relId).toBe('')
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
+  })
+
+  it('addRelationship rejects missing endpoints', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'missing', 'calls')
+    expect(relId).toBe('')
+    expect(useWorkspaceStore.getState().workspace!.model.relationships).toHaveLength(0)
+  })
+
   it('updateRelationship updates description and technology', () => {
     const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls', 'gRPC')
     useWorkspaceStore.getState().updateRelationship(relId, { description: 'queries', technology: 'SQL' })
@@ -371,7 +383,7 @@ describe('Relationship and container mutations', () => {
   it('reconnectRelationship auto-adds the non-scope endpoint to matching system context views', () => {
     const other = useWorkspaceStore.getState().addSoftwareSystem('Other')
     const ctxKey = useWorkspaceStore.getState().addView('systemContext', 'api', 'API Context')
-    const relId = useWorkspaceStore.getState().addRelationship('alice', 'other', 'uses')
+    const relId = useWorkspaceStore.getState().addRelationship('alice', other, 'uses')
 
     const before = useWorkspaceStore.getState().workspace!.views.systemContextViews.find(v => v.key === ctxKey)!
     expect(before.elements.some(e => e.id === 'alice')).toBe(false)
@@ -396,6 +408,26 @@ describe('Relationship and container mutations', () => {
   it('reconnectRelationship is a no-op when relationship id does not exist', () => {
     const undoBefore = useWorkspaceStore.getState().undoStack.length
     useWorkspaceStore.getState().reconnectRelationship('nonexistent', 'alice', 'api')
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('reconnectRelationship rejects self-relationships', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().reconnectRelationship(relId, 'alice', 'alice')
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.sourceId).toBe('alice')
+    expect(rel.destinationId).toBe('api')
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+  })
+
+  it('reconnectRelationship rejects missing endpoints', () => {
+    const relId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls')
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().reconnectRelationship(relId, 'alice', 'missing')
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find(r => r.id === relId)!
+    expect(rel.sourceId).toBe('alice')
+    expect(rel.destinationId).toBe('api')
     expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
   })
 
@@ -2376,6 +2408,14 @@ describe('duplicateElements', () => {
   it('is a no-op if element does not exist', () => {
     const newIds = useWorkspaceStore.getState().duplicateElements(['nonexistent'])
     expect(newIds).toHaveLength(0)
+  })
+
+  it('deduplicates repeated IDs in bulk duplicate requests', () => {
+    const newIds = useWorkspaceStore.getState().duplicateElements(['alice', 'alice', 'api'])
+    expect(newIds).toHaveLength(2)
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.people.filter(p => p.name.includes('copy'))).toHaveLength(1)
+    expect(ws.model.softwareSystems.filter(s => s.name.includes('copy'))).toHaveLength(1)
   })
 
   it('duplicates relationships between elements in the selection', () => {

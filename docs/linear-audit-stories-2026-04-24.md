@@ -24,3 +24,19 @@
 - **Suggested acceptance criteria:**
   - Add a deterministic Playwright scenario with repeated mixed mutations.
   - Assert group bounds continue to contain members and relationships stay attached after undo/redo and switching views.
+
+## Story 4 — Add UI-level regression coverage for invalid relationship gestures
+- **Area:** Invalid / borderline modeling attempts
+- **Problem:** Store-level guards now reject self-links and orphan endpoints, but there is still no browser-level test proving drag gestures or reconnect flows cannot sneak invalid relationships through the canvas layer.
+- **Why it matters:** A future React Flow integration change could bypass store assumptions and silently create broken model state.
+- **Suggested acceptance criteria:**
+  - Add Playwright coverage for attempted self-connect and reconnect-to-self gestures.
+  - Verify the model, view relationship refs, and visible edge count remain unchanged.
+
+## Story 5 — Add adaptive edge-label density handling for crowded views
+- **Area:** Edge routing and label readability under stress
+- **Problem:** Long labels now wrap safely, but crowded diagrams can still accumulate too many expanded edge labels at once.
+- **Why it matters:** Readability can degrade in realistic systems where many relationships intersect in the same viewport.
+- **Suggested acceptance criteria:**
+  - Define a density strategy for edge labels (for example smarter truncation, hover expansion, or zoom-threshold rules).
+  - Add regression coverage for dense orthogonal-routing views with multiple long relationship labels.

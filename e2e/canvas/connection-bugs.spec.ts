@@ -106,8 +106,12 @@ test.describe('Connection Bug Diagnostics', () => {
     await workspace.page.waitForTimeout(400)
 
     // Inspector should show "New System → New System 2" (not reversed)
-    // RightPanel renders: <span>{source?.name}</span> <ArrowRight/> <span>{dest?.name}</span>
-    const panel = workspace.page.locator('.glass-panel-solid').last()
+    // Wait for the floating inspector container rather than the generic panel class,
+    // which is shared by other overlays and can race under slower CI runs.
+    const panel = workspace.page.getByLabel('Element properties')
+    await expect(panel).toHaveCSS('pointer-events', 'auto')
+    await expect(panel).toContainText('New System')
+    await expect(panel).toContainText('New System 2')
     const panelText = await panel.textContent()
     console.log('Inspector panel text:', panelText)
 
@@ -267,6 +271,10 @@ test.describe('Connection Bug Diagnostics', () => {
     await workspace.fitView()
 
     for (let cycle = 1; cycle <= 3; cycle++) {
+      await workspace.fitView()
+      await expect(workspace.getVisibleNodeByName('New System')).toBeVisible()
+      await expect(workspace.getVisibleNodeByName('New System 2')).toBeVisible()
+
       // connectNodes auto-selects the new relationship
       await workspace.connectNodes('New System', 'New System 2')
       await workspace.page.waitForTimeout(300)
