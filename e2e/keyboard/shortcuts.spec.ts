@@ -31,11 +31,11 @@ test.describe('Keyboard Shortcuts', () => {
     expect(await workspace.getNodeCount()).toBe(0)
   })
 
-  test('F toggles presentation mode', async ({ workspace }) => {
+  test('P toggles presentation mode', async ({ workspace }) => {
     await workspace.loadSample()
-    await workspace.page.keyboard.press('f')
-    // In presentation mode, should see exit hint
-    await expect(workspace.page.getByText('to exit')).toBeVisible()
+    await workspace.page.keyboard.press('p')
+    await expect(workspace.page.getByText(/to exit/i)).toBeVisible()
     await workspace.page.keyboard.press('Escape')
+    await expect(workspace.page.getByText(/to exit/i)).not.toBeVisible()
   })
 })

@@ -1,48 +1,44 @@
 import { test, expect } from '../fixtures/workspace'
 
 test.describe('Toolbar', () => {
-  test('toolbar renders with element creation buttons', async ({ workspace }) => {
+  test('tool rail renders the primary canvas actions', async ({ workspace }) => {
     await workspace.loadBlank()
-    // Should have select button and creation buttons
-    await expect(workspace.page.getByTitle('Select (V)')).toBeVisible()
-    await expect(workspace.page.getByTitle('Person (Shift+P)')).toBeVisible()
-    await expect(workspace.page.getByTitle('System (Shift+S)')).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Add element' })).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Auto-arrange' })).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: /Multi-select/ })).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Zoom to fit' })).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Canvas settings' })).toBeVisible()
   })
 
-  test('tidy layout button resets positions', async ({ workspace }) => {
+  test('auto-arrange menu exposes layout directions', async ({ workspace }) => {
     await workspace.loadSample()
-    await expect(workspace.page.getByTitle('Tidy layout')).toBeVisible()
+    await workspace.page.getByRole('button', { name: 'Auto-arrange' }).click()
+    await expect(workspace.page.getByRole('menu')).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Top to bottom' })).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Left to right' })).toBeVisible()
+    await workspace.page.getByRole('button', { name: 'Left to right' }).click()
   })
 
-  test('layout direction buttons are visible', async ({ workspace }) => {
+  test('canvas settings expose snap to grid and minimap controls', async ({ workspace }) => {
     await workspace.loadSample()
-    await expect(workspace.page.getByTitle('Layout: TB')).toBeVisible()
-    await expect(workspace.page.getByTitle('Layout: LR')).toBeVisible()
-  })
-
-  test('snap to grid toggle works', async ({ workspace }) => {
-    await workspace.loadSample()
-    const snapButton = workspace.page.getByTitle(/Snap to grid/)
-    await expect(snapButton).toBeVisible()
-    await snapButton.click()
-  })
-
-  test('minimap toggle works', async ({ workspace }) => {
-    await workspace.loadSample()
-    const minimapButton = workspace.page.getByTitle(/Minimap/)
-    await expect(minimapButton).toBeVisible()
-    await minimapButton.click()
+    await workspace.page.getByRole('button', { name: 'Canvas settings' }).click()
+    await expect(workspace.page.getByText('Snap to grid', { exact: true })).toBeVisible()
+    await expect(workspace.page.getByText('Minimap', { exact: true })).toBeVisible()
+    await workspace.page.getByLabel('Close dialog').click()
   })
 
   test('zoom controls are functional', async ({ workspace }) => {
     await workspace.loadSample()
-    const zoomIn = workspace.page.getByTitle('Zoom in')
-    const zoomOut = workspace.page.getByTitle('Zoom out')
-    const fitScreen = workspace.page.getByTitle('Fit to screen')
+    await workspace.page.getByRole('button', { name: 'Canvas settings' }).click()
+    await workspace.page.getByRole('switch').nth(1).click()
+    await workspace.page.getByLabel('Close dialog').click()
+
+    const zoomIn = workspace.page.getByRole('button', { name: 'Zoom in', exact: true })
+    const zoomOut = workspace.page.getByRole('button', { name: 'Zoom out', exact: true })
+    const fitScreen = workspace.page.getByRole('button', { name: 'Fit to screen', exact: true })
     await expect(zoomIn).toBeVisible()
     await expect(zoomOut).toBeVisible()
     await expect(fitScreen).toBeVisible()
-    // Click each to verify no errors
     await zoomIn.click()
     await zoomOut.click()
     await fitScreen.click()

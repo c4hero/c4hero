@@ -3,31 +3,31 @@ import { test, expect } from '../fixtures/workspace'
 test.describe('Left Panel', () => {
   test('shows view list', async ({ workspace }) => {
     await workspace.loadSample()
-    await expect(workspace.page.locator('text=Views').first()).toBeVisible()
+    await workspace.page.getByRole('button', { name: 'Switch view' }).click()
+    await expect(workspace.page.getByText('System Landscape').first()).toBeVisible()
   })
 
   test('clicking a view switches the canvas', async ({ workspace }) => {
     await workspace.loadSample()
-    // Switch to Containers view via left panel
-    const containersView = workspace.page.locator('button', { hasText: 'Containers' }).first()
+    await workspace.page.getByRole('button', { name: 'Switch view' }).click()
+    const containersView = workspace.page.getByRole('button', { name: 'Containers' }).first()
     await containersView.click()
-    // Wait for canvas to update with new view's nodes
-    await workspace.page.locator('.react-flow__node').first().waitFor({ state: 'visible' })
-    const afterCount = await workspace.getNodeCount()
-    expect(afterCount).toBeGreaterThan(0)
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('Containers')
+    await expect(await workspace.getNodeByName('API Application')).toBeVisible()
   })
 
-  test('model tree shows elements after clicking Model tab', async ({ workspace }) => {
+  test('view switcher groups views by C4 level', async ({ workspace }) => {
     await workspace.loadSample()
-    // Click the "Model" tab - look for it by its text directly
-    await workspace.page.locator('button').filter({ hasText: /^Model$/ }).first().click()
-    // Should show system names in the model tree
-    await expect(workspace.page.getByText('Internet Banking System').first()).toBeVisible()
+    await workspace.page.getByRole('button', { name: 'Switch view' }).click()
+    await expect(workspace.page.getByText('System Landscape', { exact: true }).last()).toBeVisible()
+    await expect(workspace.page.getByText('System Context', { exact: true }).last()).toBeVisible()
+    await expect(workspace.page.getByText('Container', { exact: true }).last()).toBeVisible()
   })
 
   test('create view button opens dialog', async ({ workspace }) => {
     await workspace.loadSample()
-    await workspace.page.getByTitle('Create view').click()
-    await expect(workspace.page.locator('h2', { hasText: 'Create View' })).toBeVisible()
+    await workspace.page.getByRole('button', { name: 'Switch view' }).click()
+    await workspace.page.getByRole('button', { name: /New view/i }).click()
+    await expect(workspace.page.getByRole('dialog', { name: 'Create View' })).toBeVisible()
   })
 })

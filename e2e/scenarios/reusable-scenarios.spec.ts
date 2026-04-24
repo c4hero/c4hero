@@ -93,7 +93,7 @@ test.describe('Reusable architecture scenarios', () => {
     expect(containerView).toBeTruthy()
 
     await workspace.setView(containerView!.key)
-    await expect(await workspace.getNodeByName('API Application')).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('Containers')
 
     const afterCount = await workspace.getNodeCount()
     expect(afterCount).toBeGreaterThan(0)
@@ -156,4 +156,42 @@ test.describe('Reusable architecture scenarios', () => {
     expect(snapshot?.model.softwareSystems[0]?.containers).toHaveLength(7)
     expect(snapshot?.model.relationships).toHaveLength(12)
   })
+
+  test('11. multi-select grouping and undo/redo preserve the grouped elements', async ({ workspace }) => {
+    await workspace.loadBlank()
+
+    await workspace.page.keyboard.press('Shift+P')
+    await workspace.page.keyboard.press('Shift+S')
+    await workspace.page.waitForTimeout(300)
+    await workspace.page.keyboard.press('Control+a')
+    await workspace.page.keyboard.press('Shift+G')
+
+    let snapshot = await workspace.getWorkspace()
+    expect(snapshot?.model.groups).toHaveLength(1)
+    expect(snapshot?.model.groups[0]?.elementIds).toHaveLength(2)
+
+    await workspace.page.keyboard.press('Control+z')
+    snapshot = await workspace.getWorkspace()
+    expect(snapshot?.model.groups).toHaveLength(0)
+
+    await workspace.page.keyboard.press('Control+Shift+z')
+    snapshot = await workspace.getWorkspace()
+    expect(snapshot?.model.groups).toHaveLength(1)
+  })
+
+  test('12. deleting a selected element can be confirmed and undone', async ({ workspace }) => {
+    await workspace.loadBlank()
+
+    await workspace.page.keyboard.press('Shift+S')
+    await workspace.clickNode('New System')
+    await workspace.page.keyboard.press('Delete')
+    await workspace.page.getByRole('button', { name: 'Delete' }).click()
+    await workspace.page.waitForTimeout(300)
+
+    await expect(workspace.getVisibleNodeByName('New System')).not.toBeVisible()
+
+    await workspace.page.keyboard.press('Control+z')
+    await expect(workspace.getVisibleNodeByName('New System')).toBeVisible()
+  })
+
 })

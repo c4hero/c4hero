@@ -4,7 +4,6 @@ test.describe('Right Panel', () => {
   test('shows element properties when node selected', async ({ workspace }) => {
     await workspace.loadSample()
     await workspace.clickNode('Personal Banking Customer')
-    // The properties tab content should be visible - check for status dropdown as indicator
     await expect(workspace.page.getByTestId('element-status')).toBeVisible()
   })
 
@@ -32,11 +31,9 @@ test.describe('Right Panel', () => {
     await expect(workspace.page.getByText('Appears in views').first()).toBeVisible()
   })
 
-  test('view properties shows include/exclude checkboxes when nothing selected', async ({ workspace }) => {
+  test('inspector stays hidden when nothing is selected', async ({ workspace }) => {
     await workspace.loadSample()
-    // Click empty area of canvas to clear selection
     await workspace.page.locator('.react-flow__pane').click({ position: { x: 10, y: 10 } })
-    // Should show view properties with element checkboxes
-    await expect(workspace.page.getByText('Elements in view').first()).toBeVisible()
+    await expect(workspace.page.getByLabel('Element properties')).toHaveCSS('pointer-events', 'none')
   })
 })
