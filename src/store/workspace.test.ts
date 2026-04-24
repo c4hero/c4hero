@@ -82,11 +82,12 @@ describe('Group store actions', () => {
     expect(ws.model.groups[0].elementIds).toContain('api')
   })
 
-  it('deleteElement removes groups that become empty after member deletion', () => {
+  it('deleteElement preserves groups that become empty after member deletion', () => {
     useWorkspaceStore.getState().addGroup('Solo', ['alice'])
     useWorkspaceStore.getState().deleteElement('alice')
     const ws = useWorkspaceStore.getState().workspace!
-    expect(ws.model.groups).toHaveLength(0)
+    expect(ws.model.groups).toHaveLength(1)
+    expect(ws.model.groups[0]).toMatchObject({ name: 'Solo', elementIds: [] })
   })
 
   it('selectGroup sets selectedGroupId and clears element/relationship selection', () => {

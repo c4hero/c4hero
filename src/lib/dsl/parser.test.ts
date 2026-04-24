@@ -92,7 +92,7 @@ workspace {
     expect(workspace.model.groups[1].elementIds).toContain('apiSystem')
   })
 
-  it('skips groups with no known members silently', () => {
+  it('preserves explicitly empty groups', () => {
     const dsl = `
 workspace {
   model {
@@ -103,7 +103,8 @@ workspace {
 `
     const { workspace, errors } = parse(dsl)
     expect(errors).toHaveLength(0)
-    expect(workspace.model.groups).toHaveLength(0)
+    expect(workspace.model.groups).toHaveLength(1)
+    expect(workspace.model.groups[0]).toMatchObject({ name: 'Empty', elementIds: [] })
   })
 
   it('handles unresolvable references without crashing', () => {
@@ -118,8 +119,9 @@ workspace {
 `
     const { workspace, errors } = parse(dsl)
     expect(errors).toHaveLength(0)
-    // unknownRef couldn't be resolved, so no group is created (0 members → not pushed)
-    expect(workspace.model.groups).toHaveLength(0)
+    // Preserve the explicit group even when its current member refs do not resolve.
+    expect(workspace.model.groups).toHaveLength(1)
+    expect(workspace.model.groups[0]).toMatchObject({ name: 'Maybe', elementIds: [] })
   })
 
   it('assigns a default name when no group name is provided', () => {

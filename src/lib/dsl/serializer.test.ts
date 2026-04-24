@@ -34,12 +34,12 @@ describe('Group serialization', () => {
     expect(dsl).toContain('alice')
   })
 
-  it('omits empty groups', () => {
+  it('serializes empty groups', () => {
     const ws = makeWorkspace()
     ws.model.groups.push({ id: 'g1', name: 'Empty Group', elementIds: [] })
 
     const dsl = serializeDSL(ws)
-    expect(dsl).not.toContain('group "Empty Group"')
+    expect(dsl).toContain('group "Empty Group" {')
   })
 
   it('uses var name (id) when id is a valid identifier', () => {
@@ -135,6 +135,18 @@ describe('Group round-trip (serialize → parse)', () => {
     const { workspace: reparsed } = parseDSL(dsl)
 
     expect(reparsed.model.groups[0].name).toBe('My Group Name')
+  })
+
+  it('round-trips an intentional empty group', () => {
+    const ws = makeWorkspace()
+    ws.model.groups.push({ id: 'g1', name: 'Empty Group', elementIds: [] })
+
+    const dsl = serializeDSL(ws)
+    const { workspace: reparsed, errors } = parseDSL(dsl)
+
+    expect(errors).toHaveLength(0)
+    expect(reparsed.model.groups).toHaveLength(1)
+    expect(reparsed.model.groups[0]).toMatchObject({ name: 'Empty Group', elementIds: [] })
   })
 
   it('preserves all elements through round-trip regardless of grouping', () => {

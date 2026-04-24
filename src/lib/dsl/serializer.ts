@@ -181,10 +181,9 @@ class SerializerContext {
         }
 
         // Groups
-        const nonEmptyGroups = model.groups.filter(g => g.elementIds.length > 0)
-        if (nonEmptyGroups.length > 0) {
+        if (model.groups.length > 0) {
             this.emitBlank()
-            for (const group of nonEmptyGroups) {
+            for (const group of model.groups) {
                 this.emit(`group "${this.escapeString(group.name)}" {`)
                 this.depth++
                 for (const elementId of group.elementIds) {
