@@ -73,7 +73,7 @@ workspace "Multi-group" {
     expect(systems!.elementIds).toHaveLength(2)
   })
 
-  it('empty group is omitted from serialized output', () => {
+  it('empty group survives serialize → parse', () => {
     const workspace: Workspace = {
       name: 'Test',
       model: {
@@ -91,6 +91,11 @@ workspace "Multi-group" {
       },
     }
     const dsl = serialize(workspace)
-    expect(dsl).not.toContain('group')
+    expect(dsl).toContain('group "Empty Group" {')
+
+    const { workspace: reparsed, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    expect(reparsed.model.groups).toHaveLength(1)
+    expect(reparsed.model.groups[0]).toMatchObject({ name: 'Empty Group', elementIds: [] })
   })
 })

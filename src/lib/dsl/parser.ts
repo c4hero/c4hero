@@ -525,10 +525,8 @@ class ContextAwareParser {
                             ...model.softwareSystems.slice(beforeSystems).map(s => s.id),
                         ]
                         const allIds = [...new Set([...definedIds, ...memberRefs])]
-                        if (allIds.length > 0) {
-                            const group: Group = { id: nextId(), name: groupName, elementIds: allIds }
-                            model.groups.push(group)
-                        }
+                        const group: Group = { id: nextId(), name: groupName, elementIds: allIds }
+                        model.groups.push(group)
                     }
                     continue
                 }

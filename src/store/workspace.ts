@@ -670,12 +670,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       ws.views.componentViews = ws.views.componentViews.filter(
         v => !v.containerId || (!idSet.has(v.containerId) && !deletedContainerIds.has(v.containerId))
       )
-      ws.model.groups = ws.model.groups
-        .map(g => ({
-          ...g,
-          elementIds: g.elementIds.filter(eid => !allDeletedIds.has(eid)),
-        }))
-        .filter(g => g.elementIds.length > 0)
+      ws.model.groups = ws.model.groups.map(g => ({
+        ...g,
+        elementIds: g.elementIds.filter(eid => !allDeletedIds.has(eid)),
+      }))
       // If the active view was among the ones just removed, fall back to the first remaining view.
       // Also purge stale keys from viewHistory so navigateBack never jumps to a ghost view.
       const activeStillExists = s.activeViewKey ? !!findView(ws, s.activeViewKey) : false
