@@ -21,6 +21,9 @@ test-results/
 # Claude Code local state
 .claude/
 
+# superpowers brainstorm session artifacts (mockups, state)
+.superpowers/
+
 # Generated marketing screenshots (root-only; don't ignore e2e/screenshots/ specs)
 /screenshots/
 
