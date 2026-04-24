@@ -25,7 +25,7 @@ test.describe('10-pass gauntlet regressions', () => {
 
     const metrics = await description.evaluate((el) => {
       const label = el.parentElement as HTMLElement | null
-      if (!label) return null
+      if (!label) throw new Error('missing label container')
       const rect = label.getBoundingClientRect()
       const style = getComputedStyle(label)
       return {
@@ -36,11 +36,68 @@ test.describe('10-pass gauntlet regressions', () => {
       }
     })
 
-    expect(metrics).not.toBeNull()
-    expect(metrics?.clientWidth ?? 0).toBeGreaterThan(0)
-    expect(metrics?.scrollWidth ?? 0).toBeLessThanOrEqual((metrics?.clientWidth ?? 0) + 2)
-    expect(metrics?.overflowWrap).toBe('anywhere')
+    expect(metrics.clientWidth).toBeGreaterThan(0)
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 2)
+    expect(metrics.overflowWrap).toBe('anywhere')
     await expect(workspace.page.getByText('KafkaProtocolBufferEnvelopeWithVersionNegotiation').first()).toBeVisible()
+  })
+
+  test('crowded orthogonal views compact dense edge labels until hover reveals full text', async ({ workspace }) => {
+    await workspace.parseAndLoad(`workspace "Dense Edge Labels" {
+  model {
+    hub = softwareSystem "Integration Hub" {
+      ingest = container "Ingest Gateway" "Accepts partner traffic" "Node.js"
+      orchestrator = container "Workflow Orchestrator" "Coordinates jobs" "Temporal"
+      billing = container "Billing Adapter" "Writes invoices" "Go"
+      analytics = container "Analytics Projector" "Builds read models" "Python"
+
+      ingest -> orchestrator "normalizes_customer_profile_change_events_before_dispatching_to_workflows" "KafkaProtocolBufferEnvelopeWithVersionNegotiation, MutualTLSCertificatePinning" {
+        lineStyle Orthogonal
+      }
+      orchestrator -> billing "reconciles_long_running_invoice_batches_after_partner_callbacks_complete" "gRPCWithPerRequestIdempotencyKeys, MutualTLSCertificatePinning" {
+        lineStyle Orthogonal
+      }
+      orchestrator -> analytics "streams_enriched_audit_records_to_dense_projection_pipelines" "KafkaProtocolBufferEnvelopeWithVersionNegotiation, ColumnarCompressionCodec" {
+        lineStyle Orthogonal
+      }
+      billing -> analytics "publishes_financial_posting_outcomes_for_cross_team_visibility" "EventBridgeSchemaRegistryEnvelope, ColumnarCompressionCodec" {
+        lineStyle Orthogonal
+      }
+    }
+  }
+  views {
+    container hub "Dense Labels" {
+      include *
+      autoLayout lr
+    }
+  }
+}`)
+
+    const edgeDescriptions = [
+      'normalizes_customer_profile_change_events_before_dispatching_to_workflows',
+      'reconciles_long_running_invoice_batches_after_partner_callbacks_complete',
+      'streams_enriched_audit_records_to_dense_projection_pipelines',
+      'publishes_financial_posting_outcomes_for_cross_team_visibility',
+    ]
+    for (const description of edgeDescriptions) {
+      await expect(workspace.page.getByText(description, { exact: true }).first()).toBeVisible()
+    }
+
+    const labelMetrics = await workspace.page.getByText(edgeDescriptions[0], { exact: true }).first().evaluate((el) => {
+      const label = el.parentElement as HTMLElement | null
+      if (!label) throw new Error('missing label container')
+      return {
+        scrollWidth: label.scrollWidth,
+        clientWidth: label.clientWidth,
+        overflowWrap: getComputedStyle(label).overflowWrap,
+      }
+    })
+    expect(labelMetrics.scrollWidth).toBeLessThanOrEqual(labelMetrics.clientWidth + 2)
+    expect(labelMetrics.overflowWrap).toBe('anywhere')
+
+    await workspace.page.getByText(edgeDescriptions[0], { exact: true }).first().hover()
+    await expect(workspace.page.getByText('normalizes_customer_profile_change_events_before_dispatching_to_workflows', { exact: true })).toBeVisible()
+    await expect(workspace.page.getByText('MutualTLSCertificatePinning', { exact: true }).first()).toBeVisible()
   })
 
   test('bulk mutation workflows keep groups and relationships coherent across delete, undo, and redo', async ({ workspace }) => {
