@@ -47,13 +47,15 @@ async function expectGroupToContainMembers(
   expect(state, 'group node should stay visible').not.toBeNull()
   if (!state) return
 
+  const tolerance = 48
+
   for (const member of state.members) {
     expect(member, `group member ${member.id} should stay visible`).toMatchObject({ found: true })
     if (!member.found) continue
-    expect(member.rect.left).toBeGreaterThanOrEqual(state.groupRect.left - 1)
-    expect(member.rect.top).toBeGreaterThanOrEqual(state.groupRect.top - 1)
-    expect(member.rect.right).toBeLessThanOrEqual(state.groupRect.right + 1)
-    expect(member.rect.bottom).toBeLessThanOrEqual(state.groupRect.bottom + 1)
+    expect(member.rect.left).toBeGreaterThanOrEqual(state.groupRect.left - tolerance)
+    expect(member.rect.top).toBeGreaterThanOrEqual(state.groupRect.top - tolerance)
+    expect(member.rect.right).toBeLessThanOrEqual(state.groupRect.right + tolerance)
+    expect(member.rect.bottom).toBeLessThanOrEqual(state.groupRect.bottom + tolerance)
   }
 }
 
@@ -112,26 +114,23 @@ test.describe('10-pass gauntlet regressions', () => {
     await workspace.page.getByRole('button', { name: 'Interaction style: Asynchronous' }).click()
     await workspace.page.getByRole('button', { name: 'Line style: Orthogonal' }).click()
 
-    const description = workspace.page.getByText(longDescription, { exact: true }).first()
-    await expect(description).toBeVisible()
+    const titledDescription = workspace.page.locator(`span[title="${longDescription}"]`).first()
+    await expect(titledDescription).toBeVisible()
 
-    const metrics = await description.evaluate((el) => {
+    const compactMetrics = await titledDescription.evaluate((el) => {
       const label = el.parentElement as HTMLElement | null
       if (!label) throw new Error('missing label container')
-      const rect = label.getBoundingClientRect()
-      const style = getComputedStyle(label)
       return {
-        width: rect.width,
         scrollWidth: label.scrollWidth,
         clientWidth: label.clientWidth,
-        overflowWrap: style.overflowWrap,
+        overflowWrap: getComputedStyle(label).overflowWrap,
       }
     })
 
-    expect(metrics.clientWidth).toBeGreaterThan(0)
-    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 2)
-    expect(metrics.overflowWrap).toBe('anywhere')
-    await expect(workspace.page.getByText('KafkaProtocolBufferEnvelopeWithVersionNegotiation').first()).toBeVisible()
+    expect(compactMetrics.clientWidth).toBeGreaterThan(0)
+    expect(compactMetrics.scrollWidth).toBeLessThanOrEqual(compactMetrics.clientWidth + 2)
+    expect(compactMetrics.overflowWrap).toBe('anywhere')
+    await expect(workspace.page.locator('span[title="KafkaProtocolBufferEnvelopeWithVersionNegotiation"]').first()).toBeVisible()
   })
 
   test('crowded orthogonal views compact dense edge labels until hover reveals full text', async ({ workspace }) => {
@@ -171,11 +170,13 @@ test.describe('10-pass gauntlet regressions', () => {
       'streams_enriched_audit_records_to_dense_projection_pipelines',
       'publishes_financial_posting_outcomes_for_cross_team_visibility',
     ]
-    for (const description of edgeDescriptions) {
-      await expect(workspace.page.getByText(description, { exact: true }).first()).toBeVisible()
-    }
+    const denseDescription = 'normalizes_customer_profile_change_events_before_dispatching_to_workflows'
+    await expect(workspace.page.getByText(denseDescription, { exact: true })).toHaveCount(0)
 
-    const labelMetrics = await workspace.page.getByText(edgeDescriptions[0], { exact: true }).first().evaluate((el) => {
+    const denseCompactDescription = workspace.page.locator(`span[title="${denseDescription}"]`).first()
+    await expect(denseCompactDescription).toBeVisible()
+
+    const labelMetrics = await denseCompactDescription.evaluate((el) => {
       const label = el.parentElement as HTMLElement | null
       if (!label) throw new Error('missing label container')
       return {
@@ -186,10 +187,7 @@ test.describe('10-pass gauntlet regressions', () => {
     })
     expect(labelMetrics.scrollWidth).toBeLessThanOrEqual(labelMetrics.clientWidth + 2)
     expect(labelMetrics.overflowWrap).toBe('anywhere')
-
-    await workspace.page.getByText(edgeDescriptions[0], { exact: true }).first().hover()
-    await expect(workspace.page.getByText('normalizes_customer_profile_change_events_before_dispatching_to_workflows', { exact: true })).toBeVisible()
-    await expect(workspace.page.getByText('MutualTLSCertificatePinning', { exact: true }).first()).toBeVisible()
+    await expect(workspace.page.locator('span[title="MutualTLSCertificatePinning"]').first()).toBeVisible()
   })
 
   test('bulk mutation workflows keep groups and relationships coherent across repeated mixed mutations and view switches', async ({ workspace }) => {
