@@ -1,5 +1,24 @@
 import { test, expect } from '../fixtures/workspace'
 
+const SCOPED_RECONNECT_DSL = `workspace "Scoped Reconnect" {
+  model {
+    other = softwareSystem "Other System"
+    third = softwareSystem "Third System"
+    scoped = softwareSystem "Scoped System"
+    other -> third "calls"
+  }
+  views {
+    systemLandscape "Landscape" {
+      include *
+      autoLayout lr
+    }
+    systemContext scoped "ScopedContext" {
+      include *
+      autoLayout lr
+    }
+  }
+}`
+
 test.describe('Interaction regressions', () => {
   test('duplicating connected elements preserves the relationship and supports undo/redo', async ({ workspace }) => {
     await workspace.loadBlank()
@@ -126,6 +145,70 @@ test.describe('Interaction regressions', () => {
     expect(afterDelete?.model.softwareSystems).toHaveLength(1)
     expect(afterDelete?.model.relationships).toHaveLength(0)
     expect(group?.elementIds).toHaveLength(1)
+  })
+
+  test('drag-reconnecting a relationship into the scoped system keeps the context view semantically correct', async ({ workspace }) => {
+    await workspace.parseAndLoad(SCOPED_RECONNECT_DSL)
+
+    const landscapeView = await workspace.getViewByTitle('Landscape')
+    const contextView = await workspace.getViewByTitle('ScopedContext')
+    expect(landscapeView).toBeTruthy()
+    expect(contextView).toBeTruthy()
+
+    await workspace.setView(landscapeView!.key)
+    await workspace.fitView()
+
+    let snapshot = await workspace.getWorkspace()
+    expect(snapshot?.model.relationships).toHaveLength(1)
+    const relId = snapshot!.model.relationships[0].id
+    expect(snapshot!.model.relationships[0].sourceId).toBe('other')
+    expect(snapshot!.model.relationships[0].destinationId).toBe('third')
+
+    // Baseline: scoped context view should contain only the scoped system; the
+    // relationship is not yet attached to it.
+    const ctxBefore = snapshot!.views.systemContextViews.find((v) => v.key === contextView!.key)!
+    expect(ctxBefore.elements.map((e) => e.id)).toEqual(['scoped'])
+    expect(ctxBefore.relationships.some((r) => r.id === relId)).toBe(false)
+
+    // Drag the target anchor of the edge from Third System onto Scoped System so
+    // the scoped software system becomes one endpoint of the relationship.
+    await workspace.reconnectEdgeEndpoint(relId, 'target', 'Scoped System')
+
+    snapshot = await workspace.getWorkspace()
+    const rel = snapshot?.model.relationships.find((r) => r.id === relId)
+    expect(rel?.sourceId).toBe('other')
+    expect(rel?.destinationId).toBe('scoped')
+
+    // Scoped context view should now include the non-scope endpoint plus the
+    // relationship; the unrelated third system must not appear.
+    const ctxAfter = snapshot!.views.systemContextViews.find((v) => v.key === contextView!.key)!
+    const ctxElementIds = ctxAfter.elements.map((e) => e.id)
+    expect(ctxElementIds).toContain('scoped')
+    expect(ctxElementIds).toContain('other')
+    expect(ctxElementIds).not.toContain('third')
+    expect(ctxAfter.relationships.some((r) => r.id === relId)).toBe(true)
+
+    // Persistence roundtrip via view switching — the existing E2E suite uses
+    // this in place of a full save/reload (matches 'relationship edits persist
+    // across view switches' above).
+    await workspace.setView(contextView!.key)
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('ScopedContext')
+    await expect(workspace.getVisibleNodeByName('Scoped System')).toBeVisible()
+    await expect(workspace.getVisibleNodeByName('Other System')).toBeVisible()
+    await expect(workspace.getVisibleNodeByName('Third System')).not.toBeVisible()
+    expect(await workspace.getEdgeCount()).toBe(1)
+
+    await workspace.setView(landscapeView!.key)
+    await workspace.setView(contextView!.key)
+
+    const roundtrip = await workspace.getWorkspace()
+    const ctxRoundtrip = roundtrip!.views.systemContextViews.find((v) => v.key === contextView!.key)!
+    expect(ctxRoundtrip.elements.map((e) => e.id)).toEqual(expect.arrayContaining(['scoped', 'other']))
+    expect(ctxRoundtrip.elements.map((e) => e.id)).not.toContain('third')
+    expect(ctxRoundtrip.relationships.some((r) => r.id === relId)).toBe(true)
+    await expect(workspace.getVisibleNodeByName('Other System')).toBeVisible()
+    await expect(workspace.getVisibleNodeByName('Third System')).not.toBeVisible()
+    expect(await workspace.getEdgeCount()).toBe(1)
   })
 
   test('deleting a scoped system falls back to another view and undo restores the scoped view', async ({ workspace }) => {

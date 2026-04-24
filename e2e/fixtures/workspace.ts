@@ -347,6 +347,34 @@ export class WorkspaceHelper {
     await this.page.waitForTimeout(400)
   }
 
+  async reconnectEdgeEndpoint(edgeId: string, side: 'source' | 'target', newTargetName: string) {
+    const anchor = this.page
+      .locator(`[data-testid="rf__edge-${edgeId}"] .react-flow__edgeupdater-${side}`)
+      .first()
+    await anchor.waitFor({ state: 'attached' })
+    const anchorBox = await anchor.boundingBox()
+    const target = this.getVisibleNodeByName(newTargetName)
+    const targetBox = await target.boundingBox()
+    if (!anchorBox || !targetBox) throw new Error('Could not get bounding boxes for reconnect drag')
+
+    const startX = anchorBox.x + anchorBox.width / 2
+    const startY = anchorBox.y + anchorBox.height / 2
+    const endX = targetBox.x + targetBox.width / 2
+    const endY = targetBox.y + targetBox.height / 2
+
+    await this.page.mouse.move(startX, startY)
+    await this.page.mouse.down()
+    const steps = 15
+    for (let i = 1; i <= steps; i++) {
+      await this.page.mouse.move(
+        startX + ((endX - startX) * i) / steps,
+        startY + ((endY - startY) * i) / steps,
+      )
+    }
+    await this.page.mouse.up()
+    await this.page.waitForTimeout(400)
+  }
+
   async selectNewestRelationship() {
     await expect(this.page.locator('.react-flow__edge').last()).toBeVisible()
     const path = this.page.locator('.react-flow__edge-interaction').last()
