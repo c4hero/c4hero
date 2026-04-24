@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -13,6 +13,54 @@ import type { Relationship, RelationshipStyle } from '@/types/model'
 interface RelationshipEdgeData {
   relationship: Relationship
   relationshipStyle?: RelationshipStyle
+}
+
+type EdgeLabelDensity = 'full' | 'compact'
+
+const FULL_LABEL_MAX_WIDTH = 200
+const COMPACT_LABEL_MAX_WIDTH = 148
+const COMPACT_DESCRIPTION_MAX_CHARS = 42
+const COMPACT_TECH_CHIP_LIMIT = 1
+
+export function getEdgeLabelDensity({
+  lineStyle,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  description,
+  technologies,
+  selected,
+  hovered,
+}: {
+  lineStyle?: Relationship['lineStyle']
+  sourceX: number
+  sourceY: number
+  targetX: number
+  targetY: number
+  description?: string
+  technologies: string[]
+  selected: boolean
+  hovered: boolean
+}): EdgeLabelDensity {
+  if (selected || hovered) return 'full'
+
+  const edgeLength = Math.hypot(targetX - sourceX, targetY - sourceY)
+  const descriptionLength = description?.trim().length ?? 0
+  const technologyLength = technologies.join(', ').length
+  const totalLabelLength = descriptionLength + technologyLength
+
+  if (lineStyle === 'Orthogonal' && totalLabelLength >= 48) return 'compact'
+  if (totalLabelLength >= 72) return 'compact'
+  if (edgeLength < 180 && totalLabelLength >= 30) return 'compact'
+
+  return 'full'
+}
+
+export function truncateEdgeLabel(text: string, maxChars: number): string {
+  const trimmed = text.trim()
+  if (trimmed.length <= maxChars) return trimmed
+  return `${trimmed.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
 }
 
 // React Flow places edge endpoints at the outer edge of handles, which
@@ -79,6 +127,29 @@ function RelationshipEdge({
   const isDashed = isAsync || (relStyle?.dashed ?? false)
 
   const [hovered, setHovered] = useState(false)
+  const technologyTokens = useMemo(
+    () => relationship?.technology?.split(',').map((t) => t.trim()).filter(Boolean) ?? [],
+    [relationship?.technology],
+  )
+  const labelDensity = getEdgeLabelDensity({
+    lineStyle,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    description: relationship?.description,
+    technologies: technologyTokens,
+    selected,
+    hovered,
+  })
+  const compactTechnologyTokens = technologyTokens.slice(0, COMPACT_TECH_CHIP_LIMIT)
+  const hiddenTechnologyCount = Math.max(0, technologyTokens.length - compactTechnologyTokens.length)
+  const descriptionText = relationship?.description
+    ? (labelDensity === 'compact'
+        ? truncateEdgeLabel(relationship.description, COMPACT_DESCRIPTION_MAX_CHARS)
+        : relationship.description)
+    : undefined
+  const labelMaxWidth = labelDensity === 'compact' ? COMPACT_LABEL_MAX_WIDTH : FULL_LABEL_MAX_WIDTH
 
   return (
     <>
@@ -109,11 +180,12 @@ function RelationshipEdge({
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto"
+            data-label-density={labelDensity}
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              maxWidth: 200,
-              padding: '4px 8px',
+              maxWidth: labelMaxWidth,
+              padding: labelDensity === 'compact' ? '3px 7px' : '4px 8px',
               borderRadius: 10,
               background: 'color-mix(in srgb, var(--color-canvas) 82%, transparent)',
               boxShadow: '0 1px 2px color-mix(in srgb, black 12%, transparent)',
@@ -122,25 +194,32 @@ function RelationshipEdge({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: 4,
+              gap: labelDensity === 'compact' ? 3 : 4,
               overflowWrap: 'anywhere',
               wordBreak: 'break-word',
             }}
           >
-            {relationship?.description && (
+            {descriptionText && (
               <span
                 className="text-[11px]"
-                style={{ color: 'var(--color-text-secondary)', overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+                title={labelDensity === 'compact' ? relationship?.description : undefined}
+                style={{
+                  color: 'var(--color-text-secondary)',
+                  overflowWrap: 'anywhere',
+                  wordBreak: 'break-word',
+                  maxWidth: '100%',
+                }}
               >
-                {relationship.description}
+                {descriptionText}
               </span>
             )}
-            {relationship?.technology && (
+            {technologyTokens.length > 0 && (
               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
-                {relationship.technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+                {(labelDensity === 'compact' ? compactTechnologyTokens : technologyTokens).map((t) => (
                   <span
                     key={t}
                     className="c4-type-chip"
+                    title={labelDensity === 'compact' ? t : undefined}
                     style={{
                       background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
                       color: 'var(--color-text-muted)',
@@ -154,9 +233,24 @@ function RelationshipEdge({
                       wordBreak: 'break-word',
                     }}
                   >
-                    {t}
+                    {labelDensity === 'compact' ? truncateEdgeLabel(t, 20) : t}
                   </span>
                 ))}
+                {labelDensity === 'compact' && hiddenTechnologyCount > 0 && (
+                  <span
+                    className="c4-type-chip"
+                    title={technologyTokens.slice(COMPACT_TECH_CHIP_LIMIT).join(', ')}
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-text-muted) 7%, transparent)',
+                      color: 'var(--color-text-muted)',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      letterSpacing: 'normal',
+                    }}
+                  >
+                    +{hiddenTechnologyCount}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -184,9 +278,9 @@ function RelationshipEdge({
                 {relationship.description}
               </div>
             )}
-            {relationship.technology && (
+            {technologyTokens.length > 0 && (
               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3, maxWidth: '100%', minWidth: 0 }}>
-                {relationship.technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+                {technologyTokens.map((t) => (
                   <span
                     key={t}
                     className="c4-type-chip"
