@@ -139,7 +139,7 @@ function RelationshipEdge({
     targetY,
     description: relationship?.description,
     technologies: technologyTokens,
-    selected,
+    selected: !!selected,
     hovered,
   })
   const compactTechnologyTokens = technologyTokens.slice(0, COMPACT_TECH_CHIP_LIMIT)
