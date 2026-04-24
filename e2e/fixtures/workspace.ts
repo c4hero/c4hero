@@ -211,6 +211,17 @@ export class WorkspaceHelper {
     await this.page.getByRole('button', { name: label, exact: true }).click()
   }
 
+  async openViewSwitcher() {
+    const closeButton = this.page.getByLabel('Close view switcher')
+    if (await closeButton.isVisible().catch(() => false)) {
+      await closeButton.click({ force: true })
+      await expect(closeButton).not.toBeVisible()
+    }
+
+    await this.page.getByRole('button', { name: 'Switch view' }).click()
+    await expect(closeButton).toBeVisible()
+  }
+
   async createView(typeLabel: string, title: string, scopeName?: string) {
     await this.runCommand('new view', 'New View')
     await expect(this.page.getByRole('dialog', { name: 'Create View' })).toBeVisible()
@@ -311,5 +322,10 @@ export class WorkspaceHelper {
   async getRelationshipByDescription(description: string) {
     const ws = await this.getWorkspace()
     return ws?.model.relationships.find((relationship) => relationship.description === description)
+  }
+
+  async getViewByTitle(title: string) {
+    const views = await this.getViews()
+    return views.find((view) => view.title === title)
   }
 }

@@ -1,31 +1,58 @@
 import { test, expect } from '../fixtures/workspace'
 
 test.describe('View Management', () => {
-  test('create view dialog opens and creates a view', async ({ workspace }) => {
+  test('creates a view from the switcher and activates it', async ({ workspace }) => {
     await workspace.loadSample()
-    await workspace.page.getByTitle('Create view').click()
-    await expect(workspace.page.locator('h2', { hasText: 'Create View' })).toBeVisible()
+    await workspace.openViewSwitcher()
+    await workspace.page.getByRole('button', { name: 'New view' }).click()
+    await expect(workspace.page.getByRole('dialog', { name: 'Create View' })).toBeVisible()
 
-    // Fill in title and create
-    await workspace.page.getByPlaceholder('e.g. System Overview').fill('Test View')
-    await workspace.page.locator('button', { hasText: 'Create View' }).last().click()
+    await workspace.page.locator('#cv-type').selectOption({ label: 'System Context' })
+    await workspace.page.locator('#cv-scope').selectOption({ label: 'Internet Banking System' })
+    await workspace.page.locator('#cv-title').fill('Operations Context')
+    await workspace.page.getByRole('button', { name: 'Create View' }).click()
 
-    // Dialog should close and new view should be active
-    await expect(workspace.page.locator('h2', { hasText: 'Create View' })).not.toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('Operations Context')
+
+    const createdView = await workspace.getViewByTitle('Operations Context')
+    expect(createdView?.type).toBe('systemContext')
   })
 
-  test('switching views updates canvas', async ({ workspace }) => {
+  test('duplicates, renames, and deletes a view from the switcher', async ({ workspace }) => {
+    await workspace.loadSample()
+
+    await workspace.openViewSwitcher()
+    await workspace.page.getByLabel('Duplicate view Containers').click({ force: true })
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('Containers copy')
+
+    await workspace.openViewSwitcher()
+    await workspace.page.getByLabel('Rename view Containers copy').click({ force: true })
+    const renameInput = workspace.page.locator('.shade-panel input').first()
+    await expect(renameInput).toBeVisible()
+    await renameInput.fill('Containers - Ops')
+    await renameInput.press('Enter')
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('Containers - Ops')
+
+    await workspace.openViewSwitcher()
+    await workspace.page.getByLabel('Delete view Containers - Ops').click({ force: true })
+    await workspace.page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).not.toContainText('Containers - Ops')
+
+    const views = await workspace.getViews()
+    expect(views.some((view) => view.title === 'Containers - Ops')).toBe(false)
+    expect(views.filter((view) => view.title === 'Containers').length).toBe(1)
+  })
+
+  test('switching views updates the canvas and keeps the active view label in sync', async ({ workspace }) => {
     await workspace.loadSample()
     const landscapeNodes = await workspace.getNodeCount()
+    const containersView = await workspace.getViewByTitle('Containers')
+    expect(containersView).toBeTruthy()
 
-    // Switch to Containers view via left panel
-    const containersView = workspace.page.locator('button', { hasText: 'Containers' }).first()
-    await containersView.click()
-    // Wait for canvas to update with new view's nodes
-    await workspace.page.locator('.react-flow__node').first().waitFor({ state: 'visible' })
+    await workspace.setView(containersView!.key)
+    await expect(workspace.page.getByRole('button', { name: 'Switch view' })).toContainText('Containers')
+
     const containerNodes = await workspace.getNodeCount()
-
-    // Container view typically has more nodes (includes containers + external systems)
     expect(containerNodes).toBeGreaterThan(0)
     expect(containerNodes).not.toBe(landscapeNodes)
   })
