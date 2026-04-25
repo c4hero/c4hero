@@ -24,6 +24,9 @@ test-results/
 # superpowers brainstorm session artifacts (mockups, state)
 .superpowers/
 
+# git worktrees for parallel feature work
+.worktrees/
+
 # Generated marketing screenshots (root-only; don't ignore e2e/screenshots/ specs)
 /screenshots/
 
