@@ -14,6 +14,7 @@ import {
   reconnectEdge,
 } from '@xyflow/react'
 import { applyAutoLayout } from '@/lib/canvasLayout'
+import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, allViewsOf } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
@@ -638,9 +639,7 @@ export default function Canvas() {
   const MAX_MEASURE_ATTEMPTS = 60
   const rebuildOverlays = useCallback(() => {
     const rf = rfInitInstance.current ?? reactFlowInstance
-    const contentNodes = rf.getNodes().filter(
-      n => n.id !== '__scope_boundary__' && !n.id.startsWith('group-')
-    )
+    const contentNodes = rf.getNodes().filter(isContentFitNode)
     if (contentNodes.length === 0 || !contentNodes.every(n => n.measured?.width && n.measured?.height)) {
       if (rebuildAttempts.current++ < MAX_MEASURE_ATTEMPTS) {
         requestAnimationFrame(rebuildOverlays)
@@ -697,9 +696,7 @@ export default function Canvas() {
     // Check: React Flow's current node set matches what we scheduled the fit
     // for. Without this, a rAF fired right after setNodes can see the PREVIOUS
     // view's nodes (already measured) and fit to the wrong bounds.
-    const contentNodes = rf.getNodes().filter(
-      n => n.id !== '__scope_boundary__' && !n.id.startsWith('group-')
-    )
+    const contentNodes = rf.getNodes().filter(isContentFitNode)
     const expected = expectedFitIds.current
     if (expected) {
       const seen = new Set(contentNodes.map(n => n.id))
@@ -721,28 +718,7 @@ export default function Canvas() {
     // Rebuild overlays first so the bbox is correct before refitting.
     rebuildOverlays()
 
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const n of contentNodes) {
-      const w = n.measured!.width!
-      const h = n.measured!.height!
-      minX = Math.min(minX, n.position.x)
-      minY = Math.min(minY, n.position.y)
-      maxX = Math.max(maxX, n.position.x + w)
-      maxY = Math.max(maxY, n.position.y + h)
-    }
-    if (!isFinite(minX)) return
-    const PADDING = 0.15
-    const boundsW = maxX - minX
-    const boundsH = maxY - minY
-    const zoom = Math.max(0.1, Math.min(
-      (width * (1 - PADDING * 2)) / boundsW,
-      (height * (1 - PADDING * 2)) / boundsH,
-      2
-    ))
-    rf.setViewport(
-      { x: width / 2 - (minX + boundsW / 2) * zoom, y: height / 2 - (minY + boundsH / 2) * zoom, zoom },
-      { duration: 300 }
-    )
+    fitNodesToViewport(rf, contentNodes)
   }, [rebuildOverlays])
 
   // Sync nodes/edges when workspace changes.
@@ -818,11 +794,7 @@ export default function Canvas() {
 
       if (viewKey && lastFitSig !== viewSig) {
         fittedSignaturesByView.current.set(viewKey, viewSig)
-        expectedFitIds.current = new Set(
-          initialNodes
-            .filter((n) => n.id !== '__scope_boundary__' && !n.id.startsWith('group-'))
-            .map((n) => n.id),
-        )
+        expectedFitIds.current = new Set(initialNodes.filter(isContentFitNode).map((n) => n.id))
         fitPending.current = true
         fitAttempts.current = 0
         requestAnimationFrame(fitContentNodes)

@@ -17,6 +17,7 @@ import {
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
 import AddElementPanel from '@/components/layout/AddElementPanel'
+import { fitContentNodesToViewport } from '@/lib/fitViewport'
 
 const CanvasSettingsDialog = lazy(() => import('@/components/settings/CanvasSettingsDialog'))
 
@@ -114,7 +115,7 @@ export default function FloatingToolRail() {
     setArrangePanelOpen(false)
     // Wait for the new layout to be applied (positions recomputed + nodes
     // re-measured) before fitting the viewport to the freshly arranged graph.
-    setTimeout(() => reactFlow.fitView({ duration: 300, padding: 0.2 }), 120)
+    setTimeout(() => fitContentNodesToViewport(reactFlow), 120)
   }
 
   return (
@@ -123,6 +124,7 @@ export default function FloatingToolRail() {
       className="glass-panel"
       role="toolbar"
       aria-label="Canvas tools"
+      data-canvas-fit-chrome="left"
       style={{
         position: 'fixed',
         left: 14,
@@ -228,7 +230,7 @@ export default function FloatingToolRail() {
       <RailBtn
         icon={<Maximize2 size={16} />}
         label="Zoom to fit"
-        onClick={() => reactFlow.fitView({ duration: 300, padding: 0.2 })}
+        onClick={() => fitContentNodesToViewport(reactFlow)}
       />
       <RailSep />
       <RailBtn

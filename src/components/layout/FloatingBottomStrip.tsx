@@ -86,6 +86,7 @@ export default function FloatingBottomStrip() {
         <ScopeViolationBanner violations={scopeViolations} />
       )}
       <div
+        data-canvas-fit-chrome="bottom"
         style={{
           position: 'fixed',
           bottom: 'max(14px, calc(env(safe-area-inset-bottom, 0px) + 8px))',

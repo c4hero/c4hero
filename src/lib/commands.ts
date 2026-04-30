@@ -10,6 +10,7 @@ import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
+import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import type { ReactFlowInstance } from '@xyflow/react'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -188,7 +189,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       icon: Maximize2,
       shortcut: '0',
       keywords: ['fit', 'zoom', 'reset'],
-      execute: () => { reactFlow?.fitView({ duration: 300, padding: 0.2 }) },
+      execute: () => { fitContentNodesToViewport(reactFlow) },
     },
     {
       id: 'zoom-in',
@@ -217,7 +218,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.activeViewKey) return
         s.resetAndRelayout(s.activeViewKey)
-        setTimeout(() => reactFlow?.fitView({ duration: 300, padding: 0.2 }), 120)
+        setTimeout(() => fitContentNodesToViewport(reactFlow), 120)
       },
     },
     {

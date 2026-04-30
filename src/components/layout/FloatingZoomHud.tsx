@@ -2,6 +2,7 @@ import { useReactFlow, useViewport } from '@xyflow/react'
 import { Minus, Plus, Maximize2 } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
+import { fitContentNodesToViewport } from '@/lib/fitViewport'
 
 export default function FloatingZoomHud() {
   const hasWorkspace = useWorkspaceStore((s) => s.workspace !== null)
@@ -36,7 +37,7 @@ export default function FloatingZoomHud() {
 
       <div style={{ width: 1, height: 20, background: 'var(--color-border)' }} />
 
-      <ZoomHudBtn title="Fit to screen" onClick={() => reactFlow.fitView({ duration: 300, padding: 0.2 })}>
+      <ZoomHudBtn title="Fit to screen" onClick={() => fitContentNodesToViewport(reactFlow)}>
         <Maximize2 size={13} />
       </ZoomHudBtn>
     </div>

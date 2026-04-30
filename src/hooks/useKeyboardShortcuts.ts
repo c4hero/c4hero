@@ -5,6 +5,7 @@ import { serializeDSL, parseDSL } from '@/lib/dsl'
 import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { parseSidecar, applySidecar, extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
+import { fitContentNodesToViewport } from '@/lib/fitViewport'
 
 const log = createLogger('keyboard')
 
@@ -132,7 +133,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   '=': (_store, rf) => rf?.zoomIn({ duration: 200 }),
   '+': (_store, rf) => rf?.zoomIn({ duration: 200 }),
   '-': (_store, rf) => rf?.zoomOut({ duration: 200 }),
-  '0': (_store, rf) => rf?.fitView({ duration: 300, padding: 0.2 }),
+  '0': (_store, rf) => fitContentNodesToViewport(rf),
 }
 
 function getKeyCombo(e: KeyboardEvent): string {
