@@ -1,6 +1,9 @@
 import type { Workspace, View, ModelElement, Relationship } from '@/types/model'
 import { allViewsOf, findViewHelper, findElementHelper } from './workspace-helpers'
 
+const elementMapCache = new WeakMap<Workspace, Map<string, ModelElement>>()
+const relationshipMapCache = new WeakMap<Workspace, Map<string, Relationship>>()
+
 function getFirstViewKey(workspace: Workspace): string | null {
   return allViewsOf(workspace)[0]?.key ?? null
 }
@@ -14,6 +17,8 @@ export function getActiveView(workspace: Workspace, key: string): View | undefin
 }
 
 export function buildElementMap(workspace: Workspace): Map<string, ModelElement> {
+  const cached = elementMapCache.get(workspace)
+  if (cached) return cached
   const map = new Map<string, ModelElement>()
   for (const p of workspace.model.people) map.set(p.id, p)
   for (const sys of workspace.model.softwareSystems) {
@@ -23,14 +28,18 @@ export function buildElementMap(workspace: Workspace): Map<string, ModelElement>
       for (const comp of c.components) map.set(comp.id, comp)
     }
   }
+  elementMapCache.set(workspace, map)
   return map
 }
 
 export function buildRelationshipMap(workspace: Workspace): Map<string, Relationship> {
+  const cached = relationshipMapCache.get(workspace)
+  if (cached) return cached
   const map = new Map<string, Relationship>()
   for (const rel of workspace.model.relationships) {
     map.set(rel.id, rel)
   }
+  relationshipMapCache.set(workspace, map)
   return map
 }
 

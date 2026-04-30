@@ -14,6 +14,7 @@ import {
   reconnectEdge,
 } from '@xyflow/react'
 import { applyAutoLayout } from '@/lib/canvasLayout'
+import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, allViewsOf } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import { THEMES } from '@/lib/themes'
@@ -476,6 +477,7 @@ export default function Canvas() {
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
   const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
+  const syncAutoLayoutPositions = useWorkspaceStore((s) => s.syncAutoLayoutPositions)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
   const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
@@ -581,6 +583,27 @@ export default function Canvas() {
 
     return { initialNodes: allNodes, initialEdges: edges }
   }, [workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap, themeStyles])
+
+  // Canonicalize the initial dagre layout: write computed positions back to
+  // view.elements for any element that doesn't already have a saved x/y.
+  // Without this, view.elements positions stay undefined after initial layout,
+  // so a subsequent add (e.g. a new Person with no edges) sees no "frozen"
+  // siblings — applyAutoLayout falls back to a full dagre run, where the
+  // disconnected new node ends up far off as its own component. Persisting
+  // the initial layout makes those siblings frozen, letting the bbox-park
+  // heuristic in applyAutoLayout drop the new node next to existing content.
+  useEffect(() => {
+    if (!view) return
+    const updates = new Map<string, { x: number; y: number }>()
+    for (const ve of view.elements) {
+      if (ve.x !== undefined && ve.y !== undefined) continue
+      const node = initialNodes.find(n => n.id === ve.id)
+      if (node && node.position) {
+        updates.set(ve.id, { x: node.position.x, y: node.position.y })
+      }
+    }
+    if (updates.size > 0) syncAutoLayoutPositions(view.key, updates)
+  }, [initialNodes, view, syncAutoLayoutPositions])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -735,9 +758,29 @@ export default function Canvas() {
   // (rename, relationship add, style edit) only update edges and node data.
   const lastStructuralSignal = useRef<string>('')
   const fittedSignaturesByView = useRef<Map<string, string>>(new Map())
+  // Pending viewport restore (set when entering a view that has a saved
+  // viewport). Polled via rAF until the RF instance is ready, since onInit
+  // may not have fired on the first frame after a view switch.
+  const restorePending = useRef<{ viewport: { x: number; y: number; zoom: number } } | null>(null)
+  const restoreAttempts = useRef(0)
+  const tryRestoreViewport = useCallback(() => {
+    const pending = restorePending.current
+    if (!pending) return
+    const rf = rfInitInstance.current
+    if (!rf) {
+      if (restoreAttempts.current++ < 30) requestAnimationFrame(tryRestoreViewport)
+      else { restorePending.current = null; restoreAttempts.current = 0 }
+      return
+    }
+    rf.setViewport(pending.viewport, { duration: 0 })
+    restorePending.current = null
+    restoreAttempts.current = 0
+  }, [])
+
   useEffect(() => {
     const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}`
     if (signal !== lastStructuralSignal.current) {
+      const prevSignal = lastStructuralSignal.current
       lastStructuralSignal.current = signal
 
       // Structural change for the current view — swap nodes and edges.
@@ -750,6 +793,29 @@ export default function Canvas() {
       const viewKey = activeViewKey ?? ''
       const viewSig = `${view?.elements.length ?? 0}:${layoutVersion}`
       const lastFitSig = fittedSignaturesByView.current.get(viewKey)
+
+      // View-switch detection: the viewKey portion of the signal changed.
+      // On view-switch, prefer a saved viewport over a fit-on-load so the user
+      // returns to the pan/zoom they had on this view previously. Within-view
+      // structural changes (layoutVersion bump, element add/remove) still fit.
+      const prevViewKey = prevSignal ? prevSignal.split(':')[0] : ''
+      const isViewSwitch = viewKey !== '' && prevViewKey !== viewKey
+      if (isViewSwitch) {
+        const saved = loadViewport(workspaceRef.current?.name, viewKey)
+        if (saved) {
+          // Mark this view as "fitted at this signature" so any subsequent
+          // re-render of this effect within the same view doesn't kick off
+          // a fit and override the restored viewport.
+          fittedSignaturesByView.current.set(viewKey, viewSig)
+          fitPending.current = false
+          restorePending.current = { viewport: saved }
+          restoreAttempts.current = 0
+          requestAnimationFrame(tryRestoreViewport)
+          requestAnimationFrame(rebuildOverlays)
+          return
+        }
+      }
+
       if (viewKey && lastFitSig !== viewSig) {
         fittedSignaturesByView.current.set(viewKey, viewSig)
         expectedFitIds.current = new Set(
@@ -778,7 +844,7 @@ export default function Canvas() {
       })
       requestAnimationFrame(rebuildOverlays)
     }
-  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, rebuildOverlays, activeViewKey, view, layoutVersion])
+  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, rebuildOverlays, activeViewKey, view, layoutVersion, tryRestoreViewport])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes)
@@ -887,7 +953,13 @@ export default function Canvas() {
   const onMoveEnd = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => setMinimapVisible(false), 1500)
-  }, [])
+    // Persist current viewport per-view so re-entering this view restores
+    // the user's last pan/zoom instead of inheriting the prior view's state.
+    const rf = rfInitInstance.current
+    if (rf && activeViewKey) {
+      saveViewport(workspaceRef.current?.name, activeViewKey, rf.getViewport())
+    }
+  }, [activeViewKey])
 
   const multiSelectModeRef = useRef(multiSelectMode)
   useEffect(() => { multiSelectModeRef.current = multiSelectMode }, [multiSelectMode])

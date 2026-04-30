@@ -133,7 +133,7 @@ test.describe('Interaction regressions', () => {
     expect(group?.elementIds).toHaveLength(1)
 
     await workspace.page.keyboard.press('Control+z')
-    let restored = await workspace.getWorkspace()
+    const restored = await workspace.getWorkspace()
     group = await workspace.getGroupByName('Core Systems')
     expect(restored?.model.softwareSystems).toHaveLength(2)
     expect(restored?.model.relationships).toHaveLength(1)

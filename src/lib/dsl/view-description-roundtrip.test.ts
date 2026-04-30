@@ -120,7 +120,8 @@ workspace {
     api = softwareSystem "API"
   }
   views {
-    systemContext api "ctx1" "API Context" {
+    systemContext api "ctx1" {
+      title "API Context"
       include api
     }
   }
@@ -130,5 +131,49 @@ workspace {
     expect(errors).toEqual([])
     const dsl2 = serialize(workspace)
     expect(dsl2).not.toContain('description')
+  })
+
+  it('serializes view titles with the Structurizr title keyword', () => {
+    const dsl = `
+workspace {
+  model {
+    api = softwareSystem "API"
+  }
+  views {
+    systemContext api "ctx1" {
+      title "API Context"
+      include api
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+
+    const dsl2 = serialize(workspace)
+    expect(dsl2).toContain('systemContext api "ctx1" {')
+    expect(dsl2).toContain('title "API Context"')
+    expect(dsl2).not.toContain('systemContext api "ctx1" "API Context"')
+  })
+
+  it('parses the optional positional view string as a Structurizr description', () => {
+    const dsl = `
+workspace {
+  model {
+    api = softwareSystem "API"
+  }
+  views {
+    systemContext api "ctx1" "Context view for API" {
+      include api
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+
+    const view = workspace.views.systemContextViews[0]
+    expect(view.description).toBe('Context view for API')
+    expect(view.title).toBe('Context view for API')
   })
 })

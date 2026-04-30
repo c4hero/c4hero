@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FolderOpen, Pencil, X } from 'lucide-react'
 import { WorkspaceEditDialog } from './WelcomeDialogs'
+import { scopeAccent, scopeLabel } from './workspaceScopeMeta'
 
 // ─── Types shared with WelcomeScreen ────────────────────────────────────────
 
@@ -11,24 +12,6 @@ export interface FolderWorkspace {
   elementCount?: number
   viewCount?: number
   editing?: boolean
-}
-
-// Scope → accent color (single source of truth for the app)
-export const SCOPE_COLORS: Record<string, string> = {
-  softwaresystem: '#38bdf8', // sky blue
-  landscape: '#a78bfa',      // purple
-}
-const DEFAULT_SCOPE_COLOR = '#64748b' // slate for unscoped
-
-export function scopeAccent(scope?: string): string {
-  return (scope && SCOPE_COLORS[scope]) ?? DEFAULT_SCOPE_COLOR
-}
-
-/** Short uppercase label for workspace scope. Empty string for unscoped. */
-export function scopeLabel(scope?: string): string {
-  if (scope === 'softwaresystem') return 'System'
-  if (scope === 'landscape') return 'Landscape'
-  return ''
 }
 
 /** Buckets an element count into a stable node count for the DensityGlyph,

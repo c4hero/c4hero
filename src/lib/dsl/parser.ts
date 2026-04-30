@@ -1299,12 +1299,16 @@ class ContextAwareParser {
     private parseSystemLandscapeView(): View | null {
         this.advance() // consume 'systemLandscape'
         const key = this.readOptionalStringOrIdentifier() ?? ''
-        const title = this.readOptionalString()
+        const positionalDescription = this.readOptionalString()
 
         const view: View = {
             type: 'systemLandscape',
             key,
-            title,
+            // Structurizr defines the second optional view header string as
+            // the view description. Keep it as a display title fallback too so
+            // existing DSL authored for c4hero still labels views usefully.
+            title: positionalDescription,
+            description: positionalDescription,
             elements: [],
             relationships: [],
         }
@@ -1324,12 +1328,16 @@ class ContextAwareParser {
 
         const elementRef = this.readOptionalStringOrIdentifier()
         const key = this.readOptionalStringOrIdentifier() ?? ''
-        const title = this.readOptionalString()
+        const positionalDescription = this.readOptionalString()
 
         const view: View = {
             type,
             key,
-            title,
+            // Structurizr defines the second optional view header string as
+            // the view description. Keep it as a display title fallback too so
+            // existing DSL authored for c4hero still labels views usefully.
+            title: positionalDescription,
+            description: positionalDescription,
             elements: [],
             relationships: [],
         }

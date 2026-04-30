@@ -53,6 +53,7 @@ AI features are optional.
 - if you want AI features, you bring your own OpenAI or Anthropic API key
 - keys are stored in `sessionStorage`, so they stay local to the current browser session
 - keys are sent directly to the configured AI provider endpoint, not to c4hero servers
+- because keys live in the browser, any browser extension or XSS bug in the app could read them; only use AI features in trusted sessions
 - optional endpoint overrides are documented in [`.env.example`](.env.example)
 
 ## Contributing

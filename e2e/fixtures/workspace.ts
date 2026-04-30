@@ -341,17 +341,38 @@ export class WorkspaceHelper {
   }
 
   async dragNodeHandleToNode(sourceName: string, targetName: string, side: 'source' | 'target' = 'source') {
-    const sourceHandle = await this.getNodeHandle(sourceName, side)
+    const sourceNode = this.getVisibleNodeByName(sourceName)
     const targetNode = this.getVisibleNodeByName(targetName)
-
-    const handleBox = await sourceHandle.boundingBox()
+    const sourceBox = await sourceNode.boundingBox()
     const targetBox = await targetNode.boundingBox()
 
-    if (!handleBox || !targetBox) throw new Error('Could not get bounding boxes for connect drag')
+    if (!sourceBox || !targetBox) throw new Error('Could not get bounding boxes for connect drag')
+
+    const sourceCenter = { x: sourceBox.x + sourceBox.width / 2, y: sourceBox.y + sourceBox.height / 2 }
+    const targetCenter = { x: targetBox.x + targetBox.width / 2, y: targetBox.y + targetBox.height / 2 }
+    const horizontal = Math.abs(targetCenter.x - sourceCenter.x) >= Math.abs(targetCenter.y - sourceCenter.y)
+    const sourceSide = horizontal
+      ? targetCenter.x >= sourceCenter.x ? 'right' : 'left'
+      : targetCenter.y >= sourceCenter.y ? 'bottom' : 'top'
+    const targetSide = horizontal
+      ? targetCenter.x >= sourceCenter.x ? 'left' : 'right'
+      : targetCenter.y >= sourceCenter.y ? 'top' : 'bottom'
+    const endType = side === 'source' ? 'target' : 'source'
+
+    await sourceNode.hover()
+    const sourceHandle = sourceNode.locator(`[data-handleid="${sourceSide}-b-${side}"]`).first()
+    const targetHandle = targetNode.locator(`[data-handleid="${targetSide}-b-${endType}"]`).first()
+    await sourceHandle.waitFor({ state: 'attached' })
+    await targetHandle.waitFor({ state: 'attached' })
+
+    const handleBox = await sourceHandle.boundingBox()
+    const targetHandleBox = await targetHandle.boundingBox()
+    if (!handleBox || !targetHandleBox) throw new Error('Could not get handle bounding boxes for connect drag')
 
     await this.dragBetweenCenters(
       { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 },
-      { x: targetBox.x + targetBox.width / 2, y: targetBox.y + targetBox.height / 2 },
+      { x: targetHandleBox.x + targetHandleBox.width / 2, y: targetHandleBox.y + targetHandleBox.height / 2 },
+      18,
     )
   }
 

@@ -474,10 +474,15 @@ class SerializerContext {
         // Skip parser-synthesised keys so DSL without explicit view keys
         // roundtrips byte-identical.
         if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
-        if (view.title) parts.push(`"${this.escapeString(view.title)}"`)
 
         this.emit(`${parts.join(' ')} {`)
         this.depth++
+
+        // Structurizr view headers use the second optional string as a
+        // description, not a title. Emit titles with the standard child keyword.
+        if (view.title) {
+            this.emit(`title "${this.escapeString(view.title)}"`)
+        }
 
         // Description (block property — cannot be expressed as a positional arg)
         if (view.description) {

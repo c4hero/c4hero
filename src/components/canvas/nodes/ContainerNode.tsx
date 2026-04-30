@@ -4,6 +4,7 @@ import type { C4NodeData } from './types'
 import type { Container } from '@/types/model'
 import { Database, Box, Monitor, Zap, GitMerge, Smartphone, HardDrive } from 'lucide-react'
 import BaseC4Node from './BaseC4Node'
+import { getElementTypeLabel } from '@/lib/elementMeta'
 
 function ContainerNode({ data, selected }: NodeProps & { data: C4NodeData }) {
   const container = data.element as Container
@@ -24,7 +25,7 @@ function ContainerNode({ data, selected }: NodeProps & { data: C4NodeData }) {
       selected={selected}
       icon={Icon}
       typeColor="var(--color-type-container)"
-      chipLabel="Container"
+      chipLabel={getElementTypeLabel(container)}
       tint="var(--color-tint-container)"
       borderStyle="2px solid var(--color-border-container)"
       ariaPrefix="Container"

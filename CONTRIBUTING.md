@@ -34,6 +34,8 @@ Optional variables are documented in `.env.example`:
   proxy that terminates TLS
 - `VITE_ANTHROPIC_API_URL`, to override the default Anthropic API endpoint
 - `VITE_OPENAI_API_URL`, to override the default OpenAI API endpoint
+- `VITE_LOG_ENDPOINT`, to send warn/error logs to an HTTPS endpoint; remember to
+  add that origin to the deployment CSP `connect-src`
 
 Keep local overrides out of git.
 
@@ -41,7 +43,7 @@ Keep local overrides out of git.
 
 - React 19
 - TypeScript
-- Vite 8
+- Vite 7
 - Tailwind CSS v4
 - Zustand
 - React Router 7

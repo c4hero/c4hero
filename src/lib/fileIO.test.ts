@@ -331,12 +331,9 @@ describe('isWorkspaceShape edge cases', () => {
     expect(isWorkspaceShape(bad)).toBe(false)
   })
 
-  it('returns true for minimal valid shape', async () => {
+  it('returns true for a minimal complete valid shape', async () => {
     const { isWorkspaceShape } = await import('./fileIO')
-    const ok = {
-      model: { people: [], softwareSystems: [] },
-      views: {},
-    }
+    const ok = makeWorkspace('Minimal')
     expect(isWorkspaceShape(ok)).toBe(true)
   })
 })

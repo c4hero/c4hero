@@ -66,4 +66,4 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=high --omit=dev
+      - run: npm audit --audit-level=moderate

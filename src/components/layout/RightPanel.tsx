@@ -1,9 +1,9 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
-import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, ChevronRight } from 'lucide-react'
+import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, ChevronRight, Trash2 } from 'lucide-react'
 import { generateDescription, getAIConfig } from '@/lib/ai'
-import { TYPE_LABELS, TYPE_COLORS } from '@/lib/elementMeta'
+import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { FieldLabel, EditableField, TechnologyField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
 
@@ -75,6 +75,8 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const updateElement = useWorkspaceStore((s) => s.updateElement)
   const updateElementLive = useWorkspaceStore((s) => s.updateElementLive)
   const updateTech = useWorkspaceStore((s) => s.updateElementTechnology)
+  const deleteElement = useWorkspaceStore((s) => s.deleteElement)
+  const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const tech = (element as Container | Component).technology
   const hasTech = element.type === 'container' || element.type === 'component'
@@ -92,7 +94,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
     try {
       const desc = await generateDescription(
         element.name,
-        TYPE_LABELS[element.type],
+        getElementTypeLabel(element),
         hasTech ? tech : undefined,
         workspace?.name,
       )
@@ -116,9 +118,18 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
       <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
         <div>
           <div className="text-sm font-semibold">{element.name}</div>
-          <div className="text-[11px]" style={{ color: typeColor }}>{TYPE_LABELS[element.type]}</div>
+          <div className="text-[11px]" style={{ color: typeColor }}>{getElementTypeLabel(element)}</div>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => confirmDelete(`Delete ${element.name}?`, () => deleteElement(element.id))}
+            className="btn-icon !min-h-7 !min-w-7 !p-1"
+            aria-label="Delete element"
+            title="Delete element"
+            style={{ color: 'var(--color-error-text)' }}
+          >
+            <Trash2 size={14} />
+          </button>
           <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close panel"><X size={14} /></button>
         </div>
       </div>
@@ -152,22 +163,32 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             </div>
             {hasLocation && (
               <div>
-                <FieldLabel htmlFor="el-location">Location</FieldLabel>
-                <select
-                  id="el-location"
-                  value={location ?? 'Internal'}
-                  onChange={(e) => updateElement(element.id, { location: e.target.value as Location })}
-                  className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-                  style={{
-                    background: 'var(--color-surface-2)',
-                    borderColor: 'var(--color-border)',
-                    color: 'var(--color-text-primary)',
-                  }}
-                >
-                  <option value="Internal">Internal</option>
-                  <option value="External">External</option>
-                  <option value="Unspecified">Unspecified</option>
-                </select>
+                <FieldLabel>Location</FieldLabel>
+                <div className="flex gap-1" data-testid="location" role="radiogroup" aria-label="Location">
+                  {(['Internal', 'External', 'Unspecified'] as const).map((opt) => {
+                    const current = location ?? 'Internal'
+                    const active = current === opt
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => updateElement(element.id, { location: opt as Location })}
+                        className="rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors"
+                        style={{
+                          flex: 1,
+                          background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
+                          borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                          color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {opt}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
             {hasTech && (
@@ -337,6 +358,8 @@ function ViewLink({ viewKey, title }: { viewKey: string; title: string }) {
 function RelationshipProperties({ relationship, onClose }: { relationship: Relationship; onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const updateRelationship = useWorkspaceStore((s) => s.updateRelationship)
+  const deleteRelationship = useWorkspaceStore((s) => s.deleteRelationship)
+  const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
 
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
   const source = elementMap.get(relationship.sourceId)
@@ -354,7 +377,18 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
           </div>
           <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Relationship</div>
         </div>
-        <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close panel"><X size={14} /></button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => confirmDelete('Delete this relationship?', () => deleteRelationship(relationship.id))}
+            className="btn-icon !min-h-7 !min-w-7 !p-1"
+            aria-label="Delete relationship"
+            title="Delete relationship"
+            style={{ color: 'var(--color-error-text)' }}
+          >
+            <Trash2 size={14} />
+          </button>
+          <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close panel"><X size={14} /></button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

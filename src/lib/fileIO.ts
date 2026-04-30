@@ -4,8 +4,19 @@ import { createLogger } from '@/lib/logger'
 
 const log = createLogger('fileIO')
 
-/** Max file size for DSL files: 10MB */
-const MAX_FILE_SIZE = 10 * 1024 * 1024
+/** Max file size for user-imported workspace files: 10MB */
+export const MAX_FILE_SIZE = 10 * 1024 * 1024
+
+export function assertFileSize(file: File, label = 'File'): void {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`${label} too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
+  }
+}
+
+export async function readTextFileWithLimit(file: File, label = 'File'): Promise<string> {
+  assertFileSize(file, label)
+  return file.text()
+}
 
 /** File handle for re-saving to the same file */
 let currentFileHandle: FileSystemFileHandle | null = null
@@ -157,8 +168,7 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
       })
       currentFileHandle = handle
       const file = await handle.getFile()
-      if (file.size > MAX_FILE_SIZE) throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
-      const content = await file.text()
+      const content = await readTextFileWithLimit(file, 'DSL file')
       addRecentFile(file.name)
 
       // Try to load sidecar from same directory
@@ -170,7 +180,7 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
           const sidecarFileHandle = await dirHandle.getFileHandle(sidecarFileName)
           currentSidecarHandle = sidecarFileHandle
           const sidecarFile = await sidecarFileHandle.getFile()
-          sidecarJson = await sidecarFile.text()
+          sidecarJson = await readTextFileWithLimit(sidecarFile, 'Workspace sidecar file')
         }
       } catch {
         // No sidecar file found — expected for new workspaces
@@ -192,9 +202,14 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) { resolve(null); return }
-      const content = await file.text()
-      addRecentFile(file.name)
-      resolve({ content, name: file.name })
+      try {
+        const content = await readTextFileWithLimit(file, 'DSL file')
+        addRecentFile(file.name)
+        resolve({ content, name: file.name })
+      } catch (err) {
+        log.warn('Failed to open DSL file', err)
+        resolve(null)
+      }
     }
     input.click()
   })
@@ -249,14 +264,146 @@ export function saveToLocalStorage(workspace: Workspace) {
   }
 }
 
-/** Basic shape check to validate parsed JSON looks like a Workspace */
+function isRecord(obj: unknown): obj is Record<string, unknown> {
+  return !!obj && typeof obj === 'object' && !Array.isArray(obj)
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
+}
+
+function isPropertiesRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every(item => typeof item === 'string')
+}
+
+function isBaseElementShape(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false
+  if (typeof value.id !== 'string' || typeof value.name !== 'string') return false
+  if (!isStringArray(value.tags)) return false
+  if (!isPropertiesRecord(value.properties)) return false
+  if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
+  if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
+  if ('status' in value && value.status !== undefined && !['Live', 'Planned', 'Deprecated', 'Removed'].includes(String(value.status))) return false
+  if ('owner' in value && value.owner !== undefined && typeof value.owner !== 'string') return false
+  return true
+}
+
+function isComponentShape(value: unknown): boolean {
+  if (!isBaseElementShape(value)) return false
+  if (value.type !== 'component') return false
+  return !('technology' in value) || value.technology === undefined || typeof value.technology === 'string'
+}
+
+function isContainerShape(value: unknown): boolean {
+  if (!isBaseElementShape(value)) return false
+  if (value.type !== 'container') return false
+  if (!Array.isArray(value.components) || !value.components.every(isComponentShape)) return false
+  return !('technology' in value) || value.technology === undefined || typeof value.technology === 'string'
+}
+
+function isPersonShape(value: unknown): boolean {
+  if (!isBaseElementShape(value)) return false
+  if (value.type !== 'person') return false
+  return !('location' in value) || value.location === undefined || ['Internal', 'External', 'Unspecified'].includes(String(value.location))
+}
+
+function isSoftwareSystemShape(value: unknown): boolean {
+  if (!isBaseElementShape(value)) return false
+  if (value.type !== 'softwareSystem') return false
+  if (!Array.isArray(value.containers) || !value.containers.every(isContainerShape)) return false
+  return !('location' in value) || value.location === undefined || ['Internal', 'External', 'Unspecified'].includes(String(value.location))
+}
+
+function isRelationshipShape(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  if (typeof value.id !== 'string' || typeof value.sourceId !== 'string' || typeof value.destinationId !== 'string') return false
+  if (!isStringArray(value.tags) || !isPropertiesRecord(value.properties)) return false
+  if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
+  if ('technology' in value && value.technology !== undefined && typeof value.technology !== 'string') return false
+  if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
+  if ('interactionStyle' in value && value.interactionStyle !== undefined && !['Synchronous', 'Asynchronous'].includes(String(value.interactionStyle))) return false
+  if ('lineStyle' in value && value.lineStyle !== undefined && !['Curved', 'Straight', 'Orthogonal'].includes(String(value.lineStyle))) return false
+  return true
+}
+
+function isViewElementShape(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.id !== 'string') return false
+  if ('x' in value && value.x !== undefined && typeof value.x !== 'number') return false
+  if ('y' in value && value.y !== undefined && typeof value.y !== 'number') return false
+  if ('pinned' in value && value.pinned !== undefined && typeof value.pinned !== 'boolean') return false
+  return true
+}
+
+function isViewRelationshipShape(value: unknown): boolean {
+  return isRecord(value) && typeof value.id === 'string'
+}
+
+function isViewShape(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  if (!['systemLandscape', 'systemContext', 'container', 'component'].includes(String(value.type))) return false
+  if (typeof value.key !== 'string') return false
+  if (!Array.isArray(value.elements) || !value.elements.every(isViewElementShape)) return false
+  if (!Array.isArray(value.relationships) || !value.relationships.every(isViewRelationshipShape)) return false
+  if ('title' in value && value.title !== undefined && typeof value.title !== 'string') return false
+  if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
+  if ('softwareSystemId' in value && value.softwareSystemId !== undefined && typeof value.softwareSystemId !== 'string') return false
+  if ('containerId' in value && value.containerId !== undefined && typeof value.containerId !== 'string') return false
+  if ('autoLayout' in value && value.autoLayout !== undefined) {
+    if (!isRecord(value.autoLayout)) return false
+    if (!['TB', 'BT', 'LR', 'RL'].includes(String(value.autoLayout.direction))) return false
+    if ('rankSeparation' in value.autoLayout && value.autoLayout.rankSeparation !== undefined && typeof value.autoLayout.rankSeparation !== 'number') return false
+    if ('nodeSeparation' in value.autoLayout && value.autoLayout.nodeSeparation !== undefined && typeof value.autoLayout.nodeSeparation !== 'number') return false
+  }
+  return true
+}
+
+function isElementStyleShape(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.tag !== 'string') return false
+  return Object.entries(value).every(([key, item]) => {
+    if (key === 'tag' || key === 'background' || key === 'color' || key === 'shape' || key === 'border' || key === 'icon' || key === 'stroke') {
+      return typeof item === 'string'
+    }
+    if (key === 'fontSize' || key === 'opacity' || key === 'strokeWidth') return typeof item === 'number'
+    return true
+  })
+}
+
+function isRelationshipStyleShape(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.tag !== 'string') return false
+  return Object.entries(value).every(([key, item]) => {
+    if (key === 'tag' || key === 'color') return typeof item === 'string'
+    if (key === 'thickness' || key === 'fontSize' || key === 'opacity') return typeof item === 'number'
+    if (key === 'dashed') return typeof item === 'boolean'
+    return true
+  })
+}
+
+/** Runtime schema check for imported workspace JSON. */
 export function isWorkspaceShape(obj: unknown): obj is Workspace {
-  if (!obj || typeof obj !== 'object') return false
-  const w = obj as Record<string, unknown>
-  if (!w.model || typeof w.model !== 'object') return false
-  if (!w.views || typeof w.views !== 'object') return false
-  const m = w.model as Record<string, unknown>
-  if (!Array.isArray(m.people) || !Array.isArray(m.softwareSystems)) return false
+  if (!isRecord(obj)) return false
+  if ('name' in obj && obj.name !== undefined && typeof obj.name !== 'string') return false
+  if ('description' in obj && obj.description !== undefined && typeof obj.description !== 'string') return false
+  if ('scope' in obj && obj.scope !== undefined && !['softwaresystem', 'landscape', 'none'].includes(String(obj.scope))) return false
+
+  const { model, views } = obj
+  if (!isRecord(model) || !isRecord(views)) return false
+  if (!Array.isArray(model.people) || !model.people.every(isPersonShape)) return false
+  if (!Array.isArray(model.softwareSystems) || !model.softwareSystems.every(isSoftwareSystemShape)) return false
+  if (!Array.isArray(model.relationships) || !model.relationships.every(isRelationshipShape)) return false
+  if (!Array.isArray(model.groups) || !model.groups.every(group =>
+    isRecord(group) && typeof group.id === 'string' && typeof group.name === 'string' && isStringArray(group.elementIds)
+  )) return false
+
+  if (!Array.isArray(views.systemLandscapeViews) || !views.systemLandscapeViews.every(isViewShape)) return false
+  if (!Array.isArray(views.systemContextViews) || !views.systemContextViews.every(isViewShape)) return false
+  if (!Array.isArray(views.containerViews) || !views.containerViews.every(isViewShape)) return false
+  if (!Array.isArray(views.componentViews) || !views.componentViews.every(isViewShape)) return false
+  if (!isRecord(views.configuration) || !isRecord(views.configuration.styles)) return false
+  const styles = views.configuration.styles
+  if (!Array.isArray(styles.elements) || !styles.elements.every(isElementStyleShape)) return false
+  if (!Array.isArray(styles.relationships) || !styles.relationships.every(isRelationshipStyleShape)) return false
+  if ('themes' in views.configuration && views.configuration.themes !== undefined && !isStringArray(views.configuration.themes)) return false
+
   return true
 }
 

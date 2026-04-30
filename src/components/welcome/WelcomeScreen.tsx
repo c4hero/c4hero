@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
 import { createBigBankSample, createBlankWorkspace } from '@/lib/templates'
-import { openDSLFile, hasFileSystemAccess, isWorkspaceShape } from '@/lib/fileIO'
+import { openDSLFile, hasFileSystemAccess, isWorkspaceShape, readTextFileWithLimit } from '@/lib/fileIO'
 import { createLogger } from '@/lib/logger'
 import {
   openFolder,
@@ -129,7 +129,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           const fh = await dir.getFileHandle(name)
           const f = await fh.getFile()
           modifiedAt = f.lastModified
-          const content = await f.text()
+	          const content = await readTextFileWithLimit(f, 'DSL file')
           const { workspace: ws } = parseDSL(content)
           if (ws) {
             scope = ws.scope
@@ -365,35 +365,38 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
   }
 
-  function handleImportJSON(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        const parsed = JSON.parse(reader.result as string)
-        if (!isWorkspaceShape(parsed)) {
-          setErrorMsg('Invalid workspace file. The JSON does not have the expected workspace structure.')
-          return
-        }
-        // Write to folder if open
-        const filename = file.name.replace(/\.json$/, '.dsl')
-        await writeDSLFile(filename, serializeDSL(parsed))
-        loadWorkspace(parsed)
-        useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
-      } catch {
-        setErrorMsg('Failed to parse JSON file. Please check the file format.')
-      }
-    }
-    reader.readAsText(file)
-    e.target.value = ''
-  }
+	async function handleImportJSON(e: React.ChangeEvent<HTMLInputElement>) {
+	  const file = e.target.files?.[0]
+	  e.target.value = ''
+	  if (!file) return
+	  try {
+	    const text = await readTextFileWithLimit(file, 'Workspace JSON file')
+	    const parsed = JSON.parse(text)
+	    if (!isWorkspaceShape(parsed)) {
+	      setErrorMsg('Invalid workspace file. The JSON does not have the expected workspace structure.')
+	      return
+	    }
+	    // Write to folder if open
+	    const filename = file.name.replace(/\.json$/, '.dsl')
+	    await writeDSLFile(filename, serializeDSL(parsed))
+	    loadWorkspace(parsed)
+	    useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+	  } catch (err) {
+	    setErrorMsg(err instanceof Error ? err.message : 'Failed to parse JSON file. Please check the file format.')
+	  }
+	}
 
   async function handleDSLInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    const content = await file.text()
+	  let content: string
+	  try {
+	    content = await readTextFileWithLimit(file, 'DSL file')
+	  } catch (err) {
+	    setErrorMsg(err instanceof Error ? err.message : 'Failed to read DSL file.')
+	    return
+	  }
     const { workspace, errors } = parseDSL(content)
     if (errors.length > 0) log.warn("DSL parse warnings", errors)
     if (workspace) {
@@ -894,6 +897,5 @@ function CollectionView({
 }
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
-
 
 

@@ -1,5 +1,6 @@
 import { sidecarName } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
+import { readTextFileWithLimit } from '@/lib/fileIO'
 
 const log = createLogger('folderIO')
 
@@ -82,16 +83,16 @@ export async function openFolder(): Promise<{ dirHandle: FileSystemDirectoryHand
 export async function readDSLFile(filename: string): Promise<{ content: string; sidecarJson?: string } | null> {
   if (!currentDirHandle) return null
   try {
-    const fileHandle = await currentDirHandle.getFileHandle(filename)
-    const file = await fileHandle.getFile()
-    const content = await file.text()
+	    const fileHandle = await currentDirHandle.getFileHandle(filename)
+	    const file = await fileHandle.getFile()
+	    const content = await readTextFileWithLimit(file, 'DSL file')
 
     let sidecarJson: string | undefined
     try {
-      const sidecarFilename = sidecarName(filename)
-      const sidecarHandle = await currentDirHandle.getFileHandle(sidecarFilename)
-      const sidecarFile = await sidecarHandle.getFile()
-      sidecarJson = await sidecarFile.text()
+	      const sidecarFilename = sidecarName(filename)
+	      const sidecarHandle = await currentDirHandle.getFileHandle(sidecarFilename)
+	      const sidecarFile = await sidecarHandle.getFile()
+	      sidecarJson = await readTextFileWithLimit(sidecarFile, 'Sidecar file')
     } catch {
       // No sidecar — expected for new workspaces
     }
@@ -256,9 +257,9 @@ export async function readCollectionSettings(): Promise<CollectionSettings | nul
   try {
     const dir = await getC4HeroDir(false)
     if (!dir) return null
-    const fileHandle = await dir.getFileHandle(SETTINGS_FILE)
-    const file = await fileHandle.getFile()
-    const text = await file.text()
+	    const fileHandle = await dir.getFileHandle(SETTINGS_FILE)
+	    const file = await fileHandle.getFile()
+	    const text = await readTextFileWithLimit(file, 'Collection settings file')
     return JSON.parse(text) as CollectionSettings
   } catch {
     return null

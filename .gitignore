@@ -27,6 +27,9 @@ test-results/
 # git worktrees for parallel feature work
 .worktrees/
 
+# Local-only design mocks / preview routes (not part of the shipped app)
+src/components/welcome/mocks/
+
 # Generated marketing screenshots (root-only; don't ignore e2e/screenshots/ specs)
 /screenshots/
 

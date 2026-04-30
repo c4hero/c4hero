@@ -163,6 +163,11 @@ interface WorkspaceState extends UndoState {
   duplicateView: (key: string) => string
   updateNodePosition: (nodeId: string, x: number, y: number) => void
   updateNodePositions: (updates: { id: string; x: number; y: number }[]) => void
+  /** Fill in saved x/y for view elements that don't yet have positions. Used
+   *  by Canvas to canonicalize the initial dagre layout so subsequent adds
+   *  see existing nodes as "frozen" and don't trigger a full re-layout.
+   *  Does NOT pin, push undo, or bump layoutVersion — purely a derivation. */
+  syncAutoLayoutPositions: (viewKey: string, updates: Map<string, { x: number; y: number }>) => void
 
   // Undo/Redo
   undo: () => void
@@ -215,7 +220,10 @@ interface WorkspaceState extends UndoState {
 /** Push current workspace to undo stack before mutation */
 function pushUndo(s: WorkspaceState): Partial<UndoState> {
   if (!s.workspace) return {}
-  const undoStack = [...s.undoStack, structuredClone(s.workspace)].slice(-MAX_UNDO)
+  // Workspace mutations clone before writing, so the current workspace object is
+  // an immutable snapshot. Store the reference instead of deep-cloning the whole
+  // graph on every undoable action.
+  const undoStack = [...s.undoStack, s.workspace].slice(-MAX_UNDO)
   return { undoStack, redoStack: [] }
 }
 
@@ -1232,6 +1240,32 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return { workspace: ws }
   }),
 
+  syncAutoLayoutPositions: (viewKey, updates) => set((s) => {
+    if (!s.workspace || updates.size === 0) return s
+    const ws = { ...s.workspace }
+    ws.views = { ...ws.views }
+    for (const key of VIEW_ARRAY_KEYS) {
+      const idx = ws.views[key].findIndex(v => v.key === viewKey)
+      if (idx === -1) continue
+      ws.views[key] = [...ws.views[key]]
+      const view = { ...ws.views[key][idx] }
+      let changed = false
+      view.elements = view.elements.map(e => {
+        // Only fill in missing positions; never override saved ones (those
+        // came from a drag, a load, or a prior sync).
+        if (e.x !== undefined && e.y !== undefined) return e
+        const u = updates.get(e.id)
+        if (!u) return e
+        changed = true
+        return { ...e, x: u.x, y: u.y }
+      })
+      if (!changed) return s
+      ws.views[key][idx] = view
+      break
+    }
+    return { workspace: ws }
+  }),
+
   // ─── Undo / Redo ───────────────────────────────────────────────
 
   undo: () => {
@@ -1239,7 +1273,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (s.undoStack.length === 0 || !s.workspace) return s
       const undoStack = [...s.undoStack]
       const previous = undoStack.pop()!
-      const redoStack = [...s.redoStack, structuredClone(s.workspace)]
+      const redoStack = [...s.redoStack, s.workspace]
       // If the current active view no longer exists in the restored workspace, fall back to first view
       const activeStillExists = s.activeViewKey ? !!findView(previous, s.activeViewKey) : false
       const activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(previous)
@@ -1255,7 +1289,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (s.redoStack.length === 0 || !s.workspace) return s
       const redoStack = [...s.redoStack]
       const next = redoStack.pop()!
-      const undoStack = [...s.undoStack, structuredClone(s.workspace)]
+      const undoStack = [...s.undoStack, s.workspace]
       // If the current active view no longer exists in the target workspace, fall back to first view
       const activeStillExists = s.activeViewKey ? !!findView(next, s.activeViewKey) : false
       const activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(next)
@@ -1443,4 +1477,3 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   cancelDelete: () => set({ pendingDelete: null }),
   setPresentationMode: (on) => set({ presentationMode: on }),
 }))
-

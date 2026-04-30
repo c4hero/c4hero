@@ -217,6 +217,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.activeViewKey) return
         s.resetAndRelayout(s.activeViewKey)
+        setTimeout(() => reactFlow?.fitView({ duration: 300, padding: 0.2 }), 120)
       },
     },
     {

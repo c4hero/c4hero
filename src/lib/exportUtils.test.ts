@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { exportAsJSON, downloadFile, downloadBlob } from './exportUtils'
+import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsSVG } from './exportUtils'
 import type { Workspace } from '@/types/model'
 
 function makeWorkspace(): Workspace {
@@ -126,5 +126,45 @@ describe('downloadFile / downloadBlob', () => {
     const revokeSpy = vi.spyOn(URL, 'revokeObjectURL')
     downloadBlob(new Blob(['x']), 'test.txt')
     expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url')
+  })
+})
+
+describe('exportCanvasAsSVG', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('strips scripts, event handlers, and unsafe URL references', () => {
+    document.body.innerHTML = `
+      <div class="react-flow__viewport">
+        <div onclick="alert(1)" style="background-image: url(javascript:alert(1)); color: red">
+          <script>alert(1)</script>
+          <a href="javascript:alert(1)">bad</a>
+        </div>
+      </div>
+    `
+
+    const svg = exportCanvasAsSVG()
+
+    expect(svg).not.toBeNull()
+    expect(svg).not.toContain('<script')
+    expect(svg).not.toContain('onclick')
+    expect(svg).not.toContain('javascript:')
+  })
+
+  it('preserves fragment URL references used by SVG markers', () => {
+    document.body.innerHTML = `
+      <div class="react-flow__viewport">
+        <svg><path marker-end="url(#c4-arrow)" d="M0 0 L1 1"></path></svg>
+      </div>
+    `
+
+    const svg = exportCanvasAsSVG()
+
+    expect(svg).toContain('url(#c4-arrow)')
   })
 })

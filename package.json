@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
@@ -45,5 +46,10 @@
     "vite": "^7.3.2",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "@rollup/plugin-terser": "^1.0.0",
+    "postcss": "^8.5.12",
+    "serialize-javascript": "^7.0.5"
   }
 }

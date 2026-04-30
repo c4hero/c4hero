@@ -241,7 +241,10 @@ test.describe('10-pass gauntlet regressions', () => {
       'publishes_financial_posting_outcomes_for_cross_team_visibility',
     ]
     const denseDescription = 'normalizes_customer_profile_change_events_before_dispatching_to_workflows'
-    await expect(workspace.page.getByText(denseDescription, { exact: true })).toHaveCount(0)
+    for (const description of edgeDescriptions) {
+      await expect(workspace.page.getByText(description, { exact: true })).toHaveCount(0)
+      await expect(workspace.page.locator(`span[title="${description}"]`).first()).toBeVisible()
+    }
 
     const denseCompactDescription = workspace.page.locator(`span[title="${denseDescription}"]`).first()
     await expect(denseCompactDescription).toBeVisible()

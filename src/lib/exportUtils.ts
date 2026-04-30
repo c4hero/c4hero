@@ -71,14 +71,9 @@ export function exportCanvasAsSVG(theme: ExportTheme = 'dark'): string | null {
   if (!viewport) return null
 
   const cloned = viewport.cloneNode(true) as HTMLElement
-  // Strip any script elements and event handler attributes for safety
-  for (const script of cloned.querySelectorAll('script')) script.remove()
-  for (const el of cloned.querySelectorAll('*')) {
-    for (const attr of Array.from(el.attributes)) {
-      if (attr.name.startsWith('on')) el.removeAttribute(attr.name)
-    }
-  }
+  sanitizeExportTree(cloned)
   inlineStyles(viewport, cloned)
+  sanitizeExportTree(cloned)
 
   // For light theme, override CSS custom property values on the cloned root
   if (theme === 'light') {
@@ -131,4 +126,51 @@ function inlineStyles(source: Element, target: Element) {
       inlineStyles(source.children[i], target.children[i])
     }
   }
+}
+
+const URL_ATTRS = new Set(['href', 'xlink:href', 'src', 'action', 'formaction'])
+
+function sanitizeExportTree(root: Element): void {
+  for (const script of root.querySelectorAll('script')) script.remove()
+  for (const el of [root, ...Array.from(root.querySelectorAll('*'))]) {
+    sanitizeElement(el)
+  }
+}
+
+function sanitizeElement(el: Element): void {
+  for (const attr of Array.from(el.attributes)) {
+    const attrName = attr.name.toLowerCase()
+    if (attrName.startsWith('on') || attrName === 'srcdoc') {
+      el.removeAttribute(attr.name)
+      continue
+    }
+    if (URL_ATTRS.has(attrName) && !isSafeEmbeddedUrl(attr.value)) {
+      el.removeAttribute(attr.name)
+      continue
+    }
+    if (containsUnsafeCssUrl(attr.value)) {
+      el.removeAttribute(attr.name)
+    }
+  }
+
+  const style = (el as HTMLElement).style
+  if (!style) return
+  for (const prop of Array.from(style)) {
+    if (containsUnsafeCssUrl(style.getPropertyValue(prop))) {
+      style.removeProperty(prop)
+    }
+  }
+}
+
+function isSafeEmbeddedUrl(value: string): boolean {
+  const normalized = value.trim().replace(/^['"]|['"]$/g, '').toLowerCase()
+  return normalized.startsWith('#') || normalized.startsWith('data:image/')
+}
+
+function containsUnsafeCssUrl(value: string): boolean {
+  const urls = value.matchAll(/url\(([^)]*)\)/gi)
+  for (const match of urls) {
+    if (!isSafeEmbeddedUrl(match[1])) return true
+  }
+  return false
 }

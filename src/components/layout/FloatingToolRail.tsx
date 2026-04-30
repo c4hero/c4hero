@@ -112,6 +112,9 @@ export default function FloatingToolRail() {
     if (!activeViewKey) return
     resetAndRelayout(activeViewKey, direction)
     setArrangePanelOpen(false)
+    // Wait for the new layout to be applied (positions recomputed + nodes
+    // re-measured) before fitting the viewport to the freshly arranged graph.
+    setTimeout(() => reactFlow.fitView({ duration: 300, padding: 0.2 }), 120)
   }
 
   return (

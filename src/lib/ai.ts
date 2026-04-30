@@ -12,6 +12,23 @@ function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer))
 }
 
+async function throwProviderError(provider: 'Anthropic' | 'OpenAI', response: Response): Promise<never> {
+  let requestId: string | null = null
+  try {
+    requestId = response.headers.get('request-id')
+      ?? response.headers.get('x-request-id')
+      ?? response.headers.get('anthropic-request-id')
+  } catch {
+    // Header access can fail in unusual CORS/proxy configurations; status is enough.
+  }
+  log.error(`${provider} API error ${response.status}`, {
+    status: response.status,
+    requestId: requestId ?? undefined,
+  })
+  const suffix = requestId ? ` (request ${requestId})` : ''
+  throw new Error(`${provider} API error: ${response.status}${suffix}`)
+}
+
 export type AIProvider = 'anthropic' | 'openai'
 
 interface AIConfig {
@@ -80,9 +97,7 @@ Respond with ONLY the description text, no quotes or explanation.`
       }),
     })
     if (!response.ok) {
-      const body = await response.text().catch(() => '')
-      log.error(`Anthropic API error ${response.status}`, { status: response.status })
-      throw new Error(`Anthropic API error: ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`)
+      await throwProviderError('Anthropic', response)
     }
     const data = await response.json()
     return data.content[0]?.text?.trim() ?? ''
@@ -102,9 +117,7 @@ Respond with ONLY the description text, no quotes or explanation.`
       }),
     })
     if (!response.ok) {
-      const body = await response.text().catch(() => '')
-      log.error(`OpenAI API error ${response.status}`, { status: response.status })
-      throw new Error(`OpenAI API error: ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`)
+      await throwProviderError('OpenAI', response)
     }
     const data = await response.json()
     return data.choices[0]?.message?.content?.trim() ?? ''
@@ -148,9 +161,7 @@ Respond with ONLY the Structurizr DSL code, no explanation or markdown.`
       }),
     })
     if (!response.ok) {
-      const body = await response.text().catch(() => '')
-      log.error(`Anthropic API error ${response.status}`, { status: response.status })
-      throw new Error(`Anthropic API error: ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`)
+      await throwProviderError('Anthropic', response)
     }
     const data = await response.json()
     return data.content[0]?.text?.trim() ?? ''
@@ -170,9 +181,7 @@ Respond with ONLY the Structurizr DSL code, no explanation or markdown.`
       }),
     })
     if (!response.ok) {
-      const body = await response.text().catch(() => '')
-      log.error(`OpenAI API error ${response.status}`, { status: response.status })
-      throw new Error(`OpenAI API error: ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`)
+      await throwProviderError('OpenAI', response)
     }
     const data = await response.json()
     return data.choices[0]?.message?.content?.trim() ?? ''

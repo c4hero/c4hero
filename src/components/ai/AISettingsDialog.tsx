@@ -43,7 +43,7 @@ export default function AISettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="mb-4 text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          Provide your own API key to enable AI features. Keys are stored in your browser session and sent directly to the AI provider (Anthropic or OpenAI). They are not sent to c4hero servers.
+	          Provide your own API key to enable AI features. Keys are stored in sessionStorage for this browser tab and sent directly to the AI provider. Browser extensions or XSS bugs could read them, so use AI only in trusted sessions.
         </p>
 
         <div className="space-y-4">

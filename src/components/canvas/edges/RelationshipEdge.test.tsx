@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { Position } from '@xyflow/react'
-import RelationshipEdge, { getEdgeLabelDensity, truncateEdgeLabel } from './RelationshipEdge'
+import RelationshipEdge from './RelationshipEdge'
+import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
 
 vi.mock('@xyflow/react', async () => {
   const actual = await vi.importActual<typeof import('@xyflow/react')>('@xyflow/react')

@@ -185,7 +185,7 @@ test.describe('Reusable architecture scenarios', () => {
     await workspace.page.keyboard.press('Shift+S')
     await workspace.clickNode('New System')
     await workspace.page.keyboard.press('Delete')
-    await workspace.page.getByRole('button', { name: 'Delete' }).click()
+    await workspace.page.getByRole('dialog', { name: 'Confirm delete' }).getByRole('button', { name: 'Delete', exact: true }).click()
     await workspace.page.waitForTimeout(300)
 
     await expect(workspace.getVisibleNodeByName('New System')).not.toBeVisible()
