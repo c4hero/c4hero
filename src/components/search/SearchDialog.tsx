@@ -99,10 +99,10 @@ export default function SearchDialog() {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setSelectedIndex(i => Math.min(i + 1, results.length - 1))
+      setSelectedIndex(i => results.length === 0 ? 0 : Math.min(i + 1, results.length - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setSelectedIndex(i => Math.max(i - 1, 0))
+      setSelectedIndex(i => results.length === 0 ? 0 : Math.max(i - 1, 0))
     } else if (e.key === 'Enter' && results[selectedIndex]) {
       e.preventDefault()
       handleSelect(results[selectedIndex])
@@ -120,6 +120,7 @@ export default function SearchDialog() {
   }
 
   const trapRef = useFocusTrap<HTMLDivElement>()
+  const resultsListId = 'search-results-list'
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -152,6 +153,7 @@ export default function SearchDialog() {
             onKeyDown={handleKeyDown}
             placeholder="Search elements, views, technology..."
             aria-label="Search elements and views"
+            aria-controls={resultsListId}
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--color-text-primary)' }}
           />
@@ -169,7 +171,9 @@ export default function SearchDialog() {
           {TYPE_FILTERS.map(({ type, label }) => (
             <button
               key={type}
+              type="button"
               onClick={() => toggleTypeFilter(type)}
+              aria-pressed={typeFilter === type}
               className="rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-all"
               style={{
                 background: typeFilter === type ? TYPE_COLORS[type] : 'var(--color-surface-3)',
@@ -186,7 +190,9 @@ export default function SearchDialog() {
               {allTags.slice(0, 4).map(tag => (
                 <button
                   key={tag}
+                  type="button"
                   onClick={() => toggleTagFilter(tag)}
+                  aria-pressed={tagFilter === tag}
                   className="rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-all"
                   style={{
                     background: tagFilter === tag ? 'var(--color-accent)' : 'var(--color-surface-3)',
@@ -202,7 +208,7 @@ export default function SearchDialog() {
         </div>
 
         {/* Results */}
-        <div className="max-h-[300px] overflow-y-auto p-2">
+        <div id={resultsListId} className="max-h-[300px] overflow-y-auto p-2">
           {results.length === 0 && (
             <div className="px-3 py-6 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>
               {query.trim() || typeFilter || tagFilter ? 'No results found' : 'Type to search across all elements and views'}
@@ -210,7 +216,10 @@ export default function SearchDialog() {
           )}
           {results.map((result, i) => (
             <button
+              id={`search-result-${i}`}
               key={result.kind === 'element' ? result.element.id : result.view.key}
+              type="button"
+              aria-current={i === selectedIndex ? 'true' : undefined}
               onClick={() => handleSelect(result)}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors"
               style={{

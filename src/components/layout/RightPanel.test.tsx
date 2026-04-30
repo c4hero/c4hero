@@ -122,6 +122,45 @@ describe('RightPanel', () => {
     expect(relationship?.lineStyle).toBeUndefined()
   })
 
+  it('commits relationship technology before subsequent relationship button edits', async () => {
+    const user = userEvent.setup()
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectRelationship('rel1')
+    render(<RightPanel />)
+
+    const techRoot = screen.getByLabelText('Technology')
+    const techInput = techRoot.querySelector('input')
+    expect(techInput).not.toBeNull()
+
+    await user.click(techInput!)
+    await user.keyboard('gRPC')
+    await user.tab()
+    await user.click(screen.getByRole('button', { name: 'Line style: Orthogonal' }))
+
+    const relationship = useWorkspaceStore.getState().workspace?.model.relationships.find((item) => item.id === 'rel1')
+    expect(relationship).toMatchObject({
+      technology: 'gRPC',
+      lineStyle: 'Orthogonal',
+    })
+  })
+
+  it('deduplicates relationship technology tokens while preserving first casing', async () => {
+    const user = userEvent.setup()
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectRelationship('rel1')
+    render(<RightPanel />)
+
+    const techRoot = screen.getByLabelText('Technology')
+    const techInput = techRoot.querySelector('input')
+    expect(techInput).not.toBeNull()
+
+    await user.click(techInput!)
+    await user.keyboard('gRPC, REST, grpc, ')
+
+    const relationship = useWorkspaceStore.getState().workspace?.model.relationships.find((item) => item.id === 'rel1')
+    expect(relationship?.technology).toBe('gRPC, REST')
+  })
+
   it('shows group name when group selected', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     const groupId = useWorkspaceStore.getState().addGroup('My Team', ['alice'])

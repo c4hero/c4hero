@@ -41,7 +41,7 @@ export default function CommandPalette() {
       if (cmd.when && !cmd.when()) return false
       if (!q) return true
       if (cmd.label.toLowerCase().includes(q)) return true
-      if (cmd.keywords?.some((kw) => kw.includes(q))) return true
+      if (cmd.keywords?.some((kw) => kw.toLowerCase().includes(q))) return true
       return false
     })
   }, [allCommands, query])
@@ -76,10 +76,10 @@ export default function CommandPalette() {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setSelectedIndex((i) => Math.min(i + 1, flatList.length - 1))
+      setSelectedIndex((i) => flatList.length === 0 ? 0 : Math.min(i + 1, flatList.length - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setSelectedIndex((i) => Math.max(i - 1, 0))
+      setSelectedIndex((i) => flatList.length === 0 ? 0 : Math.max(i - 1, 0))
     } else if (e.key === 'Enter' && flatList[selectedIndex]) {
       e.preventDefault()
       executeCommand(flatList[selectedIndex])
@@ -87,6 +87,8 @@ export default function CommandPalette() {
       close()
     }
   }
+
+  const resultsListId = 'command-palette-results'
 
   return (
     <>
@@ -111,7 +113,7 @@ export default function CommandPalette() {
           className="flex items-center gap-3 border-b px-4 py-3"
           style={{ borderColor: 'var(--color-border)' }}
         >
-          <CommandIcon size={16} style={{ color: 'var(--color-text-muted)' }} />
+          <CommandIcon size={16} aria-hidden="true" style={{ color: 'var(--color-text-muted)' }} />
           <input
             ref={inputRef}
             type="text"
@@ -119,6 +121,7 @@ export default function CommandPalette() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Type a command..."
             aria-label="Search commands"
+            aria-controls={resultsListId}
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--color-text-primary)' }}
           />
@@ -126,7 +129,7 @@ export default function CommandPalette() {
         </div>
 
         {/* Results */}
-        <div ref={resultsRef} className="max-h-[340px] overflow-y-auto p-2">
+        <div ref={resultsRef} id={resultsListId} className="max-h-[340px] overflow-y-auto p-2">
           {flatList.length === 0 && (
             <div
               className="px-3 py-6 text-center text-xs"
@@ -148,7 +151,10 @@ export default function CommandPalette() {
                 const isSelected = idx === selectedIndex
                 return (
                   <button
+                    id={`command-palette-result-${idx}`}
                     key={cmd.id}
+                    type="button"
+                    aria-current={isSelected ? 'true' : undefined}
                     data-selected={isSelected}
                     onClick={() => executeCommand(cmd)}
                     onMouseEnter={() => setSelectedIndex(idx)}
@@ -160,6 +166,7 @@ export default function CommandPalette() {
                   >
                     <cmd.icon
                       size={15}
+                      aria-hidden="true"
                       style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}
                     />
                     <span className="flex-1 truncate">{cmd.label}</span>

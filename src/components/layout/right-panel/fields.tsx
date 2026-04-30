@@ -116,12 +116,19 @@ function useTechnologySuggestions(scope: TechnologyScope): { tech: string; count
   const workspace = useWorkspaceStore((s) => s.workspace)
   return useMemo(() => {
     if (!workspace) return []
-    const counts = new Map<string, number>()
+    const counts = new Map<string, { tech: string; count: number }>()
     const bump = (raw?: string) => {
       if (!raw) return
       for (const t of raw.split(',')) {
         const trimmed = t.trim()
-        if (trimmed) counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1)
+        if (!trimmed) continue
+        const key = trimmed.toLowerCase()
+        const existing = counts.get(key)
+        if (existing) {
+          existing.count += 1
+        } else {
+          counts.set(key, { tech: trimmed, count: 1 })
+        }
       }
     }
     if (scope === 'element') {
@@ -134,18 +141,39 @@ function useTechnologySuggestions(scope: TechnologyScope): { tech: string; count
     } else {
       for (const rel of workspace.model.relationships) bump(rel.technology)
     }
-    return Array.from(counts.entries())
-      .map(([tech, count]) => ({ tech, count }))
+    return Array.from(counts.values())
       .sort((a, b) => b.count - a.count || a.tech.localeCompare(b.tech))
   }, [workspace, scope])
 }
 
 function splitTokens(s: string): string[] {
-  return s.split(',').map((t) => t.trim()).filter(Boolean)
+  const seen = new Set<string>()
+  return s.split(',').flatMap((token): string[] => {
+    const trimmed = token.trim()
+    if (!trimmed) return []
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [trimmed]
+  })
 }
 
 function joinTokens(tokens: string[]): string {
-  return tokens.join(', ')
+  return splitTokens(tokens.join(',')).join(', ')
+}
+
+function appendTechnologyTokens(tokens: string[], rawTokens: string[]): string[] {
+  const next = [...tokens]
+  const seen = new Set(tokens.map((t) => t.toLowerCase()))
+  for (const raw of rawTokens) {
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    next.push(trimmed)
+  }
+  return next
 }
 
 /** Chip-style multi-value input used for element and relationship
@@ -189,10 +217,8 @@ export function TechnologyField({ value, placeholder, onCommit, onLiveChange, sc
   }
 
   const addToken = (raw: string) => {
-    const trimmed = raw.trim()
-    if (!trimmed) return
-    if (alreadyUsed.has(trimmed.toLowerCase())) { setDraft(''); return }
-    commitTokens([...tokens, trimmed])
+    const next = appendTechnologyTokens(tokens, [raw])
+    if (next.length !== tokens.length) commitTokens(next)
     setDraft('')
     setSelectedIdx(-1)
   }
@@ -207,21 +233,21 @@ export function TechnologyField({ value, placeholder, onCommit, onLiveChange, sc
     if (newVal.includes(',')) {
       const parts = newVal.split(',')
       const last = parts.pop() ?? ''
-      for (const p of parts) addToken(p)
+      const next = appendTechnologyTokens(tokens, parts)
+      if (next.length !== tokens.length) commitTokens(next)
       setDraft(last.trimStart())
+      setSelectedIdx(-1)
       return
     }
     setDraft(newVal)
     setSelectedIdx(-1)
   }
 
-  const handleBlur = () => {
-    setTimeout(() => {
-      if (!wrapperRef.current?.contains(document.activeElement)) {
-        setFocused(false)
-        if (draft.trim()) addToken(draft)
-      }
-    }, 150)
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const nextTarget = e.relatedTarget
+    if (nextTarget instanceof Node && wrapperRef.current?.contains(nextTarget)) return
+    setFocused(false)
+    if (draft.trim()) addToken(draft)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

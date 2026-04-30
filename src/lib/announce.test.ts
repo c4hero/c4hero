@@ -67,4 +67,29 @@ describe('announce', () => {
     announce('Element "Internet Banking" → created')
     expect(liveRegion.textContent).toBe('Element "Internet Banking" → created')
   })
+
+  it('falls back to a timer when requestAnimationFrame is unavailable', () => {
+    ;(window.requestAnimationFrame as unknown as { mockRestore: () => void }).mockRestore()
+    const original = window.requestAnimationFrame
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    })
+    vi.useFakeTimers()
+
+    try {
+      announce('Timer fallback')
+      expect(liveRegion.textContent).toBe('')
+      vi.runAllTimers()
+      expect(liveRegion.textContent).toBe('Timer fallback')
+    } finally {
+      vi.useRealTimers()
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        writable: true,
+        value: original,
+      })
+    }
+  })
 })

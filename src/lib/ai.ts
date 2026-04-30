@@ -1,4 +1,5 @@
 import { createLogger } from '@/lib/logger'
+import { isNonEmptyString, isRecord } from '@/lib/guards'
 
 const log = createLogger('ai')
 const API_TIMEOUT_MS = 30_000
@@ -42,10 +43,10 @@ export function getAIConfig(): AIConfig | null {
     const data = sessionStorage.getItem('c4hero_ai_config')
     if (!data) return null
     const parsed = JSON.parse(data)
-    if (!parsed || typeof parsed !== 'object') return null
+    if (!isRecord(parsed)) return null
     if (parsed.provider !== 'anthropic' && parsed.provider !== 'openai') return null
-    if (typeof parsed.apiKey !== 'string' || !parsed.apiKey) return null
-    return parsed as AIConfig
+    if (!isNonEmptyString(parsed.apiKey)) return null
+    return { provider: parsed.provider, apiKey: parsed.apiKey.trim() }
   } catch (err) {
     log.warn('Failed to read AI config from sessionStorage', err)
     return null
@@ -54,12 +55,20 @@ export function getAIConfig(): AIConfig | null {
 
 /** Save AI config to sessionStorage */
 export function saveAIConfig(config: AIConfig) {
-  sessionStorage.setItem('c4hero_ai_config', JSON.stringify(config))
+  try {
+    sessionStorage.setItem('c4hero_ai_config', JSON.stringify(config))
+  } catch (err) {
+    log.warn('Failed to save AI config to sessionStorage', err)
+  }
 }
 
 /** Clear AI config */
 export function clearAIConfig() {
-  sessionStorage.removeItem('c4hero_ai_config')
+  try {
+    sessionStorage.removeItem('c4hero_ai_config')
+  } catch (err) {
+    log.warn('Failed to clear AI config from sessionStorage', err)
+  }
 }
 
 /** Generate a description for an element using AI */

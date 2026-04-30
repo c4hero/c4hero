@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createLogger } from '@/lib/logger'
+import { isRecord } from '@/lib/guards'
 
 const log = createLogger('settings')
 
@@ -17,7 +18,10 @@ export interface AppSettings {
 }
 
 function isMobile(): boolean {
-  return window.matchMedia('(max-width: 768px)').matches || /Mobi|Android/i.test(navigator.userAgent)
+  if (typeof window === 'undefined') return false
+  const mediaMatches = window.matchMedia?.('(max-width: 768px)')?.matches ?? false
+  const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  return mediaMatches || /Mobi|Android/i.test(userAgent)
 }
 
 const DEFAULTS: AppSettings = {
@@ -30,13 +34,39 @@ const DEFAULTS: AppSettings = {
 
 const STORAGE_KEY = 'c4hero.json'
 
+const MINIMAP_MODES: ReadonlySet<string> = new Set<MinimapMode>(['always', 'auto', 'never'])
+const COLOR_THEMES: ReadonlySet<string> = new Set<ColorTheme>(['readability', 'structurizr'])
+
+function isMinimapMode(value: unknown): value is MinimapMode {
+  return typeof value === 'string' && MINIMAP_MODES.has(value)
+}
+
+function isColorTheme(value: unknown): value is ColorTheme {
+  return typeof value === 'string' && COLOR_THEMES.has(value)
+}
+
+function readBoolean(source: Record<string, unknown>, key: keyof AppSettings, fallback: boolean): boolean {
+  return typeof source[key] === 'boolean' ? source[key] : fallback
+}
+
+function normalizeSettings(value: unknown): AppSettings {
+  const source = isRecord(value) ? value : {}
+  return {
+    minimapMode: isMinimapMode(source.minimapMode) ? source.minimapMode : DEFAULTS.minimapMode,
+    showUndoRedo: readBoolean(source, 'showUndoRedo', DEFAULTS.showUndoRedo),
+    showZoomControls: readBoolean(source, 'showZoomControls', DEFAULTS.showZoomControls),
+    snapToGrid: readBoolean(source, 'snapToGrid', DEFAULTS.snapToGrid),
+    colorTheme: isColorTheme(source.colorTheme) ? source.colorTheme : DEFAULTS.colorTheme,
+  }
+}
+
 // ─── Persistence ────────────────────────────────────────────────────
 
 function load(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULTS }
-    return { ...DEFAULTS, ...JSON.parse(raw) }
+    return normalizeSettings(JSON.parse(raw))
   } catch (err) {
     log.warn('Failed to load settings from localStorage', err)
     return { ...DEFAULTS }

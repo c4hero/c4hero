@@ -12,6 +12,11 @@ const RESET_DEFAULTS = {
   colorTheme: 'readability' as const,
 }
 
+async function importFreshSettingsStore() {
+  vi.resetModules()
+  return (await import('./settings')).useSettingsStore
+}
+
 describe('useSettingsStore', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -82,5 +87,49 @@ describe('useSettingsStore', () => {
     const state = useSettingsStore.getState()
     expect(state.colorTheme).toBeTruthy()
     expect(typeof state.showUndoRedo).toBe('boolean')
+  })
+
+  it('loads valid persisted settings on module initialization', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      minimapMode: 'always',
+      showUndoRedo: true,
+      showZoomControls: true,
+      snapToGrid: true,
+      colorTheme: 'structurizr',
+    }))
+
+    const freshStore = await importFreshSettingsStore()
+    expect(freshStore.getState()).toMatchObject({
+      minimapMode: 'always',
+      showUndoRedo: true,
+      showZoomControls: true,
+      snapToGrid: true,
+      colorTheme: 'structurizr',
+    })
+  })
+
+  it('ignores invalid persisted setting values individually', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      minimapMode: 'sometimes',
+      showUndoRedo: 'yes',
+      showZoomControls: true,
+      snapToGrid: 1,
+      colorTheme: 'neon',
+    }))
+
+    const freshStore = await importFreshSettingsStore()
+    expect(freshStore.getState()).toMatchObject({
+      minimapMode: 'auto',
+      showUndoRedo: false,
+      showZoomControls: true,
+      snapToGrid: false,
+      colorTheme: 'readability',
+    })
+  })
+
+  it('falls back to defaults when persisted settings are not an object', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(['not', 'settings']))
+    const freshStore = await importFreshSettingsStore()
+    expect(freshStore.getState()).toMatchObject(RESET_DEFAULTS)
   })
 })

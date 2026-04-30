@@ -377,7 +377,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
 	      return
 	    }
 	    // Write to folder if open
-	    const filename = file.name.replace(/\.json$/, '.dsl')
+	    const filename = file.name.replace(/\.json$/i, '.dsl')
 	    await writeDSLFile(filename, serializeDSL(parsed))
 	    loadWorkspace(parsed)
 	    useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
@@ -897,5 +897,4 @@ function CollectionView({
 }
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
-
 

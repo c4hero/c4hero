@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { Workspace } from '@/types/model'
 
 // We need to mock localStorage before importing fileIO so the module-level
@@ -46,6 +46,10 @@ function makeWorkspace(name = 'Test Workspace'): Workspace {
     },
   }
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 // ─── isWorkspaceShape ────────────────────────────────────────────────
 
@@ -95,6 +99,25 @@ describe('getRecentFiles', () => {
     const result = getRecentFiles()
     expect(result).toEqual([])
   })
+
+  it('returns empty array when stored value is not an array', async () => {
+    localStorage.setItem('c4hero_recent_files', JSON.stringify({ name: 'workspace.dsl' }))
+    const { getRecentFiles } = await import('./fileIO')
+    expect(getRecentFiles()).toEqual([])
+  })
+
+  it('filters malformed recent file entries', async () => {
+    localStorage.setItem('c4hero_recent_files', JSON.stringify([
+      { name: 'valid.dsl', openedAt: '2026-04-30T00:00:00.000Z' },
+      { name: '', openedAt: '2026-04-30T00:00:00.000Z' },
+      { name: 'missing-date.dsl' },
+      'not-an-entry',
+    ]))
+    const { getRecentFiles } = await import('./fileIO')
+    expect(getRecentFiles()).toEqual([
+      { name: 'valid.dsl', openedAt: '2026-04-30T00:00:00.000Z' },
+    ])
+  })
 })
 
 describe('addRecentFile', () => {
@@ -107,6 +130,24 @@ describe('addRecentFile', () => {
     const files = getRecentFiles()
     expect(files).toHaveLength(1)
     expect(files[0].name).toBe('workspace.dsl')
+  })
+
+  it('trims recent file names before storing them', async () => {
+    const ls = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', ls.mock)
+    const { addRecentFile, getRecentFiles } = await import('./fileIO')
+
+    addRecentFile('  workspace.dsl  ')
+    expect(getRecentFiles()[0].name).toBe('workspace.dsl')
+  })
+
+  it('ignores blank recent file names', async () => {
+    const ls = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', ls.mock)
+    const { addRecentFile, getRecentFiles } = await import('./fileIO')
+
+    addRecentFile('   ')
+    expect(getRecentFiles()).toEqual([])
   })
 
   it('moves an existing entry to front when added again', async () => {
@@ -179,6 +220,7 @@ describe('localStorage crash recovery', () => {
   })
 
   it('loadFromLocalStorage returns null for invalid JSON', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     const ls = makeMockLocalStorage()
     ls.store['c4hero_crash_recovery'] = 'not valid json {'
     vi.stubGlobal('localStorage', ls.mock)
@@ -220,6 +262,15 @@ describe('localStorage crash recovery', () => {
     clearLocalStorage()
     expect(ls.store['c4hero_crash_recovery']).toBeUndefined()
     expect(ls.store['c4hero_crash_recovery_time']).toBeUndefined()
+  })
+
+  it('clearLocalStorage does not throw when storage removal fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal('localStorage', {
+      removeItem: () => { throw new Error('storage disabled') },
+    })
+    const { clearLocalStorage } = await import('./fileIO')
+    expect(() => clearLocalStorage()).not.toThrow()
   })
 })
 
@@ -293,6 +344,7 @@ describe('addRecentFile edge cases', () => {
   })
 
   it('getRecentFiles handles malformed JSON gracefully', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     const ls = makeMockLocalStorage()
     ls.store['c4hero_recent_files'] = 'broken json {'
     vi.stubGlobal('localStorage', ls.mock)
@@ -300,6 +352,59 @@ describe('addRecentFile edge cases', () => {
 
     const files = getRecentFiles()
     expect(files).toEqual([])
+  })
+})
+
+// ─── getRecentFolders / addRecentFolder ─────────────────────────────
+
+describe('recent folders', () => {
+  beforeEach(() => {
+    const { mock } = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', mock)
+  })
+
+  it('returns empty array when localStorage is empty', async () => {
+    const { getRecentFolders } = await import('./fileIO')
+    expect(getRecentFolders()).toEqual([])
+  })
+
+  it('filters malformed recent folder entries', async () => {
+    localStorage.setItem('c4hero_recent_folders', JSON.stringify([
+      { name: 'team-architecture', path: 'team-architecture', displayName: 'Team Architecture', openedAt: '2026-04-30T00:00:00.000Z' },
+      { name: 'missing-path', openedAt: '2026-04-30T00:00:00.000Z' },
+      { name: 'bad-display', path: 'bad-display', displayName: 42, openedAt: '2026-04-30T00:00:00.000Z' },
+      [],
+    ]))
+    const { getRecentFolders } = await import('./fileIO')
+    expect(getRecentFolders()).toEqual([
+      { name: 'team-architecture', path: 'team-architecture', displayName: 'Team Architecture', openedAt: '2026-04-30T00:00:00.000Z' },
+      { name: 'bad-display', path: 'bad-display', displayName: undefined, openedAt: '2026-04-30T00:00:00.000Z' },
+    ])
+  })
+
+  it('moves an existing folder to the front when added again', async () => {
+    const { addRecentFolder, getRecentFolders } = await import('./fileIO')
+    addRecentFolder({ name: 'first', path: 'first' })
+    addRecentFolder({ name: 'second', path: 'second' })
+    addRecentFolder({ name: 'first', path: 'first', displayName: 'First' })
+
+    const folders = getRecentFolders()
+    expect(folders).toHaveLength(2)
+    expect(folders[0].name).toBe('first')
+    expect(folders[0].displayName).toBe('First')
+  })
+
+  it('trims recent folder values before storing them', async () => {
+    const { addRecentFolder, getRecentFolders } = await import('./fileIO')
+    addRecentFolder({ name: '  team  ', path: '  team  ', displayName: '  Team  ' })
+    expect(getRecentFolders()[0]).toMatchObject({ name: 'team', path: 'team', displayName: 'Team' })
+  })
+
+  it('ignores recent folders with blank name or path', async () => {
+    const { addRecentFolder, getRecentFolders } = await import('./fileIO')
+    addRecentFolder({ name: 'team', path: '' })
+    addRecentFolder({ name: '', path: 'team' })
+    expect(getRecentFolders()).toEqual([])
   })
 })
 
@@ -335,5 +440,37 @@ describe('isWorkspaceShape edge cases', () => {
     const { isWorkspaceShape } = await import('./fileIO')
     const ok = makeWorkspace('Minimal')
     expect(isWorkspaceShape(ok)).toBe(true)
+  })
+
+  it('rejects non-finite view coordinates', async () => {
+    const { isWorkspaceShape } = await import('./fileIO')
+    const bad = makeWorkspace()
+    bad.views.systemLandscapeViews.push({
+      type: 'systemLandscape',
+      key: 'landscape',
+      elements: [{ id: 'p1', x: Number.NaN, y: 0 }],
+      relationships: [],
+    })
+    expect(isWorkspaceShape(bad)).toBe(false)
+  })
+
+  it('rejects non-finite auto-layout spacing', async () => {
+    const { isWorkspaceShape } = await import('./fileIO')
+    const bad = makeWorkspace()
+    bad.views.systemLandscapeViews.push({
+      type: 'systemLandscape',
+      key: 'landscape',
+      elements: [],
+      relationships: [],
+      autoLayout: { direction: 'TB', rankSeparation: Infinity },
+    })
+    expect(isWorkspaceShape(bad)).toBe(false)
+  })
+
+  it('rejects non-finite style numbers', async () => {
+    const { isWorkspaceShape } = await import('./fileIO')
+    const bad = makeWorkspace()
+    bad.views.configuration.styles.elements.push({ tag: 'Element', fontSize: Number.NaN })
+    expect(isWorkspaceShape(bad)).toBe(false)
   })
 })

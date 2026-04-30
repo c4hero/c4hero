@@ -10,6 +10,10 @@ import {
   getCurrentDirHandle,
 } from './folderIO'
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 // ─── Mock Dir Handle Factory ──────────────────────────────────────────
 
 function makeDirHandle(files: Record<string, string> = {}): FileSystemDirectoryHandle {
@@ -162,6 +166,7 @@ describe('readDSLFile()', () => {
   })
 
   it('returns null when file not found', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     await setupWithFiles({ 'bigbank.dsl': 'workspace {}' })
     const result = await readDSLFile('nonexistent.dsl')
     expect(result).toBeNull()
@@ -232,6 +237,7 @@ describe('listDSLFiles()', () => {
   it('returns only .dsl filenames', async () => {
     const dirHandle = makeDirHandle({
       'a.dsl': 'workspace {}',
+      'UPPER.DSL': 'workspace {}',
       'b.dsl': 'workspace {}',
       'c.txt': 'text',
     })
@@ -242,6 +248,7 @@ describe('listDSLFiles()', () => {
     const files = await listDSLFiles()
     expect(files).toContain('a.dsl')
     expect(files).toContain('b.dsl')
+    expect(files).toContain('UPPER.DSL')
     expect(files).not.toContain('c.txt')
   })
 

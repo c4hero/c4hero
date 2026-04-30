@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Download, Copy, Check } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { ExportTheme } from '@/lib/exportUtils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ExportDialog')
 
 interface ExportDialogProps {
   onExport: (format: 'dsl' | 'json' | 'png' | 'svg', theme?: ExportTheme) => Promise<void>
@@ -8,9 +12,17 @@ interface ExportDialogProps {
   onClose: () => void
 }
 
+interface ExportAction {
+  id: string
+  icon: LucideIcon
+  label: string
+  fn: () => Promise<void>
+}
+
 export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialogProps) {
   const [busy, setBusy] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
+  const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -18,33 +30,41 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
+  useEffect(() => () => {
+    if (doneTimer.current) clearTimeout(doneTimer.current)
+  }, [])
+
   async function act(key: string, fn: () => Promise<void>) {
+    if (busy) return
     setBusy(key)
-    await fn()
-    setBusy(null)
-    setDone(key)
-    setTimeout(() => setDone((d) => (d === key ? null : d)), 1500)
+    try {
+      await fn()
+      setDone(key)
+      if (doneTimer.current) clearTimeout(doneTimer.current)
+      doneTimer.current = setTimeout(() => setDone((d) => (d === key ? null : d)), 1500)
+    } catch (err) {
+      log.warn('Export action failed', err)
+    } finally {
+      setBusy(null)
+    }
   }
 
-  function Btn({
+  function renderButton({
     id,
     icon: Icon,
     label,
-    onClick,
-  }: {
-    id: string
-    icon: typeof Download
-    label: string
-    onClick: () => Promise<void>
-  }) {
+    fn,
+  }: ExportAction) {
     const isLoading = busy === id
     const isDone = done === id
     return (
       <button
-        onClick={() => act(id, onClick)}
-        disabled={isLoading}
+        key={id}
+        onClick={() => act(id, fn)}
+        disabled={!!busy}
         title={label}
         aria-label={label}
+        aria-busy={isLoading}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -56,7 +76,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
           color: isDone ? 'var(--color-success)' : 'var(--color-text-secondary)',
           fontSize: 'var(--text-xs)',
           fontWeight: 500,
-          cursor: isLoading ? 'wait' : 'pointer',
+          cursor: busy ? 'wait' : 'pointer',
           flexShrink: 0,
           transition: 'background 0.15s, color 0.15s',
           whiteSpace: 'nowrap',
@@ -71,7 +91,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
   const rows: Array<{
     label: string
     ext: string
-    actions: Array<{ id: string; icon: typeof Download; label: string; fn: () => Promise<void> }>
+    actions: ExportAction[]
   }> = [
     {
       label: 'PNG Image',
@@ -152,9 +172,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                {row.actions.map((a) => (
-                  <Btn key={a.id} id={a.id} icon={a.icon} label={a.label} onClick={a.fn} />
-                ))}
+                {row.actions.map(renderButton)}
               </div>
             </div>
           ))}

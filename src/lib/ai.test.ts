@@ -39,12 +39,23 @@ describe('AI config storage', () => {
       expect(getAIConfig()).toBeNull()
     })
 
+    it('returns null for whitespace-only apiKey', () => {
+      sessionStorage.setItem(KEY, JSON.stringify({ provider: 'openai', apiKey: '   ' }))
+      expect(getAIConfig()).toBeNull()
+    })
+
+    it('trims accidental whitespace around a stored apiKey', () => {
+      sessionStorage.setItem(KEY, JSON.stringify({ provider: 'openai', apiKey: '  sk-xyz  ' }))
+      expect(getAIConfig()).toEqual({ provider: 'openai', apiKey: 'sk-xyz' })
+    })
+
     it('returns null for non-string apiKey', () => {
       sessionStorage.setItem(KEY, JSON.stringify({ provider: 'openai', apiKey: 12345 }))
       expect(getAIConfig()).toBeNull()
     })
 
     it('returns null for malformed JSON', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
       sessionStorage.setItem(KEY, '{not valid json')
       expect(getAIConfig()).toBeNull()
     })
@@ -60,6 +71,7 @@ describe('AI config storage', () => {
     })
 
     it('returns null when storage read throws', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
       vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
         throw new Error('storage disabled')
       })
@@ -80,6 +92,14 @@ describe('AI config storage', () => {
       saveAIConfig({ provider: 'anthropic', apiKey: 'second' })
       expect(getAIConfig()).toEqual({ provider: 'anthropic', apiKey: 'second' })
     })
+
+    it('does not throw when storage writes fail', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('storage disabled')
+      })
+      expect(() => saveAIConfig({ provider: 'openai', apiKey: 'sk-xyz' })).not.toThrow()
+    })
   })
 
   describe('clearAIConfig', () => {
@@ -93,6 +113,14 @@ describe('AI config storage', () => {
     it('is a no-op when no config is stored', () => {
       clearAIConfig()
       expect(getAIConfig()).toBeNull()
+    })
+
+    it('does not throw when storage removal fails', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+        throw new Error('storage disabled')
+      })
+      expect(() => clearAIConfig()).not.toThrow()
     })
   })
 

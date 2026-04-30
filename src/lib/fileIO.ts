@@ -1,6 +1,7 @@
 import type { Workspace } from '@/types/model'
 import { downloadBlob } from '@/lib/exportUtils'
 import { createLogger } from '@/lib/logger'
+import { isFiniteNumber, isNonEmptyString, isRecord, isStringArray, isStringRecord } from '@/lib/guards'
 
 const log = createLogger('fileIO')
 
@@ -41,11 +42,36 @@ export interface RecentFolder {
   openedAt: string
 }
 
+function normalizeRecentFiles(value: unknown): RecentFile[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): RecentFile[] => {
+    if (!isRecord(item) || !isNonEmptyString(item.name) || typeof item.openedAt !== 'string') return []
+    return [{ name: item.name, openedAt: item.openedAt }]
+  })
+}
+
+function normalizeRecentFolders(value: unknown): RecentFolder[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): RecentFolder[] => {
+    if (!isRecord(item) || !isNonEmptyString(item.name) || !isNonEmptyString(item.path) || typeof item.openedAt !== 'string') return []
+    return [{
+      name: item.name,
+      path: item.path,
+      displayName: typeof item.displayName === 'string' ? item.displayName : undefined,
+      openedAt: item.openedAt,
+    }]
+  })
+}
+
+function sidecarNameForDsl(dslName: string): string {
+  return dslName.replace(/\.dsl$/i, '') + '.c4hero.json'
+}
+
 export function getRecentFiles(): RecentFile[] {
   try {
     const data = localStorage.getItem(RECENT_FILES_KEY)
     if (!data) return []
-    return JSON.parse(data) as RecentFile[]
+    return normalizeRecentFiles(JSON.parse(data))
   } catch (err) {
     log.warn('Failed to read recent files from localStorage', err)
     return []
@@ -53,8 +79,10 @@ export function getRecentFiles(): RecentFile[] {
 }
 
 export function addRecentFile(name: string) {
-  const recent = getRecentFiles().filter(f => f.name !== name)
-  recent.unshift({ name, openedAt: new Date().toISOString() })
+  const trimmedName = name.trim()
+  if (!trimmedName) return
+  const recent = getRecentFiles().filter(f => f.name !== trimmedName)
+  recent.unshift({ name: trimmedName, openedAt: new Date().toISOString() })
   try {
     localStorage.setItem(RECENT_FILES_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
   } catch (err) {
@@ -66,7 +94,7 @@ export function getRecentFolders(): RecentFolder[] {
   try {
     const data = localStorage.getItem(RECENT_FOLDERS_KEY)
     if (!data) return []
-    return JSON.parse(data) as RecentFolder[]
+    return normalizeRecentFolders(JSON.parse(data))
   } catch (err) {
     log.warn('Failed to read recent folders from localStorage', err)
     return []
@@ -89,8 +117,11 @@ export function pruneRecentFolders(validNames: string[]): void {
 }
 
 export function addRecentFolder({ name, path, displayName }: { name: string; path: string; displayName?: string }) {
-  const recent = getRecentFolders().filter(f => f.path !== path)
-  recent.unshift({ name, path, displayName, openedAt: new Date().toISOString() })
+  const trimmedName = name.trim()
+  const trimmedPath = path.trim()
+  if (!trimmedName || !trimmedPath) return
+  const recent = getRecentFolders().filter(f => f.path !== trimmedPath)
+  recent.unshift({ name: trimmedName, path: trimmedPath, displayName: displayName?.trim() || undefined, openedAt: new Date().toISOString() })
   try {
     localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
   } catch (err) {
@@ -133,7 +164,7 @@ export async function writeSidecarToHandle(json: string): Promise<boolean> {
       const dirHandle = await currentFileHandle.getParent?.()
       if (dirHandle) {
         const dslFile = await currentFileHandle.getFile()
-        const sidecarFileName = dslFile.name.replace(/\.dsl$/, '') + '.c4hero.json'
+        const sidecarFileName = sidecarNameForDsl(dslFile.name)
         currentSidecarHandle = await dirHandle.getFileHandle(sidecarFileName, { create: true })
         const writable = await currentSidecarHandle.createWritable()
         await writable.write(json)
@@ -150,12 +181,12 @@ export async function writeSidecarToHandle(json: string): Promise<boolean> {
 
 /** Check if File System Access API is available */
 export function hasFileSystemAccess(): boolean {
-  return 'showOpenFilePicker' in window
+  return typeof window !== 'undefined' && 'showOpenFilePicker' in window
 }
 
 /** Check if the directory picker (showDirectoryPicker) is available */
 export function hasDirectoryAccess(): boolean {
-  return 'showDirectoryPicker' in window
+  return typeof window !== 'undefined' && 'showDirectoryPicker' in window
 }
 
 /** Open a .dsl file using File System Access API or fallback.
@@ -176,7 +207,7 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
       try {
         const dirHandle = await handle.getParent?.()
         if (dirHandle) {
-          const sidecarFileName = file.name.replace(/\.dsl$/, '') + '.c4hero.json'
+          const sidecarFileName = sidecarNameForDsl(file.name)
           const sidecarFileHandle = await dirHandle.getFileHandle(sidecarFileName)
           currentSidecarHandle = sidecarFileHandle
           const sidecarFile = await sidecarFileHandle.getFile()
@@ -253,8 +284,9 @@ const MAX_CRASH_RECOVERY_BYTES = 4 * 1024 * 1024
 export function saveToLocalStorage(workspace: Workspace) {
   try {
     const json = JSON.stringify(workspace)
-    if (json.length > MAX_CRASH_RECOVERY_BYTES) {
-      log.warn(`Workspace too large for crash recovery (${(json.length / 1024 / 1024).toFixed(1)}MB). Skipping localStorage save.`)
+    const sizeBytes = new TextEncoder().encode(json).length
+    if (sizeBytes > MAX_CRASH_RECOVERY_BYTES) {
+      log.warn(`Workspace too large for crash recovery (${(sizeBytes / 1024 / 1024).toFixed(1)}MB). Skipping localStorage save.`)
       return
     }
     localStorage.setItem('c4hero_crash_recovery', json)
@@ -264,23 +296,11 @@ export function saveToLocalStorage(workspace: Workspace) {
   }
 }
 
-function isRecord(obj: unknown): obj is Record<string, unknown> {
-  return !!obj && typeof obj === 'object' && !Array.isArray(obj)
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(item => typeof item === 'string')
-}
-
-function isPropertiesRecord(value: unknown): value is Record<string, string> {
-  return isRecord(value) && Object.values(value).every(item => typeof item === 'string')
-}
-
 function isBaseElementShape(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) return false
   if (typeof value.id !== 'string' || typeof value.name !== 'string') return false
   if (!isStringArray(value.tags)) return false
-  if (!isPropertiesRecord(value.properties)) return false
+  if (!isStringRecord(value.properties)) return false
   if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
   if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
   if ('status' in value && value.status !== undefined && !['Live', 'Planned', 'Deprecated', 'Removed'].includes(String(value.status))) return false
@@ -317,7 +337,7 @@ function isSoftwareSystemShape(value: unknown): boolean {
 function isRelationshipShape(value: unknown): boolean {
   if (!isRecord(value)) return false
   if (typeof value.id !== 'string' || typeof value.sourceId !== 'string' || typeof value.destinationId !== 'string') return false
-  if (!isStringArray(value.tags) || !isPropertiesRecord(value.properties)) return false
+  if (!isStringArray(value.tags) || !isStringRecord(value.properties)) return false
   if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
   if ('technology' in value && value.technology !== undefined && typeof value.technology !== 'string') return false
   if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
@@ -328,8 +348,8 @@ function isRelationshipShape(value: unknown): boolean {
 
 function isViewElementShape(value: unknown): boolean {
   if (!isRecord(value) || typeof value.id !== 'string') return false
-  if ('x' in value && value.x !== undefined && typeof value.x !== 'number') return false
-  if ('y' in value && value.y !== undefined && typeof value.y !== 'number') return false
+  if ('x' in value && value.x !== undefined && !isFiniteNumber(value.x)) return false
+  if ('y' in value && value.y !== undefined && !isFiniteNumber(value.y)) return false
   if ('pinned' in value && value.pinned !== undefined && typeof value.pinned !== 'boolean') return false
   return true
 }
@@ -351,8 +371,8 @@ function isViewShape(value: unknown): boolean {
   if ('autoLayout' in value && value.autoLayout !== undefined) {
     if (!isRecord(value.autoLayout)) return false
     if (!['TB', 'BT', 'LR', 'RL'].includes(String(value.autoLayout.direction))) return false
-    if ('rankSeparation' in value.autoLayout && value.autoLayout.rankSeparation !== undefined && typeof value.autoLayout.rankSeparation !== 'number') return false
-    if ('nodeSeparation' in value.autoLayout && value.autoLayout.nodeSeparation !== undefined && typeof value.autoLayout.nodeSeparation !== 'number') return false
+    if ('rankSeparation' in value.autoLayout && value.autoLayout.rankSeparation !== undefined && !isFiniteNumber(value.autoLayout.rankSeparation)) return false
+    if ('nodeSeparation' in value.autoLayout && value.autoLayout.nodeSeparation !== undefined && !isFiniteNumber(value.autoLayout.nodeSeparation)) return false
   }
   return true
 }
@@ -363,7 +383,7 @@ function isElementStyleShape(value: unknown): boolean {
     if (key === 'tag' || key === 'background' || key === 'color' || key === 'shape' || key === 'border' || key === 'icon' || key === 'stroke') {
       return typeof item === 'string'
     }
-    if (key === 'fontSize' || key === 'opacity' || key === 'strokeWidth') return typeof item === 'number'
+    if (key === 'fontSize' || key === 'opacity' || key === 'strokeWidth') return isFiniteNumber(item)
     return true
   })
 }
@@ -372,7 +392,7 @@ function isRelationshipStyleShape(value: unknown): boolean {
   if (!isRecord(value) || typeof value.tag !== 'string') return false
   return Object.entries(value).every(([key, item]) => {
     if (key === 'tag' || key === 'color') return typeof item === 'string'
-    if (key === 'thickness' || key === 'fontSize' || key === 'opacity') return typeof item === 'number'
+    if (key === 'thickness' || key === 'fontSize' || key === 'opacity') return isFiniteNumber(item)
     if (key === 'dashed') return typeof item === 'boolean'
     return true
   })
@@ -423,8 +443,12 @@ export function loadFromLocalStorage(): Workspace | null {
 
 /** Clear crash recovery data */
 export function clearLocalStorage() {
-  localStorage.removeItem('c4hero_crash_recovery')
-  localStorage.removeItem('c4hero_crash_recovery_time')
+  try {
+    localStorage.removeItem('c4hero_crash_recovery')
+    localStorage.removeItem('c4hero_crash_recovery_time')
+  } catch (err) {
+    log.warn('Failed to clear crash recovery data from localStorage', err)
+  }
 }
 
 // ─── File System Access API type declarations ─────────────────────

@@ -122,6 +122,36 @@ describe('downloadFile / downloadBlob', () => {
     expect(a.download).toBe('workspace-2026-04-12.dsl')
   })
 
+  it('trims whitespace around downloaded filenames', () => {
+    downloadBlob(new Blob(['x']), '  workspace.dsl  ')
+    const a = createdAnchors[createdAnchors.length - 1]
+    expect(a.download).toBe('workspace.dsl')
+  })
+
+  it('replaces control characters in downloaded filenames', () => {
+    downloadBlob(new Blob(['x']), 'line\nbreak.dsl')
+    const a = createdAnchors[createdAnchors.length - 1]
+    expect(a.download).toBe('line_break.dsl')
+  })
+
+  it('falls back when filename has no usable characters', () => {
+    downloadBlob(new Blob(['x']), '...')
+    const a = createdAnchors[createdAnchors.length - 1]
+    expect(a.download).toBe('download')
+  })
+
+  it('prefixes Windows reserved filenames', () => {
+    downloadBlob(new Blob(['x']), 'CON.dsl')
+    const a = createdAnchors[createdAnchors.length - 1]
+    expect(a.download).toBe('_CON.dsl')
+  })
+
+  it('limits very long downloaded filenames', () => {
+    downloadBlob(new Blob(['x']), `${'a'.repeat(220)}.dsl`)
+    const a = createdAnchors[createdAnchors.length - 1]
+    expect(a.download.length).toBe(180)
+  })
+
   it('revokes the object URL after click', () => {
     const revokeSpy = vi.spyOn(URL, 'revokeObjectURL')
     downloadBlob(new Blob(['x']), 'test.txt')

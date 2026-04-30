@@ -3,33 +3,29 @@ import { useSyncExternalStore } from 'react'
 export type Breakpoint = 'mobile' | 'tablet' | 'desktop'
 
 function getBreakpoint(): Breakpoint {
+  if (typeof window === 'undefined') return 'desktop'
   const w = window.innerWidth
   if (w < 768) return 'mobile'
   if (w < 1024) return 'tablet'
   return 'desktop'
 }
 
-let currentBreakpoint = typeof window !== 'undefined' ? getBreakpoint() : ('desktop' as Breakpoint)
-
-const listeners = new Set<() => void>()
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', () => {
+function subscribe(callback: () => void) {
+  if (typeof window === 'undefined') return () => {}
+  let currentBreakpoint = getBreakpoint()
+  const handleResize = () => {
     const next = getBreakpoint()
     if (next !== currentBreakpoint) {
       currentBreakpoint = next
-      listeners.forEach((fn) => fn())
+      callback()
     }
-  })
-}
-
-function subscribe(callback: () => void) {
-  listeners.add(callback)
-  return () => listeners.delete(callback)
+  }
+  window.addEventListener('resize', handleResize)
+  return () => window.removeEventListener('resize', handleResize)
 }
 
 function getSnapshot() {
-  return currentBreakpoint
+  return getBreakpoint()
 }
 
 export function useBreakpoint(): Breakpoint {

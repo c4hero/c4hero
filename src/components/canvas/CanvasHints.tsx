@@ -6,17 +6,26 @@ const HINTS_DISMISSED_KEY = 'c4hero_hints_dismissed'
 
 function getDismissed(): Set<string> {
   try {
+    if (typeof localStorage === 'undefined') return new Set()
     const data = localStorage.getItem(HINTS_DISMISSED_KEY)
-    return data ? new Set(JSON.parse(data)) : new Set()
+    if (!data) return new Set()
+    const parsed = JSON.parse(data)
+    return Array.isArray(parsed)
+      ? new Set(parsed.filter((id): id is string => typeof id === 'string'))
+      : new Set()
   } catch {
     return new Set()
   }
 }
 
 function dismiss(hintId: string) {
-  const set = getDismissed()
-  set.add(hintId)
-  localStorage.setItem(HINTS_DISMISSED_KEY, JSON.stringify([...set]))
+  try {
+    const set = getDismissed()
+    set.add(hintId)
+    localStorage.setItem(HINTS_DISMISSED_KEY, JSON.stringify([...set]))
+  } catch {
+    // Hints are optional polish; storage failures should never block canvas work.
+  }
 }
 
 export default function CanvasHints() {
@@ -28,7 +37,7 @@ export default function CanvasHints() {
 
   function handleDismiss(id: string) {
     dismiss(id)
-    setDismissed(new Set(dismissed).add(id))
+    setDismissed((prev) => new Set(prev).add(id))
   }
 
   if (!workspace || !view) return null
@@ -74,10 +83,9 @@ function Hint({ id, children, onDismiss }: { id: string; children: React.ReactNo
         aria-label="Dismiss hint"
         style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit' }}
       >
-        <X size={10} />
+        <X size={10} aria-hidden="true" />
       </button>
     </div>
   )
 }
-
 

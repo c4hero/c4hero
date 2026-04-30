@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { extractSidecar, applySidecar, parseSidecar, serializeSidecar, sidecarName } from './sidecar'
 import type { Workspace } from '@/types/model'
 
@@ -39,6 +39,10 @@ function makeWorkspace(): Workspace {
     },
   }
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 // ─── extractSidecar ──────────────────────────────────────────────────
 
@@ -114,6 +118,26 @@ describe('applySidecar', () => {
     expect(ws.views.systemLandscapeViews[0].elements[0].pinned).toBe(true)
   })
 
+  it('applies finite pinned coordinates to a view element', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: true, x: 120, y: 240 } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].elements[0]).toMatchObject({ pinned: true, x: 120, y: 240 })
+  })
+
+  it('ignores non-finite pinned coordinates defensively', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: true, x: Number.NaN, y: Infinity } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].elements[0].pinned).toBe(true)
+    expect(ws.views.systemLandscapeViews[0].elements[0].x).toBeUndefined()
+    expect(ws.views.systemLandscapeViews[0].elements[0].y).toBeUndefined()
+  })
+
   it('is a no-op when version !== 1', () => {
     const ws = makeWorkspace()
     applySidecar(ws, { version: 99 as 1, elements: { alice: { status: 'Removed' } } })
@@ -162,6 +186,7 @@ describe('applySidecar', () => {
 
 describe('parseSidecar', () => {
   it('returns null for invalid JSON', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     const result = parseSidecar('not valid json {')
     expect(result).toBeNull()
   })
@@ -176,6 +201,7 @@ describe('parseSidecar', () => {
   })
 
   it('returns null for empty string', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(parseSidecar('')).toBeNull()
   })
 
@@ -185,6 +211,32 @@ describe('parseSidecar', () => {
     expect(result).not.toBeNull()
     expect(result!.version).toBe(1)
     expect(result!.elements?.['alice']?.status).toBe('Live')
+  })
+
+  it('returns null when top-level collections are arrays', () => {
+    expect(parseSidecar(JSON.stringify({ version: 1, elements: [] }))).toBeNull()
+    expect(parseSidecar(JSON.stringify({ version: 1, relationships: [] }))).toBeNull()
+    expect(parseSidecar(JSON.stringify({ version: 1, views: [] }))).toBeNull()
+  })
+
+  it('returns null for invalid element metadata', () => {
+    expect(parseSidecar(JSON.stringify({ version: 1, elements: { alice: { status: 'Injected' } } }))).toBeNull()
+    expect(parseSidecar(JSON.stringify({ version: 1, elements: { alice: { owner: 42 } } }))).toBeNull()
+  })
+
+  it('returns null for invalid relationship metadata', () => {
+    expect(parseSidecar(JSON.stringify({ version: 1, relationships: { 'rel-1': { lineStyle: 'Diagonal' } } }))).toBeNull()
+  })
+
+  it('returns null for invalid view element metadata', () => {
+    expect(parseSidecar(JSON.stringify({
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: true, x: Number.NaN } } } },
+    }))).toBeNull()
+    expect(parseSidecar(JSON.stringify({
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: 'yes' } } } },
+    }))).toBeNull()
   })
 })
 
@@ -226,6 +278,10 @@ describe('sidecarName', () => {
 
   it('converts workspace.dsl → workspace.c4hero.json', () => {
     expect(sidecarName('workspace.dsl')).toBe('workspace.c4hero.json')
+  })
+
+  it('handles uppercase .DSL extension', () => {
+    expect(sidecarName('workspace.DSL')).toBe('workspace.c4hero.json')
   })
 
   it('handles names without .dsl extension gracefully', () => {

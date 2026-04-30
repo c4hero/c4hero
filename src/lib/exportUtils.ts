@@ -13,7 +13,21 @@ export function downloadFile(content: string, filename: string, mimeType: string
 
 /** Sanitize a filename by removing path separators and dangerous characters */
 function sanitizeFilename(name: string): string {
-  return name.replace(/[/\\:*?"<>|]/g, '_').replace(/^\.+/, '_')
+  const illegalChars = new Set('/\\:*?"<>|')
+  const safeChars = Array.from(name.trim(), (char) => {
+    const code = char.charCodeAt(0)
+    return code <= 31 || code === 127 || illegalChars.has(char) ? '_' : char
+  }).join('')
+  const cleaned = safeChars
+    .replace(/^\.+/, '_')
+    .replace(/[. ]+$/, '')
+    .slice(0, 180)
+
+  if (!cleaned || cleaned === '_') return 'download'
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(cleaned)) {
+    return `_${cleaned}`
+  }
+  return cleaned
 }
 
 /** Trigger a file download from a Blob */

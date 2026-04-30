@@ -1,6 +1,7 @@
 import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
 import { allViewsOf } from '@/store/workspace'
 import { createLogger } from '@/lib/logger'
+import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 
 const VALID_STATUSES: ReadonlySet<string> = new Set<ElementStatus>(['Live', 'Planned', 'Deprecated', 'Removed'])
 const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
@@ -42,6 +43,41 @@ export interface SidecarData {
   elements?: Record<string, SidecarElement>
   relationships?: Record<string, SidecarRelationship>
   views?: Record<string, SidecarView>
+}
+
+function isSidecarElement(value: unknown): value is SidecarElement {
+  if (!isRecord(value)) return false
+  if ('status' in value && value.status !== undefined && !isValidStatus(value.status)) return false
+  if ('owner' in value && value.owner !== undefined && typeof value.owner !== 'string') return false
+  return true
+}
+
+function isSidecarRelationship(value: unknown): value is SidecarRelationship {
+  if (!isRecord(value)) return false
+  if ('lineStyle' in value && value.lineStyle !== undefined && !isValidLineStyle(value.lineStyle)) return false
+  return true
+}
+
+function isSidecarViewElement(value: unknown): value is SidecarViewElement {
+  if (!isRecord(value)) return false
+  if ('pinned' in value && value.pinned !== undefined && typeof value.pinned !== 'boolean') return false
+  if ('x' in value && value.x !== undefined && !isFiniteNumber(value.x)) return false
+  if ('y' in value && value.y !== undefined && !isFiniteNumber(value.y)) return false
+  return true
+}
+
+function isSidecarView(value: unknown): value is SidecarView {
+  if (!isRecord(value)) return false
+  if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
+  return true
+}
+
+function isSidecarData(value: unknown): value is SidecarData {
+  if (!isRecord(value) || value.version !== 1) return false
+  if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarElement)) return false
+  if ('relationships' in value && value.relationships !== undefined && !isRecordOf(value.relationships, isSidecarRelationship)) return false
+  if ('views' in value && value.views !== undefined && !isRecordOf(value.views, isSidecarView)) return false
+  return true
 }
 
 // ─── Extract sidecar from workspace ─────────────────────────────────
@@ -131,8 +167,8 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
         const elData = viewData.elements[el.id]
         if (elData?.pinned) {
           el.pinned = true
-          if (elData.x !== undefined) el.x = elData.x
-          if (elData.y !== undefined) el.y = elData.y
+          if (isFiniteNumber(elData.x)) el.x = elData.x
+          if (isFiniteNumber(elData.y)) el.y = elData.y
         }
       }
     }
@@ -142,7 +178,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
 // ─── Sidecar filename ───────────────────────────────────────────────
 
 export function sidecarName(dslName: string): string {
-  return dslName.replace(/\.dsl$/, '') + '.c4hero.json'
+  return dslName.replace(/\.dsl$/i, '') + '.c4hero.json'
 }
 
 export function serializeSidecar(data: SidecarData): string {
@@ -152,12 +188,7 @@ export function serializeSidecar(data: SidecarData): string {
 export function parseSidecar(json: string): SidecarData | null {
   try {
     const data = JSON.parse(json)
-    if (!data || typeof data !== 'object' || data.version !== 1) return null
-    // Validate expected shape — elements/relationships/views should be objects if present
-    if (data.elements && typeof data.elements !== 'object') return null
-    if (data.relationships && typeof data.relationships !== 'object') return null
-    if (data.views && typeof data.views !== 'object') return null
-    return data as SidecarData
+    return isSidecarData(data) ? data : null
   } catch (err) {
     log.warn('Failed to parse sidecar JSON', err)
     return null
