@@ -1,5 +1,4 @@
-import { forwardRef, lazy, Suspense, useEffect, useRef, useState } from 'react'
-import LoadingDot from '@/components/shared/LoadingDot'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import type { LayoutDirection } from '@/types/model'
@@ -18,8 +17,7 @@ import { useArrowNav } from '@/hooks/useArrowNav'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
 import AddElementPanel from '@/components/layout/AddElementPanel'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
-
-const CanvasSettingsDialog = lazy(() => import('@/components/settings/CanvasSettingsDialog'))
+import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
 
 const DIRECTION_ICONS: Record<LayoutDirection, React.ReactNode> = {
   TB: <ArrowDown size={14} />,
@@ -239,7 +237,7 @@ export default function FloatingToolRail() {
         onClick={() => setCanvasSettingsOpen(true)}
       />
     </div>
-    {canvasSettingsOpen && <Suspense fallback={<LoadingDot />}><CanvasSettingsDialog onClose={() => setCanvasSettingsOpen(false)} /></Suspense>}
+    {canvasSettingsOpen && <CanvasSettingsDialog onClose={() => setCanvasSettingsOpen(false)} />}
     </>
   )
 }
