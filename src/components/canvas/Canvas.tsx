@@ -46,7 +46,7 @@ const KBD_STYLE: React.CSSProperties = {
 // Stable ReactFlow prop objects — defined outside the component to avoid re-creating
 // them on every render (ReactFlow uses shallow equality to decide when to re-render).
 const RF_PRO_OPTIONS = { hideAttribution: true }
-const RF_SNAP_GRID: [number, number] = [20, 20]
+const RF_SNAP_GRID: [number, number] = [32, 32]
 const RF_DEFAULT_EDGE_OPTIONS = { type: 'relationship', reconnectable: true }
 const RF_PAN_ON_DRAG_DEFAULT = [0]
 const RF_PAN_ON_DRAG_SPACE = [0, 1, 2]
@@ -1199,7 +1199,7 @@ export default function Canvas() {
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={36}
+          gap={32}
           size={1.5}
           color={isLightCanvas ? 'rgba(0,0,0,0.32)' : '#3a5274'}
         />

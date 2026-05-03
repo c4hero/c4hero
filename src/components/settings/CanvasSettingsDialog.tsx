@@ -49,15 +49,39 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
         {/* Settings */}
         <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Color theme */}
-          <SettingRow
-            label="Color theme"
-            description="Default palette for new workspaces and templates. Per-tag styles you've set in the workspace override these values."
-          >
-            <ThemeSwatchPicker
-              value={settings.colorTheme}
-              onChange={(v) => settings.update({ colorTheme: v })}
-            />
-          </SettingRow>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <SettingRow
+              label="Color theme"
+              description="Default palette for new workspaces and templates"
+            >
+              <ThemeSwatchPicker
+                value={settings.colorTheme}
+                onChange={(v) => settings.update({ colorTheme: v })}
+              />
+            </SettingRow>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                padding: '8px 10px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+                fontSize: 'var(--text-xs-plus)',
+                color: 'var(--color-text-primary)',
+                lineHeight: 1.4,
+              }}
+              role="note"
+            >
+              <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1, marginTop: 1 }}>💡</span>
+              <span>
+                <strong style={{ color: 'var(--color-accent)' }}>Heads up:</strong>{' '}
+                Per-tag styles defined in your workspace override these theme colors. Edit them via{' '}
+                <strong>Highlight → Tags → Edit tags</strong>.
+              </span>
+            </div>
+          </div>
 
           {/* Minimap */}
           <SettingRow
