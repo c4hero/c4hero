@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 
 export function FieldLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
@@ -386,6 +386,204 @@ export function TechnologyField({ value, placeholder, onCommit, onLiveChange, sc
             >
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {s.tech}
+              </span>
+              <span style={{ fontSize: 'var(--text-xxs)', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                {s.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── OwnerField ──────────────────────────────────────────────────────
+// Single-select team picker with autocomplete. Mirrors TechnologyField's
+// dropdown UX but holds a single value (no chips). Free-text typing
+// remains supported so users can introduce a new team without having to
+// add it elsewhere first.
+
+function useOwnerSuggestions(): { owner: string; count: number }[] {
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  return useMemo(() => {
+    if (!workspace) return []
+    const counts = new Map<string, { owner: string; count: number }>()
+    const bump = (raw?: string) => {
+      if (!raw) return
+      const trimmed = raw.trim()
+      if (!trimmed) return
+      const key = trimmed.toLowerCase()
+      const existing = counts.get(key)
+      if (existing) existing.count += 1
+      else counts.set(key, { owner: trimmed, count: 1 })
+    }
+    for (const p of workspace.model.people) bump(p.owner)
+    for (const sys of workspace.model.softwareSystems) {
+      bump(sys.owner)
+      for (const c of sys.containers) {
+        bump(c.owner)
+        for (const comp of c.components) bump(comp.owner)
+      }
+    }
+    return Array.from(counts.values()).sort((a, b) => b.count - a.count || a.owner.localeCompare(b.owner))
+  }, [workspace])
+}
+
+export function OwnerField({ value, placeholder, onCommit, onLiveChange, 'aria-label': ariaLabel }: {
+  value: string
+  placeholder?: string
+  onCommit: (val: string) => void
+  onLiveChange?: (val: string) => void
+  'aria-label'?: string
+}) {
+  const [draft, setDraft] = useState(value)
+  const [focused, setFocused] = useState(false)
+  const [selectedIdx, setSelectedIdx] = useState(-1)
+  const suggestions = useOwnerSuggestions()
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Keep the draft synced when the underlying value changes externally
+  // (e.g. user selected a different element).
+  useEffect(() => { setDraft(value) }, [value])
+
+  const filtered = useMemo(() => {
+    const q = draft.trim().toLowerCase()
+    if (!q) return suggestions
+    return suggestions.filter((s) => s.owner.toLowerCase().includes(q))
+  }, [suggestions, draft])
+
+  const showDropdown = focused && filtered.length > 0
+
+  const commit = (next: string) => {
+    const trimmed = next.trim()
+    onLiveChange?.(trimmed)
+    onCommit(trimmed)
+  }
+
+  const choose = (owner: string) => {
+    setDraft(owner)
+    setSelectedIdx(-1)
+    commit(owner)
+    inputRef.current?.blur()
+  }
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const nextTarget = e.relatedTarget
+    if (nextTarget instanceof Node && wrapperRef.current?.contains(nextTarget)) return
+    setFocused(false)
+    if (draft !== value) commit(draft)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showDropdown && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      setSelectedIdx((prev) => {
+        if (e.key === 'ArrowDown') return Math.min(prev + 1, filtered.length - 1)
+        return Math.max(prev - 1, -1)
+      })
+      return
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (selectedIdx >= 0 && selectedIdx < filtered.length) choose(filtered[selectedIdx].owner)
+      else commit(draft)
+      ;(e.target as HTMLElement).blur()
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setDraft(value)
+      setSelectedIdx(-1)
+      ;(e.target as HTMLElement).blur()
+    }
+  }
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="w-full rounded-lg border px-2 py-1.5 text-sm transition-colors"
+      style={{
+        background: focused ? 'var(--color-surface-3)' : 'var(--color-surface-2)',
+        borderColor: focused ? 'var(--color-accent)' : 'var(--color-border)',
+        color: 'var(--color-text-primary)',
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        minHeight: 36,
+      }}
+      aria-label={ariaLabel}
+    >
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => { setDraft(e.target.value); onLiveChange?.(e.target.value); setSelectedIdx(-1) }}
+        onFocus={() => setFocused(true)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        style={{
+          flex: 1,
+          border: 'none',
+          outline: 'none',
+          background: 'transparent',
+          color: 'var(--color-text-primary)',
+          padding: '2px 4px',
+          fontSize: 'inherit',
+        }}
+      />
+      {draft && (
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); setDraft(''); commit('') }}
+          aria-label="Clear owner"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--color-text-muted)', padding: 0, marginRight: 4,
+            display: 'flex', alignItems: 'center', lineHeight: 1, fontSize: 14,
+          }}
+        >
+          ×
+        </button>
+      )}
+      {showDropdown && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: 'var(--glass-bg-heavy)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            maxHeight: 160,
+            overflowY: 'auto',
+            zIndex: 60,
+            backdropFilter: 'blur(12px)',
+            padding: '4px 0',
+          }}
+        >
+          {filtered.slice(0, 12).map((s, i) => (
+            <button
+              key={s.owner}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); choose(s.owner) }}
+              className="flyout-item"
+              style={{
+                padding: '5px 10px',
+                width: '100%',
+                background: i === selectedIdx ? 'var(--glass-overlay-sm)' : undefined,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {s.owner}
               </span>
               <span style={{ fontSize: 'var(--text-xxs)', color: 'var(--color-text-muted)', flexShrink: 0 }}>
                 {s.count}

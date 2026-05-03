@@ -4,7 +4,7 @@ import type { ModelElement, Container, Component, Person, SoftwareSystem, Relati
 import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, ChevronRight, Trash2 } from 'lucide-react'
 import { generateDescription, getAIConfig } from '@/lib/ai'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
-import { FieldLabel, EditableField, TechnologyField } from './right-panel/fields'
+import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
 
 /** Returns the URL if it uses a safe protocol (http, https, or protocol-relative), otherwise null. */
@@ -267,7 +267,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             {/* Owner */}
             <div>
               <FieldLabel>Owner</FieldLabel>
-              <EditableField value={element.owner ?? ''} placeholder="e.g. Team Alpha" aria-label="Owner" onLiveChange={(v) => updateElementLive(element.id, { owner: v || undefined })} onCommit={(v) => updateElement(element.id, { owner: v || undefined })} />
+              <OwnerField value={element.owner ?? ''} placeholder="e.g. Team Alpha" aria-label="Owner" onLiveChange={(v) => updateElementLive(element.id, { owner: v || undefined })} onCommit={(v) => updateElement(element.id, { owner: v || undefined })} />
             </div>
 
             {/* URL */}
