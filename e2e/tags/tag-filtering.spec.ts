@@ -40,20 +40,15 @@ test.describe('Tag Filtering', () => {
     await panel.getByRole('button', { name: /^Critical\b/, exact: false }).click()
     await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
-    // Close the spotlight panel before opening tag manager
-    await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
-
-    await workspace.page.getByRole('button', { name: 'Manage tags' }).click()
+    // Manage tags now lives inside the Highlighter panel's Tags tab.
+    await panel.getByRole('button', { name: 'Manage tags' }).click()
     const tagInput = workspace.page.locator('input[type="text"][value="Critical"]')
     await tagInput.click()
     await tagInput.fill('Urgent')
     await workspace.page.getByRole('button', { name: 'Confirm rename' }).click()
 
-    // Close the TagManagerPanel before re-opening spotlight (its full-screen
-    // close overlay would otherwise intercept the rail button click).
+    // Close the TagManagerPanel modal so its overlay doesn't intercept clicks.
     await workspace.page.getByRole('button', { name: 'Close tag manager' }).click()
-
-    panel = await openSpotlight(workspace)
     const urgent = panel.getByRole('button', { name: /^Urgent\b/, exact: false })
     await expect(urgent).toBeVisible()
     await expect(urgent).toHaveAttribute('aria-pressed', 'true')
@@ -74,8 +69,7 @@ test.describe('Tag Filtering', () => {
     await panel.getByRole('button', { name: /^Critical\b/, exact: false }).click()
     await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
-    await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
-    await workspace.page.getByRole('button', { name: 'Manage tags' }).click()
+    await panel.getByRole('button', { name: 'Manage tags' }).click()
     await workspace.page.getByRole('button', { name: 'Remove tag "Critical" globally' }).click()
 
     await expect(workspace.getVisibleNodeByName('New System')).toBeVisible()

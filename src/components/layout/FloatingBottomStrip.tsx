@@ -2,79 +2,27 @@ import { useMemo, useRef, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useWorkspaceStore, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
 import type { ElementStyle } from '@/types/model'
-import { X, Palette, Pencil, Plus, Check, AlertTriangle } from 'lucide-react'
+import { X, Palette, Plus, Check, AlertTriangle } from 'lucide-react'
 import type { ScopeViolation } from '@/lib/scopeValidation'
 
 const DEFAULT_BUILTIN_TAGS = ['Person', 'Software System', 'Container', 'Component', 'Element', 'Relationship',
   'Web Application', 'Service', 'Database', 'Queue', 'Mobile App', 'File System']
 
+// FloatingBottomStrip now only surfaces orphan scope violations. The manage-tags
+// pencil moved into the Highlighter panel's Tags tab; the spotlight bar moved
+// into the right-side panel.
 export default function FloatingBottomStrip() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const scopeViolations = useWorkspaceStore((s) => s.scopeViolations)
-  const [tagManagerOpen, setTagManagerOpen] = useState(false)
-
   if (!workspace) return null
-
-  return (
-    <>
-      {scopeViolations.filter((v) => !v.elementId && !v.relationshipId).length > 0 && (
-        <ScopeViolationBanner violations={scopeViolations.filter((v) => !v.elementId && !v.relationshipId)} />
-      )}
-      <div
-        data-canvas-fit-chrome="bottom"
-        style={{
-          position: 'fixed',
-          bottom: 'max(14px, calc(env(safe-area-inset-bottom, 0px) + 8px))',
-          left: 0,
-          right: 0,
-          zIndex: 50,
-          display: 'flex',
-          justifyContent: 'center',
-          padding: '0 14px',
-          pointerEvents: 'none',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            maxWidth: '100%',
-            pointerEvents: 'auto',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setTagManagerOpen((o) => !o)}
-            className="glass-panel hover-lift-inactive"
-            data-active={tagManagerOpen ? 'true' : undefined}
-            aria-label="Manage tags"
-            title="Manage tags"
-            style={{
-              height: 44,
-              width: 44,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-              color: tagManagerOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
-              border: 'none',
-              flexShrink: 0,
-            }}
-          >
-            <Pencil size={14} />
-          </button>
-        </div>
-      </div>
-      {tagManagerOpen && createPortal(<TagManagerPanel onClose={() => setTagManagerOpen(false)} />, document.body)}
-    </>
-  )
+  const orphans = scopeViolations.filter((v) => !v.elementId && !v.relationshipId)
+  if (orphans.length === 0) return null
+  return <ScopeViolationBanner violations={orphans} />
 }
 
 // ─── Tag Manager Panel ────────────────────────────────────────────────
 
-function TagManagerPanel({
+export function TagManagerPanel({
   onClose,
 }: {
   onClose: () => void

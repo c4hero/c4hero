@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Tag, Activity, Cpu, Users, X, Trash2, Search } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Tag, Activity, Cpu, Users, X, Trash2, Search, Pencil } from 'lucide-react'
 import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/workspace'
 import type { ElementStatus } from '@/types/model'
+import { TagManagerPanel } from '../FloatingBottomStrip'
 
 const STATUS_COLORS: Record<ElementStatus, string> = {
   Live: 'var(--color-status-live)',
@@ -122,6 +124,7 @@ export default function SpotlightPanel() {
 
   const [tab, setTab] = useState<FacetKey>('tags')
   const [query, setQuery] = useState('')
+  const [tagManagerOpen, setTagManagerOpen] = useState(false)
 
   // Reset search when switching tabs.
   useEffect(() => { setQuery('') }, [tab])
@@ -450,23 +453,48 @@ export default function SpotlightPanel() {
                 {tabContent.available.length}
               </span>
             </span>
-            {tabContent.selected.length > 0 && (
-              <button
-                type="button"
-                onClick={tabContent.onClear}
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: 'var(--color-text-muted)',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
-              >
-                Clear
-              </button>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {tab === 'tags' && (
+                <button
+                  type="button"
+                  onClick={() => setTagManagerOpen(true)}
+                  title="Manage tags (rename, restyle, remove)"
+                  aria-label="Manage tags"
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: 'var(--color-text-muted)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                >
+                  <Pencil size={10} />
+                  Edit tags
+                </button>
+              )}
+              {tabContent.selected.length > 0 && (
+                <button
+                  type="button"
+                  onClick={tabContent.onClear}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: 'var(--color-text-muted)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {ordered.length === 0 && (
@@ -533,6 +561,10 @@ export default function SpotlightPanel() {
           </div>
         </div>
       </div>
+      {tagManagerOpen && createPortal(
+        <TagManagerPanel onClose={() => setTagManagerOpen(false)} />,
+        document.body,
+      )}
     </div>
   )
 }

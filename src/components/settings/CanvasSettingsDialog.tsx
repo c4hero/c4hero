@@ -51,7 +51,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
           {/* Color theme */}
           <SettingRow
             label="Color theme"
-            description="Default palette for new workspaces and templates"
+            description="Default palette for new workspaces and templates. Per-tag styles you've set in the workspace override these values."
           >
             <ThemeSwatchPicker
               value={settings.colorTheme}
