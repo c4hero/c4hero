@@ -129,6 +129,15 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   'a': (store) => {
     if (store.workspace) store.setAddElementPanelOpen(!store.addElementPanelOpen)
   },
+  'h': (store) => {
+    if (store.workspace) store.setHighlighterPanelOpen(!store.highlighterPanelOpen)
+  },
+  'm': (store) => {
+    if (store.workspace) store.setMultiSelectMode(!store.multiSelectMode)
+  },
+  'mod+shift+l': (store) => {
+    if (store.workspace && store.activeViewKey) store.resetAndRelayout(store.activeViewKey)
+  },
   '?': (store) => store.setCommandPaletteOpen(true),
   '=': (_store, rf) => rf?.zoomIn({ duration: 200 }),
   '+': (_store, rf) => rf?.zoomIn({ duration: 200 }),

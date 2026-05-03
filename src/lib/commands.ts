@@ -4,6 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
+  Highlighter, MousePointerClick,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
@@ -213,6 +214,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: LayoutDashboard,
       keywords: ['layout', 'arrange', 'organize'],
+      shortcut: `${mod}⇧L`,
       when: () => !!store().activeViewKey,
       execute: () => {
         const s = store()
@@ -220,6 +222,26 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         s.resetAndRelayout(s.activeViewKey)
         setTimeout(() => fitContentNodesToViewport(reactFlow), 120)
       },
+    },
+    {
+      id: 'toggle-highlighter',
+      label: 'Toggle Highlighter',
+      category: 'view',
+      icon: Highlighter,
+      shortcut: 'H',
+      keywords: ['filter', 'highlight', 'tag', 'tech', 'team', 'status'],
+      when: () => !!store().workspace,
+      execute: () => store().setHighlighterPanelOpen(!store().highlighterPanelOpen),
+    },
+    {
+      id: 'toggle-multi-select',
+      label: 'Toggle Multi-Select Mode',
+      category: 'edit',
+      icon: MousePointerClick,
+      shortcut: 'M',
+      keywords: ['multi', 'select', 'tap', 'multiple'],
+      when: () => !!store().workspace,
+      execute: () => store().setMultiSelectMode(!store().multiSelectMode),
     },
     {
       id: 'toggle-views-panel',
