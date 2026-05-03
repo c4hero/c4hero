@@ -20,6 +20,14 @@ updates:
       # Hold vite at 7.x until the PWA plugin announces vite 8 support.
       - dependency-name: vite
         update-types: [version-update:semver-major]
+      # TypeScript 6 surfaces new strict-mode errors that need a deliberate
+      # pass; revisit when we have time for the upgrade.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Vitest 4 changed several test/runner APIs; treat as a focused
+      # upgrade project rather than a bot bump.
+      - dependency-name: vitest
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
