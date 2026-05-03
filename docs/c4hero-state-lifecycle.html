@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>c4hero · State Lifecycle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0b0f;
+    --bg-2: #0f1117;
+    --line: rgba(255,255,255,0.06);
+    --line-2: rgba(255,255,255,0.10);
+    --line-soft: rgba(255,255,255,0.04);
+    --text: #e8eaf0;
+    --text-2: #a4a9b6;
+    --text-3: #6b7180;
+    --text-4: #4a4f5c;
+    --accent: #4f8bff;
+    --accent-2: #7aa8ff;
+    --accent-soft: rgba(79,139,255,0.10);
+    --accent-glow: rgba(79,139,255,0.35);
+    --radius: 14px;
+    --radius-lg: 22px;
+    --shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 20px 60px -20px rgba(0,0,0,0.6);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+
+  /* ── PAGE CHROME ─────────────────────────────────────────── */
+  .page-intro {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 64px 32px 32px;
+  }
+  .page-intro h1 {
+    font-size: 32px; font-weight: 600; letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+  .page-intro p { color: var(--text-2); margin: 0; max-width: 640px; }
+
+  /* lifecycle diagram */
+  .lifeline {
+    margin-top: 36px;
+    padding: 24px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    display: flex; gap: 0; align-items: stretch;
+    overflow-x: auto;
+  }
+  .lifeline .step {
+    flex: 1; min-width: 180px;
+    padding: 4px 18px;
+    position: relative;
+  }
+  .lifeline .step + .step { border-left: 1px solid var(--line); }
+  .lifeline .step .num {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--accent); letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .lifeline .step .ttl { font-size: 13px; font-weight: 500; }
+  .lifeline .step .sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .lifeline .step .arrow {
+    position: absolute; right: -7px; top: 50%; transform: translateY(-50%);
+    color: var(--text-4); background: var(--bg);
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lifeline .step:last-child .arrow { display: none; }
+
+  .section {
+    max-width: 1180px;
+    margin: 80px auto;
+    padding: 0 32px;
+  }
+  .section-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 24px; flex-wrap: wrap;
+    padding-bottom: 18px; margin-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+  }
+  .section-header .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--accent);
+    letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .section-header h2 { font-size: 24px; font-weight: 600; margin: 4px 0 0; letter-spacing: -0.01em; }
+  .section-header .blurb { color: var(--text-2); font-size: 13px; max-width: 480px; text-align: right; }
+  .section-header .matrix {
+    display: inline-flex; gap: 8px; margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  }
+  .section-header .matrix .chip {
+    padding: 3px 8px; border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-3);
+    border: 1px solid var(--line);
+  }
+  .section-header .matrix .chip.on {
+    background: var(--accent-soft);
+    color: var(--accent-2);
+    border-color: rgba(79,139,255,0.25);
+  }
+  .section-header .matrix .chip.off {
+    color: var(--text-4);
+    text-decoration: line-through;
+    text-decoration-color: var(--text-4);
+  }
+
+  /* ── FRAME ─────────────────────────────────────── */
+  .frame {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .frame-bar {
+    display: flex; align-items: center; gap: 8px;
+    height: 36px; padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+  }
+  .frame-bar .dot { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,0.10); }
+  .frame-bar .url {
+    margin-left: 12px; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--text-3);
+  }
+
+  /* ── LOGO ──────────────────────────────────────── */
+  .c4-mark {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    background: radial-gradient(120% 80% at 0% 0%, var(--accent-2), var(--accent) 60%, #2b5fd6 100%);
+    color: white;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.10) inset, 0 6px 18px -6px var(--accent-glow);
+    position: relative;
+  }
+  .c4-mark::after {
+    content: ''; position: absolute; inset: 1px; border-radius: 6px;
+    background: radial-gradient(80% 60% at 50% 0%, rgba(255,255,255,0.20), transparent 60%);
+    pointer-events: none;
+  }
+  .c4-logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.01em; }
+  .ic { width: 14px; height: 14px; flex: none; }
+  .ic-lg { width: 18px; height: 18px; }
+
+  /* ════════════════════════════════════════════════════════════
+     SHARED UNIFIED LAYOUT — used across all four states
+     ════════════════════════════════════════════════════════════ */
+  .stage { padding: 44px 64px 64px; min-height: 640px; display: flex; flex-direction: column; }
+
+  /* top nav (always present) */
+  .topnav { display: flex; align-items: center; justify-content: space-between; }
+  .topnav .crumb { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; }
+  .topnav .crumb b { color: var(--text); font-weight: 500; }
+  .topnav .actions { display: flex; gap: 18px; align-items: center; }
+  .topnav .actions a {
+    color: var(--text-2); font-size: 13px; padding: 6px 0;
+    border-bottom: 1px solid transparent; cursor: pointer;
+  }
+  .topnav .actions a:hover { color: var(--text); border-bottom-color: var(--accent); }
+  .topnav .actions a.primary { color: var(--accent); }
+
+  /* pills row (collections) */
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 14px; border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.02);
+    color: var(--text-2); font-size: 13px;
+    cursor: pointer; transition: all .15s;
+  }
+  .pill:hover { color: var(--text); border-color: var(--line-2); }
+  .pill.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .pill .ct { color: var(--text-3); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .pill.on .ct { color: rgba(10,11,15,0.55); }
+  .pill.add { border-style: dashed; color: var(--text-3); }
+  .pill.add:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* display heading */
+  .display { font-size: 56px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; margin: 0 0 10px; }
+  .display .accent { color: var(--text-3); font-weight: 300; }
+  .summary { color: var(--text-2); font-size: 15px; margin: 0 0 48px; max-width: 540px; }
+
+  /* numbered workspace rows */
+  .ws-list { display: flex; flex-direction: column; }
+  .ws-row {
+    display: grid; grid-template-columns: 60px 1fr auto auto;
+    align-items: center; gap: 28px;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    transition: padding .2s;
+  }
+  .ws-row:hover { padding-left: 8px; }
+  .ws-row .idx { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-3); }
+  .ws-row .name { font-size: 22px; font-weight: 500; letter-spacing: -0.015em; }
+  .ws-row .desc { color: var(--text-3); font-size: 13px; margin-top: 3px; }
+  .ws-row .stats {
+    display: flex; gap: 16px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-3);
+  }
+  .ws-row .arrow {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-3); transition: all .2s;
+  }
+  .ws-row:hover .arrow { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* recent collections list (used in state 2) */
+  .recent-list { display: flex; flex-direction: column; max-width: 720px; }
+  .recent-row {
+    display: grid; grid-template-columns: 60px 1fr auto auto;
+    align-items: center; gap: 28px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    transition: padding .2s;
+  }
+  .recent-row:hover { padding-left: 8px; }
+  .recent-row .ico {
+    width: 30px; height: 30px; border-radius: 8px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.02);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-3);
+  }
+  .recent-row .name { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .recent-row .slug { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .recent-row .meta { color: var(--text-3); font-size: 12px; font-family: 'JetBrains Mono', monospace; text-align: right; white-space: nowrap; }
+  .recent-row .arrow {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-3); transition: all .2s;
+  }
+  .recent-row:hover .arrow { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* empty zone (used in state 3) */
+  .empty-zone {
+    border: 1px dashed var(--line-2);
+    border-radius: 16px;
+    padding: 56px 32px;
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 16px;
+    background: radial-gradient(60% 80% at 50% 0%, rgba(79,139,255,0.05), transparent 70%);
+  }
+  .empty-zone .badge {
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-3); font-family: 'JetBrains Mono', monospace;
+  }
+  .empty-zone h3 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 32px; font-weight: 400;
+    letter-spacing: -0.015em; margin: 0;
+  }
+  .empty-zone p {
+    margin: 0; color: var(--text-2); font-size: 14px;
+    max-width: 420px; line-height: 1.55;
+  }
+  .empty-zone .ctas { display: flex; gap: 10px; margin-top: 8px; }
+  .empty-illu {
+    width: 110px; height: 70px;
+    opacity: 0.7;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* welcome hero (used in state 1) */
+  .welcome {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    padding: 60px 0 40px;
+  }
+  .welcome .art {
+    width: 220px; height: 140px;
+    margin-bottom: 36px;
+    position: relative;
+  }
+  .welcome .art svg { width: 100%; height: 100%; overflow: visible; }
+  .welcome h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 48px; font-weight: 400;
+    letter-spacing: -0.02em; line-height: 1;
+    margin: 0 0 14px;
+  }
+  .welcome h1 em { font-style: italic; color: var(--accent-2); }
+  .welcome .lede {
+    color: var(--text-2); font-size: 15px;
+    max-width: 460px; line-height: 1.55;
+    margin: 0 0 36px;
+  }
+  .feats {
+    display: flex; justify-content: center; gap: 26px; flex-wrap: wrap;
+    margin-top: 44px;
+    color: var(--text-3); font-size: 12px;
+  }
+  .feats span { display: inline-flex; align-items: center; gap: 6px; }
+  .feats span svg { color: var(--text-4); }
+
+  /* shared CTAs */
+  .ctas { display: flex; gap: 10px; }
+  .btn {
+    padding: 11px 18px; border-radius: 10px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn.primary { background: var(--text); color: var(--bg); }
+  .btn.primary:hover { background: white; }
+  .btn.ghost {
+    color: var(--text-2);
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.02);
+  }
+  .btn.ghost:hover { color: var(--text); border-color: var(--line-2); }
+
+  /* small headings */
+  .toc-label {
+    font-size: 11px; color: var(--text-3);
+    letter-spacing: 0.16em; text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+  }
+  .toc-label .right { float: right; letter-spacing: 0; text-transform: none; }
+</style>
+</head>
+<body>
+
+<!-- INTRO + LIFECYCLE -->
+<div class="page-intro">
+  <div class="c4-logo" style="margin-bottom:18px;">
+    <span class="c4-mark">c4</span>
+    <span style="color:var(--text-2);font-size:12px;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;">state lifecycle · 4 states</span>
+  </div>
+  <h1>One design, every state.</h1>
+  <p>Same shell, same type, same posture — content adapts to what the user has. Below is the natural lifecycle a user passes through, from first launch to a fully populated collection.</p>
+
+  <div class="lifeline">
+    <div class="step">
+      <div class="num">01</div>
+      <div class="ttl">First run</div>
+      <div class="sub">no collections, no recents</div>
+      <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m9 6 6 6-6 6"/></svg></div>
+    </div>
+    <div class="step">
+      <div class="num">02</div>
+      <div class="ttl">Returning · idle</div>
+      <div class="sub">has recents · none open</div>
+      <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m9 6 6 6-6 6"/></svg></div>
+    </div>
+    <div class="step">
+      <div class="num">03</div>
+      <div class="ttl">Collection · empty</div>
+      <div class="sub">collection open · 0 workspaces</div>
+      <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m9 6 6 6-6 6"/></svg></div>
+    </div>
+    <div class="step">
+      <div class="num">04</div>
+      <div class="ttl">Collection · populated</div>
+      <div class="sub">collection open · with workspaces</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     STATE 01 — FIRST RUN
+     no collection · no workspace · no recents
+     ════════════════════════════════════════════════════════════ -->
+<section id="s1" class="section">
+  <div class="section-header">
+    <div>
+      <div class="label">State 01 · First run</div>
+      <h2>No collections, no recents</h2>
+      <div class="matrix">
+        <span class="chip off">collection</span>
+        <span class="chip off">workspace</span>
+        <span class="chip off">recents</span>
+      </div>
+    </div>
+    <div class="blurb">A fresh install. No history to draw on. Lean into welcome rather than emptiness — quiet artwork, one calm headline, two clear next steps. The pills row is hidden entirely; the user has nothing to switch between.</div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">app.c4hero.com</span></div>
+    <div class="stage">
+      <div class="topnav">
+        <div class="c4-logo"><span class="c4-mark">c4</span><span>c4hero</span></div>
+        <div class="actions">
+          <a>Docs</a>
+          <a>Github</a>
+          <a>Settings</a>
+        </div>
+      </div>
+
+      <div class="welcome">
+        <div class="art">
+          <svg viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="lg-edge-1" x1="0" x2="1">
+                <stop offset="0" stop-color="#7aa8ff" stop-opacity="0.7"/>
+                <stop offset="1" stop-color="#4f8bff" stop-opacity="0.1"/>
+              </linearGradient>
+            </defs>
+            <g stroke="url(#lg-edge-1)" stroke-width="1" fill="none" stroke-dasharray="2 4">
+              <rect x="20"  y="40" width="60" height="36" rx="8"/>
+              <rect x="100" y="20" width="60" height="36" rx="8"/>
+              <rect x="100" y="84" width="60" height="36" rx="8"/>
+              <rect x="180" y="52" width="32" height="36" rx="8"/>
+              <path d="M80 58 L100 38 M80 58 L100 102 M160 38 L180 70 M160 102 L180 70"/>
+            </g>
+            <g fill="#7aa8ff" opacity="0.85">
+              <circle cx="80" cy="58" r="2"/>
+              <circle cx="100" cy="38" r="2"/>
+              <circle cx="100" cy="102" r="2"/>
+              <circle cx="160" cy="38" r="2"/>
+              <circle cx="160" cy="102" r="2"/>
+              <circle cx="180" cy="70" r="2"/>
+            </g>
+            <g stroke="#7aa8ff" stroke-width="1.4" stroke-linecap="round" opacity="0.6">
+              <path d="M130 42 v8 M126 46 h8"/>
+            </g>
+          </svg>
+        </div>
+
+        <h1>Start with an <em>architecture</em>.</h1>
+        <p class="lede">Open a folder you already have, or create a fresh collection — c4hero saves everything as plain <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text-2);">.dsl</code> files alongside your code.</p>
+
+        <div class="ctas">
+          <div class="btn primary">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            New collection
+          </div>
+          <div class="btn ghost">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            Open existing folder
+          </div>
+        </div>
+
+        <div class="feats">
+          <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3v4a1 1 0 0 0 1 1h4M5 21h14a2 2 0 0 0 2-2V7l-4-4H7a2 2 0 0 0-2 2z"/></svg>.dsl files</span>
+          <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19a4 4 0 0 1-4-4V8a4 4 0 0 1 8 0v8a4 4 0 0 0 8 0V5"/></svg>Git-friendly</span>
+          <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 4v16M4 9h5M15 4v16"/></svg>C4 model</span>
+          <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18l5-5 4 4 9-9"/></svg>Open-source · MIT</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     STATE 02 — RETURNING USER, IDLE
+     no collection currently open · has recents
+     ════════════════════════════════════════════════════════════ -->
+<section id="s2" class="section">
+  <div class="section-header">
+    <div>
+      <div class="label">State 02 · Returning · idle</div>
+      <h2>Has recents, none currently open</h2>
+      <div class="matrix">
+        <span class="chip off">collection open</span>
+        <span class="chip off">workspace</span>
+        <span class="chip on">recents</span>
+      </div>
+    </div>
+    <div class="blurb">Returning user landing on the home screen with no collection actively loaded. The hero softens; recents take over as the primary content. Two CTAs stay quietly available below the heading. No pills row yet — recents are the way back in.</div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">app.c4hero.com</span></div>
+    <div class="stage">
+      <div class="topnav">
+        <div class="c4-logo"><span class="c4-mark">c4</span><span>c4hero</span></div>
+        <div class="actions">
+          <a>Search</a>
+          <a>Docs</a>
+          <a>Settings</a>
+        </div>
+      </div>
+
+      <div style="margin-top:48px;">
+        <h1 class="display">Welcome back<span class="accent">.</span></h1>
+        <p class="summary">Pick up where you left off, or start something new.</p>
+
+        <div class="ctas" style="margin-bottom:48px;">
+          <div class="btn primary">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            New collection
+          </div>
+          <div class="btn ghost">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            Open existing folder
+          </div>
+        </div>
+
+        <div class="toc-label">Recent collections <span class="right">3 collections</span></div>
+
+        <div class="recent-list">
+          <div class="recent-row">
+            <div class="ico">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </div>
+            <div>
+              <div class="name">My Architecture5</div>
+              <div class="slug">my-architecture5 · 5 workspaces</div>
+            </div>
+            <div class="meta">opened 2h ago</div>
+            <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+          </div>
+          <div class="recent-row">
+            <div class="ico">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </div>
+            <div>
+              <div class="name">Imagine Learning</div>
+              <div class="slug">imagine-learning · 12 workspaces</div>
+            </div>
+            <div class="meta">yesterday</div>
+            <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+          </div>
+          <div class="recent-row">
+            <div class="ico">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </div>
+            <div>
+              <div class="name">c4hero collections</div>
+              <div class="slug">c4hero-collections · 3 workspaces</div>
+            </div>
+            <div class="meta">3 days ago</div>
+            <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     STATE 03 — COLLECTION OPEN, EMPTY
+     collection open · 0 workspaces
+     ════════════════════════════════════════════════════════════ -->
+<section id="s3" class="section">
+  <div class="section-header">
+    <div>
+      <div class="label">State 03 · Collection · empty</div>
+      <h2>Collection open, no workspaces yet</h2>
+      <div class="matrix">
+        <span class="chip on">collection open</span>
+        <span class="chip off">workspace</span>
+      </div>
+    </div>
+    <div class="blurb">A collection has been opened (or just created) but has no workspaces inside it. The pills row appears, breadcrumb shows the active collection. The "Workspaces." display heading stays — but the list is replaced by a calm dashed empty-zone with a clear "create your first workspace" call.</div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">app.c4hero.com / my-architecture5</span></div>
+    <div class="stage">
+      <div class="topnav">
+        <div class="crumb">
+          <span class="c4-mark" style="width:22px;height:22px;font-size:11px;border-radius:6px;">c4</span>
+          <span>c4hero</span>
+          <span style="opacity:0.4;">/</span>
+          <b>my-architecture5</b>
+        </div>
+        <div class="actions">
+          <a>Search</a>
+          <a>Open collection</a>
+          <a class="primary">+ New collection</a>
+        </div>
+      </div>
+
+      <div style="margin-top:48px;">
+        <div class="pills" style="margin-bottom:56px;">
+          <div class="pill on">My Architecture5 <span class="ct">0</span></div>
+          <div class="pill">Imagine Learning <span class="ct">12</span></div>
+          <div class="pill">c4hero collections <span class="ct">3</span></div>
+          <div class="pill add">+ Add</div>
+        </div>
+
+        <h1 class="display">Workspaces<span class="accent">.</span></h1>
+        <p class="summary">This collection is empty. Add a workspace to start mapping the system — each workspace is a separate diagram saved as its own <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text-2);">.dsl</code> file.</p>
+
+        <div class="empty-zone">
+          <div class="empty-illu">
+            <svg viewBox="0 0 110 70" xmlns="http://www.w3.org/2000/svg">
+              <g stroke="rgba(122,168,255,0.7)" stroke-width="1" fill="none" stroke-dasharray="2 4">
+                <rect x="6"  y="22" width="32" height="22" rx="6"/>
+                <rect x="72" y="22" width="32" height="22" rx="6"/>
+                <path d="M38 33 H72"/>
+              </g>
+              <g fill="#7aa8ff" opacity="0.85">
+                <circle cx="38" cy="33" r="2"/>
+                <circle cx="72" cy="33" r="2"/>
+              </g>
+              <g stroke="#7aa8ff" stroke-width="1.4" stroke-linecap="round">
+                <path d="M55 28 v10 M50 33 h10"/>
+              </g>
+            </svg>
+          </div>
+          <div class="badge">No workspaces · 0 of ∞</div>
+          <h3>Map your first system.</h3>
+          <p>Workspaces are where your diagrams live. You can start from a template or paste in an existing <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text-2);">.dsl</code> file.</p>
+          <div class="ctas">
+            <div class="btn primary">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              New workspace
+            </div>
+            <div class="btn ghost">Import .dsl file</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     STATE 04 — COLLECTION OPEN, POPULATED
+     collection open · with workspaces
+     ════════════════════════════════════════════════════════════ -->
+<section id="s4" class="section">
+  <div class="section-header">
+    <div>
+      <div class="label">State 04 · Collection · populated</div>
+      <h2>Collection open with workspaces</h2>
+      <div class="matrix">
+        <span class="chip on">collection open</span>
+        <span class="chip on">workspace</span>
+      </div>
+    </div>
+    <div class="blurb">The fully-loaded daily-driver state. Same exact shell as state 03 — only the empty-zone is replaced by the numbered workspace list. Hovering a row slides it right and highlights the arrow. This is the screen users will spend the most time on.</div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">app.c4hero.com / my-architecture5</span></div>
+    <div class="stage">
+      <div class="topnav">
+        <div class="crumb">
+          <span class="c4-mark" style="width:22px;height:22px;font-size:11px;border-radius:6px;">c4</span>
+          <span>c4hero</span>
+          <span style="opacity:0.4;">/</span>
+          <b>my-architecture5</b>
+        </div>
+        <div class="actions">
+          <a>Search</a>
+          <a>Open collection</a>
+          <a class="primary">+ New collection</a>
+        </div>
+      </div>
+
+      <div style="margin-top:48px;">
+        <div class="pills" style="margin-bottom:56px;">
+          <div class="pill on">My Architecture5 <span class="ct">5</span></div>
+          <div class="pill">Imagine Learning <span class="ct">12</span></div>
+          <div class="pill">c4hero collections <span class="ct">3</span></div>
+          <div class="pill add">+ Add</div>
+        </div>
+
+        <h1 class="display">Workspaces<span class="accent">.</span></h1>
+        <p class="summary">Five workspaces in this collection. Diagrams that live with your code.</p>
+
+        <div class="ws-list">
+          <div class="ws-row">
+            <span class="idx">01</span>
+            <div>
+              <div class="name">imagine learning current</div>
+              <div class="desc">Production architecture · last edited 2 hours ago</div>
+            </div>
+            <div class="stats"><span>324 el</span><span>v24</span></div>
+            <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+          </div>
+          <div class="ws-row">
+            <span class="idx">02</span>
+            <div>
+              <div class="name">my architecture s2</div>
+              <div class="desc">System diagram · in progress</div>
+            </div>
+            <div class="stats"><span>2 el</span><span>v1</span></div>
+            <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+          </div>
+          <div class="ws-row">
+            <span class="idx">03</span>
+            <div>
+              <div class="name">workspace</div>
+              <div class="desc">Container view · stable</div>
+            </div>
+            <div class="stats"><span>54 el</span><span>v5</span></div>
+            <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+          </div>
+          <div class="ws-row">
+            <span class="idx">04</span>
+            <div>
+              <div class="name">workspace2</div>
+              <div class="desc">Component drill-down</div>
+            </div>
+            <div class="stats"><span>55 el</span><span>v11</span></div>
+            <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+          </div>
+          <div class="ws-row">
+            <span class="idx">05</span>
+            <div>
+              <div class="name">workspace3</div>
+              <div class="desc">Deployment topology</div>
+            </div>
+            <div class="stats"><span>100 el</span><span>v17</span></div>
+            <div class="arrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div style="height:80px;"></div>
+
+</body>
+</html>

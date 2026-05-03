@@ -17,15 +17,15 @@ function GroupNode({ data, selected }: NodeProps & { data: GroupNodeData }) {
         minWidth: undefined,
         minHeight: undefined,
         border: selected
-          ? '2px dashed var(--color-accent)'
+          ? '2px dashed var(--canvas-selection, var(--color-accent))'
           : '2px dashed var(--color-border-hover)',
         background: 'var(--color-tint-accent-faint)',
         transition: 'border-color 200ms ease',
       }}
     >
       <div className="flex items-center gap-1.5">
-        <FolderOpen size={12} style={{ color: 'var(--color-accent)', opacity: 0.6 }} />
-        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-accent)', opacity: 0.7 }}>
+        <FolderOpen size={12} style={{ color: 'var(--canvas-selection, var(--color-accent))', opacity: 0.6 }} />
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--canvas-selection, var(--color-accent))', opacity: 0.7 }}>
           {data.label}
         </span>
         {data.elementCount > 0 && (

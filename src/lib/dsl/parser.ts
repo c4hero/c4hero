@@ -455,8 +455,9 @@ class ContextAwareParser {
                     const s = val.value.toLowerCase()
                     if (s === 'softwaresystem') workspace.scope = 'softwaresystem'
                     else if (s === 'landscape') workspace.scope = 'landscape'
+                    else if (s === 'none') workspace.scope = 'none'
                     else {
-                        this.addError(`Unknown scope value '${val.value}' — expected 'softwareSystem' or 'landscape'`, val)
+                        this.addError(`Unknown scope value '${val.value}' — expected 'softwareSystem', 'landscape', or 'none'`, val)
                         workspace.scope = 'none'
                     }
                 }

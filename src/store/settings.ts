@@ -7,7 +7,19 @@ const log = createLogger('settings')
 // ─── Types ──────────────────────────────────────────────────────────
 
 export type MinimapMode = 'always' | 'auto' | 'never'
-export type ColorTheme = 'readability' | 'structurizr'
+export type ColorTheme =
+  | 'readability'
+  | 'structurizr'
+  | 'grayscale'
+  | 'light'
+  | 'highContrast'
+  | 'semantic'
+  | 'pastel'
+  | 'slate'
+  | 'sepia'
+  | 'solarizedDark'
+  | 'whiteboard'
+  | 'monoAccent'
 
 export interface AppSettings {
   minimapMode: MinimapMode
@@ -35,7 +47,20 @@ const DEFAULTS: AppSettings = {
 const STORAGE_KEY = 'c4hero.json'
 
 const MINIMAP_MODES: ReadonlySet<string> = new Set<MinimapMode>(['always', 'auto', 'never'])
-const COLOR_THEMES: ReadonlySet<string> = new Set<ColorTheme>(['readability', 'structurizr'])
+const COLOR_THEMES: ReadonlySet<string> = new Set<ColorTheme>([
+  'readability',
+  'structurizr',
+  'grayscale',
+  'light',
+  'highContrast',
+  'semantic',
+  'pastel',
+  'slate',
+  'sepia',
+  'solarizedDark',
+  'whiteboard',
+  'monoAccent',
+])
 
 function isMinimapMode(value: unknown): value is MinimapMode {
   return typeof value === 'string' && MINIMAP_MODES.has(value)

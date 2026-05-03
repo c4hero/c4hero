@@ -47,6 +47,7 @@ function RelationshipEdge({
   targetPosition,
   data,
   selected,
+  style: edgeStyle,
 }: EdgeProps & { data?: RelationshipEdgeData }) {
   const relationship = data?.relationship
   const relStyle = data?.relationshipStyle
@@ -80,7 +81,9 @@ function RelationshipEdge({
   }
 
   // Apply style from RelationshipStyle if available
-  const strokeColor = selected ? 'var(--color-accent)' : (relStyle?.color ?? 'var(--color-edge)')
+  const strokeColor = selected
+    ? 'var(--canvas-selection, var(--color-accent))'
+    : (relStyle?.color ?? 'var(--canvas-edge, var(--color-edge))')
   const strokeWidth = selected ? 2 : (relStyle?.thickness ?? 1.5)
   const isDashed = isAsync || (relStyle?.dashed ?? false)
 
@@ -129,9 +132,10 @@ function RelationshipEdge({
           strokeWidth,
           strokeDasharray: isDashed ? '6 4' : undefined,
           opacity: relStyle?.opacity,
+          ...edgeStyle,
         }}
-        markerStart="url(#c4-dot)"
-        markerEnd="url(#c4-arrow)"
+        markerStart={selected ? 'url(#c4-dot-selected)' : 'url(#c4-dot)'}
+        markerEnd={selected ? 'url(#c4-arrow-selected)' : 'url(#c4-arrow)'}
       />
       {/* Label — shown when either description or technology is present */}
       {(relationship?.description || relationship?.technology) && (
@@ -145,7 +149,7 @@ function RelationshipEdge({
               maxWidth: labelMaxWidth,
               padding: labelDensity === 'compact' ? '3px 7px' : '4px 8px',
               borderRadius: 10,
-              background: 'color-mix(in srgb, var(--color-canvas) 82%, transparent)',
+              background: 'color-mix(in srgb, var(--canvas-bg, var(--color-bg-primary)) 82%, transparent)',
               boxShadow: '0 1px 2px color-mix(in srgb, black 12%, transparent)',
               textAlign: 'center',
               lineHeight: 1.3,
@@ -162,7 +166,7 @@ function RelationshipEdge({
                 className="text-[11px]"
                 title={labelDensity === 'compact' ? relationship?.description : undefined}
                 style={{
-                  color: 'var(--color-text-secondary)',
+                  color: 'var(--canvas-label-color, var(--color-text-secondary))',
                   overflowWrap: 'anywhere',
                   wordBreak: 'break-word',
                   maxWidth: '100%',
@@ -179,8 +183,8 @@ function RelationshipEdge({
                     className="c4-type-chip"
                     title={labelDensity === 'compact' ? t : undefined}
                     style={{
-                      background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
-                      color: 'var(--color-text-muted)',
+                      background: 'color-mix(in srgb, var(--canvas-label-muted, var(--color-text-muted)) 10%, transparent)',
+                      color: 'var(--canvas-label-muted, var(--color-text-muted))',
                       fontWeight: 600,
                       textTransform: 'none',
                       letterSpacing: 'normal',
@@ -199,8 +203,8 @@ function RelationshipEdge({
                     className="c4-type-chip"
                     title={technologyTokens.slice(COMPACT_TECH_CHIP_LIMIT).join(', ')}
                     style={{
-                      background: 'color-mix(in srgb, var(--color-text-muted) 7%, transparent)',
-                      color: 'var(--color-text-muted)',
+                      background: 'color-mix(in srgb, var(--canvas-label-muted, var(--color-text-muted)) 7%, transparent)',
+                      color: 'var(--canvas-label-muted, var(--color-text-muted))',
                       fontWeight: 600,
                       textTransform: 'none',
                       letterSpacing: 'normal',

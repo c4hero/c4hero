@@ -1,7 +1,25 @@
 {
   "name": "c4hero",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Local-first visual architecture modelling for the C4 model. Edit visually, save as Structurizr DSL — your architecture lives in your repo.",
+  "license": "MIT",
+  "homepage": "https://c4hero.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/c4hero/c4hero.git"
+  },
+  "bugs": {
+    "url": "https://github.com/c4hero/c4hero/issues"
+  },
+  "keywords": [
+    "c4",
+    "c4-model",
+    "architecture",
+    "structurizr",
+    "diagram",
+    "visual-editor",
+    "local-first"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",

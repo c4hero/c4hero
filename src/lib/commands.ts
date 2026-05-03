@@ -3,12 +3,12 @@ import {
   UserRound, Globe, Box, Puzzle, Layers, Undo2, Redo2, Trash2,
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
-  Presentation, FolderOpen, FileText, Image, FileCode, Copy, Plus,
+  Presentation, FolderOpen, Image, FileCode, Copy, Plus,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
-import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
+import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import type { ReactFlowInstance } from '@xyflow/react'
@@ -342,18 +342,6 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.workspace) return
         await saveDSLFile(serializeDSL(s.workspace), `${s.workspace.name ?? 'workspace'}.dsl`)
-      },
-    },
-    {
-      id: 'export-json',
-      label: 'Export as JSON',
-      category: 'export',
-      icon: FileText,
-      keywords: ['export', 'json'],
-      execute: () => {
-        const s = store()
-        if (!s.workspace) return
-        downloadFile(exportAsJSON(s.workspace), `${s.workspace.name ?? 'workspace'}.json`, 'application/json')
       },
     },
     {

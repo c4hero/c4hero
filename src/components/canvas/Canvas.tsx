@@ -18,7 +18,15 @@ import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, allViewsOf } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
-import { THEMES } from '@/lib/themes'
+import {
+  THEMES,
+  THEME_CANVAS_BACKGROUNDS,
+  THEME_SELECTION_COLORS,
+  THEME_EDGE_COLORS,
+  THEME_LABEL_COLORS,
+  THEME_LABEL_MUTED_COLORS,
+  isLightCanvasTheme,
+} from '@/lib/themes'
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
@@ -158,6 +166,7 @@ function buildNodes(
   onDrillIn: (elementId: string) => void,
   activeTagFilter: string | null,
   activeStatusFilter: string | null,
+  activeTechFilter: string[],
   viewCountMap: Map<string, number>,
   drillableIds: Set<string>,
   themeStyles: ElementStyle[],
@@ -167,15 +176,42 @@ function buildNodes(
   const styleIndex = buildStyleIndex([...themeStyles, ...workspace.views.configuration.styles.elements])
 
   const nodes: Node[] = []
+  const techFilterSet = new Set(activeTechFilter.map((t) => t.toLowerCase()))
+
+  // If the active tag/status filter doesn't match anything in this view (e.g.
+  // a stale filter carried over from another view), suppress it so the canvas
+  // doesn't black out every node. The filter chip is still set in the store —
+  // just rendered as inactive against this view.
+  const tagFilterMatchesAny = !activeTagFilter || view.elements.some((ve) => {
+    const el = elementMap.get(ve.id)
+    return el ? el.tags.includes(activeTagFilter) : false
+  })
+  const statusFilterMatchesAny = !activeStatusFilter || view.elements.some((ve) => {
+    const el = elementMap.get(ve.id)
+    return el ? el.status === activeStatusFilter : false
+  })
+  const effectiveTagFilter = tagFilterMatchesAny ? activeTagFilter : null
+  const effectiveStatusFilter = statusFilterMatchesAny ? activeStatusFilter : null
 
   for (const viewEl of view.elements) {
     const element = elementMap.get(viewEl.id)
     if (!element) continue
 
     const style = getElementStyle(element, styleIndex)
-    const matchesTag = !activeTagFilter || element.tags.includes(activeTagFilter)
-    const matchesStatus = !activeStatusFilter || element.status === activeStatusFilter
-    const matchesFilter = matchesTag && matchesStatus
+    const matchesTag = !effectiveTagFilter || element.tags.includes(effectiveTagFilter)
+    const matchesStatus = !effectiveStatusFilter || element.status === effectiveStatusFilter
+    const techActive = techFilterSet.size > 0
+    const matchesTech = !techActive || (() => {
+      const elTech = ('technology' in element ? element.technology : undefined) as string | undefined
+      if (!elTech) return false
+      const elTechSet = new Set(elTech.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
+      for (const t of techFilterSet) if (!elTechSet.has(t)) return false
+      return true
+    })()
+    // Tag/status filters DIM non-matching elements (existing behavior).
+    // Tech filter HIGHLIGHTS matching elements without dimming the rest.
+    const matchesTagStatus = matchesTag && matchesStatus
+    const techHighlighted = techActive && matchesTech
     const pos = { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }
 
     nodes.push({
@@ -188,10 +224,12 @@ function buildNodes(
         childCount: getChildCount(element),
         canDrill: drillableIds.has(element.id),
         onDrillIn,
-        dimmed: !matchesFilter,
+        dimmed: !matchesTagStatus,
+        techHighlighted,
         viewCount: viewCountMap.get(element.id) ?? 1,
       },
-      style: matchesFilter ? undefined : { opacity: 0.4 },
+      style: matchesTagStatus ? undefined : { opacity: 0.18 },
+      className: techHighlighted ? 'c4-node-tech-highlight' : undefined,
     })
   }
 
@@ -366,6 +404,7 @@ function buildEdges(
   workspace: Workspace,
   view: View,
   nodes: Node[],
+  activeTechFilter: string[],
 ): Edge[] {
   const relationshipMap = buildRelationshipMap(workspace)
   const relationshipStyles = workspace.views.configuration.styles.relationships
@@ -454,6 +493,17 @@ function buildEdges(
     const srcSlot = sourceSlots.get(i) ?? 'b'
     const tgtSlot = targetSlots.get(i) ?? 'b'
 
+    const techFilterSet = new Set(activeTechFilter.map((t) => t.toLowerCase()))
+    const techActive = techFilterSet.size > 0
+    const matchesTech = !techActive || (() => {
+      const rt = e.rel.technology
+      if (!rt) return false
+      const relTechSet = new Set(rt.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
+      for (const t of techFilterSet) if (!relTechSet.has(t)) return false
+      return true
+    })()
+    const techHighlighted = techActive && matchesTech
+
     edges.push({
       id: e.rel.id,
       source: e.sourceId,
@@ -461,7 +511,8 @@ function buildEdges(
       sourceHandle: `${e.sourceSide}-${srcSlot}-source`,
       targetHandle: `${e.targetSide}-${tgtSlot}-target`,
       type: 'relationship',
-      data: { relationship: e.rel, relationshipStyle: e.relStyle },
+      data: { relationship: e.rel, relationshipStyle: e.relStyle, techHighlighted },
+      className: techHighlighted ? 'c4-edge-tech-highlight' : undefined,
     })
   }
 
@@ -477,17 +528,52 @@ export default function Canvas() {
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
+  const storeSelectedElementIds = useWorkspaceStore((s) => s.selectedElementIds)
+  const storeSelectedRelationshipId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
   const syncAutoLayoutPositions = useWorkspaceStore((s) => s.syncAutoLayoutPositions)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
   const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
+  const activeTechFilter = useWorkspaceStore((s) => s.activeTechFilter)
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
   const layoutVersion = useWorkspaceStore((s) => s.layoutVersion)
   const minimapMode = useSettingsStore((s) => s.minimapMode)
   const snapToGrid = useSettingsStore((s) => s.snapToGrid)
   const colorTheme = useSettingsStore((s) => s.colorTheme)
   const themeStyles = THEMES[colorTheme]
+  const themeCanvasBackground = THEME_CANVAS_BACKGROUNDS[colorTheme]
+  const themeSelectionColor = THEME_SELECTION_COLORS[colorTheme]
+  const themeEdgeColor = THEME_EDGE_COLORS[colorTheme]
+  const isLightCanvas = isLightCanvasTheme(colorTheme)
+
+  // Cascade canvas-related theme vars to document.documentElement so the
+  // floating chrome (top pill, tool rail, inspector, etc.) — which is rendered
+  // outside the canvas tree — can also read them.
+  useEffect(() => {
+    const root = document.documentElement
+    const set = (key: string, value: string | null) => {
+      if (value == null) root.style.removeProperty(key)
+      else root.style.setProperty(key, value)
+    }
+    const labelColorOverride = THEME_LABEL_COLORS[colorTheme]
+    const labelMutedOverride = THEME_LABEL_MUTED_COLORS[colorTheme]
+    set('--canvas-bg', themeCanvasBackground ?? null)
+    set('--canvas-selection', themeSelectionColor)
+    set('--canvas-label-color', labelColorOverride ?? (isLightCanvas ? '#1f2937' : 'var(--color-text-secondary)'))
+    set('--canvas-label-muted', labelMutedOverride ?? (isLightCanvas ? '#475569' : 'var(--color-text-muted)'))
+    set('--canvas-edge', themeEdgeColor ?? null)
+    if (isLightCanvas) root.setAttribute('data-canvas-light', '')
+    else root.removeAttribute('data-canvas-light')
+    return () => {
+      set('--canvas-bg', null)
+      set('--canvas-selection', null)
+      set('--canvas-label-color', null)
+      set('--canvas-label-muted', null)
+      set('--canvas-edge', null)
+      root.removeAttribute('data-canvas-light')
+    }
+  }, [themeCanvasBackground, themeSelectionColor, themeEdgeColor, isLightCanvas, colorTheme])
 
   // Stable callback refs — avoid new function references every render which would
   // invalidate expensive useMemos that depend on them.
@@ -547,7 +633,7 @@ export default function Canvas() {
 
     // 1. Build nodes with raw positions from view
     const drillableIds = buildDrillableSet(workspace)
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap, drillableIds, themeStyles)
+    const rawNodes = buildNodes(workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, activeTechFilter, viewCountMap, drillableIds, themeStyles)
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
     const relationshipMap = buildRelationshipMap(workspace)
@@ -580,10 +666,10 @@ export default function Canvas() {
     const allNodes = [...overlayNodes, ...laidOut]
 
     // 5. Build final edges using post-layout positions for handle routing
-    const edges = buildEdges(workspace, view, allNodes)
+    const edges = buildEdges(workspace, view, allNodes, activeTechFilter)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, viewCountMap, themeStyles])
+  }, [workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, activeTechFilter, viewCountMap, themeStyles])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.
@@ -817,6 +903,36 @@ export default function Canvas() {
       requestAnimationFrame(rebuildOverlays)
     }
   }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, rebuildOverlays, activeViewKey, view, layoutVersion, tryRestoreViewport])
+
+  // Reconcile RF's internal `selected` flag with the store. Without this, an
+  // outside-click that clears the store selection (e.g. clicking a filter chip
+  // in the bottom strip dismisses the inspector via FloatingInspector's outside
+  // listener) leaves the node still marked `selected: true` inside RF — so the
+  // next click on that node is a no-op (RF sees no change → no onSelectionChange
+  // → inspector never reopens).
+  useEffect(() => {
+    const elIds = new Set(storeSelectedElementIds)
+    setNodes((prev) => {
+      let changed = false
+      const next = prev.map((n) => {
+        const shouldBeSelected = elIds.has(n.id)
+        if (!!n.selected === shouldBeSelected) return n
+        changed = true
+        return { ...n, selected: shouldBeSelected }
+      })
+      return changed ? next : prev
+    })
+    setEdges((prev) => {
+      let changed = false
+      const next = prev.map((e) => {
+        const shouldBeSelected = e.id === storeSelectedRelationshipId
+        if (!!e.selected === shouldBeSelected) return e
+        changed = true
+        return { ...e, selected: shouldBeSelected }
+      })
+      return changed ? next : prev
+    })
+  }, [storeSelectedElementIds, storeSelectedRelationshipId, setNodes, setEdges])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes)
@@ -1101,9 +1217,9 @@ export default function Canvas() {
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={24}
-          size={1}
-          color="#1e3044"
+          gap={36}
+          size={1.5}
+          color={isLightCanvas ? 'rgba(0,0,0,0.32)' : '#3a5274'}
         />
         {minimapMode !== 'never' && (
           <MiniMap
@@ -1125,7 +1241,18 @@ export default function Canvas() {
               markerHeight={8}
               orient="auto-start-reverse"
             >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-edge)" />
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--canvas-edge, var(--color-edge))" />
+            </marker>
+            <marker
+              id="c4-arrow-selected"
+              viewBox="0 0 10 10"
+              refX="10"
+              refY="5"
+              markerWidth={8}
+              markerHeight={8}
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--canvas-selection, var(--color-accent))" />
             </marker>
             <marker
               id="c4-dot"
@@ -1135,7 +1262,17 @@ export default function Canvas() {
               markerWidth={6}
               markerHeight={6}
             >
-              <circle cx="5" cy="5" r="4" fill="var(--color-edge)" />
+              <circle cx="5" cy="5" r="4" fill="var(--canvas-edge, var(--color-edge))" />
+            </marker>
+            <marker
+              id="c4-dot-selected"
+              viewBox="0 0 10 10"
+              refX="5"
+              refY="5"
+              markerWidth={6}
+              markerHeight={6}
+            >
+              <circle cx="5" cy="5" r="4" fill="var(--canvas-selection, var(--color-accent))" />
             </marker>
           </defs>
         </svg>

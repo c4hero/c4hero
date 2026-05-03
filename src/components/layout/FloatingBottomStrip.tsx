@@ -2,10 +2,10 @@ import { useMemo, useRef, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useWorkspaceStore, getActiveView, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
 import type { ElementStatus, ElementStyle } from '@/types/model'
-import { Tag, Activity, X, Palette, Pencil, Plus, Check, AlertTriangle } from 'lucide-react'
+import { Tag, Activity, X, Palette, Pencil, Plus, Check, AlertTriangle, Cpu, ChevronDown, Search } from 'lucide-react'
 import type { ScopeViolation } from '@/lib/scopeValidation'
 
-type Mode = 'tags' | 'status'
+type Mode = 'tags' | 'status' | 'tech'
 
 const STATUS_OPTIONS: { value: ElementStatus; label: string; color: string }[] = [
   { value: 'Live', label: 'Live', color: 'var(--color-status-live)' },
@@ -24,6 +24,9 @@ export default function FloatingBottomStrip() {
   const setActiveTagFilter = useWorkspaceStore((s) => s.setActiveTagFilter)
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
   const setActiveStatusFilter = useWorkspaceStore((s) => s.setActiveStatusFilter)
+  const activeTechFilter = useWorkspaceStore((s) => s.activeTechFilter)
+  const toggleActiveTechFilter = useWorkspaceStore((s) => s.toggleActiveTechFilter)
+  const setActiveTechFilter = useWorkspaceStore((s) => s.setActiveTechFilter)
   const scopeViolations = useWorkspaceStore((s) => s.scopeViolations)
 
 
@@ -75,6 +78,21 @@ export default function FloatingBottomStrip() {
     return Array.from(statuses)
   }, [view, elementMap])
 
+  // Technology tokens used by elements in the current view (multi-select filter)
+  const viewTechs = useMemo(() => {
+    if (!view) return []
+    const techs = new Set<string>()
+    for (const ve of view.elements) {
+      const el = elementMap.get(ve.id) as { technology?: string } | undefined
+      const raw = el?.technology
+      if (!raw) continue
+      for (const t of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+        techs.add(t)
+      }
+    }
+    return Array.from(techs).sort((a, b) => a.localeCompare(b))
+  }, [view, elementMap])
+
   if (!workspace) return null
 
   const elementStyles = workspace.views.configuration.styles.elements
@@ -82,8 +100,8 @@ export default function FloatingBottomStrip() {
 
   return (
     <>
-      {scopeViolations.length > 0 && (
-        <ScopeViolationBanner violations={scopeViolations} />
+      {scopeViolations.filter((v) => !v.elementId && !v.relationshipId).length > 0 && (
+        <ScopeViolationBanner violations={scopeViolations.filter((v) => !v.elementId && !v.relationshipId)} />
       )}
       <div
         data-canvas-fit-chrome="bottom"
@@ -116,6 +134,7 @@ export default function FloatingBottomStrip() {
         {/* Mode tabs */}
         <ModeTab icon={<Tag size={13} />} label="Tags" active={mode === 'tags'} onClick={() => setMode('tags')} isFirst />
         <ModeTab icon={<Activity size={13} />} label="Status" active={mode === 'status'} onClick={() => setMode('status')} />
+        <ModeTab icon={<Cpu size={13} />} label="Tech" active={mode === 'tech'} onClick={() => setMode('tech')} count={activeTechFilter.length || undefined} />
 
         {/* Divider */}
         <div style={{ width: 1, height: 24, background: 'var(--color-border)' }} />
@@ -212,6 +231,16 @@ export default function FloatingBottomStrip() {
               )
             })}
           </div>
+        )}
+
+        {/* Tech mode — multi-select with search popover */}
+        {mode === 'tech' && (
+          <TechFilterControls
+            viewTechs={viewTechs}
+            activeTechFilter={activeTechFilter}
+            toggleActiveTechFilter={toggleActiveTechFilter}
+            setActiveTechFilter={setActiveTechFilter}
+          />
         )}
       </div>
       </div>
@@ -535,8 +564,386 @@ function TagRow({
 
 // ─── Mode Tab ─────────────────────────────────────────────────────────
 
-function ModeTab({ icon, label, active, onClick, isFirst }: {
-  icon: React.ReactNode; label: string; active: boolean; onClick: () => void; isFirst?: boolean
+function TechFilterControls({
+  viewTechs,
+  activeTechFilter,
+  toggleActiveTechFilter,
+  setActiveTechFilter,
+}: {
+  viewTechs: string[]
+  activeTechFilter: string[]
+  toggleActiveTechFilter: (t: string) => void
+  setActiveTechFilter: (t: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const POPUP_WIDTH = 280
+  const POPUP_MAX_HEIGHT = 380
+  const VISIBLE_CHIP_LIMIT = 2
+
+  function openPopup() {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const r = trigger.getBoundingClientRect()
+    let left = r.left
+    left = Math.max(8, Math.min(left, window.innerWidth - POPUP_WIDTH - 8))
+
+    // Flip up when there's not enough room below (the bottom pill lives near
+    // the viewport bottom, so this is the common case). Anchor the bottom of
+    // the popup above the trigger instead of the top below it.
+    const spaceBelow = window.innerHeight - r.bottom - 12
+    const spaceAbove = r.top - 12
+    const openUp = spaceBelow < 220 && spaceAbove > spaceBelow
+    const top = openUp
+      ? Math.max(8, r.top - Math.min(POPUP_MAX_HEIGHT, spaceAbove) - 6)
+      : r.bottom + 6
+    const maxHeight = openUp ? Math.min(POPUP_MAX_HEIGHT, spaceAbove) : Math.min(POPUP_MAX_HEIGHT, spaceBelow)
+
+    setCoords({ top, left, width: POPUP_WIDTH, maxHeight })
+    setOpen(true)
+    setTimeout(() => inputRef.current?.focus(), 30)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onDocPointer(e: MouseEvent | TouchEvent | PointerEvent) {
+      const t = e.target as Node | null
+      if (!t) return
+      if (popupRef.current?.contains(t)) return
+      if (triggerRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    // Use capture phase so React Flow / other handlers that call
+    // stopPropagation in their bubble-phase listeners can't swallow the
+    // close. Listening on pointerdown + mousedown + touchstart covers all
+    // input methods and event-flavor differences across browsers.
+    document.addEventListener('pointerdown', onDocPointer, true)
+    document.addEventListener('mousedown', onDocPointer, true)
+    document.addEventListener('touchstart', onDocPointer, true)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointer, true)
+      document.removeEventListener('mousedown', onDocPointer, true)
+      document.removeEventListener('touchstart', onDocPointer, true)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const filteredTechs = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return viewTechs
+    return viewTechs.filter((t) => t.toLowerCase().includes(q))
+  }, [viewTechs, query])
+
+  // Sticky-selected: selected items first, then unselected, both alpha
+  const orderedTechs = useMemo(() => {
+    const sel = filteredTechs.filter((t) => activeTechFilter.includes(t))
+    const unsel = filteredTechs.filter((t) => !activeTechFilter.includes(t))
+    return { sel, unsel }
+  }, [filteredTechs, activeTechFilter])
+
+  const visibleChips = activeTechFilter.slice(0, VISIBLE_CHIP_LIMIT)
+  const hiddenChipCount = Math.max(0, activeTechFilter.length - VISIBLE_CHIP_LIMIT)
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
+      <button
+        ref={triggerRef}
+        onClick={() => (open ? setOpen(false) : openPopup())}
+        className="hover-lift-inactive"
+        data-active={open ? 'true' : undefined}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        style={{
+          height: 30,
+          padding: '0 10px',
+          borderRadius: 'var(--radius-sm)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          fontSize: 'var(--text-xs)',
+          fontWeight: 600,
+          color: 'var(--color-text-muted)',
+          background: open ? 'var(--color-accent-active)' : undefined,
+          cursor: 'pointer',
+          border: 'none',
+          flexShrink: 0,
+        }}
+      >
+        Filter tech
+        <ChevronDown size={11} />
+      </button>
+
+      {/* Visible active chips (preview) */}
+      {visibleChips.map((tech) => (
+        <button
+          key={tech}
+          onClick={() => toggleActiveTechFilter(tech)}
+          title={`Remove ${tech}`}
+          style={{
+            height: 26,
+            padding: '0 8px',
+            borderRadius: 'var(--radius-sm)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            color: 'var(--color-bg-primary)',
+            background: 'var(--color-accent)',
+            border: 'none',
+            cursor: 'pointer',
+            maxWidth: 140,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{tech}</span>
+          <X size={10} style={{ flexShrink: 0 }} />
+        </button>
+      ))}
+      {hiddenChipCount > 0 && (
+        <button
+          onClick={openPopup}
+          style={{
+            height: 26,
+            padding: '0 8px',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            color: 'var(--color-accent)',
+            background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',
+            border: 'none',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          +{hiddenChipCount} more
+        </button>
+      )}
+      {activeTechFilter.length > 0 && (
+        <button
+          onClick={() => setActiveTechFilter([])}
+          title="Clear tech filter"
+          aria-label="Clear tech filter"
+          style={{
+            width: 24, height: 24,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--color-text-muted)',
+            cursor: 'pointer', border: 'none', background: 'transparent',
+            flexShrink: 0,
+          }}
+        >
+          <X size={11} />
+        </button>
+      )}
+
+      {open && coords && createPortal(
+        <div
+          ref={popupRef}
+          role="dialog"
+          aria-label="Tech filter"
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            left: coords.left,
+            width: coords.width,
+            maxHeight: coords.maxHeight,
+            zIndex: 1100,
+            padding: 8,
+            borderRadius: 12,
+            border: '1px solid color-mix(in srgb, var(--color-border) 90%, #000 10%)',
+            background: 'var(--color-surface-2)',
+            boxShadow: '0 14px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.4)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            overflow: 'hidden',
+          }}
+        >
+          {/* Header with title + close */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '2px 4px 0',
+          }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'var(--color-text-muted)',
+            }}>Filter by tech</span>
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Close"
+              title="Close"
+              style={{
+                width: 22, height: 22,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: 'none', background: 'transparent', borderRadius: 6,
+                color: 'var(--color-text-muted)', cursor: 'pointer',
+              }}
+            >
+              <X size={13} />
+            </button>
+          </div>
+
+          {/* Search */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 8px',
+            borderRadius: 8,
+            background: 'var(--glass-overlay-xs)',
+            border: '1px solid var(--color-border)',
+          }}>
+            <Search size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search technologies…"
+              aria-label="Search technologies"
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: 'var(--color-text-primary)',
+                fontSize: 13,
+              }}
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 0 }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* List */}
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            display: 'flex', flexDirection: 'column', gap: 1,
+          }}>
+            {viewTechs.length === 0 ? (
+              <div style={{ padding: '12px 10px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                No technologies in this view
+              </div>
+            ) : (
+              <>
+                {orderedTechs.sel.length > 0 && (
+                  <>
+                    <div style={{
+                      padding: '6px 10px 4px', fontSize: 10, fontWeight: 700,
+                      textTransform: 'uppercase', letterSpacing: '0.08em',
+                      color: 'var(--color-text-muted)',
+                    }}>Selected · {orderedTechs.sel.length}</div>
+                    {orderedTechs.sel.map((tech) => (
+                      <TechRow key={tech} tech={tech} selected onToggle={() => toggleActiveTechFilter(tech)} />
+                    ))}
+                    <div style={{
+                      height: 1,
+                      margin: '6px 6px 2px',
+                      background: 'color-mix(in srgb, var(--color-border) 60%, transparent)',
+                    }} />
+                  </>
+                )}
+                {orderedTechs.unsel.length > 0 ? (
+                  orderedTechs.unsel.map((tech) => (
+                    <TechRow key={tech} tech={tech} onToggle={() => toggleActiveTechFilter(tech)} />
+                  ))
+                ) : orderedTechs.sel.length === 0 ? (
+                  <div style={{ padding: '12px 10px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                    No matches for &ldquo;{query}&rdquo;
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          {activeTechFilter.length > 0 && (
+            <button
+              onClick={() => setActiveTechFilter([])}
+              style={{
+                marginTop: 2,
+                padding: '7px 10px',
+                borderRadius: 6,
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--color-error, #f87171)',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              Clear all ({activeTechFilter.length})
+            </button>
+          )}
+        </div>,
+        document.body,
+      )}
+    </div>
+  )
+}
+
+function TechRow({ tech, selected, onToggle }: { tech: string; selected?: boolean; onToggle: () => void }) {
+  return (
+    <button
+      role="option"
+      aria-selected={selected}
+      onClick={onToggle}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
+        padding: '7px 10px',
+        border: 0,
+        borderRadius: 6,
+        background: selected
+          ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)'
+          : 'transparent',
+        color: 'var(--color-text-primary)',
+        fontSize: 13,
+        textAlign: 'left',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => {
+        if (!selected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+      }}
+      onMouseLeave={(e) => {
+        if (!selected) e.currentTarget.style.background = 'transparent'
+      }}
+    >
+      <span style={{
+        width: 14, height: 14, borderRadius: 4,
+        border: `1.5px solid ${selected ? 'var(--color-accent)' : 'var(--color-border-hover)'}`,
+        background: selected ? 'var(--color-accent)' : 'transparent',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        {selected && <Check size={10} style={{ color: 'var(--color-bg-primary)' }} />}
+      </span>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tech}</span>
+    </button>
+  )
+}
+
+function ModeTab({ icon, label, active, onClick, isFirst, count }: {
+  icon: React.ReactNode; label: string; active: boolean; onClick: () => void; isFirst?: boolean; count?: number
 }) {
   return (
     <button
@@ -556,6 +963,14 @@ function ModeTab({ icon, label, active, onClick, isFirst }: {
     >
       {icon}
       {label}
+      {count !== undefined && (
+        <span style={{
+          minWidth: 16, height: 16, padding: '0 4px',
+          borderRadius: 999, background: 'var(--color-accent)', color: 'var(--color-bg-primary)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, fontWeight: 700,
+        }}>{count}</span>
+      )}
     </button>
   )
 }

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState, useRef } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import LoadingDot from '@/components/shared/LoadingDot'
 import { ReactFlowProvider } from '@xyflow/react'
@@ -101,17 +101,7 @@ export default function App() {
           <ErrorBoundary label="Canvas error" onHome={() => useWorkspaceStore.getState().closeWorkspace()}>
             <Canvas />
           </ErrorBoundary>
-          <div
-            className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-3 py-1.5 text-xs"
-            style={{
-              background: 'rgba(13, 17, 23, 0.9)',
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text-muted)',
-
-            }}
-          >
-            Press <kbd className="mx-1 rounded border px-1" style={{ borderColor: 'var(--color-border)' }}>Esc</kbd> or <kbd className="mx-1 rounded border px-1" style={{ borderColor: 'var(--color-border)' }}>F</kbd> to exit
-          </div>
+          <PresentationExitPill />
         </div>
       </ReactFlowProvider>
     )
@@ -163,5 +153,47 @@ export default function App() {
           no existing child view. Offers fast create or "Customize…" for full control. */}
       <ZoomConfirmDialog />
     </>
+  )
+}
+
+function PresentationExitPill() {
+  const [visible, setVisible] = useState(true)
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    function show() {
+      setVisible(true)
+      if (idleTimer.current) clearTimeout(idleTimer.current)
+      idleTimer.current = setTimeout(() => setVisible(false), 2000)
+    }
+    show()
+    window.addEventListener('mousemove', show)
+    window.addEventListener('keydown', show)
+    window.addEventListener('touchstart', show)
+    return () => {
+      window.removeEventListener('mousemove', show)
+      window.removeEventListener('keydown', show)
+      window.removeEventListener('touchstart', show)
+      if (idleTimer.current) clearTimeout(idleTimer.current)
+    }
+  }, [])
+
+  return (
+    <div
+      className="fixed bottom-4 right-4 z-50 rounded-lg border px-2.5 py-1 text-xs"
+      style={{
+        background: 'color-mix(in srgb, var(--canvas-bg, var(--color-bg-primary)) 65%, transparent)',
+        borderColor: 'color-mix(in srgb, var(--color-border) 50%, transparent)',
+        color: 'var(--color-text-muted)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        opacity: visible ? 1 : 0,
+        pointerEvents: visible ? 'auto' : 'none',
+        transition: 'opacity 300ms ease',
+      }}
+    >
+      <kbd className="mr-1 rounded border px-1" style={{ borderColor: 'color-mix(in srgb, var(--color-border) 60%, transparent)' }}>Esc</kbd>
+      <span style={{ opacity: 0.7 }}>to exit</span>
+    </div>
   )
 }

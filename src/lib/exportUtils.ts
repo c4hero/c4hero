@@ -43,7 +43,7 @@ export function downloadBlob(blob: Blob, filename: string) {
 }
 
 /** Export the canvas viewport as PNG */
-export type ExportTheme = 'dark' | 'light'
+export type ExportTheme = 'dark' | 'light' | 'current'
 
 /** Light theme background / override vars */
 const LIGHT_STYLE: Record<string, string> = {
@@ -57,13 +57,30 @@ const LIGHT_STYLE: Record<string, string> = {
   '--color-text-muted': '#64748b',
 }
 
+/** Read the current canvas background from the live DOM, falling back to dark. */
+function readCurrentCanvasBg(): string {
+  const renderer = document.querySelector('.react-flow__renderer') as HTMLElement | null
+  if (!renderer) return '#0a0f14'
+  const styles = getComputedStyle(renderer)
+  const override = styles.getPropertyValue('--canvas-bg').trim()
+  if (override) return override
+  const fallback = styles.getPropertyValue('--color-bg-primary').trim()
+  return fallback || '#0a0f14'
+}
+
+function bgForTheme(theme: ExportTheme): string {
+  if (theme === 'light') return '#f8fafc'
+  if (theme === 'current') return readCurrentCanvasBg()
+  return '#0a0f14'
+}
+
 export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Blob | null> {
   const renderer = document.querySelector('.react-flow__renderer') as HTMLElement | null
   if (!renderer) return null
 
   try {
     const { toPng } = await import('html-to-image')
-    const bg = theme === 'light' ? '#f8fafc' : '#0a0f14'
+    const bg = bgForTheme(theme)
     const dataUrl = await toPng(renderer, {
       pixelRatio: 2,
       backgroundColor: bg,
@@ -97,7 +114,7 @@ export function exportCanvasAsSVG(theme: ExportTheme = 'dark'): string | null {
   }
 
   const rect = viewport.getBoundingClientRect()
-  const bg = theme === 'light' ? '#f8fafc' : '#0a0f14'
+  const bg = bgForTheme(theme)
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}" style="background:${bg}">
   <foreignObject width="100%" height="100%">

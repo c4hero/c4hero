@@ -92,6 +92,8 @@ interface WorkspaceState extends UndoState {
   // Canvas settings
   activeTagFilter: string | null
   activeStatusFilter: ElementStatus | null
+  /** Multi-select tech filter — element matches if any of its technology tokens is in this set. */
+  activeTechFilter: string[]
   minimapEnabled: boolean
   snapToGrid: boolean
   multiSelectMode: boolean
@@ -187,6 +189,8 @@ interface WorkspaceState extends UndoState {
   // Canvas settings
   setActiveTagFilter: (tag: string | null) => void
   setActiveStatusFilter: (status: ElementStatus | null) => void
+  setActiveTechFilter: (techs: string[]) => void
+  toggleActiveTechFilter: (tech: string) => void
   updateElementStyle: (style: import('@/types/model').ElementStyle) => void
   removeElementStyle: (tag: string) => void
   renameTag: (oldTag: string, newTag: string) => void
@@ -331,6 +335,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   clearFocusElement: () => set({ focusElementId: null }),
   activeTagFilter: null,
   activeStatusFilter: null,
+  activeTechFilter: [],
   minimapEnabled: true,
   snapToGrid: false,
   multiSelectMode: false,
@@ -368,6 +373,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // Clear view filters so they don't bleed from a previous workspace
       activeTagFilter: null,
       activeStatusFilter: null,
+      activeTechFilter: [],
       scopeViolations: validateScope(workspace),
     })
   },
@@ -1377,6 +1383,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   setActiveTagFilter: (tag) => set({ activeTagFilter: tag }),
   setActiveStatusFilter: (status) => set({ activeStatusFilter: status }),
+  setActiveTechFilter: (techs) => set({ activeTechFilter: techs }),
+  toggleActiveTechFilter: (tech) => set((s) => ({
+    activeTechFilter: s.activeTechFilter.includes(tech)
+      ? s.activeTechFilter.filter((t) => t !== tech)
+      : [...s.activeTechFilter, tech],
+  })),
   updateElementStyle: (style) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s

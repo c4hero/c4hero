@@ -7,8 +7,8 @@ import { createLogger } from '@/lib/logger'
 const log = createLogger('ExportDialog')
 
 interface ExportDialogProps {
-  onExport: (format: 'dsl' | 'json' | 'png' | 'svg', theme?: ExportTheme) => Promise<void>
-  onCopy: (type: 'png-dark' | 'png-light' | 'dsl') => Promise<void>
+  onExport: (format: 'dsl' | 'png' | 'svg', theme?: ExportTheme) => Promise<void>
+  onCopy: (type: 'png-dark' | 'png-light' | 'png-current' | 'dsl') => Promise<void>
   onClose: () => void
 }
 
@@ -97,18 +97,21 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
       label: 'PNG Image',
       ext: '.png',
       actions: [
-        { id: 'dl-dark-.png',  icon: Download, label: 'Dark',  fn: () => onExport('png', 'dark') },
-        { id: 'dl-light-.png', icon: Download, label: 'Light', fn: () => onExport('png', 'light') },
-        { id: 'cp-dark-.png',  icon: Copy,     label: 'Copy Dark',  fn: () => onCopy('png-dark') },
-        { id: 'cp-light-.png', icon: Copy,     label: 'Copy Light', fn: () => onCopy('png-light') },
+        { id: 'dl-current-.png', icon: Download, label: 'Current',  fn: () => onExport('png', 'current') },
+        { id: 'dl-dark-.png',    icon: Download, label: 'Dark',     fn: () => onExport('png', 'dark') },
+        { id: 'dl-light-.png',   icon: Download, label: 'Light',    fn: () => onExport('png', 'light') },
+        { id: 'cp-current-.png', icon: Copy,     label: 'Copy Current', fn: () => onCopy('png-current') },
+        { id: 'cp-dark-.png',    icon: Copy,     label: 'Copy Dark',    fn: () => onCopy('png-dark') },
+        { id: 'cp-light-.png',   icon: Copy,     label: 'Copy Light',   fn: () => onCopy('png-light') },
       ],
     },
     {
       label: 'SVG Vector',
       ext: '.svg',
       actions: [
-        { id: 'dl-dark-.svg',  icon: Download, label: 'Dark',  fn: () => onExport('svg', 'dark') },
-        { id: 'dl-light-.svg', icon: Download, label: 'Light', fn: () => onExport('svg', 'light') },
+        { id: 'dl-current-.svg', icon: Download, label: 'Current', fn: () => onExport('svg', 'current') },
+        { id: 'dl-dark-.svg',    icon: Download, label: 'Dark',    fn: () => onExport('svg', 'dark') },
+        { id: 'dl-light-.svg',   icon: Download, label: 'Light',   fn: () => onExport('svg', 'light') },
       ],
     },
     {
@@ -117,13 +120,6 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
       actions: [
         { id: 'dl-.dsl', icon: Download, label: 'Download', fn: () => onExport('dsl') },
         { id: 'cp-.dsl', icon: Copy,     label: 'Copy',     fn: () => onCopy('dsl') },
-      ],
-    },
-    {
-      label: 'Workspace JSON',
-      ext: '.json',
-      actions: [
-        { id: 'dl-.json', icon: Download, label: 'Download', fn: () => onExport('json') },
       ],
     },
   ]

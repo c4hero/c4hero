@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { FileText, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Building2, Network, Box, Zap, Trash2, X } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import {
   createBigBankSample,
   createMicroservicesTemplate,
@@ -7,8 +8,43 @@ import {
   createEventDrivenTemplate,
 } from '@/lib/templates'
 import { slugifyName } from '@/lib/folderIO'
+import type { Workspace } from '@/types/model'
 
 // ─── Template Dialog ─────────────────────────────────────────────────────────
+
+type TemplateCard = {
+  label: string
+  name: string
+  fn: () => ReturnType<typeof createBigBankSample>
+  tagline: string
+  icon: LucideIcon
+  accent: string
+  glow: string
+}
+
+function summarize(ws: Workspace): string {
+  const people = ws.model.people.length
+  const systems = ws.model.softwareSystems.length
+  const containers = ws.model.softwareSystems.reduce(
+    (sum, s) => sum + (s.containers?.length ?? 0),
+    0,
+  )
+  const components = ws.model.softwareSystems.reduce(
+    (sum, s) => sum + (s.containers?.reduce((cs, c) => cs + (c.components?.length ?? 0), 0) ?? 0),
+    0,
+  )
+  const relationships = ws.model.relationships.length
+  const scopeLabel =
+    ws.scope === 'landscape' ? 'Landscape' : ws.scope === 'softwaresystem' ? 'System' : 'Workspace'
+  const plural = (n: number, s: string) => `${n} ${s}${n === 1 ? '' : 's'}`
+  const parts: string[] = [scopeLabel]
+  if (people > 0) parts.push(plural(people, 'person').replace('persons', 'people'))
+  if (systems > 0) parts.push(plural(systems, 'system'))
+  if (containers > 0) parts.push(plural(containers, 'container'))
+  if (components > 0) parts.push(plural(components, 'component'))
+  if (relationships > 0) parts.push(plural(relationships, 'relationship'))
+  return parts.join(' · ')
+}
 
 export function TemplateDialog({
   onSelect,
@@ -17,53 +53,187 @@ export function TemplateDialog({
   onSelect: (ws: ReturnType<typeof createBigBankSample>, name: string) => void
   onClose: () => void
 }) {
-  const templates = [
-    { label: 'Big Bank Sample', name: 'big-bank.dsl', fn: createBigBankSample },
-    { label: 'Microservices', name: 'microservices.dsl', fn: createMicroservicesTemplate },
-    { label: 'Monolith', name: 'monolith.dsl', fn: createMonolithTemplate },
-    { label: 'Event-Driven', name: 'event-driven.dsl', fn: createEventDrivenTemplate },
-  ] as const
+  const templates: TemplateCard[] = [
+    {
+      label: 'Big Bank',
+      name: 'big-bank.dsl',
+      fn: createBigBankSample,
+      tagline: 'Enterprise landscape with customers, staff, and core systems.',
+      icon: Building2,
+      accent: '#7aa2f7',
+      glow: 'rgba(122, 162, 247, 0.18)',
+    },
+    {
+      label: 'Microservices',
+      name: 'microservices.dsl',
+      fn: createMicroservicesTemplate,
+      tagline: 'Distributed services behind an API gateway with shared infra.',
+      icon: Network,
+      accent: '#9ece6a',
+      glow: 'rgba(158, 206, 106, 0.18)',
+    },
+    {
+      label: 'Monolith',
+      name: 'monolith.dsl',
+      fn: createMonolithTemplate,
+      tagline: 'Classic three-tier app, single deployable, one database.',
+      icon: Box,
+      accent: '#e0af68',
+      glow: 'rgba(224, 175, 104, 0.18)',
+    },
+    {
+      label: 'Event-Driven',
+      name: 'event-driven.dsl',
+      fn: createEventDrivenTemplate,
+      tagline: 'Async services communicating over a message broker.',
+      icon: Zap,
+      accent: '#bb9af7',
+      glow: 'rgba(187, 154, 247, 0.18)',
+    },
+  ]
+
+  const summaries = useMemo(
+    () => Object.fromEntries(templates.map((t) => [t.name, summarize(t.fn())])),
+    // templates list is static per-render; safe to omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  const [hovered, setHovered] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
+      style={{
+        background: 'rgba(5, 8, 14, 0.72)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+      }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="flex flex-col gap-4 rounded-xl border p-5 shadow-xl"
+        className="relative flex flex-col rounded-2xl border shadow-2xl"
         style={{
-          background: 'var(--color-bg-primary)',
+          background:
+            'radial-gradient(circle at top left, rgba(122,162,247,0.08), transparent 55%), radial-gradient(circle at bottom right, rgba(187,154,247,0.06), transparent 55%), var(--color-bg-primary)',
           borderColor: 'var(--color-border)',
-          minWidth: '280px',
-          maxWidth: '400px',
-          width: '90vw',
+          width: 'min(680px, 92vw)',
+          padding: '24px 24px 22px',
+          gap: 20,
+          boxShadow: '0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.02) inset',
         }}
       >
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            Load template
-          </h2>
+        <div className="flex items-start justify-between" style={{ gap: 16 }}>
+          <div className="flex flex-col" style={{ gap: 4 }}>
+            <h2
+              className="font-semibold"
+              style={{ color: 'var(--color-text-primary)', fontSize: 18, letterSpacing: '-0.01em' }}
+            >
+              Start from a template
+            </h2>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 13, lineHeight: 1.5, maxWidth: 460 }}>
+              Open a worked example to see how a real workspace is structured. You can edit, rename, or delete anything afterwards.
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="rounded p-1 hover:opacity-70"
-            style={{ color: 'var(--color-text-muted)' }}
+            className="rounded-lg p-1.5 transition-opacity hover:opacity-100"
+            style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}
             aria-label="Close"
           >
             <X size={16} />
           </button>
         </div>
-        <div className="flex flex-col gap-1">
-          {templates.map(({ label, name, fn }) => (
-            <button
-              key={name}
-              className="btn-surface w-full items-center gap-3 rounded-lg px-4 py-3 text-left"
-              onClick={() => onSelect(fn(), name)}
-            >
-              <FileText size={15} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-              <span className="text-sm font-medium">{label}</span>
-            </button>
-          ))}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {templates.map((t) => {
+            const Icon = t.icon
+            const isHovered = hovered === t.name
+            return (
+              <button
+                key={t.name}
+                onMouseEnter={() => setHovered(t.name)}
+                onMouseLeave={() => setHovered((h) => (h === t.name ? null : h))}
+                onFocus={() => setHovered(t.name)}
+                onBlur={() => setHovered((h) => (h === t.name ? null : h))}
+                onClick={() => onSelect(t.fn(), t.name)}
+                className="text-left transition-all"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                  padding: '16px 16px 14px',
+                  borderRadius: 14,
+                  border: `1px solid ${isHovered ? t.accent : 'var(--color-border)'}`,
+                  background: isHovered
+                    ? `linear-gradient(160deg, ${t.glow}, transparent 70%), var(--color-bg-secondary, rgba(255,255,255,0.02))`
+                    : 'var(--color-bg-secondary, rgba(255,255,255,0.02))',
+                  boxShadow: isHovered ? `0 10px 28px ${t.glow}` : 'none',
+                  transform: isHovered ? 'translateY(-1px)' : 'translateY(0)',
+                  cursor: 'pointer',
+                }}
+              >
+                <div className="flex items-center" style={{ gap: 10 }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 34,
+                      height: 34,
+                      borderRadius: 10,
+                      background: `${t.accent}1f`,
+                      border: `1px solid ${t.accent}33`,
+                      color: t.accent,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Icon size={17} />
+                  </span>
+                  <span
+                    className="font-semibold"
+                    style={{ color: 'var(--color-text-primary)', fontSize: 14, letterSpacing: '-0.005em' }}
+                  >
+                    {t.label}
+                  </span>
+                </div>
+                <p
+                  style={{
+                    color: 'var(--color-text-secondary, var(--color-text-muted))',
+                    fontSize: 12.5,
+                    lineHeight: 1.5,
+                    margin: 0,
+                  }}
+                >
+                  {t.tagline}
+                </p>
+                <span
+                  style={{
+                    color: 'var(--color-text-muted)',
+                    fontSize: 11,
+                    fontFamily:
+                      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                    letterSpacing: '0.02em',
+                    marginTop: 'auto',
+                  }}
+                >
+                  {summaries[t.name]}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -220,11 +390,19 @@ export function NewCollectionDialog({
   onChange,
   onConfirm,
   onCancel,
+  title = 'New collection',
+  description = 'Choose a friendly name — the folder will be created using the slug below.',
+  confirmLabel = 'Choose location →',
+  showSlug = true,
 }: {
   value: string
   onChange: (v: string) => void
   onConfirm: () => void
   onCancel: () => void
+  title?: string
+  description?: string
+  confirmLabel?: string
+  showSlug?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -256,10 +434,10 @@ export function NewCollectionDialog({
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-            New collection
+            {title}
           </span>
           <span style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-            Choose a friendly name — the folder will be created using the slug below.
+            {description}
           </span>
         </div>
 
@@ -285,18 +463,20 @@ export function NewCollectionDialog({
               outline: 'none',
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Folder:</span>
-            <code style={{
-              fontSize: 11, padding: '2px 8px', borderRadius: 6,
-              background: 'var(--glass-overlay-sm)',
-              border: '1px solid var(--color-border)',
-              color: canSubmit ? 'var(--color-accent)' : 'var(--color-text-muted)',
-              fontFamily: 'monospace',
-            }}>
-              {canSubmit ? slug : 'collection'}
-            </code>
-          </div>
+          {showSlug && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Folder:</span>
+              <code style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 6,
+                background: 'var(--glass-overlay-sm)',
+                border: '1px solid var(--color-border)',
+                color: canSubmit ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                fontFamily: 'monospace',
+              }}>
+                {canSubmit ? slug : 'collection'}
+              </code>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -314,7 +494,7 @@ export function NewCollectionDialog({
               transition: 'background 150ms',
             }}
           >
-            Choose location →
+            {confirmLabel}
           </button>
         </div>
       </div>

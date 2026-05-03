@@ -13,9 +13,21 @@ This repository currently contains a browser-based React app with:
 - Structurizr DSL parsing and serialization, with a substantial round-trip test suite
 - local file and folder workflows, plus local crash-recovery storage in the browser
 - search, command palette, keyboard shortcuts, layout controls, tags, styles, groups, and presentation-oriented canvas controls
-- import/export paths for Structurizr DSL and JSON
+- import/export paths for Structurizr DSL plus PNG and SVG export
 - optional AI helpers for generating element descriptions and bootstrapping a workspace from a text prompt
 - unit and Playwright coverage for core editing flows
+
+## Browser support
+
+c4hero runs in any modern browser, but **folder collections** rely on the
+[File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API).
+That API is currently only available in **Chromium-based browsers** (Chrome,
+Edge, Brave, Arc, Opera).
+
+In Firefox and Safari you can still open and edit a single `.dsl` file at a
+time, export PNG / SVG / DSL, and use every other feature. When folder
+workflows aren't supported, c4hero automatically falls back to the single-file
+flow.
 
 ## Local development
 

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, lazy, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
@@ -9,12 +10,12 @@ import {
   openFolder,
   readDSLFile,
   writeDSLFile,
-  listDSLFiles,
   hasFolderAccess,
   getCurrentDirHandle,
   restoreDirHandleByName,
   initCollectionSettings,
   readCollectionSettings,
+  writeCollectionSettings,
   slugifyName,
   folderExists,
 } from '@/lib/folderIO'
@@ -28,6 +29,11 @@ import {
   ChevronRight,
   AlertTriangle,
   Search,
+  Pencil,
+  Trash2,
+  X,
+  MoreHorizontal,
+  Boxes,
 } from 'lucide-react'
 import AISettingsDialog from '@/components/ai/AISettingsDialog'
 import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
@@ -35,14 +41,10 @@ import {
   TemplateDialog,
   DuplicateCollectionDialog,
   NewCollectionDialog,
+  WorkspaceEditDialog,
 } from './WelcomeDialogs'
-import {
-  WorkspaceTile,
-  RecentRow,
-  StartupActionCard,
-  SectionDivider,
-  type FolderWorkspace,
-} from './WelcomeLeaves'
+import type { FolderWorkspace } from './WelcomeLeaves'
+import { scopeAccent, scopeLabel } from './workspaceScopeMeta'
 
 const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDialog'))
 
@@ -72,8 +74,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     if (urlSlug && !getCurrentDirHandle()) {
       restoreDirHandleByName(urlSlug).then(async (handle) => {
         if (handle) {
-          const files = await listDSLFiles()
-          setFolderWorkspaces(files.map(f => ({ name: f })))
+          setFolderWorkspaces(await listCurrentDSLFiles())
         } else {
           navigate('/', { replace: true })
         }
@@ -99,6 +100,9 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const [showTemplates, setShowTemplates] = useState(false)
   const [showNewCollection, setShowNewCollection] = useState(false)
   const [newCollectionName, setNewCollectionName] = useState('My Architecture')
+  const [renameCollection, setRenameCollection] = useState<{ slug: string; name: string } | null>(null)
+  const [loadingCollection, setLoadingCollection] = useState<string | null>(null)
+  const [loadingWorkspace, setLoadingWorkspace] = useState<string | null>(null)
   const [duplicateConfirm, setDuplicateConfirm] = useState<{ slug: string; displayName: string; parentHandle: FileSystemDirectoryHandle } | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -120,7 +124,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     if (!dir) return []
     const files: FolderWorkspace[] = []
     for await (const [name, entry] of dir.entries()) {
-      if (entry.kind === 'file' && name.endsWith('.dsl')) {
+      if (entry.kind === 'file' && name.toLowerCase().endsWith('.dsl')) {
         let modifiedAt: number | undefined
         let scope: string | undefined
         let elementCount = 0
@@ -157,11 +161,16 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   async function openFolderAndTransition() {
     const result = await openFolder()
     if (!result) return
-    const settings = await initCollectionSettings(result.dirHandle.name)
-    addRecentFolder({ name: result.dirHandle.name, path: result.dirHandle.name, displayName: settings.name })
-    const workspaces = result.dslFiles.map((name) => ({ name }))
-    setFolderWorkspaces(workspaces)
-    setView('collection')
+    setLoadingCollection(result.dirHandle.name)
+    try {
+      const settings = await initCollectionSettings(result.dirHandle.name)
+      addRecentFolder({ name: result.dirHandle.name, path: result.dirHandle.name, displayName: settings.name })
+      setRecentFolders(getRecentFolders())
+      setFolderWorkspaces(await listCurrentDSLFiles())
+      setView('collection')
+    } finally {
+      setLoadingCollection(null)
+    }
   }
 
   // ── Screen 1 handlers ───────────────────────────────────────────────
@@ -190,8 +199,8 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const friendlyName = displayName.trim() || slug
     await initCollectionSettings(friendlyName)
     addRecentFolder({ name: newDir.name, path: newDir.name, displayName: friendlyName })
-    const files = await listDSLFiles()
-    setFolderWorkspaces(files.map(n => ({ name: n })))
+    setRecentFolders(getRecentFolders())
+    setFolderWorkspaces(await listCurrentDSLFiles())
     setView('collection')
   }
 
@@ -205,8 +214,8 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const friendlyName = displayName.trim() || slug
     const settings = await initCollectionSettings(friendlyName)
     addRecentFolder({ name: newDir.name, path: newDir.name, displayName: settings.name ?? friendlyName })
-    const files = await listDSLFiles()
-    setFolderWorkspaces(files.map(n => ({ name: n })))
+    setRecentFolders(getRecentFolders())
+    setFolderWorkspaces(await listCurrentDSLFiles())
     setView('collection')
   }
 
@@ -223,6 +232,24 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     setShowNewCollection(true)
   }
 
+  async function handleRenameCollection() {
+    const dir = getCurrentDirHandle()
+    if (!dir) return
+    const settings = await readCollectionSettings()
+    setRenameCollection({ slug: dir.name, name: settings?.name ?? dir.name })
+  }
+
+  async function commitRenameCollection(newName: string) {
+    if (!renameCollection) return
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    const existing = (await readCollectionSettings()) ?? {}
+    await writeCollectionSettings({ ...existing, name: trimmed })
+    addRecentFolder({ name: renameCollection.slug, path: renameCollection.slug, displayName: trimmed })
+    setRecentFolders(getRecentFolders())
+    setRenameCollection(null)
+  }
+
   const handleOpenCollection = openFolderAndTransition
   function handleRemoveRecent(name: string) {
     removeRecentFolder(name)
@@ -230,36 +257,48 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   }
 
   async function handleOpenRecent(name: string) {
-    const handle = await restoreDirHandleByName(name)
-    if (handle) {
-      const files = await listDSLFiles()
-      const settings = await readCollectionSettings()
-      addRecentFolder({ name: handle.name, path: handle.name, displayName: settings?.name })
-      setFolderWorkspaces(files.map(f => ({ name: f })))
-      setView('collection')
-    } else {
-      // Permission revoked — fall back to manual picker
-      openFolderAndTransition()
+    setLoadingCollection(name)
+    try {
+      const handle = await restoreDirHandleByName(name)
+      if (handle) {
+        const settings = await readCollectionSettings()
+        addRecentFolder({ name: handle.name, path: handle.name, displayName: settings?.name })
+        setRecentFolders(getRecentFolders())
+        setFolderWorkspaces(await listCurrentDSLFiles())
+        setView('collection')
+      } else {
+        // Permission revoked — fall back to manual picker
+        setLoadingCollection(null)
+        openFolderAndTransition()
+        return
+      }
+    } finally {
+      setLoadingCollection(null)
     }
   }
 
   // ── Screen 2 handlers ───────────────────────────────────────────────
 
   async function handleOpenWorkspace(filename: string) {
-    const file = await readDSLFile(filename)
-    if (!file) return
-    const { workspace, errors } = parseDSL(file.content)
-    if (errors.length > 0) log.warn("DSL parse warnings", errors)
-    if (workspace) {
-      if (!workspace.name) workspace.name = filename.replace(/\.dsl$/, '')
-      if (file.sidecarJson) {
-        const sidecar = parseSidecar(file.sidecarJson)
-        if (sidecar) applySidecar(workspace, sidecar)
+    setLoadingWorkspace(filename.replace(/\.dsl$/, ''))
+    try {
+      const file = await readDSLFile(filename)
+      if (!file) return
+      const { workspace, errors } = parseDSL(file.content)
+      if (errors.length > 0) log.warn("DSL parse warnings", errors)
+      if (workspace) {
+        if (!workspace.name) workspace.name = filename.replace(/\.dsl$/, '')
+        if (file.sidecarJson) {
+          const sidecar = parseSidecar(file.sidecarJson)
+          if (sidecar) applySidecar(workspace, sidecar)
+        }
+        loadWorkspace(workspace)
+        useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
+      } else {
+        setErrorMsg('Failed to parse DSL file. Please check the file format.')
       }
-      loadWorkspace(workspace)
-      useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
-    } else {
-      setErrorMsg('Failed to parse DSL file. Please check the file format.')
+    } finally {
+      setLoadingWorkspace(null)
     }
   }
 
@@ -414,17 +453,22 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     }
     const file = await openDSLFile()
     if (!file) return
-    const { workspace, errors } = parseDSL(file.content)
-    if (errors.length > 0) log.warn("DSL parse warnings", errors)
-    if (workspace) {
-      if (!workspace.name) workspace.name = file.name.replace(/\.dsl$/, '')
-      if (file.sidecarJson) {
-        const sidecar = parseSidecar(file.sidecarJson)
-        if (sidecar) applySidecar(workspace, sidecar)
+    setLoadingWorkspace(file.name.replace(/\.dsl$/, ''))
+    try {
+      const { workspace, errors } = parseDSL(file.content)
+      if (errors.length > 0) log.warn("DSL parse warnings", errors)
+      if (workspace) {
+        if (!workspace.name) workspace.name = file.name.replace(/\.dsl$/, '')
+        if (file.sidecarJson) {
+          const sidecar = parseSidecar(file.sidecarJson)
+          if (sidecar) applySidecar(workspace, sidecar)
+        }
+        loadWorkspace(workspace)
+      } else {
+        setErrorMsg('Failed to parse DSL file. Please check the file format.')
       }
-      loadWorkspace(workspace)
-    } else {
-      setErrorMsg('Failed to parse DSL file. Please check the file format.')
+    } finally {
+      setLoadingWorkspace(null)
     }
   }
 
@@ -450,24 +494,14 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
 
   return (
     <div
-      className="flex h-full w-full items-start justify-center overflow-y-auto px-5"
-      style={{
-        background: 'var(--color-bg-primary)',
-        paddingTop: 'max(3rem, calc(env(safe-area-inset-top, 0px) + 1.5rem))',
-        paddingBottom: 'max(3rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))',
-      }}
+      className="welcome-page"
     >
-      <div className={`flex w-full max-w-md flex-col gap-6 my-auto ${view === 'collection' ? 'sm:max-w-2xl' : 'sm:max-w-lg'}`}>
+      <div className="welcome-stage">
         {/* Error banner */}
         {errorMsg && (
           <div
             role="alert"
-            className="flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-sm"
-            style={{
-              background: 'color-mix(in srgb, var(--color-error) 8%, transparent)',
-              borderColor: 'color-mix(in srgb, var(--color-error) 30%, transparent)',
-              color: 'var(--color-error)',
-            }}
+            className="welcome-error"
           >
             <AlertTriangle size={16} style={{ flexShrink: 0 }} />
             <span style={{ flex: 1 }}>{errorMsg}</span>
@@ -494,10 +528,17 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           <CollectionView
             dirHandle={dirHandle}
             workspaces={folderWorkspaces}
+            recentFolders={recentFolders}
             onOpenWorkspace={handleOpenWorkspace}
             onRenameWorkspace={handleRenameWorkspace}
             onDeleteWorkspace={handleDeleteWorkspace}
             onBlankWorkspace={handleBlankWorkspace}
+            onImportDSL={handleOpenFile}
+            onTemplate={() => setShowTemplates(true)}
+            onOpenCollection={handleOpenCollection}
+            onCreateCollection={handleCreateCollection}
+            onRenameCollection={handleRenameCollection}
+            onOpenRecent={handleOpenRecent}
             onBack={() => setView('startup')}
           />
         )}
@@ -527,6 +568,18 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           onCancel={() => setShowNewCollection(false)}
         />
       )}
+      {renameCollection && (
+        <NewCollectionDialog
+          title="Rename collection"
+          description="Update the collection's display name. The folder name on disk stays the same."
+          confirmLabel="Save"
+          showSlug={false}
+          value={renameCollection.name}
+          onChange={(v) => setRenameCollection((r) => (r ? { ...r, name: v } : r))}
+          onConfirm={() => commitRenameCollection(renameCollection.name)}
+          onCancel={() => setRenameCollection(null)}
+        />
+      )}
       {duplicateConfirm && (
         <DuplicateCollectionDialog
           slug={duplicateConfirm.slug}
@@ -551,6 +604,12 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           onClose={() => setShowTemplates(false)}
         />
       )}
+      {(loadingCollection || loadingWorkspace) && (
+        <CollectionLoadingOverlay
+          name={loadingWorkspace ?? loadingCollection ?? ''}
+          kind={loadingWorkspace ? 'workspace' : 'collection'}
+        />
+      )}
       <div className="commit-hash">{__COMMIT_HASH__}</div>
     </div>
   )
@@ -573,172 +632,109 @@ function StartupView({
   onOpenFile: () => void
   recentFolders: { name: string; path: string; displayName?: string }[]
 }) {
+  const canUseCollections = hasFolderAccess()
+  const hasRecents = recentFolders.length > 0
+
   return (
     <>
-      {/* Logo + tagline */}
-      <div className="flex flex-col items-center gap-4">
-        <h1 className="flex flex-col items-center gap-2">
-          <img
-            src="/c4-logo.svg"
-            alt="c4hero — visual architecture modelling tool"
-            className="h-10 sm:h-12"
-          />
-        </h1>
-        <p
-          className="text-center text-sm leading-relaxed sm:text-base"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          Visual architecture modelling...
-        </p>
+      <div className="welcome-brand">
+        <C4Mark />
       </div>
 
-      {/* Collection actions */}
-      {hasFolderAccess() ? (
-        <div className="flex flex-col gap-3 w-full">
-          <div className="flex gap-3 w-full">
-            <StartupActionCard
-              icon={
-                <svg width="52" height="48" viewBox="0 0 52 48" fill="none">
-                  {/* folder back */}
-                  <path d="M4 14C4 11.8 5.8 10 8 10H18L22 14H44C46.2 14 48 15.8 48 18V38C48 40.2 46.2 42 44 42H8C5.8 42 4 40.2 4 38V14Z" fill="rgba(88,166,255,0.12)" stroke="rgba(88,166,255,0.5)" strokeWidth="1.5"/>
-                  {/* folder open flap */}
-                  <path d="M4 20H48L44 42H8L4 20Z" fill="rgba(88,166,255,0.08)" stroke="rgba(88,166,255,0.4)" strokeWidth="1.5"/>
-                  {/* doc 1 — flying up-right */}
-                  <g transform="translate(28,4) rotate(12)">
-                    <rect width="13" height="16" rx="2" fill="rgba(88,166,255,0.2)" stroke="#58a6ff" strokeWidth="1.2"/>
-                    <line x1="3" y1="6" x2="10" y2="6" stroke="#58a6ff" strokeWidth="1" strokeOpacity="0.6"/>
-                    <line x1="3" y1="9" x2="10" y2="9" stroke="#58a6ff" strokeWidth="1" strokeOpacity="0.4"/>
-                    <line x1="3" y1="12" x2="7" y2="12" stroke="#58a6ff" strokeWidth="1" strokeOpacity="0.3"/>
-                  </g>
-                  {/* doc 2 — flying up-left */}
-                  <g transform="translate(8,2) rotate(-10)">
-                    <rect width="11" height="14" rx="2" fill="rgba(34,197,94,0.15)" stroke="rgba(34,197,94,0.6)" strokeWidth="1.2"/>
-                    <line x1="2.5" y1="5" x2="8.5" y2="5" stroke="rgba(34,197,94,0.7)" strokeWidth="1"/>
-                    <line x1="2.5" y1="8" x2="8.5" y2="8" stroke="rgba(34,197,94,0.5)" strokeWidth="1"/>
-                  </g>
-                </svg>
-              }
-              label="Open collection"
-              description="Choose an existing folder on your machine"
-              onClick={onOpenCollection}
-            />
-            <StartupActionCard
-              icon={
-                <svg width="52" height="48" viewBox="0 0 52 48" fill="none">
-                  {/* canvas/board */}
-                  <rect x="4" y="8" width="44" height="34" rx="5" fill="rgba(88,166,255,0.07)" stroke="rgba(88,166,255,0.35)" strokeWidth="1.5"/>
-                  {/* node 1 */}
-                  <rect x="10" y="15" width="14" height="10" rx="3" fill="rgba(88,166,255,0.2)" stroke="#58a6ff" strokeWidth="1.3"/>
-                  <text x="17" y="22" fontSize="5" fill="#93c5fd" textAnchor="middle" fontFamily="monospace">API</text>
-                  {/* arrow */}
-                  <line x1="24" y1="20" x2="30" y2="20" stroke="rgba(88,166,255,0.5)" strokeWidth="1.2"/>
-                  <polygon points="30,17.5 34,20 30,22.5" fill="rgba(88,166,255,0.6)"/>
-                  {/* node 2 — dashed/being drawn */}
-                  <rect x="34" y="14" width="12" height="10" rx="3" fill="rgba(168,85,247,0.1)" stroke="rgba(168,85,247,0.6)" strokeWidth="1.3" strokeDasharray="3,2"/>
-                  <text x="40" y="21" fontSize="5" fill="#c4b5fd" textAnchor="middle" fontFamily="monospace">DB</text>
-                  {/* sparkle top-right */}
-                  <g transform="translate(38,6)">
-                    <line x1="4" y1="0" x2="4" y2="8" stroke="#fbbf24" strokeWidth="1.2"/>
-                    <line x1="0" y1="4" x2="8" y2="4" stroke="#fbbf24" strokeWidth="1.2"/>
-                    <line x1="1.2" y1="1.2" x2="6.8" y2="6.8" stroke="#fbbf24" strokeWidth="0.8" strokeOpacity="0.6"/>
-                    <line x1="6.8" y1="1.2" x2="1.2" y2="6.8" stroke="#fbbf24" strokeWidth="0.8" strokeOpacity="0.6"/>
-                  </g>
-                  {/* pencil */}
-                  <g transform="translate(8,29)">
-                    <path d="M0 8L6 2L10 6L4 12L0 12L0 8Z" fill="rgba(88,166,255,0.2)" stroke="#58a6ff" strokeWidth="1.1"/>
-                    <line x1="5" y1="3" x2="9" y2="7" stroke="#58a6ff" strokeWidth="0.9"/>
-                  </g>
-                </svg>
-              }
-              label="New collection"
-              description="Pick a folder and start from scratch"
-              onClick={onCreateCollection}
-            />
+      {hasRecents ? (
+        <div className="welcome-content welcome-content-centered">
+          <div className="welcome-return-header">
+            <div className="welcome-return-copy">
+              <h1 className="welcome-display">Welcome back<span>.</span></h1>
+              <p className="welcome-summary">Pick up where you left off, or start something new.</p>
+            </div>
+
+            <div className="welcome-ctas">
+              {canUseCollections ? (
+                <>
+                  <LifecycleButton variant="primary" onClick={onCreateCollection}>
+                    <Plus size={14} />
+                    New collection
+                  </LifecycleButton>
+                  <LifecycleButton onClick={onOpenCollection}>
+                    <FolderOpen size={14} />
+                    Open collection
+                  </LifecycleButton>
+                </>
+              ) : (
+                <LifecycleButton variant="primary" onClick={onOpenFile}>
+                  <FileText size={14} />
+                  Open .dsl file
+                </LifecycleButton>
+              )}
+            </div>
           </div>
 
-          {/* Recent folders */}
-          {recentFolders.length > 0 && (
-            <div className="w-full mt-2">
-              <SectionDivider label="Recent" />
-              <div className="flex flex-col gap-1 mt-2">
-                {recentFolders.slice(0, 3).map((folder) => (
-                  <RecentRow
-                    key={folder.path}
-                    name={folder.name}
-                    displayName={folder.displayName}
-                    path={folder.path}
-                    onClick={() => onOpenRecent(folder.name)}
-                    onRemove={() => onRemoveRecent(folder.name)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="welcome-toc-label">
+            Recent collections
+            <span>{recentFolders.length} collection{recentFolders.length === 1 ? '' : 's'}</span>
+          </div>
+
+          <div className="welcome-recent-list">
+            {recentFolders.slice(0, 6).map((folder) => (
+              <RecentCollectionRow
+                key={folder.path}
+                folder={folder}
+                onOpen={() => onOpenRecent(folder.name)}
+                onRemove={() => onRemoveRecent(folder.name)}
+              />
+            ))}
+          </div>
         </div>
       ) : (
-        // Fallback for Firefox / no folder access
-        <div className="flex flex-col gap-3 w-full">
-          <div
-            className="rounded-lg border px-4 py-3 text-sm"
-            style={{
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text-muted)',
-            }}
-          >
-            Folder collections require a Chromium-based browser. You can still open individual .dsl files.
-          </div>
-          <button className="btn-surface w-full justify-center py-3.5" onClick={onOpenFile}>
-            <FileText size={18} style={{ color: 'var(--color-accent)' }} />
-            <span>Open .dsl file</span>
-          </button>
+        <div className="welcome-hero">
+          <ArchitectureArtwork />
+          <h1>Start with an <em>architecture</em>.</h1>
+          <p className="welcome-lede">
+            Visual architecture modelling that lives with your code. Open a folder you already have,
+            or create a fresh collection — c4hero saves everything as plain <code>.dsl</code> documents.
+          </p>
+
+          {canUseCollections ? (
+            <div className="welcome-ctas">
+              <LifecycleButton variant="primary" onClick={onCreateCollection}>
+                <Plus size={14} />
+                New collection
+              </LifecycleButton>
+              <LifecycleButton onClick={onOpenCollection}>
+                <FolderOpen size={14} />
+                Open collection
+              </LifecycleButton>
+            </div>
+          ) : (
+            <div className="welcome-fallback">
+              <p>Folder collections require a Chromium-based browser. You can still open individual .dsl files.</p>
+              <LifecycleButton variant="primary" onClick={onOpenFile}>
+                <FileText size={14} />
+                Open .dsl file
+              </LifecycleButton>
+            </div>
+          )}
+
+          <FeatureStrip />
+          <p className="welcome-code-line">Architecture diagrams that live with your code.</p>
         </div>
       )}
 
-
-
-      {/* Divider */}
-      <div style={{ width: '100%', borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
-
-      {/* Tagline + capability pills */}
-      <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
-          Architecture diagrams that{' '}
-          <span style={{ color: 'var(--color-accent)', whiteSpace: 'nowrap' }}>live with your code.</span>
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', rowGap: 8, columnGap: 18, maxWidth: 440, margin: '0 auto' }}>
-          {[
-            { icon: <FileText size={11} />, label: '.dsl files' },
-            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>, label: 'Git-friendly' },
-            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>, label: 'C4 model' },
-            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>, label: 'Visual canvas' },
-            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>, label: 'Export PNG/SVG' },
-            { icon: <svg style={{ display:'inline',verticalAlign:'middle' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>, label: 'Open-source · MIT' },
-          ].map(({ icon, label }) => (
-            <span
-              key={label}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                fontSize: '11px', fontWeight: 500,
-                color: 'var(--color-text-muted)',
-              }}
-            >
-              <span style={{ color: 'var(--color-accent)', display: 'flex', opacity: 0.85 }}>{icon}</span>
-              {label}
-            </span>
-          ))}
-        </div>
-        <a
-          href="https://c4hero.com"
-          style={{ fontSize: '12px', color: 'var(--color-text-muted)', textDecoration: 'none', marginTop: 4 }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--color-accent)' }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--color-text-muted)' }}
-        >
-          Back to c4hero.com ↗
-        </a>
-      </div>
       {/* sr-only: preserves test assertion for AI describe */}
       <span className="sr-only">Describe your system with AI</span>
+
+      <WelcomeFooter />
     </>
+  )
+}
+
+function WelcomeFooter() {
+  return (
+    <div className="welcome-footer">
+      <a href="https://github.com/c4hero/c4hero" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://c4hero.com" target="_blank" rel="noreferrer">c4hero.com</a>
+    </div>
   )
 }
 
@@ -747,154 +743,630 @@ function StartupView({
 function CollectionView({
   dirHandle,
   workspaces,
+  recentFolders,
   onOpenWorkspace,
   onRenameWorkspace,
   onDeleteWorkspace,
   onBlankWorkspace,
+  onImportDSL,
+  onTemplate,
+  onOpenCollection,
+  onCreateCollection,
+  onRenameCollection,
+  onOpenRecent,
   onBack,
 }: {
   dirHandle: FileSystemDirectoryHandle | null
   workspaces: FolderWorkspace[]
+  recentFolders: { name: string; path: string; displayName?: string }[]
   onOpenWorkspace: (name: string) => void
   onRenameWorkspace: (oldName: string, newName: string) => void
   onDeleteWorkspace: (name: string) => void
   onBlankWorkspace: () => void
+  onImportDSL: () => void
+  onTemplate: () => void
+  onOpenCollection: () => void
+  onCreateCollection: () => void
+  onRenameCollection: () => void
+  onOpenRecent: (name: string) => void
   onBack: () => void
 }) {
   const [query, setQuery] = useState('')
+  const [editingWorkspace, setEditingWorkspace] = useState<FolderWorkspace | null>(null)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return workspaces
-    return workspaces.filter((ws) => ws.name.toLowerCase().includes(q))
+    return workspaces.filter((ws) => workspaceLabel(ws.name).toLowerCase().includes(q))
   }, [workspaces, query])
 
   const count = workspaces.length
   const countLabel = count === 1 ? '1 workspace' : `${count} workspaces`
+  const currentSlug = dirHandle?.name ?? 'collection'
+  const currentRecent = recentFolders.find((folder) => folder.name === currentSlug)
+  const collectionName = currentRecent?.displayName || currentSlug
+  const otherRecentFolders = recentFolders.filter((folder) => folder.name !== currentSlug).slice(0, 4)
 
   return (
     <>
-      {/* Logo */}
-      <div className="flex flex-col items-center gap-1 mb-2">
-        <img
-          src="/c4-logo.svg"
-          alt="c4hero"
-          className="h-10 sm:h-12"
-        />
+      <div className="welcome-brand">
+        <button
+          className="welcome-brand-button"
+          onClick={onBack}
+          aria-label="Back to start"
+          title="Back to start"
+        >
+          <C4Mark />
+        </button>
       </div>
 
-      {/* Collection header */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onBack}
-            className="rounded p-1 hover:opacity-70 -ml-1"
-            style={{ color: 'var(--color-text-muted)' }}
-            title="Back to startup"
-          >
-            <ChevronRight size={16} style={{ transform: 'rotate(180deg)' }} />
-          </button>
-          <FolderOpen size={20} style={{ color: 'var(--color-accent)' }} />
-          <span className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            {dirHandle?.name ?? 'Collection'}
-          </span>
+      <div className="welcome-content welcome-content-centered">
+        <div className="welcome-return-header">
+          <div className="welcome-return-copy">
+            <h1 className="welcome-display">Workspaces<span>.</span></h1>
+            <p className="welcome-summary">
+              {count === 0
+                ? 'This collection is empty. A workspace is a single architecture model: its elements, relationships, and views, saved as one .dsl file.'
+                : `${countLabel.charAt(0).toUpperCase()}${countLabel.slice(1)} in ${collectionName}. Each workspace is one architecture model with its own elements, relationships, and views.`}
+            </p>
+          </div>
+          <div className="welcome-ctas">
+            {dirHandle && (
+              <LifecycleButton variant="primary" ariaLabel="New Workspace" onClick={onBlankWorkspace}>
+                <Plus size={14} />
+                New workspace
+              </LifecycleButton>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Page title */}
-      <div>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
-          Workspaces
-        </h2>
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-          {countLabel} in this collection
-        </p>
-      </div>
-
-      {/* Toolbar: search + new workspace */}
-      {count > 0 && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search
-              size={13}
-              style={{
-                position: 'absolute',
-                left: 11,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--color-text-muted)',
-                pointerEvents: 'none',
-              }}
+        <div className="collection-pills">
+          <span className="collection-pill active collection-pill-current">
+            <span className="collection-pill-label">{collectionName}</span>
+            <span>{count}</span>
+            <RowMenu
+              ariaLabel={`Collection actions for ${collectionName}`}
+              items={[
+                { label: 'Rename collection', icon: <Pencil size={13} />, onSelect: onRenameCollection },
+              ]}
             />
+          </span>
+          {otherRecentFolders.map((folder) => (
+            <button key={folder.path} className="collection-pill" onClick={() => onOpenRecent(folder.name)}>
+              {folder.displayName || folder.name}
+            </button>
+          ))}
+          <span className="collection-pills-divider" aria-hidden="true" />
+          <button
+            className="collection-pill collection-pill-action"
+            onClick={onOpenCollection}
+            title="Open collection"
+            aria-label="Open collection"
+          >
+            <FolderOpen size={13} />
+            Open
+          </button>
+          <button
+            className="collection-pill collection-pill-action"
+            onClick={onCreateCollection}
+            title="New collection"
+            aria-label="New collection"
+          >
+            <Plus size={13} />
+            New
+          </button>
+        </div>
+
+        {count > 0 && (
+          <div className="workspace-search">
+            <Search size={13} />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search workspaces…"
               aria-label="Search workspaces"
-              style={{
-                width: '100%',
-                height: 34,
-                paddingLeft: 32,
-                paddingRight: 12,
-                background: 'var(--color-surface-2)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 8,
-                color: 'var(--color-text-primary)',
-                fontSize: 13,
-                outline: 'none',
-              }}
             />
+            {query && (
+              <button aria-label="Clear search" onClick={() => setQuery('')}>
+                <X size={12} />
+              </button>
+            )}
           </div>
-          <button
-            className="btn-surface items-center gap-2 rounded-lg px-3 text-sm"
-            style={{ height: 34, whiteSpace: 'nowrap', color: 'var(--color-text-primary)' }}
-            onClick={onBlankWorkspace}
-          >
-            <Plus size={14} />
-            <span>New</span>
-          </button>
-        </div>
+        )}
+
+        {count === 0 ? (
+          <div className="workspace-empty-zone">
+            <EmptyWorkspaceArtwork />
+            <div className="workspace-empty-badge">No workspaces yet. 0 of infinity</div>
+            <h2>Map your first system.</h2>
+            <p>
+              Workspaces are where a system map lives. Start with a software-system workspace for one product, a landscape workspace for multiple systems, or import an existing <code>.dsl</code> file.
+            </p>
+            <div className="welcome-ctas">
+              <LifecycleButton variant="primary" ariaLabel="New Workspace" onClick={onBlankWorkspace}>
+                <Plus size={14} />
+                New workspace
+              </LifecycleButton>
+              <LifecycleButton onClick={onImportDSL}>Import .dsl file</LifecycleButton>
+              <LifecycleButton onClick={onTemplate}>Start from a template</LifecycleButton>
+            </div>
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="workspace-no-results">No workspaces match “{query}”.</p>
+        ) : (
+          <div className="workspace-list">
+            {filtered.map((ws) => (
+              <WorkspaceRow
+                key={ws.name}
+                workspace={ws}
+                onOpen={() => onOpenWorkspace(ws.name)}
+                onEdit={() => setEditingWorkspace(ws)}
+                onDelete={() => onDeleteWorkspace(ws.name)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {editingWorkspace && (
+        <WorkspaceEditDialog
+          name={workspaceLabel(editingWorkspace.name)}
+          onRename={(newName) => {
+            onRenameWorkspace(editingWorkspace.name, newName)
+            setEditingWorkspace(null)
+          }}
+          onDelete={() => {
+            onDeleteWorkspace(editingWorkspace.name)
+            setEditingWorkspace(null)
+          }}
+          onClose={() => setEditingWorkspace(null)}
+        />
       )}
 
-      {/* Cards */}
-      {count === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-6">
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            No workspaces yet.
-          </p>
-          <button
-            className="btn-surface items-center gap-2 rounded-lg px-4 py-2.5 text-sm"
-            style={{ color: 'var(--color-text-primary)' }}
-            onClick={onBlankWorkspace}
-          >
-            <Plus size={14} />
-            <span>New Workspace</span>
-          </button>
-        </div>
-      ) : filtered.length === 0 ? (
-        <p className="text-sm px-4 py-3" style={{ color: 'var(--color-text-muted)' }}>
-          No workspaces match “{query}”.
-        </p>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-          {filtered.map((ws) => (
-            <WorkspaceTile
-              key={ws.name}
-              label={ws.name.replace(/\.dsl$/, '').replace(/-/g, ' ')}
-              scope={ws.scope}
-              elementCount={ws.elementCount ?? 0}
-              viewCount={ws.viewCount ?? 0}
-              onClick={() => onOpenWorkspace(ws.name)}
-              onRename={(newName) => onRenameWorkspace(ws.name, newName)}
-              onDelete={() => onDeleteWorkspace(ws.name)}
-            />
-          ))}
-        </div>
-      )}
+      <WelcomeFooter />
     </>
   )
 }
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
+function C4Logo() {
+  return (
+    <div className="welcome-logo">
+      <C4Mark />
+      <C4Wordmark />
+    </div>
+  )
+}
+
+function C4Wordmark() {
+  return (
+    <span className="welcome-wordmark">
+      <span>c4</span>
+      <span>hero</span>
+    </span>
+  )
+}
+
+function C4Mark({ compact }: { compact?: boolean }) {
+  return (
+    <img
+      className={compact ? 'welcome-mark compact' : 'welcome-mark'}
+      src="/c4-logo.svg"
+      alt=""
+      aria-hidden="true"
+    />
+  )
+}
+
+function LifecycleButton({
+  children,
+  onClick,
+  variant = 'ghost',
+  ariaLabel,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  variant?: 'primary' | 'ghost'
+  ariaLabel?: string
+}) {
+  return (
+    <button
+      className="welcome-button"
+      data-variant={variant}
+      aria-label={ariaLabel}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ArchitectureArtwork() {
+  return (
+    <div className="welcome-art" aria-hidden="true">
+      <svg viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="welcome-edge-gradient" x1="0" x2="1">
+            <stop offset="0" stopColor="var(--color-accent-hover)" stopOpacity="0.7" />
+            <stop offset="1" stopColor="var(--color-accent)" stopOpacity="0.08" />
+          </linearGradient>
+        </defs>
+        <g stroke="url(#welcome-edge-gradient)" strokeWidth="1" fill="none" strokeDasharray="2 4">
+          <rect x="20" y="40" width="60" height="36" rx="8" />
+          <rect x="100" y="20" width="60" height="36" rx="8" />
+          <rect x="100" y="84" width="60" height="36" rx="8" />
+          <rect x="180" y="52" width="32" height="36" rx="8" />
+          <path d="M80 58 L100 38 M80 58 L100 102 M160 38 L180 70 M160 102 L180 70" />
+        </g>
+        <g fill="var(--color-accent-hover)" opacity="0.85">
+          <circle cx="80" cy="58" r="2" />
+          <circle cx="100" cy="38" r="2" />
+          <circle cx="100" cy="102" r="2" />
+          <circle cx="160" cy="38" r="2" />
+          <circle cx="160" cy="102" r="2" />
+          <circle cx="180" cy="70" r="2" />
+        </g>
+        <g stroke="var(--color-accent-hover)" strokeWidth="1.4" strokeLinecap="round" opacity="0.65">
+          <path d="M130 42 v8 M126 46 h8" />
+        </g>
+      </svg>
+    </div>
+  )
+}
+
+function EmptyWorkspaceArtwork() {
+  return (
+    <div className="workspace-empty-art" aria-hidden="true">
+      <svg viewBox="0 0 110 70" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="rgba(121,184,255,0.72)" strokeWidth="1" fill="none" strokeDasharray="2 4">
+          <rect x="6" y="22" width="32" height="22" rx="6" />
+          <rect x="72" y="22" width="32" height="22" rx="6" />
+          <path d="M38 33 H72" />
+        </g>
+        <g fill="var(--color-accent-hover)" opacity="0.85">
+          <circle cx="38" cy="33" r="2" />
+          <circle cx="72" cy="33" r="2" />
+        </g>
+        <g stroke="var(--color-accent-hover)" strokeWidth="1.4" strokeLinecap="round">
+          <path d="M55 28 v10 M50 33 h10" />
+        </g>
+      </svg>
+    </div>
+  )
+}
+
+function FeatureStrip() {
+  const features = [
+    { icon: <FileText size={13} />, label: '.dsl files' },
+    { icon: <ChevronRight size={13} />, label: 'Git-friendly' },
+    { icon: <GridIcon />, label: 'C4 model' },
+    { icon: <ExportIcon />, label: 'Export PNG/SVG' },
+    { icon: <OpenSourceIcon />, label: 'Open-source · MIT' },
+  ]
+
+  return (
+    <div className="welcome-features">
+      {features.map(({ icon, label }) => (
+        <span key={label}>
+          {icon}
+          {label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function RecentCollectionRow({
+  folder,
+  onOpen,
+  onRemove,
+}: {
+  folder: { name: string; path: string; displayName?: string }
+  onOpen: () => void
+  onRemove: () => void
+}) {
+  const label = folder.displayName || folder.name
+  const slug = folder.name
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className="welcome-recent-row"
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+    >
+      <span className="recent-folder-icon"><FolderOpen size={15} /></span>
+      <span className="recent-main">
+        <span className="recent-name">{label}</span>
+        <span className="recent-slug">{slug}</span>
+      </span>
+      <span className="recent-meta">recent</span>
+      <span className="recent-actions">
+        <RowMenu
+          ariaLabel={`More actions for ${label}`}
+          items={[
+            { label: 'Remove from recents', icon: <X size={13} />, onSelect: onRemove, danger: true },
+          ]}
+        />
+      </span>
+      <span className="recent-arrow"><ChevronRight size={15} /></span>
+    </div>
+  )
+}
+
+function WorkspaceRow({
+  workspace,
+  onOpen,
+  onEdit,
+  onDelete,
+}: {
+  workspace: FolderWorkspace
+  onOpen: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const label = workspaceLabel(workspace.name)
+  const elementCount = workspace.elementCount ?? 0
+  const viewCount = workspace.viewCount ?? 0
+  const scopeText = scopeLabel(workspace.scope) || 'Workspace'
+  const typeColor = scopeAccent(workspace.scope)
+  const modified = workspace.modifiedAt ? `edited ${relativeTime(workspace.modifiedAt)}` : 'ready to edit'
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className="workspace-row"
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+    >
+      <span
+        className="workspace-scope-icon"
+        style={{
+          color: typeColor,
+          borderColor: `${typeColor}55`,
+          background: `${typeColor}14`,
+        }}
+        aria-hidden="true"
+      >
+        <Boxes size={15} />
+      </span>
+      <span className="workspace-main">
+        <span className="workspace-name">{label}</span>
+        <span className="workspace-meta">
+          <span className="workspace-scope" style={{ color: typeColor }}>{scopeText}</span>
+          <span className="workspace-meta-dot" aria-hidden="true">·</span>
+          <span>{modified}</span>
+        </span>
+      </span>
+      <span className="workspace-stats" aria-label={`${elementCount} elements and ${viewCount} views`}>
+        <span><strong>{elementCount}</strong> elements</span>
+        <span className="workspace-meta-dot" aria-hidden="true">·</span>
+        <span><strong>{viewCount}</strong> views</span>
+      </span>
+      <span className="workspace-row-actions">
+        <RowMenu
+          ariaLabel={`More actions for ${label}`}
+          items={[
+            { label: 'Rename', icon: <Pencil size={13} />, onSelect: onEdit },
+            { label: 'Delete', icon: <Trash2 size={13} />, onSelect: onDelete, danger: true },
+          ]}
+        />
+      </span>
+      <span className="workspace-arrow"><ChevronRight size={16} /></span>
+    </div>
+  )
+}
+
+type RowMenuItem = {
+  label: string
+  icon?: React.ReactNode
+  onSelect: () => void
+  danger?: boolean
+}
+
+function RowMenu({ items, ariaLabel }: { items: RowMenuItem[]; ariaLabel: string }) {
+  const [open, setOpen] = useState(false)
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+
+  const POPUP_WIDTH = 200
+
+  function computeCoords() {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const r = trigger.getBoundingClientRect()
+    const top = r.bottom + 6
+    // Anchor right edge of popup to right edge of trigger; clamp to viewport.
+    let left = r.right - POPUP_WIDTH
+    left = Math.max(8, Math.min(left, window.innerWidth - POPUP_WIDTH - 8))
+    setCoords({ top, left })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    computeCoords()
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as Node
+      if (popupRef.current?.contains(target)) return
+      if (triggerRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    function onReposition() {
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onReposition, true)
+    window.addEventListener('resize', onReposition)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onReposition, true)
+      window.removeEventListener('resize', onReposition)
+    }
+  }, [open])
+
+  return (
+    <span className="row-menu" data-open={open || undefined}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="row-menu-trigger"
+        aria-label={ariaLabel}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((v) => !v)
+        }}
+      >
+        <MoreHorizontal size={15} />
+      </button>
+      {open && coords && createPortal(
+        <div
+          ref={popupRef}
+          role="menu"
+          className="row-menu-popup"
+          style={{ top: coords.top, left: coords.left, width: POPUP_WIDTH }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              role="menuitem"
+              type="button"
+              className={item.danger ? 'row-menu-item danger' : 'row-menu-item'}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpen(false)
+                item.onSelect()
+              }}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </span>
+  )
+}
+
+function workspaceLabel(name: string): string {
+  return name.replace(/\.dsl$/i, '').replace(/[-_]+/g, ' ')
+}
+
+function relativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp
+  const minute = 60 * 1000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diff < hour) return 'just now'
+  if (diff < day) {
+    const hours = Math.max(1, Math.round(diff / hour))
+    return `${hours}h ago`
+  }
+  const days = Math.max(1, Math.round(diff / day))
+  return `${days}d ago`
+}
+
+function GridIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="4" y="4" width="6" height="6" rx="1.5" />
+      <rect x="14" y="4" width="6" height="6" rx="1.5" />
+      <rect x="4" y="14" width="6" height="6" rx="1.5" />
+      <rect x="14" y="14" width="6" height="6" rx="1.5" />
+    </svg>
+  )
+}
+
+function ExportIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M4 18l5-5 4 4 7-9" />
+      <path d="M15 8h5v5" />
+    </svg>
+  )
+}
+
+function OpenSourceIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M12 3v18" />
+      <path d="M7 8l5-5 5 5" />
+      <path d="M7 16l5 5 5-5" />
+    </svg>
+  )
+}
+
+const LOADING_MESSAGES = [
+  'Sketching boxes…',
+  'Drawing edges…',
+  'Wiring up containers…',
+  'Placing components…',
+  'Connecting the dots…',
+  'Reading the .dsl files…',
+  'Plotting your architecture…',
+  'Untangling dependencies…',
+]
+
+function CollectionLoadingOverlay({ name, kind = 'collection' }: { name: string; kind?: 'collection' | 'workspace' }) {
+  const [messageIndex, setMessageIndex] = useState(() => Math.floor(Math.random() * LOADING_MESSAGES.length))
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length)
+    }, 1800)
+    return () => window.clearInterval(id)
+  }, [])
+
+  return (
+    <div className="collection-loading" role="status" aria-live="polite">
+      <div className="collection-loading-card">
+        <div className="collection-loading-stage" aria-hidden="true">
+          <svg viewBox="0 0 200 120" width="200" height="120">
+            {/* Two boxes with an edge drawing between them, the c4 mark
+                resting beside as the author's signature. */}
+            <g stroke="var(--color-accent)" fill="none" strokeLinecap="round">
+              <rect className="diag-box diag-box-1"
+                    x="24" y="46" width="44" height="28" rx="5" strokeWidth="1.6" />
+              <rect className="diag-box diag-box-2"
+                    x="124" y="46" width="44" height="28" rx="5" strokeWidth="1.6" />
+              <line className="diag-edge"
+                    x1="68" y1="60" x2="124" y2="60" strokeWidth="1.6" />
+            </g>
+            <image className="diag-author" href="/c4-logo.svg" x="84" y="14" width="32" height="32" />
+          </svg>
+        </div>
+
+        <div className="collection-loading-copy">
+          <span className="collection-loading-title">Opening {kind}</span>
+          <span className="collection-loading-subtitle">{name}</span>
+          <span key={messageIndex} className="collection-loading-status">
+            {LOADING_MESSAGES[messageIndex]}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}

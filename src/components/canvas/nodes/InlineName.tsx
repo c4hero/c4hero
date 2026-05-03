@@ -33,8 +33,11 @@ export default memo(function InlineName({ elementId, name, lineClamp, textColor 
     return (
       <input
         ref={inputRef}
-        className="nodrag c4-node-name w-full bg-transparent outline-none border-b"
-        style={{ borderColor: 'var(--color-accent)', caretColor: 'var(--color-accent)' }}
+        className="nodrag c4-node-name c4-inline-rename w-full bg-transparent outline-none border-b"
+        style={{
+          borderColor: 'var(--node-glow, var(--canvas-selection, var(--color-accent)))',
+          caretColor: 'var(--node-glow, var(--canvas-selection, var(--color-accent)))',
+        }}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}

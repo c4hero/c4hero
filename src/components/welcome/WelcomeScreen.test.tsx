@@ -70,7 +70,7 @@ describe('WelcomeScreen', () => {
 
   it('shows tagline', () => {
     render(<WelcomeScreen />)
-    expect(screen.getByText('Visual architecture modelling...')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /Start with an architecture/ })).toBeTruthy()
   })
 
   it('shows fallback action when folder access unavailable', () => {

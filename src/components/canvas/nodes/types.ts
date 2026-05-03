@@ -7,4 +7,6 @@ export interface C4NodeData {
   canDrill?: boolean
   onDrillIn?: (elementId: string) => void
   viewCount?: number
+  /** True when this node matches the active tech filter — render marching-ants. */
+  techHighlighted?: boolean
 }

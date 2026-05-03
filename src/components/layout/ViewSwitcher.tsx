@@ -18,10 +18,10 @@ const VIEW_TYPE_LABELS: Record<string, string> = {
 }
 
 const LEVEL_BADGE: Record<string, string> = {
-  systemLandscape: 'L1',
-  systemContext: 'L2',
-  container: 'L3',
-  component: 'L4',
+  systemLandscape: 'Map',
+  systemContext: 'L1',
+  container: 'L2',
+  component: 'L3',
 }
 
 interface ViewSwitcherProps {

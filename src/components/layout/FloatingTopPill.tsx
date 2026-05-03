@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState, useCallback } from 'react'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import LoadingDot from '@/components/shared/LoadingDot'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
-import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
+import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
 import { serializeDSL } from '@/lib/dsl'
 import { createBlankWorkspace } from '@/lib/templates'
 import { saveDSLFile } from '@/lib/fileIO'
@@ -148,14 +148,11 @@ export default function FloatingTopPill() {
 
   const wsName = workspace.name ?? 'workspace'
 
-  async function handleExport(format: 'dsl' | 'json' | 'png' | 'svg', theme: ExportTheme = 'dark') {
+  async function handleExport(format: 'dsl' | 'png' | 'svg', theme: ExportTheme = 'dark') {
     if (!workspace) return
     switch (format) {
       case 'dsl':
         await saveDSLFile(serializeDSL(workspace), `${wsName}.dsl`)
-        break
-      case 'json':
-        downloadFile(exportAsJSON(workspace), `${wsName}.json`, 'application/json')
         break
       case 'png': {
         const blob = await exportCanvasAsPNG(theme)
@@ -170,13 +167,15 @@ export default function FloatingTopPill() {
     }
   }
 
-  async function handleCopy(type: 'png-dark' | 'png-light' | 'dsl') {
+  async function handleCopy(type: 'png-dark' | 'png-light' | 'png-current' | 'dsl') {
     if (!workspace) return
     let ok = false
     if (type === 'png-dark') ok = await copyCanvasAsPNG('dark')
     else if (type === 'png-light') ok = await copyCanvasAsPNG('light')
+    else if (type === 'png-current') ok = await copyCanvasAsPNG('current')
     else if (type === 'dsl') ok = await copyTextToClipboard(serializeDSL(workspace))
-    const label = type === 'dsl' ? 'DSL' : `PNG (${type === 'png-dark' ? 'dark' : 'light'})`
+    const themeLabel = type === 'png-dark' ? 'dark' : type === 'png-light' ? 'light' : 'current'
+    const label = type === 'dsl' ? 'DSL' : `PNG (${themeLabel})`
     const msg = ok ? `Copied ${label}` : 'Copy failed'
     setCopyToast(msg)
     announce(msg)

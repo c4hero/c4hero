@@ -38,6 +38,13 @@ describe('scope roundtrip', () => {
     expect(parsed.workspace?.scope).toBeUndefined()
   })
 
+  it('explicit none scope parses as unscoped without an error', () => {
+    const dsl = `workspace {\n  model {}\n  views {}\n  configuration { scope none }\n}`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(workspace.scope).toBe('none')
+  })
+
   it('unknown scope value produces a parse error and defaults to none', () => {
     const dsl = `workspace {\n  model {}\n  views {}\n  configuration { scope badvalue }\n}`
     const { workspace, errors } = parseDSL(dsl)

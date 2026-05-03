@@ -1,7 +1,7 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react'
 
 const CHROME_CLEARANCE = 14
-const DEFAULT_PADDING = 0.15
+const DEFAULT_PADDING = 0.05
 const DEFAULT_DURATION = 300
 const DEFAULT_MIN_ZOOM = 0.1
 const DEFAULT_MAX_ZOOM = 2

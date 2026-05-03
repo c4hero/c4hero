@@ -1,8 +1,10 @@
 import { useState, useRef, useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import type { LucideIcon } from 'lucide-react'
 import {
   ZoomIn,
   Database, Circle, Hexagon, Diamond, UserRound, Bot, Folder, Globe, Smartphone,
+  AlertTriangle,
 } from 'lucide-react'
 import type { C4NodeData } from './types'
 import StatusDot from './StatusDot'
@@ -53,6 +55,12 @@ export default function BaseC4Node({
   isExternal,
 }: BaseC4NodeProps) {
   const storeSelected = useWorkspaceStore((s) => s.selectedElementIds.includes(data.element.id))
+  const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
+  // useShallow does a shallow array compare so the inline filter doesn't
+  // create a "new reference every render → infinite re-render" loop.
+  const elementViolations = useWorkspaceStore(
+    useShallow((s) => s.scopeViolations.filter((v) => v.elementId === data.element.id)),
+  )
   const selected = rfSelected || storeSelected
   const { element, childCount, onDrillIn, viewCount = 1 } = data
   const desc = element.description ?? ''
@@ -60,6 +68,7 @@ export default function BaseC4Node({
 
   // ─── Resolve tag style overrides ──────────────────────────────────
   const ResolvedIcon = (style?.shape && SHAPE_ICON_MAP[style.shape]) || Icon
+  const isPerson = style?.shape === 'Person'
   // Theme/tag styles apply to all elements. External elements are distinguished
   // by their dashed border and "External" chip label — not by opting out of color.
   const resolvedTint = style?.background ?? tint
@@ -75,7 +84,7 @@ export default function BaseC4Node({
   const borderColor = style?.stroke
     ?? (style?.background ? `color-mix(in srgb, ${style.background}, white 32%)` : borderParts.slice(2).join(' '))
   const resolvedBorder = selected
-    ? '2px solid var(--color-accent)'
+    ? `2px solid ${borderColor}`
     : `${borderWidth}px ${borderLine} ${borderColor}`
 
   // Opacity: Structurizr uses 0–100, CSS uses 0–1
@@ -93,10 +102,15 @@ export default function BaseC4Node({
 
   return (
     <div
-      className={`c4-node relative ${selected ? 'selected' : ''}`}
+      className={`c4-node relative ${selected ? 'selected' : ''} ${isPerson ? 'c4-node-person' : ''}`}
       style={{
         background: resolvedTint,
         border: resolvedBorder,
+        // Per-node tier color for selection halo, hover handles, and the
+        // connection-target indicator. Cascades to children. Falls back to
+        // the theme-wide selection color via the CSS rules.
+        ['--node-glow' as string]: borderColor,
+        ...(isPerson && { borderRadius: 999, padding: '20px 28px' }),
         ...(resolvedOpacity != null && { opacity: resolvedOpacity }),
       }}
       role="figure"
@@ -104,10 +118,42 @@ export default function BaseC4Node({
       aria-selected={selected}
     >
       <StatusDot status={element.status} />
+      {data.techHighlighted && <span className="c4-tech-marquee" aria-hidden="true" />}
+      {elementViolations.length > 0 && (
+        <span
+          className="c4-node-violation"
+          role="img"
+          aria-label={elementViolations.map((v) => v.message).join(' | ')}
+          title={elementViolations.map((v) => v.message).join('\n')}
+        >
+          <AlertTriangle size={12} />
+          {elementViolations.length > 1 && <span>{elementViolations.length}</span>}
+        </span>
+      )}
 
       {/* Row 1: icon + title + action buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <ResolvedIcon size={16} aria-hidden="true" style={{ flexShrink: 0, color: resolvedTypeColor }} />
+        {isPerson ? (
+          <span
+            aria-hidden="true"
+            style={{
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 26,
+              height: 26,
+              borderRadius: '50%',
+              border: `1.5px solid ${resolvedTypeColor}`,
+              background: `color-mix(in srgb, ${resolvedTypeColor} 18%, transparent)`,
+              color: resolvedTypeColor,
+            }}
+          >
+            <ResolvedIcon size={14} />
+          </span>
+        ) : (
+          <ResolvedIcon size={16} aria-hidden="true" style={{ flexShrink: 0, color: resolvedTypeColor }} />
+        )}
         <div style={{ flex: 1, minWidth: 0, ...(resolvedFontSize != null && { fontSize: `${resolvedFontSize}px` }) }}>
           <InlineName elementId={element.id} name={element.name} lineClamp={nameClamp} textColor={style?.color} />
         </div>
@@ -167,6 +213,31 @@ export default function BaseC4Node({
       </div>
 
       <NodeHandles />
+      {activeTagFilter && element.tags.includes(activeTagFilter) && (
+        <span
+          className="c4-node-tag-label"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '2px 8px',
+            borderRadius: 999,
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            whiteSpace: 'nowrap',
+            background: 'var(--canvas-selection, var(--color-accent))',
+            color: 'var(--color-bg-primary, #0b0f17)',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+          aria-label={`Tag: ${activeTagFilter}`}
+        >
+          {activeTagFilter}
+        </span>
+      )}
     </div>
   )
 }

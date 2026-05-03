@@ -19,7 +19,13 @@ function getSafeUrl(raw: string): string | null {
   }
 }
 
-const STATUS_OPTIONS: ElementStatus[] = ['Live', 'Planned', 'Deprecated', 'Removed']
+const STATUS_OPTIONS: { value: ElementStatus | undefined; label: string; color: string | null }[] = [
+  { value: undefined, label: 'Not set', color: null },
+  { value: 'Live', label: 'Live', color: 'var(--color-status-live)' },
+  { value: 'Planned', label: 'Planned', color: 'var(--color-status-planned)' },
+  { value: 'Deprecated', label: 'Deprecated', color: 'var(--color-status-deprecated)' },
+  { value: 'Removed', label: 'Removed', color: 'var(--color-status-removed)' },
+]
 
 const INTERACTION_STYLE_OPTIONS = [
   { value: undefined, label: 'Default', shortLabel: 'Auto' },
@@ -223,22 +229,39 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
 
             {/* Status */}
             <div>
-              <FieldLabel htmlFor="el-status">Status</FieldLabel>
-              <select
-                id="el-status"
-                value={element.status ?? ''}
-                onChange={(e) => updateElement(element.id, { status: (e.target.value || undefined) as ElementStatus | undefined })}
-                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-                style={{
-                  background: 'var(--color-surface-2)',
-                  borderColor: 'var(--color-border)',
-                  color: 'var(--color-text-primary)',
-                }}
-                data-testid="element-status"
-              >
-                <option value="">Not set</option>
-                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <FieldLabel>Status</FieldLabel>
+              <div className="flex flex-wrap gap-1" data-testid="element-status">
+                {STATUS_OPTIONS.map((opt) => {
+                  const active = (element.status ?? undefined) === opt.value
+                  return (
+                    <button
+                      key={opt.label}
+                      onClick={() => updateElement(element.id, { status: opt.value })}
+                      aria-pressed={active}
+                      aria-label={`Status: ${opt.label}`}
+                      className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors"
+                      style={{
+                        background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
+                        borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                        color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: opt.color ?? 'transparent',
+                          border: opt.color ? '1px solid rgba(255,255,255,0.2)' : '1px dashed var(--color-border)',
+                          flexShrink: 0,
+                        }}
+                      />
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             {/* Owner */}

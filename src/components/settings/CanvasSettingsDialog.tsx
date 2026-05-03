@@ -1,6 +1,9 @@
-import { X } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { X, Check, ChevronDown } from 'lucide-react'
 import { useSettingsStore, type MinimapMode, type ColorTheme } from '@/store/settings'
 import DialogShell from '@/components/shared/DialogShell'
+import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
 
 export default function CanvasSettingsDialog({ onClose }: { onClose: () => void }) {
   const settings = useSettingsStore()
@@ -50,13 +53,9 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
             label="Color theme"
             description="Default palette for new workspaces and templates"
           >
-            <SegmentedControl
-              options={[
-                { value: 'readability', label: 'Readable' },
-                { value: 'structurizr', label: 'Structurizr' },
-              ]}
+            <ThemeSwatchPicker
               value={settings.colorTheme}
-              onChange={(v) => settings.update({ colorTheme: v as ColorTheme })}
+              onChange={(v) => settings.update({ colorTheme: v })}
             />
           </SettingRow>
 
@@ -228,5 +227,233 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
         }}
       />
     </button>
+  )
+}
+
+// ─── Theme picker with color swatches ────────────────────────────────────────
+
+const THEME_LABELS: Record<ColorTheme, string> = {
+  readability: 'Readable',
+  structurizr: 'Structurizr',
+  grayscale: 'Grayscale',
+  semantic: 'Semantic',
+  slate: 'Slate',
+  solarizedDark: 'Solarized Dark',
+  monoAccent: 'Mono accent',
+  light: 'Light',
+  pastel: 'Pastel',
+  highContrast: 'High contrast',
+  sepia: 'Sepia',
+  whiteboard: 'Whiteboard',
+}
+
+const THEME_GROUPS: { label: string; themes: ColorTheme[] }[] = [
+  {
+    label: 'Dark background',
+    themes: ['readability', 'structurizr', 'slate', 'solarizedDark', 'semantic', 'grayscale', 'monoAccent'],
+  },
+  {
+    label: 'Light background',
+    themes: ['light', 'pastel', 'sepia', 'whiteboard', 'highContrast'],
+  },
+]
+
+function ThemeSwatch({ theme, size = 'sm' }: { theme: ColorTheme; size?: 'sm' | 'md' }) {
+  const styles = THEMES[theme]
+  const canvas = THEME_CANVAS_BACKGROUNDS[theme] ?? '#0d1117'
+  const isCompact = size === 'sm'
+  const dotSize = isCompact ? 5 : 7
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: isCompact ? 3 : 4,
+        padding: isCompact ? '4px 6px' : '6px 8px',
+        borderRadius: 6,
+        border: '1px solid color-mix(in srgb, var(--color-border) 70%, transparent)',
+        background: canvas,
+        flexShrink: 0,
+      }}
+    >
+      {styles.map((s) => (
+        <span
+          key={s.tag}
+          style={{
+            width: dotSize,
+            height: dotSize,
+            borderRadius: '50%',
+            background: s.stroke,
+          }}
+        />
+      ))}
+    </span>
+  )
+}
+
+function ThemeSwatchPicker({
+  value,
+  onChange,
+}: {
+  value: ColorTheme
+  onChange: (v: ColorTheme) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [coords, setCoords] = useState<{ top: number; right: number; minWidth: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+
+  function openPopup() {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const r = trigger.getBoundingClientRect()
+    setCoords({
+      top: r.bottom + 6,
+      right: window.innerWidth - r.right,
+      minWidth: Math.max(r.width, 240),
+    })
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onDocClick(e: MouseEvent) {
+      const t = e.target as Node
+      if (popupRef.current?.contains(t)) return
+      if (triggerRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => (open ? setOpen(false) : openPopup())}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '5px 8px 5px 5px',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--color-border)',
+          background: 'var(--color-surface-2)',
+          color: 'var(--color-text-primary)',
+          fontSize: 'var(--text-xs-plus)',
+          fontWeight: 600,
+          cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        <ThemeSwatch theme={value} />
+        <span>{THEME_LABELS[value]}</span>
+        <ChevronDown size={12} style={{ color: 'var(--color-text-muted)' }} />
+      </button>
+      {open && coords && createPortal(
+        <div
+          ref={popupRef}
+          role="listbox"
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            right: coords.right,
+            minWidth: coords.minWidth,
+            zIndex: 1100,
+            padding: 6,
+            borderRadius: 12,
+            border: '1px solid color-mix(in srgb, var(--color-border) 90%, #000 10%)',
+            background: 'var(--color-surface-2)',
+            boxShadow: '0 14px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.4)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            maxHeight: '60dvh',
+            overflowY: 'auto',
+          }}
+        >
+          {THEME_GROUPS.map((group, gi) => (
+            <div key={group.label}>
+              {gi > 0 && (
+                <div
+                  style={{
+                    height: 1,
+                    margin: '6px 4px',
+                    background: 'color-mix(in srgb, var(--color-border) 60%, transparent)',
+                  }}
+                />
+              )}
+              <div
+                style={{
+                  padding: '6px 10px 4px',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
+                {group.label}
+              </div>
+              {group.themes.map((t) => {
+                const isSelected = t === value
+                return (
+                  <button
+                    key={t}
+                    role="option"
+                    aria-selected={isSelected}
+                    type="button"
+                    onClick={() => {
+                      onChange(t)
+                      setOpen(false)
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      width: '100%',
+                      padding: '7px 8px',
+                      border: 0,
+                      borderRadius: 8,
+                      background: isSelected
+                        ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)'
+                        : 'transparent',
+                      color: 'var(--color-text-primary)',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    <ThemeSwatch theme={t} size="md" />
+                    <span style={{ flex: 1 }}>{THEME_LABELS[t]}</span>
+                    {isSelected && <Check size={14} style={{ color: 'var(--color-accent)' }} />}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }

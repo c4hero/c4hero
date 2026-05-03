@@ -4,7 +4,6 @@ import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, getCurrentFileHandle } from '@/lib/fileIO'
 import { getCurrentDirHandle } from '@/lib/folderIO'
 import { announce } from '@/lib/announce'
-import { TriangleAlert } from 'lucide-react'
 
 /** The workspace is linked to a file if EITHER:
  *  - A single-file handle is open (file-picker mode), OR
@@ -71,14 +70,17 @@ export default function SaveIndicator() {
     : !hasFileHandle ? 'No file linked \u2014 click to save to a .dsl file'
     : isFileDirty ? 'Unsaved changes \u2014 click to save'
     : 'All changes saved'
-  const showWarningIcon = !hasFileHandle && saveStatus === 'idle'
+  const isUnlinked = !hasFileHandle && saveStatus === 'idle'
+
+  const dotBg = isUnlinked ? 'var(--color-warning)' : dotColor
+  const dotShadow = isUnlinked ? '0 0 6px var(--color-warning)' : dotGlow
 
   return (
     <button
       onClick={handleSave}
-      className="hover-subtle"
+      className={isUnlinked ? 'hover-subtle save-indicator-pulse' : 'hover-subtle'}
       style={{
-        width: showWarningIcon ? 40 : 36,
+        width: 36,
         height: '100%',
         display: 'flex',
         alignItems: 'center',
@@ -87,25 +89,20 @@ export default function SaveIndicator() {
         border: 'none',
         borderRight: '1px solid var(--color-border)',
         flexShrink: 0,
-        color: showWarningIcon ? 'var(--color-warning)' : undefined,
       }}
       title={tooltip}
       aria-label={tooltip}
     >
-      {showWarningIcon ? (
-        <TriangleAlert size={14} style={{ filter: 'drop-shadow(0 0 4px var(--color-warning))' }} />
-      ) : (
-        <div
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: dotColor,
-            boxShadow: dotGlow,
-            transition: 'background 0.3s, box-shadow 0.3s',
-          }}
-        />
-      )}
+      <div
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: dotBg,
+          boxShadow: dotShadow,
+          transition: 'background 0.3s, box-shadow 0.3s',
+        }}
+      />
     </button>
   )
 }
