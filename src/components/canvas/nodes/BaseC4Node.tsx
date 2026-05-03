@@ -125,7 +125,6 @@ export default function BaseC4Node({
       aria-selected={selected}
     >
       <StatusDot status={element.status} />
-      {data.spotlit && <span className="c4-node-spotlit-rail" aria-hidden="true" />}
       {elementViolations.length > 0 && (
         <span
           className="c4-node-violation"
