@@ -36,7 +36,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^2.0.4",
+    "@dagrejs/dagre": "^3.0.0",
     "@xyflow/react": "^12.10.2",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.577.0",
