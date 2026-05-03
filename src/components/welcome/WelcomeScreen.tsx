@@ -35,8 +35,6 @@ import {
   MoreHorizontal,
   Boxes,
 } from 'lucide-react'
-import AISettingsDialog from '@/components/ai/AISettingsDialog'
-import DescribeSystemDialog from '@/components/ai/DescribeSystemDialog'
 import {
   TemplateDialog,
   DuplicateCollectionDialog,
@@ -97,8 +95,6 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const [folderWorkspaces, setFolderWorkspaces] = useState<FolderWorkspace[]>([])
 
   const [showScopePicker, setShowScopePicker] = useState(false)
-  const [showAISettings, setShowAISettings] = useState(false)
-  const [showDescribe, setShowDescribe] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [showNewCollection, setShowNewCollection] = useState(false)
   const [newCollectionName, setNewCollectionName] = useState('My Architecture')
@@ -598,8 +594,6 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           />
         </Suspense>
       )}
-      {showAISettings && <AISettingsDialog onClose={() => setShowAISettings(false)} />}
-      {showDescribe && <DescribeSystemDialog onClose={() => setShowDescribe(false)} />}
       {showTemplates && (
         <TemplateDialog
           onSelect={handleTemplateSelect}

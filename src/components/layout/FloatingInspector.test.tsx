@@ -3,19 +3,12 @@ import { useWorkspaceStore } from '@/store/workspace'
 import type { Workspace } from '@/types/model'
 import FloatingInspector from './FloatingInspector'
 
-vi.mock('@/lib/ai', () => ({
-  getAIConfig: () => null,
-  generateDescription: vi.fn(),
-}))
-
 vi.mock('lucide-react', () => ({
   X: () => null,
   MoreHorizontal: () => null,
   Plus: () => null,
   ArrowRight: () => null,
   ExternalLink: () => null,
-  Sparkles: () => null,
-  Loader2: () => null,
   Eye: () => null,
   Layers: () => null,
   Trash2: () => null,
