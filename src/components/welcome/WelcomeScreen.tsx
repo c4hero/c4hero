@@ -689,10 +689,10 @@ function StartupView({
       ) : (
         <div className="welcome-hero">
           <ArchitectureArtwork />
-          <h1>Start with an <em>architecture</em>.</h1>
+          <h1>Diagram your <em>architecture</em>.</h1>
           <p className="welcome-lede">
-            Visual architecture modelling that lives with your code. Open a folder you already have,
-            or create a fresh collection — c4hero saves everything as plain <code>.dsl</code> documents.
+            Visual architecture modelling that lives with your code. Open a folder, or start a
+            new collection — c4hero saves everything as plain <code>.dsl</code> documents.
           </p>
 
           {canUseCollections ? (
