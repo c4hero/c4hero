@@ -1,0 +1,102 @@
+import { describe, it, expect } from 'vitest'
+import { isSpotlit, isSpotlitRel, spotlightActive, type SpotlightFilters } from './spotlight'
+import type { Container, Person, Relationship } from '@/types/model'
+
+const emptyFilters: SpotlightFilters = { tags: [], statuses: [], techs: [], teams: [] }
+
+const baseContainer: Container = {
+  id: 'c1',
+  type: 'container',
+  name: 'API',
+  tags: ['service', 'auth'],
+  properties: {},
+  status: 'Live',
+  owner: 'Platform',
+  technology: 'Go, Postgres, gRPC',
+  components: [],
+}
+
+const noTechPerson: Person = {
+  id: 'p1',
+  type: 'person',
+  name: 'Operator',
+  tags: ['internal'],
+  properties: {},
+  status: 'Live',
+  owner: 'Ops',
+}
+
+describe('spotlightActive', () => {
+  it('is false when every facet is empty', () => {
+    expect(spotlightActive(emptyFilters)).toBe(false)
+  })
+  it('is true when any facet has values', () => {
+    expect(spotlightActive({ ...emptyFilters, tags: ['auth'] })).toBe(true)
+    expect(spotlightActive({ ...emptyFilters, techs: ['Go'] })).toBe(true)
+  })
+})
+
+describe('isSpotlit (AND across facets, within-semantic per facet)', () => {
+  it('matches when no filters set (degenerate true — caller should gate via spotlightActive)', () => {
+    expect(isSpotlit(baseContainer, emptyFilters)).toBe(true)
+  })
+
+  it('tags use OR within: any selected tag suffices', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, tags: ['auth', 'pii'] })).toBe(true)
+    expect(isSpotlit(baseContainer, { ...emptyFilters, tags: ['pii'] })).toBe(false)
+  })
+
+  it('statuses use OR within: any selected status suffices', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, statuses: ['Live', 'Planned'] })).toBe(true)
+    expect(isSpotlit(baseContainer, { ...emptyFilters, statuses: ['Deprecated'] })).toBe(false)
+  })
+
+  it('teams use OR within over element.owner', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, teams: ['Platform'] })).toBe(true)
+    expect(isSpotlit(baseContainer, { ...emptyFilters, teams: ['Security'] })).toBe(false)
+  })
+
+  it('teams: missing owner never matches', () => {
+    const noOwner = { ...baseContainer, owner: undefined }
+    expect(isSpotlit(noOwner, { ...emptyFilters, teams: ['Platform'] })).toBe(false)
+  })
+
+  it('techs use AND within: every selected tech must appear', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, techs: ['Go', 'Postgres'] })).toBe(true)
+    expect(isSpotlit(baseContainer, { ...emptyFilters, techs: ['Go', 'Kafka'] })).toBe(false)
+  })
+
+  it('techs: element with no technology field never matches a tech filter', () => {
+    expect(isSpotlit(noTechPerson, { ...emptyFilters, techs: ['Go'] })).toBe(false)
+  })
+
+  it('AND across facets: must match every active facet', () => {
+    expect(isSpotlit(baseContainer, { tags: ['auth'], statuses: ['Live'], techs: ['Go'], teams: ['Platform'] })).toBe(true)
+    expect(isSpotlit(baseContainer, { tags: ['auth'], statuses: ['Deprecated'], techs: [], teams: [] })).toBe(false)
+  })
+
+  it('tech tokens are normalized: case-insensitive, comma+whitespace tolerant', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, techs: ['go', 'POSTGRES'] })).toBe(true)
+  })
+})
+
+describe('isSpotlitRel (Tech only)', () => {
+  const rel: Relationship = {
+    id: 'r1',
+    sourceId: 'a',
+    destinationId: 'b',
+    technology: 'gRPC, HTTP/2',
+    tags: [],
+    properties: {},
+  }
+  it('relationships ignore tag/status/team filters', () => {
+    expect(isSpotlitRel(rel, { ...emptyFilters, tags: ['auth'] })).toBe(true)
+    expect(isSpotlitRel(rel, { ...emptyFilters, statuses: ['Live'] })).toBe(true)
+    expect(isSpotlitRel(rel, { ...emptyFilters, teams: ['Platform'] })).toBe(true)
+  })
+  it('relationships AND on tech', () => {
+    expect(isSpotlitRel(rel, { ...emptyFilters, techs: ['gRPC'] })).toBe(true)
+    expect(isSpotlitRel(rel, { ...emptyFilters, techs: ['gRPC', 'HTTP/2'] })).toBe(true)
+    expect(isSpotlitRel(rel, { ...emptyFilters, techs: ['gRPC', 'Kafka'] })).toBe(false)
+  })
+})
