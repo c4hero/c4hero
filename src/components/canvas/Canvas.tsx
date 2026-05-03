@@ -456,15 +456,18 @@ function buildEdges(
     }
   }
 
-  // Build final edges with slot-assigned handles
-  const active = spotlightActive(filters)
+  // Build final edges with slot-assigned handles.
+  // Edges only spotlight when a tech filter is active (the only facet that
+  // applies to relationships). Without this gate, tag/status/team selections
+  // would light every edge because isSpotlitRel is vacuously true with no techs.
+  const techActive = filters.techs.length > 0
   const edges: Edge[] = []
   for (let i = 0; i < edgeInfos.length; i++) {
     const e = edgeInfos[i]
     const srcSlot = sourceSlots.get(i) ?? 'b'
     const tgtSlot = targetSlots.get(i) ?? 'b'
 
-    const spotlit = active && isSpotlitRel(e.rel, filters)
+    const spotlit = techActive && isSpotlitRel(e.rel, filters)
 
     edges.push({
       id: e.rel.id,
