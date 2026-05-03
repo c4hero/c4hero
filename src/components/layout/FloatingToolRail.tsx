@@ -50,8 +50,8 @@ export default function FloatingToolRail() {
 
   const canvasSettingsOpen = useWorkspaceStore((s) => s.canvasSettingsOpen)
   const setCanvasSettingsOpen = useWorkspaceStore((s) => s.setCanvasSettingsOpen)
-  const spotlightPanelOpen = useWorkspaceStore((s) => s.spotlightPanelOpen)
-  const setSpotlightPanelOpen = useWorkspaceStore((s) => s.setSpotlightPanelOpen)
+  const highlighterPanelOpen = useWorkspaceStore((s) => s.highlighterPanelOpen)
+  const setHighlighterPanelOpen = useWorkspaceStore((s) => s.setHighlighterPanelOpen)
   const activeFilterCount = useWorkspaceStore(
     (s) => s.activeTagFilter.length + s.activeStatusFilter.length + s.activeTechFilter.length + s.activeTeamFilter.length,
   )
@@ -229,22 +229,22 @@ export default function FloatingToolRail() {
         onClick={() => setMultiSelectMode(!multiSelectMode)}
       />
 
-      {/* Spotlight (filter highlights) */}
+      {/* Highlighter */}
       <RailSep />
-      <div style={{ position: 'relative' }} data-testid="spotlight-rail-trigger">
+      <div style={{ position: 'relative' }} data-testid="highlighter-rail-trigger">
         <RailBtn
           icon={<Highlighter size={16} />}
           label={
-            spotlightPanelOpen
+            highlighterPanelOpen
               ? 'Hide highlighter'
               : activeFilterCount > 0
                 ? `Highlight (${activeFilterCount} active)`
                 : 'Highlight'
           }
-          active={spotlightPanelOpen || activeFilterCount > 0}
-          onClick={() => setSpotlightPanelOpen(!spotlightPanelOpen)}
+          active={highlighterPanelOpen || activeFilterCount > 0}
+          onClick={() => setHighlighterPanelOpen(!highlighterPanelOpen)}
         />
-        {activeFilterCount > 0 && !spotlightPanelOpen && (
+        {activeFilterCount > 0 && !highlighterPanelOpen && (
           <span
             aria-hidden="true"
             style={{

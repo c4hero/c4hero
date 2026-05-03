@@ -196,7 +196,7 @@ interface WorkspaceState extends UndoState {
   toggleActiveTechFilter: (tech: string) => void
   setActiveTeamFilter: (teams: string[]) => void
   toggleActiveTeamFilter: (team: string) => void
-  clearAllSpotlightFilters: () => void
+  clearAllHighlightFilters: () => void
   updateElementStyle: (style: import('@/types/model').ElementStyle) => void
   removeElementStyle: (tag: string) => void
   renameTag: (oldTag: string, newTag: string) => void
@@ -220,8 +220,8 @@ interface WorkspaceState extends UndoState {
   setCanvasSettingsOpen: (open: boolean) => void
   addElementPanelOpen: boolean
   setAddElementPanelOpen: (open: boolean) => void
-  spotlightPanelOpen: boolean
-  setSpotlightPanelOpen: (open: boolean) => void
+  highlighterPanelOpen: boolean
+  setHighlighterPanelOpen: (open: boolean) => void
   tagFilterMode: 'any' | 'all'
   statusFilterMode: 'any' | 'all'
   techFilterMode: 'any' | 'all'
@@ -339,7 +339,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   commandPaletteOpen: false,
   canvasSettingsOpen: false,
   addElementPanelOpen: false,
-  spotlightPanelOpen: false,
+  highlighterPanelOpen: false,
   tagFilterMode: 'any',
   statusFilterMode: 'any',
   techFilterMode: 'all',
@@ -521,9 +521,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   // Selecting any canvas object closes the Highlighter panel so the Inspector
   // (right side) doesn't stack underneath / behind it.
-  selectElements: (ids) => set((s) => ({ selectedElementIds: ids, selectedRelationshipId: null, selectedGroupId: null, spotlightPanelOpen: ids.length > 0 ? false : s.spotlightPanelOpen })),
-  selectRelationship: (id) => set((s) => ({ selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null, spotlightPanelOpen: id ? false : s.spotlightPanelOpen })),
-  selectGroup: (id) => set((s) => ({ selectedGroupId: id, selectedElementIds: [], selectedRelationshipId: null, spotlightPanelOpen: id ? false : s.spotlightPanelOpen })),
+  selectElements: (ids) => set((s) => ({ selectedElementIds: ids, selectedRelationshipId: null, selectedGroupId: null, highlighterPanelOpen: ids.length > 0 ? false : s.highlighterPanelOpen })),
+  selectRelationship: (id) => set((s) => ({ selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null, highlighterPanelOpen: id ? false : s.highlighterPanelOpen })),
+  selectGroup: (id) => set((s) => ({ selectedGroupId: id, selectedElementIds: [], selectedRelationshipId: null, highlighterPanelOpen: id ? false : s.highlighterPanelOpen })),
   clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 
   // ─── Element CRUD ───────────────────────────────────────────────
@@ -1430,7 +1430,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       ? s.activeTeamFilter.filter((t) => t !== team)
       : [...s.activeTeamFilter, team],
   })),
-  clearAllSpotlightFilters: () => set({
+  clearAllHighlightFilters: () => set({
     activeTagFilter: [],
     activeStatusFilter: [],
     activeTechFilter: [],
@@ -1531,7 +1531,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
   setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
-  setSpotlightPanelOpen: (open) => set({ spotlightPanelOpen: open, commandPaletteOpen: false }),
+  setHighlighterPanelOpen: (open) => set({ highlighterPanelOpen: open, commandPaletteOpen: false }),
   setTagFilterMode: (mode) => set({ tagFilterMode: mode }),
   setStatusFilterMode: (mode) => set({ statusFilterMode: mode }),
   setTechFilterMode: (mode) => set({ techFilterMode: mode }),

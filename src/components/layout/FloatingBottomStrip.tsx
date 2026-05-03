@@ -9,7 +9,7 @@ const DEFAULT_BUILTIN_TAGS = ['Person', 'Software System', 'Container', 'Compone
   'Web Application', 'Service', 'Database', 'Queue', 'Mobile App', 'File System']
 
 // FloatingBottomStrip now only surfaces orphan scope violations. The manage-tags
-// pencil moved into the Highlighter panel's Tags tab; the spotlight bar moved
+// pencil moved into the Highlighter panel's Tags tab; the highlighter bar moved
 // into the right-side panel.
 export default function FloatingBottomStrip() {
   const workspace = useWorkspaceStore((s) => s.workspace)

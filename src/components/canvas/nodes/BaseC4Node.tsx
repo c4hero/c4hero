@@ -13,7 +13,7 @@ import NodeHandles from './NodeHandles'
 import ZoomHoverCard from './ZoomHoverCard'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useZoomLevel } from '@/hooks/useZoomLevel'
-import { pickSpotlitReason } from '@/lib/spotlight'
+import { pickHighlightReason } from '@/lib/highlight'
 
 /** Map Structurizr shape names to Lucide icons */
 const SHAPE_ICON_MAP: Record<string, LucideIcon> = {
@@ -67,7 +67,7 @@ export default function BaseC4Node({
     techs: s.activeTechFilter,
     teams: s.activeTeamFilter,
   })))
-  const reasonLabel = data.spotlit ? pickSpotlitReason(data.element, filters) : null
+  const reasonLabel = data.highlighted ? pickHighlightReason(data.element, filters) : null
   const selected = rfSelected || storeSelected
   const { element, childCount, onDrillIn, viewCount = 1 } = data
   const desc = element.description ?? ''
@@ -221,7 +221,7 @@ export default function BaseC4Node({
       <NodeHandles />
       {reasonLabel && (
         <span
-          className="c4-node-spotlit-label"
+          className="c4-highlight-label"
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',

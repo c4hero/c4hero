@@ -3214,13 +3214,13 @@ describe('setActiveTagFilter and setActiveStatusFilter', () => {
     expect(useWorkspaceStore.getState().activeStatusFilter).toEqual([])
   })
 
-  it('clearAllSpotlightFilters resets all four facets', () => {
+  it('clearAllHighlightFilters resets all four facets', () => {
     const s = useWorkspaceStore.getState()
     s.setActiveTagFilter(['x'])
     s.setActiveStatusFilter(['Live'])
     s.setActiveTechFilter(['Go'])
     s.setActiveTeamFilter(['Platform'])
-    s.clearAllSpotlightFilters()
+    s.clearAllHighlightFilters()
     const after = useWorkspaceStore.getState()
     expect(after.activeTagFilter).toEqual([])
     expect(after.activeStatusFilter).toEqual([])

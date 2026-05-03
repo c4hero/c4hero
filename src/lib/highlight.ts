@@ -2,7 +2,7 @@ import type { ElementStatus, ModelElement, Relationship } from '@/types/model'
 
 export type FacetMode = 'any' | 'all'
 
-export interface SpotlightFilters {
+export interface HighlightFilters {
   tags: string[]
   statuses: ElementStatus[]
   techs: string[]
@@ -13,7 +13,7 @@ export interface SpotlightFilters {
   teamsMode?: FacetMode
 }
 
-export function spotlightActive(f: SpotlightFilters): boolean {
+export function highlightActive(f: HighlightFilters): boolean {
   return f.tags.length > 0 || f.statuses.length > 0 || f.techs.length > 0 || f.teams.length > 0
 }
 
@@ -35,7 +35,7 @@ function matchesTokenSet(tokens: Set<string>, values: string[], mode: FacetMode)
     : values.some((v) => tokens.has(v.toLowerCase()))
 }
 
-export function isSpotlit(el: ModelElement, f: SpotlightFilters): boolean {
+export function isHighlighted(el: ModelElement, f: HighlightFilters): boolean {
   const tagsMode = f.tagsMode ?? 'any'
   const statusesMode = f.statusesMode ?? 'any'
   const techsMode = f.techsMode ?? 'all'
@@ -65,12 +65,12 @@ export function isSpotlit(el: ModelElement, f: SpotlightFilters): boolean {
   return true
 }
 
-export function isSpotlitRel(rel: Relationship, f: SpotlightFilters): boolean {
+export function isHighlightedRel(rel: Relationship, f: HighlightFilters): boolean {
   const techsMode = f.techsMode ?? 'all'
   return matchesTokenSet(techTokens(rel.technology), f.techs, techsMode)
 }
 
-export function pickSpotlitReason(el: ModelElement, f: SpotlightFilters): string | null {
+export function pickHighlightReason(el: ModelElement, f: HighlightFilters): string | null {
   if (f.techs.length > 0) {
     const tokens = techTokens('technology' in el ? el.technology : undefined)
     const hit = f.techs.find((t) => tokens.has(t.toLowerCase()))

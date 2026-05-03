@@ -16,7 +16,7 @@ import {
 import { applyAutoLayout } from '@/lib/canvasLayout'
 import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
-import { isSpotlit, isSpotlitRel, spotlightActive, type SpotlightFilters } from '@/lib/spotlight'
+import { isHighlighted, isHighlightedRel, highlightActive, type HighlightFilters } from '@/lib/highlight'
 import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, allViewsOf } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import {
@@ -165,7 +165,7 @@ function buildNodes(
   workspace: Workspace,
   view: View,
   onDrillIn: (elementId: string) => void,
-  filters: SpotlightFilters,
+  filters: HighlightFilters,
   viewCountMap: Map<string, number>,
   drillableIds: Set<string>,
   themeStyles: ElementStyle[],
@@ -174,7 +174,7 @@ function buildNodes(
   // Theme styles form the base layer; workspace styles override them per tag
   const styleIndex = buildStyleIndex([...themeStyles, ...workspace.views.configuration.styles.elements])
 
-  const active = spotlightActive(filters)
+  const active = highlightActive(filters)
   const nodes: Node[] = []
 
   for (const viewEl of view.elements) {
@@ -182,7 +182,7 @@ function buildNodes(
     if (!element) continue
 
     const style = getElementStyle(element, styleIndex)
-    const spotlit = active && isSpotlit(element, filters)
+    const highlighted = active && isHighlighted(element, filters)
     const pos = { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }
 
     nodes.push({
@@ -195,13 +195,13 @@ function buildNodes(
         childCount: getChildCount(element),
         canDrill: drillableIds.has(element.id),
         onDrillIn,
-        spotlit,
+        highlighted,
         viewCount: viewCountMap.get(element.id) ?? 1,
       },
-      // Highlighter focus mode: matched nodes get the spotlit ring; the rest
+      // Highlighter focus mode: matched nodes get the highlighted ring; the rest
       // fade to ghost context. When no facets are active, every node renders
       // normally (no class either way).
-      className: active ? (spotlit ? 'c4-node-spotlit' : 'c4-node-spotlit-faded') : undefined,
+      className: active ? (highlighted ? 'c4-node-highlighted' : 'c4-node-faded') : undefined,
     })
   }
 
@@ -376,7 +376,7 @@ function buildEdges(
   workspace: Workspace,
   view: View,
   nodes: Node[],
-  filters: SpotlightFilters,
+  filters: HighlightFilters,
 ): Edge[] {
   const relationshipMap = buildRelationshipMap(workspace)
   const relationshipStyles = workspace.views.configuration.styles.relationships
@@ -459,27 +459,27 @@ function buildEdges(
   }
 
   // Build final edges with slot-assigned handles.
-  // Spotlight rules:
+  // Highlight rules:
   //   - Tech filter active: edges that match the tech AND get the bright ring.
   //   - Any facet active: edges whose source or target is faded also fade so
-  //     focus stays on the spotlit subgraph.
-  const active = spotlightActive(filters)
+  //     focus stays on the highlighted subgraph.
+  const active = highlightActive(filters)
   const techActive = filters.techs.length > 0
-  const spotlitNodeIds = new Set(nodes.filter((n) => (n.data as { spotlit?: boolean })?.spotlit).map((n) => n.id))
+  const highlightedNodeIds = new Set(nodes.filter((n) => (n.data as { highlighted?: boolean })?.highlighted).map((n) => n.id))
   const edges: Edge[] = []
   for (let i = 0; i < edgeInfos.length; i++) {
     const e = edgeInfos[i]
     const srcSlot = sourceSlots.get(i) ?? 'b'
     const tgtSlot = targetSlots.get(i) ?? 'b'
 
-    const techSpotlit = techActive && isSpotlitRel(e.rel, filters)
-    const endpointsSpotlit = spotlitNodeIds.has(e.sourceId) && spotlitNodeIds.has(e.targetId)
-    const spotlit = techSpotlit || (active && endpointsSpotlit)
-    const faded = active && !spotlit
+    const techHighlighted = techActive && isHighlightedRel(e.rel, filters)
+    const endpointsHighlighted = highlightedNodeIds.has(e.sourceId) && highlightedNodeIds.has(e.targetId)
+    const highlighted = techHighlighted || (active && endpointsHighlighted)
+    const faded = active && !highlighted
 
     let className: string | undefined
-    if (spotlit) className = 'c4-edge-spotlit'
-    else if (faded) className = 'c4-edge-spotlit-faded'
+    if (highlighted) className = 'c4-edge-highlighted'
+    else if (faded) className = 'c4-edge-faded'
 
     edges.push({
       id: e.rel.id,
@@ -488,7 +488,7 @@ function buildEdges(
       sourceHandle: `${e.sourceSide}-${srcSlot}-source`,
       targetHandle: `${e.targetSide}-${tgtSlot}-target`,
       type: 'relationship',
-      data: { relationship: e.rel, relationshipStyle: e.relStyle, spotlit },
+      data: { relationship: e.rel, relationshipStyle: e.relStyle, highlighted },
       className,
     })
   }
@@ -521,7 +521,7 @@ export default function Canvas() {
   const teamFilterMode = useWorkspaceStore((s) => s.teamFilterMode)
   const layoutVersion = useWorkspaceStore((s) => s.layoutVersion)
 
-  const spotlightFilters = useMemo<SpotlightFilters>(() => ({
+  const highlightFilters = useMemo<HighlightFilters>(() => ({
     tags: activeTagFilter,
     statuses: activeStatusFilter,
     techs: activeTechFilter,
@@ -627,7 +627,7 @@ export default function Canvas() {
 
     // 1. Build nodes with raw positions from view
     const drillableIds = buildDrillableSet(workspace)
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, spotlightFilters, viewCountMap, drillableIds, themeStyles)
+    const rawNodes = buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
     const relationshipMap = buildRelationshipMap(workspace)
@@ -660,10 +660,10 @@ export default function Canvas() {
     const allNodes = [...overlayNodes, ...laidOut]
 
     // 5. Build final edges using post-layout positions for handle routing
-    const edges = buildEdges(workspace, view, allNodes, spotlightFilters)
+    const edges = buildEdges(workspace, view, allNodes, highlightFilters)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, spotlightFilters, viewCountMap, themeStyles])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.

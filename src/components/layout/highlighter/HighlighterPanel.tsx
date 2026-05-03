@@ -24,9 +24,9 @@ const FACET_TABS: { key: FacetKey; label: string; icon: React.ComponentType<{ si
   { key: 'teams', label: 'Teams', icon: Users },
 ]
 
-export default function SpotlightPanel() {
-  const open = useWorkspaceStore((s) => s.spotlightPanelOpen)
-  const setOpen = useWorkspaceStore((s) => s.setSpotlightPanelOpen)
+export default function HighlighterPanel() {
+  const open = useWorkspaceStore((s) => s.highlighterPanelOpen)
+  const setOpen = useWorkspaceStore((s) => s.setHighlighterPanelOpen)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const tags = useWorkspaceStore((s) => s.activeTagFilter)
@@ -49,7 +49,7 @@ export default function SpotlightPanel() {
   const setStatuses = useWorkspaceStore((s) => s.setActiveStatusFilter)
   const setTechs = useWorkspaceStore((s) => s.setActiveTechFilter)
   const setTeams = useWorkspaceStore((s) => s.setActiveTeamFilter)
-  const clearAll = useWorkspaceStore((s) => s.clearAllSpotlightFilters)
+  const clearAll = useWorkspaceStore((s) => s.clearAllHighlightFilters)
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
   const elementMap = useMemo(() => (workspace ? buildElementMap(workspace) : new Map()), [workspace])
@@ -228,7 +228,7 @@ export default function SpotlightPanel() {
   return (
     <div
       ref={containerRef}
-      data-canvas-chrome="spotlight-panel"
+      data-canvas-chrome="highlighter-panel"
       role="complementary"
       aria-label="Highlighter"
       aria-hidden={!open}
