@@ -233,7 +233,7 @@ export default function SpotlightPanel() {
         top: 72,
         right: 14,
         zIndex: 50,
-        width: 300,
+        width: 320,
         maxHeight: 'calc(100dvh - 86px)',
         display: 'flex',
         flexDirection: 'column',
@@ -327,37 +327,50 @@ export default function SpotlightPanel() {
               aria-selected={active}
               type="button"
               onClick={() => setTab(key)}
+              title={cnt > 0 ? `${label} (${cnt} active)` : label}
               style={{
                 flex: 1,
+                minWidth: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 5,
+                gap: 4,
                 height: 28,
-                padding: '0 6px',
+                padding: '0 4px',
                 fontSize: 11,
                 fontWeight: 700,
                 textTransform: 'uppercase',
-                letterSpacing: '0.04em',
+                letterSpacing: '0.03em',
                 color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 background: 'transparent',
                 border: 'none',
                 borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
                 marginBottom: -1,
                 cursor: 'pointer',
+                overflow: 'hidden',
               }}
             >
               <Icon size={11} />
-              {label}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {label}
+              </span>
               {cnt > 0 && (
                 <span
+                  aria-label={`${cnt} selected`}
                   style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: '1px 5px',
+                    flexShrink: 0,
+                    minWidth: 14,
+                    height: 14,
+                    padding: '0 4px',
                     borderRadius: 999,
-                    background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
-                    color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                    background: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                    color: active ? 'var(--color-bg-primary)' : 'var(--color-bg-primary)',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    lineHeight: 1,
                   }}
                 >
                   {cnt}
