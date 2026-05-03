@@ -29,7 +29,7 @@ export default function FloatingInspector() {
       if (containerRef.current?.contains(target)) return
       // Don't dismiss when clicking inside the React Flow canvas — its own
       // pane / node handlers already manage selection.
-      const inCanvas = (target as Element).closest?.('.react-flow')
+      const inCanvas = (target as Element).closest?.('.react-flow, [data-canvas-chrome]')
       if (inCanvas) return
       clearSelection()
     }

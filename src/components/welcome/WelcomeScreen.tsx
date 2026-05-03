@@ -931,24 +931,6 @@ function CollectionView({
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
-function C4Logo() {
-  return (
-    <div className="welcome-logo">
-      <C4Mark />
-      <C4Wordmark />
-    </div>
-  )
-}
-
-function C4Wordmark() {
-  return (
-    <span className="welcome-wordmark">
-      <span>c4</span>
-      <span>hero</span>
-    </span>
-  )
-}
-
 function C4Mark({ compact }: { compact?: boolean }) {
   return (
     <img

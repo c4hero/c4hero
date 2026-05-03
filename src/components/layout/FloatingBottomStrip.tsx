@@ -1,102 +1,20 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { useWorkspaceStore, getActiveView, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
-import type { ElementStatus, ElementStyle } from '@/types/model'
-import { Tag, Activity, X, Palette, Pencil, Plus, Check, AlertTriangle, Cpu, ChevronDown, Search } from 'lucide-react'
+import { useWorkspaceStore, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
+import type { ElementStyle } from '@/types/model'
+import { X, Palette, Pencil, Plus, Check, AlertTriangle } from 'lucide-react'
 import type { ScopeViolation } from '@/lib/scopeValidation'
-
-type Mode = 'tags' | 'status' | 'tech'
-
-const STATUS_OPTIONS: { value: ElementStatus; label: string; color: string }[] = [
-  { value: 'Live', label: 'Live', color: 'var(--color-status-live)' },
-  { value: 'Deprecated', label: 'Deprecated', color: 'var(--color-status-deprecated)' },
-  { value: 'Planned', label: 'Planned', color: 'var(--color-status-planned)' },
-  { value: 'Removed', label: 'Removed', color: 'var(--color-status-removed)' },
-]
+import SpotlightBar from './spotlight/SpotlightBar'
 
 const DEFAULT_BUILTIN_TAGS = ['Person', 'Software System', 'Container', 'Component', 'Element', 'Relationship',
   'Web Application', 'Service', 'Database', 'Queue', 'Mobile App', 'File System']
 
 export default function FloatingBottomStrip() {
   const workspace = useWorkspaceStore((s) => s.workspace)
-  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
-  const setActiveTagFilter = useWorkspaceStore((s) => s.setActiveTagFilter)
-  const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
-  const setActiveStatusFilter = useWorkspaceStore((s) => s.setActiveStatusFilter)
-  const activeTechFilter = useWorkspaceStore((s) => s.activeTechFilter)
-  const toggleActiveTechFilter = useWorkspaceStore((s) => s.toggleActiveTechFilter)
-  const setActiveTechFilter = useWorkspaceStore((s) => s.setActiveTechFilter)
   const scopeViolations = useWorkspaceStore((s) => s.scopeViolations)
-
-
-  const [mode, setMode] = useState<Mode>('tags')
   const [tagManagerOpen, setTagManagerOpen] = useState(false)
 
-  const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
-
-  // Build element map once per workspace change — shared by all derived selectors below
-  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
-
-  // Tags to surface in the manager. Always includes the 4 C4 type tags so
-  // users can style them even when no style has been authored yet; also
-  // includes any custom tags in use and any tags that have an explicit style.
-  const allWorkspaceTags = useMemo(() => {
-    const tags = new Set<string>(['Person', 'Software System', 'Container', 'Component'])
-    if (!workspace) return Array.from(tags)
-    for (const el of elementMap.values()) {
-      for (const tag of el.tags) {
-        if (!DEFAULT_BUILTIN_TAGS.includes(tag)) tags.add(tag)
-      }
-    }
-    for (const s of workspace.views.configuration.styles.elements) {
-      tags.add(s.tag)
-    }
-    return Array.from(tags).sort()
-  }, [workspace, elementMap])
-
-  // Tags visible in current view (for filter pills)
-  const viewTags = useMemo(() => {
-    if (!view) return []
-    const tags = new Set<string>()
-    for (const ve of view.elements) {
-      const el = elementMap.get(ve.id)
-      if (el) for (const tag of el.tags) {
-        if (!DEFAULT_BUILTIN_TAGS.includes(tag)) tags.add(tag)
-      }
-    }
-    return Array.from(tags).sort()
-  }, [view, elementMap])
-
-  const viewStatuses = useMemo(() => {
-    if (!view) return []
-    const statuses = new Set<ElementStatus>()
-    for (const ve of view.elements) {
-      const el = elementMap.get(ve.id)
-      if (el?.status) statuses.add(el.status)
-    }
-    return Array.from(statuses)
-  }, [view, elementMap])
-
-  // Technology tokens used by elements in the current view (multi-select filter)
-  const viewTechs = useMemo(() => {
-    if (!view) return []
-    const techs = new Set<string>()
-    for (const ve of view.elements) {
-      const el = elementMap.get(ve.id) as { technology?: string } | undefined
-      const raw = el?.technology
-      if (!raw) continue
-      for (const t of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
-        techs.add(t)
-      }
-    }
-    return Array.from(techs).sort((a, b) => a.localeCompare(b))
-  }, [view, elementMap])
-
   if (!workspace) return null
-
-  const elementStyles = workspace.views.configuration.styles.elements
-  const getStyleForTag = (tag: string) => elementStyles.find((s) => s.tag === tag)
 
   return (
     <>
@@ -117,142 +35,41 @@ export default function FloatingBottomStrip() {
           pointerEvents: 'none',
         }}
       >
-      <div
-        className="glass-panel"
-        style={{
-          pointerEvents: 'auto',
-          maxWidth: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          height: 44,
-          whiteSpace: 'nowrap',
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          scrollbarWidth: 'none',
-        }}
-      >
-        {/* Mode tabs */}
-        <ModeTab icon={<Tag size={13} />} label="Tags" active={mode === 'tags'} onClick={() => setMode('tags')} isFirst />
-        <ModeTab icon={<Activity size={13} />} label="Status" active={mode === 'status'} onClick={() => setMode('status')} />
-        <ModeTab icon={<Cpu size={13} />} label="Tech" active={mode === 'tech'} onClick={() => setMode('tech')} count={activeTechFilter.length || undefined} />
-
-        {/* Divider */}
-        <div style={{ width: 1, height: 24, background: 'var(--color-border)' }} />
-
-        {/* Tags mode */}
-        {mode === 'tags' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px' }}>
-            {viewTags.length === 0 && (
-              <span style={{ padding: '0 8px', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                No custom tags
-              </span>
-            )}
-            {viewTags.map((tag) => {
-              const tagStyle = getStyleForTag(tag)
-              const isActive = activeTagFilter === tag
-              return (
-                <button
-                  key={tag}
-                  onClick={() => setActiveTagFilter(isActive ? null : tag)}
-                  className="hover-lift-inactive"
-                  data-active={isActive ? 'true' : undefined}
-                  style={{
-                    height: 30,
-                    padding: '0 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                    color: isActive ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
-                    ...(isActive ? { background: tagStyle?.background ?? 'var(--color-accent)' } : {}),
-                    cursor: 'pointer',
-                    transition: 'background 0.12s, color 0.12s',
-                    border: 'none',
-                  }}
-                >
-                  {tagStyle?.background && !isActive && (
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: tagStyle.background, flexShrink: 0 }} />
-                  )}
-                  {tag}
-                </button>
-              )
-            })}
-
-            {/* Edit button */}
-            <button
-              onClick={() => setTagManagerOpen((o) => !o)}
-              className="hover-lift-inactive"
-              data-active={tagManagerOpen ? 'true' : undefined}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 'var(--radius-sm)',
-                ...(tagManagerOpen ? { background: 'var(--color-accent-active)' } : {}),
-                color: tagManagerOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                cursor: 'pointer', border: 'none', transition: 'background 0.1s, color 0.1s',
-              }}
-              title="Manage tags"
-              aria-label="Manage tags"
-            >
-              <Pencil size={12} />
-            </button>
-          </div>
-        )}
-
-        {/* Status mode */}
-        {mode === 'status' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px' }}>
-            {STATUS_OPTIONS.map((opt) => {
-              const isActive = activeStatusFilter === opt.value
-              return (
-                <button
-                  key={opt.value}
-                  onClick={() => setActiveStatusFilter(isActive ? null : opt.value)}
-                  className="hover-lift-inactive"
-                  data-active={isActive ? 'true' : undefined}
-                  style={{
-                    height: 30, padding: '0 10px', borderRadius: 'var(--radius-sm)',
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    fontSize: 'var(--text-xs)', fontWeight: 600,
-                    color: isActive ? 'var(--color-bg-primary)' : 'var(--color-text-muted)',
-                    ...(isActive ? { background: opt.color } : {}),
-                    cursor: 'pointer', transition: 'background 0.12s, color 0.12s', border: 'none',
-                    opacity: viewStatuses.includes(opt.value) || isActive ? 1 : 0.4,
-                  }}
-                >
-                  <span style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: isActive ? 'var(--glass-bg)' : opt.color,
-                    flexShrink: 0,
-                  }} />
-                  {opt.label}
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Tech mode — multi-select with search popover */}
-        {mode === 'tech' && (
-          <TechFilterControls
-            viewTechs={viewTechs}
-            activeTechFilter={activeTechFilter}
-            toggleActiveTechFilter={toggleActiveTechFilter}
-            setActiveTechFilter={setActiveTechFilter}
-          />
-        )}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            maxWidth: '100%',
+            pointerEvents: 'auto',
+          }}
+        >
+          <SpotlightBar />
+          <button
+            type="button"
+            onClick={() => setTagManagerOpen((o) => !o)}
+            className="glass-panel hover-lift-inactive"
+            data-active={tagManagerOpen ? 'true' : undefined}
+            aria-label="Manage tags"
+            title="Manage tags"
+            style={{
+              height: 44,
+              width: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              color: tagManagerOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
+              border: 'none',
+              flexShrink: 0,
+            }}
+          >
+            <Pencil size={14} />
+          </button>
+        </div>
       </div>
-      </div>
-
-      {/* Tag Manager Panel */}
-      {tagManagerOpen && (
-        <TagManagerPanel
-          tags={allWorkspaceTags}
-          getStyleForTag={getStyleForTag}
-          onClose={() => setTagManagerOpen(false)}
-        />
-      )}
+      {tagManagerOpen && createPortal(<TagManagerPanel onClose={() => setTagManagerOpen(false)} />, document.body)}
     </>
   )
 }
@@ -260,20 +77,38 @@ export default function FloatingBottomStrip() {
 // ─── Tag Manager Panel ────────────────────────────────────────────────
 
 function TagManagerPanel({
-  tags,
-  getStyleForTag,
   onClose,
 }: {
-  tags: string[]
-  getStyleForTag: (tag: string) => ElementStyle | undefined
   onClose: () => void
 }) {
+  const workspace = useWorkspaceStore((s) => s.workspace)
   const renameTag = useWorkspaceStore((s) => s.renameTag)
   const removeTagGlobal = useWorkspaceStore((s) => s.removeTagGlobal)
   const updateElementStyle = useWorkspaceStore((s) => s.updateElementStyle)
   const [editingStyleFor, setEditingStyleFor] = useState<string | null>(null)
   const [newTagValue, setNewTagValue] = useState('')
   const newTagInputRef = useRef<HTMLInputElement>(null)
+
+  const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
+
+  const tags = useMemo(() => {
+    const tagSet = new Set<string>(['Person', 'Software System', 'Container', 'Component'])
+    if (!workspace) return Array.from(tagSet)
+    for (const el of elementMap.values()) {
+      for (const tag of (el as { tags: string[] }).tags) {
+        if (!DEFAULT_BUILTIN_TAGS.includes(tag)) tagSet.add(tag)
+      }
+    }
+    for (const s of workspace.views.configuration.styles.elements) {
+      tagSet.add(s.tag)
+    }
+    return Array.from(tagSet).sort()
+  }, [workspace, elementMap])
+
+  const elementStyles = workspace?.views.configuration.styles.elements ?? []
+  function getStyleForTag(tag: string): ElementStyle | undefined {
+    return elementStyles.find((s) => s.tag === tag)
+  }
 
   function handleAddTag() {
     const trimmed = newTagValue.trim()
@@ -559,419 +394,6 @@ function TagRow({
         />
       )}
     </>
-  )
-}
-
-// ─── Mode Tab ─────────────────────────────────────────────────────────
-
-function TechFilterControls({
-  viewTechs,
-  activeTechFilter,
-  toggleActiveTechFilter,
-  setActiveTechFilter,
-}: {
-  viewTechs: string[]
-  activeTechFilter: string[]
-  toggleActiveTechFilter: (t: string) => void
-  setActiveTechFilter: (t: string[]) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [coords, setCoords] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const popupRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const POPUP_WIDTH = 280
-  const POPUP_MAX_HEIGHT = 380
-  const VISIBLE_CHIP_LIMIT = 2
-
-  function openPopup() {
-    const trigger = triggerRef.current
-    if (!trigger) return
-    const r = trigger.getBoundingClientRect()
-    let left = r.left
-    left = Math.max(8, Math.min(left, window.innerWidth - POPUP_WIDTH - 8))
-
-    // Flip up when there's not enough room below (the bottom pill lives near
-    // the viewport bottom, so this is the common case). Anchor the bottom of
-    // the popup above the trigger instead of the top below it.
-    const spaceBelow = window.innerHeight - r.bottom - 12
-    const spaceAbove = r.top - 12
-    const openUp = spaceBelow < 220 && spaceAbove > spaceBelow
-    const top = openUp
-      ? Math.max(8, r.top - Math.min(POPUP_MAX_HEIGHT, spaceAbove) - 6)
-      : r.bottom + 6
-    const maxHeight = openUp ? Math.min(POPUP_MAX_HEIGHT, spaceAbove) : Math.min(POPUP_MAX_HEIGHT, spaceBelow)
-
-    setCoords({ top, left, width: POPUP_WIDTH, maxHeight })
-    setOpen(true)
-    setTimeout(() => inputRef.current?.focus(), 30)
-  }
-
-  useEffect(() => {
-    if (!open) return
-    function onDocPointer(e: MouseEvent | TouchEvent | PointerEvent) {
-      const t = e.target as Node | null
-      if (!t) return
-      if (popupRef.current?.contains(t)) return
-      if (triggerRef.current?.contains(t)) return
-      setOpen(false)
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    // Use capture phase so React Flow / other handlers that call
-    // stopPropagation in their bubble-phase listeners can't swallow the
-    // close. Listening on pointerdown + mousedown + touchstart covers all
-    // input methods and event-flavor differences across browsers.
-    document.addEventListener('pointerdown', onDocPointer, true)
-    document.addEventListener('mousedown', onDocPointer, true)
-    document.addEventListener('touchstart', onDocPointer, true)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onDocPointer, true)
-      document.removeEventListener('mousedown', onDocPointer, true)
-      document.removeEventListener('touchstart', onDocPointer, true)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  const filteredTechs = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return viewTechs
-    return viewTechs.filter((t) => t.toLowerCase().includes(q))
-  }, [viewTechs, query])
-
-  // Sticky-selected: selected items first, then unselected, both alpha
-  const orderedTechs = useMemo(() => {
-    const sel = filteredTechs.filter((t) => activeTechFilter.includes(t))
-    const unsel = filteredTechs.filter((t) => !activeTechFilter.includes(t))
-    return { sel, unsel }
-  }, [filteredTechs, activeTechFilter])
-
-  const visibleChips = activeTechFilter.slice(0, VISIBLE_CHIP_LIMIT)
-  const hiddenChipCount = Math.max(0, activeTechFilter.length - VISIBLE_CHIP_LIMIT)
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
-      <button
-        ref={triggerRef}
-        onClick={() => (open ? setOpen(false) : openPopup())}
-        className="hover-lift-inactive"
-        data-active={open ? 'true' : undefined}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        style={{
-          height: 30,
-          padding: '0 10px',
-          borderRadius: 'var(--radius-sm)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 5,
-          fontSize: 'var(--text-xs)',
-          fontWeight: 600,
-          color: 'var(--color-text-muted)',
-          background: open ? 'var(--color-accent-active)' : undefined,
-          cursor: 'pointer',
-          border: 'none',
-          flexShrink: 0,
-        }}
-      >
-        Filter tech
-        <ChevronDown size={11} />
-      </button>
-
-      {/* Visible active chips (preview) */}
-      {visibleChips.map((tech) => (
-        <button
-          key={tech}
-          onClick={() => toggleActiveTechFilter(tech)}
-          title={`Remove ${tech}`}
-          style={{
-            height: 26,
-            padding: '0 8px',
-            borderRadius: 'var(--radius-sm)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            fontSize: 'var(--text-xs)',
-            fontWeight: 600,
-            color: 'var(--color-bg-primary)',
-            background: 'var(--color-accent)',
-            border: 'none',
-            cursor: 'pointer',
-            maxWidth: 140,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{tech}</span>
-          <X size={10} style={{ flexShrink: 0 }} />
-        </button>
-      ))}
-      {hiddenChipCount > 0 && (
-        <button
-          onClick={openPopup}
-          style={{
-            height: 26,
-            padding: '0 8px',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 'var(--text-xs)',
-            fontWeight: 600,
-            color: 'var(--color-accent)',
-            background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',
-            border: 'none',
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          +{hiddenChipCount} more
-        </button>
-      )}
-      {activeTechFilter.length > 0 && (
-        <button
-          onClick={() => setActiveTechFilter([])}
-          title="Clear tech filter"
-          aria-label="Clear tech filter"
-          style={{
-            width: 24, height: 24,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 'var(--radius-sm)',
-            color: 'var(--color-text-muted)',
-            cursor: 'pointer', border: 'none', background: 'transparent',
-            flexShrink: 0,
-          }}
-        >
-          <X size={11} />
-        </button>
-      )}
-
-      {open && coords && createPortal(
-        <div
-          ref={popupRef}
-          role="dialog"
-          aria-label="Tech filter"
-          style={{
-            position: 'fixed',
-            top: coords.top,
-            left: coords.left,
-            width: coords.width,
-            maxHeight: coords.maxHeight,
-            zIndex: 1100,
-            padding: 8,
-            borderRadius: 12,
-            border: '1px solid color-mix(in srgb, var(--color-border) 90%, #000 10%)',
-            background: 'var(--color-surface-2)',
-            boxShadow: '0 14px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.4)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            overflow: 'hidden',
-          }}
-        >
-          {/* Header with title + close */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '2px 4px 0',
-          }}>
-            <span style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: 'var(--color-text-muted)',
-            }}>Filter by tech</span>
-            <button
-              onClick={() => setOpen(false)}
-              aria-label="Close"
-              title="Close"
-              style={{
-                width: 22, height: 22,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: 'none', background: 'transparent', borderRadius: 6,
-                color: 'var(--color-text-muted)', cursor: 'pointer',
-              }}
-            >
-              <X size={13} />
-            </button>
-          </div>
-
-          {/* Search */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '6px 8px',
-            borderRadius: 8,
-            background: 'var(--glass-overlay-xs)',
-            border: '1px solid var(--color-border)',
-          }}>
-            <Search size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search technologies…"
-              aria-label="Search technologies"
-              style={{
-                flex: 1,
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                color: 'var(--color-text-primary)',
-                fontSize: 13,
-              }}
-            />
-            {query && (
-              <button
-                onClick={() => setQuery('')}
-                style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 0 }}
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
-
-          {/* List */}
-          <div style={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
-            display: 'flex', flexDirection: 'column', gap: 1,
-          }}>
-            {viewTechs.length === 0 ? (
-              <div style={{ padding: '12px 10px', fontSize: 12, color: 'var(--color-text-muted)' }}>
-                No technologies in this view
-              </div>
-            ) : (
-              <>
-                {orderedTechs.sel.length > 0 && (
-                  <>
-                    <div style={{
-                      padding: '6px 10px 4px', fontSize: 10, fontWeight: 700,
-                      textTransform: 'uppercase', letterSpacing: '0.08em',
-                      color: 'var(--color-text-muted)',
-                    }}>Selected · {orderedTechs.sel.length}</div>
-                    {orderedTechs.sel.map((tech) => (
-                      <TechRow key={tech} tech={tech} selected onToggle={() => toggleActiveTechFilter(tech)} />
-                    ))}
-                    <div style={{
-                      height: 1,
-                      margin: '6px 6px 2px',
-                      background: 'color-mix(in srgb, var(--color-border) 60%, transparent)',
-                    }} />
-                  </>
-                )}
-                {orderedTechs.unsel.length > 0 ? (
-                  orderedTechs.unsel.map((tech) => (
-                    <TechRow key={tech} tech={tech} onToggle={() => toggleActiveTechFilter(tech)} />
-                  ))
-                ) : orderedTechs.sel.length === 0 ? (
-                  <div style={{ padding: '12px 10px', fontSize: 12, color: 'var(--color-text-muted)' }}>
-                    No matches for &ldquo;{query}&rdquo;
-                  </div>
-                ) : null}
-              </>
-            )}
-          </div>
-
-          {activeTechFilter.length > 0 && (
-            <button
-              onClick={() => setActiveTechFilter([])}
-              style={{
-                marginTop: 2,
-                padding: '7px 10px',
-                borderRadius: 6,
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--color-error, #f87171)',
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              Clear all ({activeTechFilter.length})
-            </button>
-          )}
-        </div>,
-        document.body,
-      )}
-    </div>
-  )
-}
-
-function TechRow({ tech, selected, onToggle }: { tech: string; selected?: boolean; onToggle: () => void }) {
-  return (
-    <button
-      role="option"
-      aria-selected={selected}
-      onClick={onToggle}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        width: '100%',
-        padding: '7px 10px',
-        border: 0,
-        borderRadius: 6,
-        background: selected
-          ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)'
-          : 'transparent',
-        color: 'var(--color-text-primary)',
-        fontSize: 13,
-        textAlign: 'left',
-        cursor: 'pointer',
-      }}
-      onMouseEnter={(e) => {
-        if (!selected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-      }}
-      onMouseLeave={(e) => {
-        if (!selected) e.currentTarget.style.background = 'transparent'
-      }}
-    >
-      <span style={{
-        width: 14, height: 14, borderRadius: 4,
-        border: `1.5px solid ${selected ? 'var(--color-accent)' : 'var(--color-border-hover)'}`,
-        background: selected ? 'var(--color-accent)' : 'transparent',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
-      }}>
-        {selected && <Check size={10} style={{ color: 'var(--color-bg-primary)' }} />}
-      </span>
-      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tech}</span>
-    </button>
-  )
-}
-
-function ModeTab({ icon, label, active, onClick, isFirst, count }: {
-  icon: React.ReactNode; label: string; active: boolean; onClick: () => void; isFirst?: boolean; count?: number
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="hover-subtle-inactive"
-      data-active={active ? 'true' : undefined}
-      style={{
-        height: '100%', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 5,
-        fontSize: 'var(--text-xs)', fontWeight: 600,
-        color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-        ...(active ? { background: 'var(--glass-overlay-xs)' } : {}),
-        border: 'none',
-        borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
-        cursor: 'pointer', transition: 'color 0.12s, background 0.12s',
-        borderRadius: isFirst ? 'var(--radius-lg) 0 0 var(--radius-lg)' : 0,
-      }}
-    >
-      {icon}
-      {label}
-      {count !== undefined && (
-        <span style={{
-          minWidth: 16, height: 16, padding: '0 4px',
-          borderRadius: 999, background: 'var(--color-accent)', color: 'var(--color-bg-primary)',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 10, fontWeight: 700,
-        }}>{count}</span>
-      )}
-    </button>
   )
 }
 
