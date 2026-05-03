@@ -504,6 +504,14 @@ export function OwnerField({ value, placeholder, onCommit, onLiveChange, 'aria-l
     <div
       ref={wrapperRef}
       className="w-full rounded-lg border px-2 py-1.5 text-sm transition-colors"
+      // The owner dropdown's mousedown can race with FloatingInspector's
+      // document-level outside-click listener (the listener fires before our
+      // commit runs and, on some focus-change paths, the dropdown item ends up
+      // unmounted by the time the closest()/contains() check runs — clearing
+      // the selection and dismissing the inspector). Stopping propagation here
+      // keeps every interaction with the owner field local to the inspector.
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
       style={{
         background: focused ? 'var(--color-surface-3)' : 'var(--color-surface-2)',
         borderColor: focused ? 'var(--color-accent)' : 'var(--color-border)',
