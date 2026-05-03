@@ -41,7 +41,7 @@ test.describe('Tag Filtering', () => {
     await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
     // Manage tags now lives inside the Highlighter panel's Tags tab.
-    await panel.getByRole('button', { name: 'Manage tags' }).click()
+    await panel.getByRole('button', { name: 'Edit tag styles' }).click()
     const tagInput = workspace.page.locator('input[type="text"][value="Critical"]')
     await tagInput.click()
     await tagInput.fill('Urgent')
@@ -69,7 +69,7 @@ test.describe('Tag Filtering', () => {
     await panel.getByRole('button', { name: /^Critical\b/, exact: false }).click()
     await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
-    await panel.getByRole('button', { name: 'Manage tags' }).click()
+    await panel.getByRole('button', { name: 'Edit tag styles' }).click()
     await workspace.page.getByRole('button', { name: 'Remove tag "Critical" globally' }).click()
 
     await expect(workspace.getVisibleNodeByName('New System')).toBeVisible()

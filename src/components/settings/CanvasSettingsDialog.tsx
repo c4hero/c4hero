@@ -78,7 +78,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
               <span>
                 <strong style={{ color: 'var(--color-accent)' }}>Heads up:</strong>{' '}
                 Per-tag styles defined in your workspace override these theme colors. Edit them via{' '}
-                <strong>Highlight → Tags → Edit tags</strong>.
+                <strong>Highlight → Tags → Edit tags &amp; styles</strong>.
               </span>
             </div>
           </div>
@@ -124,7 +124,7 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
           {/* Snap to grid */}
           <SettingRow
             label="Snap to grid"
-            description="Snap elements to a 20px grid when dragging"
+            description="Snap elements to the 32px dot grid when dragging"
           >
             <Toggle
               checked={settings.snapToGrid}

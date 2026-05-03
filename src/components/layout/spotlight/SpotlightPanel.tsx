@@ -471,8 +471,8 @@ export default function SpotlightPanel() {
                 <button
                   type="button"
                   onClick={() => setTagManagerOpen(true)}
-                  title="Manage tags (rename, restyle, remove)"
-                  aria-label="Manage tags"
+                  title="Edit tag names and styles (rename, restyle, remove)"
+                  aria-label="Edit tag styles"
                   style={{
                     fontSize: 10,
                     fontWeight: 600,
@@ -487,7 +487,7 @@ export default function SpotlightPanel() {
                   }}
                 >
                   <Pencil size={10} />
-                  Edit tags
+                  Edit tags &amp; styles
                 </button>
               )}
               {tabContent.selected.length > 0 && (
