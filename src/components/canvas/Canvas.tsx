@@ -865,10 +865,10 @@ export default function Canvas() {
       // Only update edges and refresh node data without replacing positions.
       setEdges(initialEdges)
       setNodes((prev) => {
-        const dataById = new Map(initialNodes.map(n => [n.id, n.data]))
+        const byId = new Map(initialNodes.map(n => [n.id, n]))
         return prev.map(n => {
-          const newData = dataById.get(n.id)
-          return newData ? { ...n, data: newData } : n
+          const next = byId.get(n.id)
+          return next ? { ...n, data: next.data, className: next.className } : n
         })
       })
       requestAnimationFrame(rebuildOverlays)

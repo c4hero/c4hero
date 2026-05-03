@@ -8,7 +8,7 @@ test.describe('spotlight bar', () => {
   // to the ReactFlow wrapper div. See Canvas.tsx ~line 867: the else branch maps
   // `{ ...n, data: newData }` without also propagating `className` from initialNodes.
   // This test is currently marked `.fail()` to document the regression.
-  test.fail('AND across facets: only nodes matching every active facet show the spotlit ring', async ({ workspace }) => {
+  test('AND across facets: only nodes matching every active facet show the spotlit ring', async ({ workspace }) => {
     await workspace.loadSample()
 
     // Toggle a tag (Customer in the sample fixture).
