@@ -37,6 +37,12 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: "@eslint/js"
         update-types: [version-update:semver-major]
+      # eslint-plugin-react-hooks 7.1+ introduces several new strict rules
+      # (no setState-in-effect, no use-before-define in recursive callbacks)
+      # that flag existing patterns in Canvas.tsx and others. Hold at 7.0.x
+      # until we have time for a focused refactor pass.
+      - dependency-name: "eslint-plugin-react-hooks"
+        versions: [">=7.1.0"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
