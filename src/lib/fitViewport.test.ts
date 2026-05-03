@@ -48,8 +48,11 @@ describe('fitViewport', () => {
     setElementRect(left, rect(14, 300, 44, 200))
     setElementRect(bottom, rect(300, 742, 400, 44))
 
+    // top inset uses TOP_CHROME_CLEARANCE (4px); all other sides use the
+    // standard 14px clearance. Horizontal mirroring happens at fitNodesToViewport
+    // call time (not inside getCanvasFitInsets), so right stays at 0 here.
     expect(getCanvasFitInsets(canvas)).toEqual({
-      top: 72,
+      top: 62,
       right: 0,
       bottom: 72,
       left: 72,
@@ -81,10 +84,13 @@ describe('fitViewport', () => {
       { duration: 0, padding: 0, maxZoom: 10 },
     )
 
+    // With the new inset model: top=62, left=72, right=72 (mirrored from left),
+    // bottom=72. Usable area 856×666; 400×200 node bounds fit at zoom 2.14
+    // (width-bound). Center of usable area is (500, 395).
     const [viewport, fitOptions] = vi.mocked(reactFlow.setViewport).mock.calls[0]
-    expect(viewport.x).toBeCloseTo(-160)
-    expect(viewport.y).toBeCloseTo(-64)
-    expect(viewport.zoom).toBeCloseTo(2.32)
+    expect(viewport.x).toBeCloseTo(-142)
+    expect(viewport.y).toBeCloseTo(-33)
+    expect(viewport.zoom).toBeCloseTo(2.14)
     expect(fitOptions).toEqual({ duration: 0 })
   })
 
@@ -105,8 +111,10 @@ describe('fitViewport', () => {
 
     fitContentNodesToViewport(reactFlow, { duration: 0, padding: 0, maxZoom: 10 })
 
+    // No chrome → only the 16px bottom floor applies, leaving 1000×784 usable.
+    // Node 100×100 fits at 7.84x (height-bound). Centered → x=108, y=0.
     expect(reactFlow.setViewport).toHaveBeenCalledWith(
-      { x: 100, y: 0, zoom: 8 },
+      { x: expect.closeTo(108) as unknown as number, y: expect.closeTo(0) as unknown as number, zoom: expect.closeTo(7.84) as unknown as number },
       { duration: 0 },
     )
   })
