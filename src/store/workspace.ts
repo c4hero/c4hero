@@ -519,9 +519,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   // ─── Selection ──────────────────────────────────────────────────
 
-  selectElements: (ids) => set({ selectedElementIds: ids, selectedRelationshipId: null, selectedGroupId: null }),
-  selectRelationship: (id) => set({ selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null }),
-  selectGroup: (id) => set({ selectedGroupId: id, selectedElementIds: [], selectedRelationshipId: null }),
+  // Selecting any canvas object closes the Highlighter panel so the Inspector
+  // (right side) doesn't stack underneath / behind it.
+  selectElements: (ids) => set((s) => ({ selectedElementIds: ids, selectedRelationshipId: null, selectedGroupId: null, spotlightPanelOpen: ids.length > 0 ? false : s.spotlightPanelOpen })),
+  selectRelationship: (id) => set((s) => ({ selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null, spotlightPanelOpen: id ? false : s.spotlightPanelOpen })),
+  selectGroup: (id) => set((s) => ({ selectedGroupId: id, selectedElementIds: [], selectedRelationshipId: null, spotlightPanelOpen: id ? false : s.spotlightPanelOpen })),
   clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 
   // ─── Element CRUD ───────────────────────────────────────────────

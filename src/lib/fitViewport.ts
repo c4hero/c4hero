@@ -1,6 +1,9 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react'
 
 const CHROME_CLEARANCE = 14
+// The top pill is now left-aligned and narrow, so it no longer dominates
+// the top strip — content can sit closer to the pill's bottom edge.
+const TOP_CHROME_CLEARANCE = 4
 const DEFAULT_PADDING = 0.05
 const DEFAULT_DURATION = 300
 const DEFAULT_MIN_ZOOM = 0.1
@@ -95,7 +98,7 @@ export function getCanvasFitInsets(canvas: RectLike): FitInsets {
     if (rect.width <= 0 || rect.height <= 0 || !rectsOverlap(canvas, rect)) continue
 
     if (side === 'top') {
-      insets.top = Math.max(insets.top, Math.max(0, rect.bottom - canvas.top + CHROME_CLEARANCE))
+      insets.top = Math.max(insets.top, Math.max(0, rect.bottom - canvas.top + TOP_CHROME_CLEARANCE))
     } else if (side === 'right') {
       insets.right = Math.max(insets.right, Math.max(0, canvas.right - rect.left + CHROME_CLEARANCE))
     } else if (side === 'bottom') {
