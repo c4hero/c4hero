@@ -11,15 +11,9 @@ export function spotlightActive(f: SpotlightFilters): boolean {
   return f.tags.length > 0 || f.statuses.length > 0 || f.techs.length > 0 || f.teams.length > 0
 }
 
-function elementTechTokens(el: ModelElement): Set<string> {
-  const raw = 'technology' in el ? el.technology : undefined
+function techTokens(raw: string | undefined): Set<string> {
   if (!raw) return new Set()
   return new Set(raw.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
-}
-
-function relTechTokens(rel: Relationship): Set<string> {
-  if (!rel.technology) return new Set()
-  return new Set(rel.technology.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
 }
 
 function matchesTechAND(tokens: Set<string>, techs: string[]): boolean {
@@ -41,10 +35,10 @@ export function isSpotlit(el: ModelElement, f: SpotlightFilters): boolean {
   if (f.teams.length > 0) {
     if (!el.owner || !f.teams.includes(el.owner)) return false
   }
-  if (!matchesTechAND(elementTechTokens(el), f.techs)) return false
+  if (!matchesTechAND(techTokens('technology' in el ? el.technology : undefined), f.techs)) return false
   return true
 }
 
 export function isSpotlitRel(rel: Relationship, f: SpotlightFilters): boolean {
-  return matchesTechAND(relTechTokens(rel), f.techs)
+  return matchesTechAND(techTokens(rel.technology), f.techs)
 }
