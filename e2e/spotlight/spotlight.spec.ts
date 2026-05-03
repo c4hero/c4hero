@@ -1,13 +1,6 @@
 import { test, expect } from '../fixtures/workspace'
 
 test.describe('spotlight bar', () => {
-  // NOTE: This test exercises the `c4-node-spotlit` className on ReactFlow nodes.
-  // A production bug was discovered during test authoring: when spotlight filters
-  // change (a "non-structural" change), Canvas.tsx only updates `node.data` but
-  // not `node.className`. The `.c4-node-spotlit` class is therefore never applied
-  // to the ReactFlow wrapper div. See Canvas.tsx ~line 867: the else branch maps
-  // `{ ...n, data: newData }` without also propagating `className` from initialNodes.
-  // This test is currently marked `.fail()` to document the regression.
   test('AND across facets: only nodes matching every active facet show the spotlit ring', async ({ workspace }) => {
     await workspace.loadSample()
 

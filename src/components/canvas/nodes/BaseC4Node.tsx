@@ -15,6 +15,7 @@ import { useWorkspaceStore } from '@/store/workspace'
 import { useZoomLevel } from '@/hooks/useZoomLevel'
 import type { ModelElement } from '@/types/model'
 import type { SpotlightFilters } from '@/lib/spotlight'
+import { pickSpotlitReason } from '@/lib/spotlight'
 
 /** Map Structurizr shape names to Lucide icons */
 const SHAPE_ICON_MAP: Record<string, LucideIcon> = {
@@ -248,22 +249,6 @@ export default function BaseC4Node({
       )}
     </div>
   )
-}
-
-function pickSpotlitReason(el: ModelElement, f: SpotlightFilters): string | null {
-  if (f.techs.length > 0) {
-    const elTech = ('technology' in el ? el.technology : undefined) ?? ''
-    const tokens = elTech.split(',').map((t) => t.trim())
-    const hit = f.techs.find((t) => tokens.some((tok) => tok.toLowerCase() === t.toLowerCase()))
-    if (hit) return hit
-  }
-  if (f.tags.length > 0) {
-    const hit = f.tags.find((t) => el.tags.includes(t))
-    if (hit) return hit
-  }
-  if (f.teams.length > 0 && el.owner && f.teams.includes(el.owner)) return el.owner
-  if (f.statuses.length > 0 && el.status && f.statuses.includes(el.status)) return el.status
-  return null
 }
 
 /** Zoom button with hover card popover */

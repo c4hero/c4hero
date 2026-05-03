@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSpotlit, isSpotlitRel, spotlightActive, type SpotlightFilters } from './spotlight'
+import { isSpotlit, isSpotlitRel, spotlightActive, pickSpotlitReason, type SpotlightFilters } from './spotlight'
 import type { Container, Person, Relationship } from '@/types/model'
 
 const emptyFilters: SpotlightFilters = { tags: [], statuses: [], techs: [], teams: [] }
@@ -98,5 +98,37 @@ describe('isSpotlitRel (Tech only)', () => {
     expect(isSpotlitRel(rel, { ...emptyFilters, techs: ['gRPC'] })).toBe(true)
     expect(isSpotlitRel(rel, { ...emptyFilters, techs: ['gRPC', 'HTTP/2'] })).toBe(true)
     expect(isSpotlitRel(rel, { ...emptyFilters, techs: ['gRPC', 'Kafka'] })).toBe(false)
+  })
+})
+
+describe('pickSpotlitReason', () => {
+  it('returns null when no facet matches', () => {
+    expect(pickSpotlitReason(baseContainer, emptyFilters)).toBeNull()
+  })
+
+  it('priority: tech > tag > team > status when multiple match', () => {
+    const filters: SpotlightFilters = {
+      tags: ['auth'],
+      statuses: ['Live'],
+      techs: ['Go'],
+      teams: ['Platform'],
+    }
+    expect(pickSpotlitReason(baseContainer, filters)).toBe('Go')
+  })
+
+  it('falls through to tag when no tech matches', () => {
+    expect(pickSpotlitReason(baseContainer, { ...emptyFilters, tags: ['auth'] })).toBe('auth')
+  })
+
+  it('falls through to team when only team matches', () => {
+    expect(pickSpotlitReason(baseContainer, { ...emptyFilters, teams: ['Platform'] })).toBe('Platform')
+  })
+
+  it('falls through to status when only status matches', () => {
+    expect(pickSpotlitReason(baseContainer, { ...emptyFilters, statuses: ['Live'] })).toBe('Live')
+  })
+
+  it('tech match is case-insensitive', () => {
+    expect(pickSpotlitReason(baseContainer, { ...emptyFilters, techs: ['go'] })).toBe('go')
   })
 })

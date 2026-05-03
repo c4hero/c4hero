@@ -11,7 +11,7 @@ export function spotlightActive(f: SpotlightFilters): boolean {
   return f.tags.length > 0 || f.statuses.length > 0 || f.techs.length > 0 || f.teams.length > 0
 }
 
-function techTokens(raw: string | undefined): Set<string> {
+export function techTokens(raw: string | undefined): Set<string> {
   if (!raw) return new Set()
   return new Set(raw.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
 }
@@ -41,4 +41,19 @@ export function isSpotlit(el: ModelElement, f: SpotlightFilters): boolean {
 
 export function isSpotlitRel(rel: Relationship, f: SpotlightFilters): boolean {
   return matchesTechAND(techTokens(rel.technology), f.techs)
+}
+
+export function pickSpotlitReason(el: ModelElement, f: SpotlightFilters): string | null {
+  if (f.techs.length > 0) {
+    const tokens = techTokens('technology' in el ? el.technology : undefined)
+    const hit = f.techs.find((t) => tokens.has(t.toLowerCase()))
+    if (hit) return hit
+  }
+  if (f.tags.length > 0) {
+    const hit = f.tags.find((t) => el.tags.includes(t))
+    if (hit) return hit
+  }
+  if (f.teams.length > 0 && el.owner && f.teams.includes(el.owner)) return el.owner
+  if (f.statuses.length > 0 && el.status && f.statuses.includes(el.status)) return el.status
+  return null
 }
