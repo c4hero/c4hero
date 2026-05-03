@@ -81,8 +81,6 @@ test.describe('Connection Bug Diagnostics', () => {
     expect(rels.length).toBe(1)
 
     const rel = rels[0]
-    console.log('Connection result:', JSON.stringify(rel))
-    console.log('First node DOM id:', firstNodeId, '  Second node DOM id:', secondNodeId)
 
     // The relationship sourceId should be the node we dragged FROM (New System / first)
     // The relationship destinationId should be the node we dragged TO (New System 2 / second)
@@ -113,7 +111,6 @@ test.describe('Connection Bug Diagnostics', () => {
     await expect(panel).toContainText('New System')
     await expect(panel).toContainText('New System 2')
     const panelText = await panel.textContent()
-    console.log('Inspector panel text:', panelText)
 
     const srcIndex = panelText?.indexOf('New System') ?? -1
     const dstIndex = panelText?.indexOf('New System 2') ?? -1
@@ -145,21 +142,18 @@ test.describe('Connection Bug Diagnostics', () => {
 
     let rels = await getRelationships(workspace.page)
     expect(rels.length).toBe(1)
-    console.log('After 1st add — model relationships:', rels.length)
 
     // Delete the selected relationship
     await deleteSelectedRelationship(workspace.page)
 
     rels = await getRelationships(workspace.page)
     expect(rels.length).toBe(0)
-    console.log('After 1st delete — model relationships:', rels.length)
 
     // Re-add
     await workspace.connectNodes('New System', 'New System 2')
     await workspace.page.waitForTimeout(300)
 
     rels = await getRelationships(workspace.page)
-    console.log('After 2nd add — model relationships:', rels.length)
     expect(rels.length).toBe(1)  // Bug 2: user reports seeing 2 here
   })
 
@@ -187,9 +181,6 @@ test.describe('Connection Bug Diagnostics', () => {
     const viewRels = await getViewRelationships(workspace.page)
     const edgeCount = await workspace.getEdgeCount()
 
-    console.log('Model rels:', modelRels.length, JSON.stringify(modelRels))
-    console.log('View rels:', viewRels.length, JSON.stringify(viewRels))
-    console.log('Canvas edges:', edgeCount)
 
     expect(modelRels.length).toBe(1)
     expect(viewRels.length).toBe(1)
@@ -212,7 +203,6 @@ test.describe('Connection Bug Diagnostics', () => {
 
     let rels = await getRelationships(workspace.page)
     expect(rels.length).toBe(1)
-    console.log('After connect — model relationships:', rels.length)
 
     // Click the edge to mark it as "selected" in React Flow's internal state
     // (needed for React Flow's built-in Backspace delete to fire)
@@ -242,7 +232,6 @@ test.describe('Connection Bug Diagnostics', () => {
 
     rels = await getRelationships(workspace.page)
     const edgeCount = await workspace.getEdgeCount()
-    console.log('After Backspace — model relationships:', rels.length, 'visible edges:', edgeCount)
 
     // Both the model AND the visible edges should be 0
     expect(rels.length).toBe(0)
@@ -254,7 +243,6 @@ test.describe('Connection Bug Diagnostics', () => {
 
     rels = await getRelationships(workspace.page)
     const finalEdgeCount = await workspace.getEdgeCount()
-    console.log('After reconnect — model relationships:', rels.length, 'visible edges:', finalEdgeCount)
 
     expect(rels.length).toBe(1)
     expect(finalEdgeCount).toBe(1)
@@ -280,14 +268,12 @@ test.describe('Connection Bug Diagnostics', () => {
       await workspace.page.waitForTimeout(300)
 
       const afterAdd = await workspace.getEdgeCount()
-      console.log(`Cycle ${cycle} after add: ${afterAdd} edges`)
       expect(afterAdd).toBe(1)
 
       // Delete the selected relationship
       await deleteSelectedRelationship(workspace.page)
 
       const afterDelete = await workspace.getEdgeCount()
-      console.log(`Cycle ${cycle} after delete: ${afterDelete} edges`)
       expect(afterDelete).toBe(0)
     }
   })

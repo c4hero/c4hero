@@ -72,9 +72,19 @@ AI features are optional.
 - because keys live in the browser, any browser extension or XSS bug in the app could read them; only use AI features in trusted sessions
 - optional endpoint overrides are documented in [`.env.example`](.env.example)
 
+## Privacy
+
+c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a c4hero server. AI features require a key you bring yourself, and the key is sent directly to the provider you choose. Full details in [PRIVACY.md](PRIVACY.md).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a list of notable changes.
+
 ## Contributing
 
 Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for setup, workflow, and testing guidance, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+To report a security issue, see [SECURITY.md](SECURITY.md).
 
 ## License
 
