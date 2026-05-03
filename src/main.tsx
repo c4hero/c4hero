@@ -74,7 +74,19 @@ if (import.meta.env.DEV) {
 // events; in that case fall back to the message/filename so we don't log
 // a useless "null". Skip entirely when there's nothing actionable at all
 // (no error, no message) — those are typically CSP / extension noise.
+const BENIGN_ERROR_PATTERNS = [
+  // Browsers fire this when a ResizeObserver callback's side-effects trigger
+  // another resize within the same frame. Harmless and well-known — see
+  // https://github.com/WICG/resize-observer/issues/38. Suppressing here
+  // keeps the console (and the remote log buffer) free of churn.
+  /ResizeObserver loop/i,
+]
+function isBenignErrorMessage(msg: unknown): boolean {
+  if (typeof msg !== 'string') return false
+  return BENIGN_ERROR_PATTERNS.some((p) => p.test(msg))
+}
 window.addEventListener('error', (e) => {
+  if (isBenignErrorMessage(e.message) || isBenignErrorMessage((e.error as Error | undefined)?.message)) return
   if (e.error) {
     log.error('Unhandled error', e.error)
     return
@@ -84,9 +96,10 @@ window.addEventListener('error', (e) => {
   }
 })
 window.addEventListener('unhandledrejection', (e) => {
-  if (e.reason !== undefined && e.reason !== null) {
-    log.error('Unhandled promise rejection', e.reason)
-  }
+  if (e.reason === undefined || e.reason === null) return
+  const msg = (e.reason as { message?: unknown })?.message
+  if (isBenignErrorMessage(msg)) return
+  log.error('Unhandled promise rejection', e.reason)
 })
 
 // Optional remote log transport. Activates only when VITE_LOG_ENDPOINT is set
