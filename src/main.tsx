@@ -69,12 +69,24 @@ if (import.meta.env.DEV) {
   }
 }
 
-// Global unhandled error handlers
+// Global unhandled error handlers.
+// `e.error` can be null for cross-origin script errors and some synthetic
+// events; in that case fall back to the message/filename so we don't log
+// a useless "null". Skip entirely when there's nothing actionable at all
+// (no error, no message) — those are typically CSP / extension noise.
 window.addEventListener('error', (e) => {
-  log.error('Unhandled error', e.error)
+  if (e.error) {
+    log.error('Unhandled error', e.error)
+    return
+  }
+  if (e.message) {
+    log.error('Unhandled error', { message: e.message, source: e.filename, line: e.lineno, col: e.colno })
+  }
 })
 window.addEventListener('unhandledrejection', (e) => {
-  log.error('Unhandled promise rejection', e.reason)
+  if (e.reason !== undefined && e.reason !== null) {
+    log.error('Unhandled promise rejection', e.reason)
+  }
 })
 
 // Optional remote log transport. Activates only when VITE_LOG_ENDPOINT is set
