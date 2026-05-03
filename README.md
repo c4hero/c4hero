@@ -1,5 +1,9 @@
 # c4hero
 
+[![CI](https://github.com/c4hero/c4hero/actions/workflows/ci.yml/badge.svg)](https://github.com/c4hero/c4hero/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](#prerequisites)
+
 c4hero is a local-first visual architecture modelling tool for teams that use the C4 model and want to keep their architecture definitions in files, not a hosted black box.
 
 It is designed around Structurizr-compatible workflows. You edit architecture visually, and c4hero reads and writes Structurizr DSL so your workspace can live in your repo, stay reviewable in pull requests, and avoid vendor lock-in.
