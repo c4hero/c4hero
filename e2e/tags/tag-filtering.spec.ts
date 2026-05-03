@@ -2,20 +2,20 @@ import { test, expect } from '../fixtures/workspace'
 
 async function openSpotlight(workspace: { page: import('@playwright/test').Page }) {
   await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
-  return workspace.page.getByRole('complementary', { name: 'Spotlight filters' })
+  return workspace.page.getByRole('complementary', { name: 'Highlighter' })
 }
 
 test.describe('Tag Filtering', () => {
   test('Spotlight panel lists custom tags from the view', async ({ workspace }) => {
     await workspace.loadSample()
     const panel = await openSpotlight(workspace)
-    await expect(panel.getByRole('button', { name: 'Customer', exact: true })).toBeVisible()
+    await expect(panel.getByRole('button', { name: /^Customer\b/, exact: false })).toBeVisible()
   })
 
   test('toggling a tag in the panel marks it pressed', async ({ workspace }) => {
     await workspace.loadSample()
     const panel = await openSpotlight(workspace)
-    const btn = panel.getByRole('button', { name: 'Customer', exact: true })
+    const btn = panel.getByRole('button', { name: /^Customer\b/, exact: false })
     await btn.click()
     await expect(btn).toHaveAttribute('aria-pressed', 'true')
   })
@@ -23,7 +23,7 @@ test.describe('Tag Filtering', () => {
   test('toggling an active tag clears that filter', async ({ workspace }) => {
     await workspace.loadSample()
     const panel = await openSpotlight(workspace)
-    const btn = panel.getByRole('button', { name: 'Customer', exact: true })
+    const btn = panel.getByRole('button', { name: /^Customer\b/, exact: false })
     await btn.click()
     await expect(btn).toHaveAttribute('aria-pressed', 'true')
     await btn.click()
@@ -37,8 +37,8 @@ test.describe('Tag Filtering', () => {
     await workspace.addTag('Critical')
 
     let panel = await openSpotlight(workspace)
-    await panel.getByRole('button', { name: 'Critical', exact: true }).click()
-    await expect(panel.getByRole('button', { name: 'Critical', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await panel.getByRole('button', { name: /^Critical\b/, exact: false }).click()
+    await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
     // Close the spotlight panel before opening tag manager
     await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
@@ -54,10 +54,10 @@ test.describe('Tag Filtering', () => {
     await workspace.page.getByRole('button', { name: 'Close tag manager' }).click()
 
     panel = await openSpotlight(workspace)
-    const urgent = panel.getByRole('button', { name: 'Urgent', exact: true })
+    const urgent = panel.getByRole('button', { name: /^Urgent\b/, exact: false })
     await expect(urgent).toBeVisible()
     await expect(urgent).toHaveAttribute('aria-pressed', 'true')
-    await expect(panel.getByRole('button', { name: 'Critical', exact: true })).toHaveCount(0)
+    await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveCount(0)
     await expect(workspace.getVisibleNodeByName('New System')).toBeVisible()
 
     const system = await workspace.getElementByName('New System')
@@ -71,8 +71,8 @@ test.describe('Tag Filtering', () => {
     await workspace.addTag('Critical')
 
     const panel = await openSpotlight(workspace)
-    await panel.getByRole('button', { name: 'Critical', exact: true }).click()
-    await expect(panel.getByRole('button', { name: 'Critical', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await panel.getByRole('button', { name: /^Critical\b/, exact: false }).click()
+    await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
     await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
     await workspace.page.getByRole('button', { name: 'Manage tags' }).click()

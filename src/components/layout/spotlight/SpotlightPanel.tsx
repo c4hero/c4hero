@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Tag, Activity, Cpu, Users, X, ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { Tag, Activity, Cpu, Users, X, Trash2, Search } from 'lucide-react'
 import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/workspace'
 import type { ElementStatus } from '@/types/model'
 
@@ -13,6 +13,15 @@ const STATUS_COLORS: Record<ElementStatus, string> = {
 const DEFAULT_BUILTIN_TAGS = ['Person', 'Software System', 'Container', 'Component', 'Element', 'Relationship',
   'Web Application', 'Service', 'Database', 'Queue', 'Mobile App', 'File System']
 
+type FacetKey = 'tags' | 'status' | 'tech' | 'teams'
+
+const FACET_TABS: { key: FacetKey; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+  { key: 'tags', label: 'Tags', icon: Tag },
+  { key: 'status', label: 'Status', icon: Activity },
+  { key: 'tech', label: 'Tech', icon: Cpu },
+  { key: 'teams', label: 'Teams', icon: Users },
+]
+
 export default function SpotlightPanel() {
   const open = useWorkspaceStore((s) => s.spotlightPanelOpen)
   const setOpen = useWorkspaceStore((s) => s.setSpotlightPanelOpen)
@@ -22,6 +31,14 @@ export default function SpotlightPanel() {
   const statuses = useWorkspaceStore((s) => s.activeStatusFilter)
   const techs = useWorkspaceStore((s) => s.activeTechFilter)
   const teams = useWorkspaceStore((s) => s.activeTeamFilter)
+  const tagMode = useWorkspaceStore((s) => s.tagFilterMode)
+  const statusMode = useWorkspaceStore((s) => s.statusFilterMode)
+  const techMode = useWorkspaceStore((s) => s.techFilterMode)
+  const teamMode = useWorkspaceStore((s) => s.teamFilterMode)
+  const setTagMode = useWorkspaceStore((s) => s.setTagFilterMode)
+  const setStatusMode = useWorkspaceStore((s) => s.setStatusFilterMode)
+  const setTechMode = useWorkspaceStore((s) => s.setTechFilterMode)
+  const setTeamMode = useWorkspaceStore((s) => s.setTeamFilterMode)
   const toggleTag = useWorkspaceStore((s) => s.toggleActiveTagFilter)
   const toggleStatus = useWorkspaceStore((s) => s.toggleActiveStatusFilter)
   const toggleTech = useWorkspaceStore((s) => s.toggleActiveTechFilter)
@@ -35,78 +52,188 @@ export default function SpotlightPanel() {
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
   const elementMap = useMemo(() => (workspace ? buildElementMap(workspace) : new Map()), [workspace])
 
-  const viewTags = useMemo(() => {
-    if (!view) return []
-    const set = new Set<string>()
+  // Per-value counts so users see how many elements each option would highlight.
+  const tagCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    if (!view) return map
     for (const ve of view.elements) {
       const el = elementMap.get(ve.id)
-      if (el) for (const t of el.tags) if (!DEFAULT_BUILTIN_TAGS.includes(t)) set.add(t)
+      if (!el) continue
+      for (const t of el.tags) {
+        if (DEFAULT_BUILTIN_TAGS.includes(t)) continue
+        map.set(t, (map.get(t) ?? 0) + 1)
+      }
     }
-    return Array.from(set).sort()
+    return map
   }, [view, elementMap])
 
-  const viewStatuses = useMemo<ElementStatus[]>(() => {
-    if (!view) return []
-    const set = new Set<ElementStatus>()
+  const statusCounts = useMemo(() => {
+    const map = new Map<ElementStatus, number>()
+    if (!view) return map
     for (const ve of view.elements) {
       const el = elementMap.get(ve.id)
-      if (el?.status) set.add(el.status)
+      if (el?.status) map.set(el.status, (map.get(el.status) ?? 0) + 1)
     }
-    return (['Live', 'Planned', 'Deprecated', 'Removed'] as ElementStatus[]).filter((s) => set.has(s))
+    return map
   }, [view, elementMap])
 
-  const viewTechs = useMemo(() => {
-    if (!view) return []
-    const set = new Set<string>()
+  const techCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    if (!view) return map
     for (const ve of view.elements) {
       const el = elementMap.get(ve.id) as { technology?: string } | undefined
       const raw = el?.technology
       if (!raw) continue
-      for (const t of raw.split(',').map((s) => s.trim()).filter(Boolean)) set.add(t)
+      for (const t of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+        map.set(t, (map.get(t) ?? 0) + 1)
+      }
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b))
+    return map
   }, [view, elementMap])
 
-  const viewTeams = useMemo(() => {
-    if (!view) return []
-    const set = new Set<string>()
+  const teamCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    if (!view) return map
     for (const ve of view.elements) {
       const el = elementMap.get(ve.id)
-      if (el?.owner) set.add(el.owner)
+      if (el?.owner) map.set(el.owner, (map.get(el.owner) ?? 0) + 1)
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b))
+    return map
   }, [view, elementMap])
 
+  const viewTags = useMemo(() => Array.from(tagCounts.keys()).sort(), [tagCounts])
+  const viewStatuses = useMemo<ElementStatus[]>(
+    () => (['Live', 'Planned', 'Deprecated', 'Removed'] as ElementStatus[]).filter((s) => statusCounts.has(s)),
+    [statusCounts],
+  )
+  const viewTechs = useMemo(() => Array.from(techCounts.keys()).sort((a, b) => a.localeCompare(b)), [techCounts])
+  const viewTeams = useMemo(() => Array.from(teamCounts.keys()).sort((a, b) => a.localeCompare(b)), [teamCounts])
+
   const tagStyles = workspace?.views.configuration.styles.elements ?? []
-  const tagColorFor = (tag: string) => tagStyles.find((s) => s.tag === tag)?.background
+  const tagColorFor = (t: string) => tagStyles.find((s) => s.tag === t)?.background
 
   const total = tags.length + statuses.length + techs.length + teams.length
+  const counts: Record<FacetKey, number> = {
+    tags: tags.length,
+    status: statuses.length,
+    tech: techs.length,
+    teams: teams.length,
+  }
 
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [tab, setTab] = useState<FacetKey>('tags')
+  const [query, setQuery] = useState('')
+
+  // Reset search when switching tabs.
+  useEffect(() => { setQuery('') }, [tab])
 
   useEffect(() => {
     if (!open) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [open, setOpen])
 
+  const containerRef = useRef<HTMLDivElement>(null)
+
   if (!workspace) return null
+
+  // Build the active tab's content from a single descriptor so the rest of
+  // the panel stays purely presentational.
+  const tabContent: {
+    available: string[]
+    selected: string[]
+    counts: Map<string, number>
+    mode: 'any' | 'all'
+    setMode: (m: 'any' | 'all') => void
+    onToggle: (v: string) => void
+    onClear: () => void
+    colorFor?: (v: string) => string | undefined
+    label: string
+    placeholder: string
+  } = (() => {
+    switch (tab) {
+      case 'tags':
+        return {
+          available: viewTags,
+          selected: tags,
+          counts: tagCounts,
+          mode: tagMode,
+          setMode: setTagMode,
+          onToggle: toggleTag,
+          onClear: () => setTags([]),
+          colorFor: tagColorFor,
+          label: 'tags',
+          placeholder: 'Search tags…',
+        }
+      case 'status':
+        return {
+          available: viewStatuses,
+          selected: statuses,
+          counts: statusCounts as unknown as Map<string, number>,
+          mode: statusMode,
+          setMode: setStatusMode,
+          onToggle: (v) => toggleStatus(v as ElementStatus),
+          onClear: () => setStatuses([]),
+          colorFor: (v) => STATUS_COLORS[v as ElementStatus],
+          label: 'statuses',
+          placeholder: 'Search status…',
+        }
+      case 'tech':
+        return {
+          available: viewTechs,
+          selected: techs,
+          counts: techCounts,
+          mode: techMode,
+          setMode: setTechMode,
+          onToggle: toggleTech,
+          onClear: () => setTechs([]),
+          label: 'tech',
+          placeholder: 'Search tech…',
+        }
+      case 'teams':
+        return {
+          available: viewTeams,
+          selected: teams,
+          counts: teamCounts,
+          mode: teamMode,
+          setMode: setTeamMode,
+          onToggle: toggleTeam,
+          onClear: () => setTeams([]),
+          label: 'teams',
+          placeholder: 'Search teams…',
+        }
+    }
+  })()
+
+  const filteredValues = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return tabContent.available
+    return tabContent.available.filter((v) => v.toLowerCase().includes(q))
+  }, [tabContent.available, query])
+
+  // Selected-first ordering inside the tab.
+  const ordered = useMemo(() => {
+    const sel = filteredValues.filter((v) => tabContent.selected.includes(v))
+    const unsel = filteredValues.filter((v) => !tabContent.selected.includes(v))
+    return [...sel, ...unsel]
+  }, [filteredValues, tabContent.selected])
 
   return (
     <div
       ref={containerRef}
       data-canvas-chrome="spotlight-panel"
+      role="complementary"
+      aria-label="Highlighter"
+      aria-hidden={!open}
       style={{
         position: 'fixed',
         top: 72,
         right: 14,
         zIndex: 50,
-        width: 280,
+        width: 300,
         maxHeight: 'calc(100dvh - 86px)',
-        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
         borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--color-border)',
         background: 'var(--glass-bg)',
@@ -117,15 +244,14 @@ export default function SpotlightPanel() {
         transform: open ? 'translateY(0)' : 'translateY(-8px)',
         pointerEvents: open ? 'auto' : 'none',
         transition: 'opacity 0.18s ease, transform 0.18s ease',
+        overflow: 'hidden',
       }}
-      role="complementary"
-      aria-label="Spotlight filters"
-      aria-hidden={!open}
     >
+      {/* Header */}
       <header
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 8,
           padding: '12px 14px 10px',
           borderBottom: '1px solid var(--color-border)',
@@ -133,7 +259,7 @@ export default function SpotlightPanel() {
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-            Filter
+            Highlight
             {total > 0 && (
               <span
                 style={{
@@ -149,203 +275,221 @@ export default function SpotlightPanel() {
               </span>
             )}
           </div>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-            Highlight on canvas
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
+            By tag, status, tech, or team
           </div>
         </div>
         {total > 0 && (
           <button
             type="button"
             onClick={clearAll}
-            title="Clear all filters"
-            aria-label="Clear all filters"
+            title="Clear all selections"
+            aria-label="Clear all selections"
             className="btn-icon"
             style={{ minWidth: 24, minHeight: 24, padding: 4 }}
           >
-            <X size={12} />
+            <Trash2 size={12} />
           </button>
         )}
         <button
           type="button"
           onClick={() => setOpen(false)}
-          title="Close filter panel"
-          aria-label="Close filter panel"
+          title="Close highlighter"
+          aria-label="Close highlighter"
           className="btn-icon"
           style={{ minWidth: 24, minHeight: 24, padding: 4 }}
         >
-          <ChevronRight size={14} />
+          <X size={14} />
         </button>
       </header>
 
-      <FacetSection
-        label="Tags"
-        icon={<Tag size={12} />}
-        semantic="ANY"
-        available={viewTags}
-        selected={tags}
-        onToggle={toggleTag}
-        onClear={() => setTags([])}
-        colorFor={tagColorFor}
-        searchable={viewTags.length > 8}
-      />
-      <FacetSection
-        label="Status"
-        icon={<Activity size={12} />}
-        semantic="ANY"
-        available={viewStatuses}
-        selected={statuses}
-        onToggle={(v) => toggleStatus(v as ElementStatus)}
-        onClear={() => setStatuses([])}
-        colorFor={(v) => STATUS_COLORS[v as ElementStatus]}
-      />
-      <FacetSection
-        label="Tech"
-        icon={<Cpu size={12} />}
-        semantic="AND"
-        available={viewTechs}
-        selected={techs}
-        onToggle={toggleTech}
-        onClear={() => setTechs([])}
-        searchable={viewTechs.length > 8}
-      />
-      <FacetSection
-        label="Teams"
-        icon={<Users size={12} />}
-        semantic="ANY"
-        available={viewTeams}
-        selected={teams}
-        onToggle={toggleTeam}
-        onClear={() => setTeams([])}
-        searchable={viewTeams.length > 8}
-      />
-    </div>
-  )
-}
-
-interface FacetSectionProps {
-  label: string
-  icon: React.ReactNode
-  semantic: 'AND' | 'ANY'
-  available: string[]
-  selected: string[]
-  onToggle: (value: string) => void
-  onClear: () => void
-  colorFor?: (value: string) => string | undefined
-  searchable?: boolean
-}
-
-function FacetSection({ label, icon, semantic, available, selected, onToggle, onClear, colorFor, searchable }: FacetSectionProps) {
-  const [collapsed, setCollapsed] = useState(false)
-  const [query, setQuery] = useState('')
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return available
-    return available.filter((v) => v.toLowerCase().includes(q))
-  }, [available, query])
-
-  const ordered = useMemo(() => {
-    const sel = filtered.filter((v) => selected.includes(v))
-    const unsel = filtered.filter((v) => !selected.includes(v))
-    return [...sel, ...unsel]
-  }, [filtered, selected])
-
-  const matchedInView = selected.filter((v) => available.includes(v)).length
-  const stale = selected.length > 0 && matchedInView === 0
-  const isEmpty = available.length === 0 && selected.length === 0
-
-  return (
-    <section
-      style={{
-        borderBottom: '1px solid var(--color-border)',
-        padding: '10px 14px',
-        opacity: isEmpty ? 0.55 : 1,
-      }}
-    >
-      <header
+      {/* Tabs */}
+      <div
+        role="tablist"
+        aria-label="Facets"
         style={{
           display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          fontSize: 11,
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          fontWeight: 700,
-          color: 'var(--color-text-muted)',
-          cursor: isEmpty ? 'default' : 'pointer',
-          userSelect: 'none',
-          marginBottom: collapsed ? 0 : 8,
+          padding: '6px 8px 0',
+          gap: 2,
+          borderBottom: '1px solid var(--color-border)',
         }}
-        onClick={() => { if (!isEmpty) setCollapsed((c) => !c) }}
-        role="button"
-        aria-expanded={!collapsed}
-        aria-disabled={isEmpty}
       >
-        <span style={{ display: 'inline-flex', color: 'var(--color-text-muted)' }}>{icon}</span>
-        <span>{label}</span>
-        {selected.length > 0 && (
-          <span
+        {FACET_TABS.map(({ key, label, icon: Icon }) => {
+          const active = tab === key
+          const cnt = counts[key]
+          return (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={active}
+              type="button"
+              onClick={() => setTab(key)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                height: 28,
+                padding: '0 6px',
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
+                marginBottom: -1,
+                cursor: 'pointer',
+              }}
+            >
+              <Icon size={11} />
+              {label}
+              {cnt > 0 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: 999,
+                    background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
+                    color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                  }}
+                >
+                  {cnt}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Body */}
+      <div
+        role="tabpanel"
+        aria-label={`${tab} options`}
+        style={{
+          padding: '10px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          overflowY: 'auto',
+          flex: 1,
+        }}
+      >
+        {/* Search */}
+        <div style={{ position: 'relative' }}>
+          <Search
+            size={12}
+            style={{
+              position: 'absolute',
+              left: 9,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--color-text-muted)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            placeholder={tabContent.placeholder}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '6px 10px 6px 28px',
+              fontSize: 'var(--text-xs)',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface-2)',
+              color: 'var(--color-text-primary)',
+              outline: 'none',
+            }}
+          />
+        </div>
+
+        {/* Filter mode */}
+        <div>
+          <div
             style={{
               fontSize: 10,
               fontWeight: 700,
-              padding: '1px 5px',
-              borderRadius: 999,
-              background: stale ? 'var(--color-surface-2)' : 'var(--color-accent-active)',
-              color: stale ? 'var(--color-text-muted)' : 'var(--color-accent)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              color: 'var(--color-text-muted)',
+              marginBottom: 4,
             }}
           >
-            {stale ? `${selected.length} (0)` : selected.length}
-          </span>
-        )}
-        <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, opacity: 0.7 }}>
-          {semantic === 'AND' ? 'all of' : 'any of'}
-        </span>
-        {!isEmpty && (
-          <span style={{ display: 'inline-flex', color: 'var(--color-text-muted)' }}>
-            <ChevronDown size={12} style={{ transform: collapsed ? 'rotate(-90deg)' : undefined, transition: 'transform 0.12s' }} />
-          </span>
-        )}
-      </header>
+            Match mode
+          </div>
+          <ModeToggle mode={tabContent.mode} onChange={tabContent.setMode} />
+        </div>
 
-      {!collapsed && !isEmpty && (
-        <>
-          {searchable && (
-            <div style={{ position: 'relative', marginBottom: 6 }}>
-              <Search size={11} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-              <input
-                type="text"
-                placeholder={`Search ${label.toLowerCase()}…`}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+        {/* Values */}
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              marginBottom: 6,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                color: 'var(--color-text-muted)',
+              }}
+            >
+              {FACET_TABS.find((t) => t.key === tab)?.label}{' '}
+              <span style={{ color: 'var(--color-text-muted)', fontWeight: 600, opacity: 0.6 }}>
+                {tabContent.available.length}
+              </span>
+            </span>
+            {tabContent.selected.length > 0 && (
+              <button
+                type="button"
+                onClick={tabContent.onClear}
                 style={{
-                  width: '100%',
-                  padding: '5px 8px 5px 24px',
-                  fontSize: 'var(--text-xs)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-surface-2)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: 'var(--color-text-muted)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
                 }}
-              />
-            </div>
-          )}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {ordered.length === 0 && (
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>No matches</span>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                {tabContent.available.length === 0
+                  ? `No ${tabContent.label} in this view`
+                  : 'No matches'}
+              </span>
             )}
             {ordered.map((value) => {
-              const isSel = selected.includes(value)
-              const swatch = colorFor?.(value)
+              const isSel = tabContent.selected.includes(value)
+              const swatch = tabContent.colorFor?.(value)
+              const cnt = tabContent.counts.get(value) ?? 0
               return (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => onToggle(value)}
+                  onClick={() => tabContent.onToggle(value)}
                   aria-pressed={isSel}
+                  title={`${value} (${cnt} match${cnt === 1 ? '' : 'es'})`}
                   style={{
                     height: 24,
-                    padding: '0 8px',
+                    padding: '0 9px',
                     borderRadius: 999,
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -374,30 +518,63 @@ function FacetSection({ label, icon, semantic, available, selected, onToggle, on
                     />
                   )}
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      opacity: isSel ? 0.85 : 0.55,
+                    }}
+                  >
+                    {cnt}
+                  </span>
                 </button>
               )
             })}
           </div>
-          {selected.length > 0 && (
-            <button
-              type="button"
-              onClick={onClear}
-              style={{
-                marginTop: 6,
-                fontSize: 10,
-                fontWeight: 600,
-                color: 'var(--color-text-muted)',
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-              }}
-            >
-              Clear {label.toLowerCase()}
-            </button>
-          )}
-        </>
-      )}
-    </section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModeToggle({ mode, onChange }: { mode: 'any' | 'all'; onChange: (m: 'any' | 'all') => void }) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Match mode"
+      style={{
+        display: 'inline-flex',
+        padding: 2,
+        borderRadius: 'var(--radius-sm)',
+        background: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
+        gap: 2,
+      }}
+    >
+      {(['any', 'all'] as const).map((m) => {
+        const active = mode === m
+        return (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(m)}
+            style={{
+              padding: '3px 10px',
+              borderRadius: 'var(--radius-xs)',
+              fontSize: 11,
+              fontWeight: 600,
+              color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+              background: active ? 'var(--color-accent-active)' : 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {m === 'any' ? 'Any of' : 'All of'}
+          </button>
+        )
+      })}
+    </div>
   )
 }

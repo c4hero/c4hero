@@ -12,7 +12,7 @@ import {
   Maximize2,
   Settings,
   MousePointerClick,
-  Filter,
+  Highlighter,
 } from 'lucide-react'
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
@@ -233,13 +233,13 @@ export default function FloatingToolRail() {
       <RailSep />
       <div style={{ position: 'relative' }} data-testid="spotlight-rail-trigger">
         <RailBtn
-          icon={<Filter size={16} />}
+          icon={<Highlighter size={16} />}
           label={
             spotlightPanelOpen
-              ? 'Hide filter panel'
+              ? 'Hide highlighter'
               : activeFilterCount > 0
-                ? `Filter (${activeFilterCount} active)`
-                : 'Filter / highlight'
+                ? `Highlight (${activeFilterCount} active)`
+                : 'Highlight'
           }
           active={spotlightPanelOpen || activeFilterCount > 0}
           onClick={() => setSpotlightPanelOpen(!spotlightPanelOpen)}

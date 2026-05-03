@@ -503,6 +503,10 @@ export default function Canvas() {
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
   const activeTechFilter = useWorkspaceStore((s) => s.activeTechFilter)
   const activeTeamFilter = useWorkspaceStore((s) => s.activeTeamFilter)
+  const tagFilterMode = useWorkspaceStore((s) => s.tagFilterMode)
+  const statusFilterMode = useWorkspaceStore((s) => s.statusFilterMode)
+  const techFilterMode = useWorkspaceStore((s) => s.techFilterMode)
+  const teamFilterMode = useWorkspaceStore((s) => s.teamFilterMode)
   const layoutVersion = useWorkspaceStore((s) => s.layoutVersion)
 
   const spotlightFilters = useMemo<SpotlightFilters>(() => ({
@@ -510,7 +514,11 @@ export default function Canvas() {
     statuses: activeStatusFilter,
     techs: activeTechFilter,
     teams: activeTeamFilter,
-  }), [activeTagFilter, activeStatusFilter, activeTechFilter, activeTeamFilter])
+    tagsMode: tagFilterMode,
+    statusesMode: statusFilterMode,
+    techsMode: techFilterMode,
+    teamsMode: teamFilterMode,
+  }), [activeTagFilter, activeStatusFilter, activeTechFilter, activeTeamFilter, tagFilterMode, statusFilterMode, techFilterMode, teamFilterMode])
 
   const minimapMode = useSettingsStore((s) => s.minimapMode)
   const snapToGrid = useSettingsStore((s) => s.snapToGrid)

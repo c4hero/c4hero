@@ -222,6 +222,14 @@ interface WorkspaceState extends UndoState {
   setAddElementPanelOpen: (open: boolean) => void
   spotlightPanelOpen: boolean
   setSpotlightPanelOpen: (open: boolean) => void
+  tagFilterMode: 'any' | 'all'
+  statusFilterMode: 'any' | 'all'
+  techFilterMode: 'any' | 'all'
+  teamFilterMode: 'any' | 'all'
+  setTagFilterMode: (mode: 'any' | 'all') => void
+  setStatusFilterMode: (mode: 'any' | 'all') => void
+  setTechFilterMode: (mode: 'any' | 'all') => void
+  setTeamFilterMode: (mode: 'any' | 'all') => void
   createViewDialogOpen: boolean
   setCreateViewDialogOpen: (open: boolean) => void
   setPresentationMode: (on: boolean) => void
@@ -332,6 +340,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   canvasSettingsOpen: false,
   addElementPanelOpen: false,
   spotlightPanelOpen: false,
+  tagFilterMode: 'any',
+  statusFilterMode: 'any',
+  techFilterMode: 'all',
+  teamFilterMode: 'any',
   createViewDialogOpen: false,
   pendingDelete: null,
   pendingZoomConfirm: null,
@@ -1518,6 +1530,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
   setSpotlightPanelOpen: (open) => set({ spotlightPanelOpen: open, commandPaletteOpen: false }),
+  setTagFilterMode: (mode) => set({ tagFilterMode: mode }),
+  setStatusFilterMode: (mode) => set({ statusFilterMode: mode }),
+  setTechFilterMode: (mode) => set({ techFilterMode: mode }),
+  setTeamFilterMode: (mode) => set({ teamFilterMode: mode }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
   confirmDelete: (message, onConfirm) => set({ pendingDelete: { message, onConfirm } }),
   cancelDelete: () => set({ pendingDelete: null }),

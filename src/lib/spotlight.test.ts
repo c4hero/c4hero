@@ -101,6 +101,29 @@ describe('isSpotlitRel (Tech only)', () => {
   })
 })
 
+describe('per-facet match modes', () => {
+  it('tagsMode "all" requires every selected tag', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, tags: ['service', 'auth'], tagsMode: 'all' })).toBe(true)
+    expect(isSpotlit(baseContainer, { ...emptyFilters, tags: ['service', 'pii'], tagsMode: 'all' })).toBe(false)
+  })
+  it('tagsMode "any" matches when at least one selected tag is present', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, tags: ['service', 'pii'], tagsMode: 'any' })).toBe(true)
+  })
+  it('techsMode "any" relaxes the tech AND constraint', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, techs: ['Go', 'Kafka'], techsMode: 'any' })).toBe(true)
+    expect(isSpotlit(baseContainer, { ...emptyFilters, techs: ['Kafka', 'Redis'], techsMode: 'any' })).toBe(false)
+  })
+  it('statusesMode "all" only matches when one status is selected', () => {
+    expect(isSpotlit(baseContainer, { ...emptyFilters, statuses: ['Live'], statusesMode: 'all' })).toBe(true)
+    expect(isSpotlit(baseContainer, { ...emptyFilters, statuses: ['Live', 'Planned'], statusesMode: 'all' })).toBe(false)
+  })
+  it('relationship tech mode flips between any/all', () => {
+    const rel = { id: 'r', sourceId: 'a', destinationId: 'b', technology: 'gRPC, HTTP/2', tags: [], properties: {} }
+    expect(isSpotlitRel(rel, { ...emptyFilters, techs: ['gRPC', 'Kafka'], techsMode: 'all' })).toBe(false)
+    expect(isSpotlitRel(rel, { ...emptyFilters, techs: ['gRPC', 'Kafka'], techsMode: 'any' })).toBe(true)
+  })
+})
+
 describe('pickSpotlitReason', () => {
   it('returns null when no facet matches', () => {
     expect(pickSpotlitReason(baseContainer, emptyFilters)).toBeNull()

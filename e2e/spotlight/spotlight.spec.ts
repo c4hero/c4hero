@@ -6,11 +6,11 @@ test.describe('spotlight panel', () => {
 
     // Open the spotlight panel via the rail button. The label varies by state.
     await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
-    const panel = workspace.page.getByRole('complementary', { name: 'Spotlight filters' })
+    const panel = workspace.page.getByRole('complementary', { name: 'Highlighter' })
     await expect(panel).toBeVisible()
 
     // Toggle the Customer tag.
-    await panel.getByRole('button', { name: 'Customer', exact: true }).click()
+    await panel.getByRole('button', { name: /^Customer\b/, exact: false }).click()
 
     // After toggling, at least one node should carry the spotlit class.
     const spotlit = workspace.page.locator('.react-flow__node.c4-node-spotlit')
@@ -24,8 +24,8 @@ test.describe('spotlight panel', () => {
     await expect(workspace.page.getByLabel('Element properties')).toBeVisible()
 
     await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
-    const panel = workspace.page.getByRole('complementary', { name: 'Spotlight filters' })
-    await panel.getByRole('button', { name: 'Customer', exact: true }).click()
+    const panel = workspace.page.getByRole('complementary', { name: 'Highlighter' })
+    await panel.getByRole('button', { name: /^Customer\b/, exact: false }).click()
     await expect(workspace.page.getByLabel('Element properties')).toBeVisible()
   })
 
@@ -33,8 +33,8 @@ test.describe('spotlight panel', () => {
     await workspace.loadSample()
 
     await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
-    const panel = workspace.page.getByRole('complementary', { name: 'Spotlight filters' })
-    await panel.getByRole('button', { name: 'Customer', exact: true }).click()
+    const panel = workspace.page.getByRole('complementary', { name: 'Highlighter' })
+    await panel.getByRole('button', { name: /^Customer\b/, exact: false }).click()
 
     const nodes = workspace.page.locator('.react-flow__node:not(.react-flow__node-group)')
     const count = await nodes.count()
