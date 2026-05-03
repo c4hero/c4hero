@@ -189,12 +189,15 @@ export default function FloatingTopPill() {
         style={{
           position: 'fixed',
           top: 'max(14px, calc(env(safe-area-inset-top, 0px) + 8px))',
-          left: 0,
-          right: 0,
+          // Left-aligned, sitting just to the right of the tool rail so the
+          // diagram's visual centerline isn't competing with the chrome.
+          // The tool rail's gutter is also 14px; match it.
+          left: 14,
+          right: 14,
           zIndex: 50,
           display: 'flex',
-          justifyContent: 'center',
-          padding: '0 14px',
+          justifyContent: 'flex-start',
+          padding: 0,
           pointerEvents: 'none',
         }}
       >
