@@ -16,6 +16,7 @@ import {
 import { applyAutoLayout } from '@/lib/canvasLayout'
 import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
+import { isSpotlit, isSpotlitRel, spotlightActive, type SpotlightFilters } from '@/lib/spotlight'
 import { useWorkspaceStore, getActiveView, buildElementMap, buildRelationshipMap, allViewsOf } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import {
@@ -164,9 +165,7 @@ function buildNodes(
   workspace: Workspace,
   view: View,
   onDrillIn: (elementId: string) => void,
-  activeTagFilter: string | null,
-  activeStatusFilter: string | null,
-  activeTechFilter: string[],
+  filters: SpotlightFilters,
   viewCountMap: Map<string, number>,
   drillableIds: Set<string>,
   themeStyles: ElementStyle[],
@@ -175,43 +174,15 @@ function buildNodes(
   // Theme styles form the base layer; workspace styles override them per tag
   const styleIndex = buildStyleIndex([...themeStyles, ...workspace.views.configuration.styles.elements])
 
+  const active = spotlightActive(filters)
   const nodes: Node[] = []
-  const techFilterSet = new Set(activeTechFilter.map((t) => t.toLowerCase()))
-
-  // If the active tag/status filter doesn't match anything in this view (e.g.
-  // a stale filter carried over from another view), suppress it so the canvas
-  // doesn't black out every node. The filter chip is still set in the store —
-  // just rendered as inactive against this view.
-  const tagFilterMatchesAny = !activeTagFilter || view.elements.some((ve) => {
-    const el = elementMap.get(ve.id)
-    return el ? el.tags.includes(activeTagFilter) : false
-  })
-  const statusFilterMatchesAny = !activeStatusFilter || view.elements.some((ve) => {
-    const el = elementMap.get(ve.id)
-    return el ? el.status === activeStatusFilter : false
-  })
-  const effectiveTagFilter = tagFilterMatchesAny ? activeTagFilter : null
-  const effectiveStatusFilter = statusFilterMatchesAny ? activeStatusFilter : null
 
   for (const viewEl of view.elements) {
     const element = elementMap.get(viewEl.id)
     if (!element) continue
 
     const style = getElementStyle(element, styleIndex)
-    const matchesTag = !effectiveTagFilter || element.tags.includes(effectiveTagFilter)
-    const matchesStatus = !effectiveStatusFilter || element.status === effectiveStatusFilter
-    const techActive = techFilterSet.size > 0
-    const matchesTech = !techActive || (() => {
-      const elTech = ('technology' in element ? element.technology : undefined) as string | undefined
-      if (!elTech) return false
-      const elTechSet = new Set(elTech.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
-      for (const t of techFilterSet) if (!elTechSet.has(t)) return false
-      return true
-    })()
-    // Tag/status filters DIM non-matching elements (existing behavior).
-    // Tech filter HIGHLIGHTS matching elements without dimming the rest.
-    const matchesTagStatus = matchesTag && matchesStatus
-    const techHighlighted = techActive && matchesTech
+    const spotlit = active && isSpotlit(element, filters)
     const pos = { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }
 
     nodes.push({
@@ -224,12 +195,11 @@ function buildNodes(
         childCount: getChildCount(element),
         canDrill: drillableIds.has(element.id),
         onDrillIn,
-        dimmed: !matchesTagStatus,
-        techHighlighted,
+        spotlit,
         viewCount: viewCountMap.get(element.id) ?? 1,
       },
-      style: matchesTagStatus ? undefined : { opacity: 0.18 },
-      className: techHighlighted ? 'c4-node-tech-highlight' : undefined,
+      // No more opacity dim. Spotlit nodes get the ring class; non-matches render normally.
+      className: spotlit ? 'c4-node-spotlit' : undefined,
     })
   }
 
@@ -404,7 +374,7 @@ function buildEdges(
   workspace: Workspace,
   view: View,
   nodes: Node[],
-  activeTechFilter: string[],
+  filters: SpotlightFilters,
 ): Edge[] {
   const relationshipMap = buildRelationshipMap(workspace)
   const relationshipStyles = workspace.views.configuration.styles.relationships
@@ -487,22 +457,14 @@ function buildEdges(
   }
 
   // Build final edges with slot-assigned handles
+  const active = spotlightActive(filters)
   const edges: Edge[] = []
   for (let i = 0; i < edgeInfos.length; i++) {
     const e = edgeInfos[i]
     const srcSlot = sourceSlots.get(i) ?? 'b'
     const tgtSlot = targetSlots.get(i) ?? 'b'
 
-    const techFilterSet = new Set(activeTechFilter.map((t) => t.toLowerCase()))
-    const techActive = techFilterSet.size > 0
-    const matchesTech = !techActive || (() => {
-      const rt = e.rel.technology
-      if (!rt) return false
-      const relTechSet = new Set(rt.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
-      for (const t of techFilterSet) if (!relTechSet.has(t)) return false
-      return true
-    })()
-    const techHighlighted = techActive && matchesTech
+    const spotlit = active && isSpotlitRel(e.rel, filters)
 
     edges.push({
       id: e.rel.id,
@@ -511,8 +473,8 @@ function buildEdges(
       sourceHandle: `${e.sourceSide}-${srcSlot}-source`,
       targetHandle: `${e.targetSide}-${tgtSlot}-target`,
       type: 'relationship',
-      data: { relationship: e.rel, relationshipStyle: e.relStyle, techHighlighted },
-      className: techHighlighted ? 'c4-edge-tech-highlight' : undefined,
+      data: { relationship: e.rel, relationshipStyle: e.relStyle, spotlit },
+      className: spotlit ? 'c4-edge-spotlit' : undefined,
     })
   }
 
@@ -535,9 +497,18 @@ export default function Canvas() {
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
   const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
-  const activeTechFilter = useWorkspaceStore((s) => s.activeTechFilter)
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
+  const activeTechFilter = useWorkspaceStore((s) => s.activeTechFilter)
+  const activeTeamFilter = useWorkspaceStore((s) => s.activeTeamFilter)
   const layoutVersion = useWorkspaceStore((s) => s.layoutVersion)
+
+  const spotlightFilters = useMemo<SpotlightFilters>(() => ({
+    tags: activeTagFilter,
+    statuses: activeStatusFilter,
+    techs: activeTechFilter,
+    teams: activeTeamFilter,
+  }), [activeTagFilter, activeStatusFilter, activeTechFilter, activeTeamFilter])
+
   const minimapMode = useSettingsStore((s) => s.minimapMode)
   const snapToGrid = useSettingsStore((s) => s.snapToGrid)
   const colorTheme = useSettingsStore((s) => s.colorTheme)
@@ -633,7 +604,7 @@ export default function Canvas() {
 
     // 1. Build nodes with raw positions from view
     const drillableIds = buildDrillableSet(workspace)
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, activeTechFilter, viewCountMap, drillableIds, themeStyles)
+    const rawNodes = buildNodes(workspace, view, stableDrillInto, spotlightFilters, viewCountMap, drillableIds, themeStyles)
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
     const relationshipMap = buildRelationshipMap(workspace)
@@ -666,10 +637,10 @@ export default function Canvas() {
     const allNodes = [...overlayNodes, ...laidOut]
 
     // 5. Build final edges using post-layout positions for handle routing
-    const edges = buildEdges(workspace, view, allNodes, activeTechFilter)
+    const edges = buildEdges(workspace, view, allNodes, spotlightFilters)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, activeTagFilter, activeStatusFilter, activeTechFilter, viewCountMap, themeStyles])
+  }, [workspace, view, stableDrillInto, spotlightFilters, viewCountMap, themeStyles])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.

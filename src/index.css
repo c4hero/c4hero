@@ -1557,7 +1557,7 @@ body {
 /* In-node tech-match indicator — a thick rounded rail on the left side,
    inset top and bottom so the ends are visible capsule pills (like an
    active-tab underline, but vertical and bolder). Static, no animation. */
-.c4-tech-marquee {
+.c4-node-spotlit-rail {
   position: absolute;
   top: 14px;
   bottom: 14px;
@@ -1572,14 +1572,14 @@ body {
 
 /* Person-shaped (pill) nodes — same rail style, just nudged inward to
    clear the curved edge. */
-.c4-node-person .c4-tech-marquee {
+.c4-node-person .c4-node-spotlit-rail {
   top: 14px;
   bottom: 14px;
   left: 12px;
 }
 
 /* Edges: thicker accent stroke with a soft glow (static, no marquee). */
-.c4-edge-tech-highlight path.react-flow__edge-path {
+.c4-edge-spotlit path.react-flow__edge-path {
   stroke: var(--canvas-selection, var(--color-accent)) !important;
   stroke-width: 2.6 !important;
   filter: drop-shadow(0 0 4px color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 55%, transparent));

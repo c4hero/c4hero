@@ -13,6 +13,8 @@ import NodeHandles from './NodeHandles'
 import ZoomHoverCard from './ZoomHoverCard'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useZoomLevel } from '@/hooks/useZoomLevel'
+import type { ModelElement } from '@/types/model'
+import type { SpotlightFilters } from '@/lib/spotlight'
 
 /** Map Structurizr shape names to Lucide icons */
 const SHAPE_ICON_MAP: Record<string, LucideIcon> = {
@@ -55,12 +57,18 @@ export default function BaseC4Node({
   isExternal,
 }: BaseC4NodeProps) {
   const storeSelected = useWorkspaceStore((s) => s.selectedElementIds.includes(data.element.id))
-  const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
   // useShallow does a shallow array compare so the inline filter doesn't
   // create a "new reference every render → infinite re-render" loop.
   const elementViolations = useWorkspaceStore(
     useShallow((s) => s.scopeViolations.filter((v) => v.elementId === data.element.id)),
   )
+  const filters = useWorkspaceStore(useShallow((s) => ({
+    tags: s.activeTagFilter,
+    statuses: s.activeStatusFilter,
+    techs: s.activeTechFilter,
+    teams: s.activeTeamFilter,
+  })))
+  const reasonLabel = data.spotlit ? pickSpotlitReason(data.element, filters) : null
   const selected = rfSelected || storeSelected
   const { element, childCount, onDrillIn, viewCount = 1 } = data
   const desc = element.description ?? ''
@@ -118,7 +126,7 @@ export default function BaseC4Node({
       aria-selected={selected}
     >
       <StatusDot status={element.status} />
-      {data.techHighlighted && <span className="c4-tech-marquee" aria-hidden="true" />}
+      {data.spotlit && <span className="c4-node-spotlit-rail" aria-hidden="true" />}
       {elementViolations.length > 0 && (
         <span
           className="c4-node-violation"
@@ -213,9 +221,9 @@ export default function BaseC4Node({
       </div>
 
       <NodeHandles />
-      {activeTagFilter && element.tags.includes(activeTagFilter) && (
+      {reasonLabel && (
         <span
-          className="c4-node-tag-label"
+          className="c4-node-spotlit-label"
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
@@ -233,13 +241,29 @@ export default function BaseC4Node({
             pointerEvents: 'none',
             zIndex: 2,
           }}
-          aria-label={`Tag: ${activeTagFilter}`}
+          aria-label={`Match: ${reasonLabel}`}
         >
-          {activeTagFilter}
+          {reasonLabel}
         </span>
       )}
     </div>
   )
+}
+
+function pickSpotlitReason(el: ModelElement, f: SpotlightFilters): string | null {
+  if (f.techs.length > 0) {
+    const elTech = ('technology' in el ? el.technology : undefined) ?? ''
+    const tokens = elTech.split(',').map((t) => t.trim())
+    const hit = f.techs.find((t) => tokens.some((tok) => tok.toLowerCase() === t.toLowerCase()))
+    if (hit) return hit
+  }
+  if (f.tags.length > 0) {
+    const hit = f.tags.find((t) => el.tags.includes(t))
+    if (hit) return hit
+  }
+  if (f.teams.length > 0 && el.owner && f.teams.includes(el.owner)) return el.owner
+  if (f.statuses.length > 0 && el.status && f.statuses.includes(el.status)) return el.status
+  return null
 }
 
 /** Zoom button with hover card popover */
