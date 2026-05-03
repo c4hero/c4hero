@@ -129,12 +129,19 @@ export default function HighlighterPanel() {
     teams: teams.length,
   }
 
-  const [tab, setTab] = useState<FacetKey>('tags')
+  const [tab, setTabRaw] = useState<FacetKey>('tags')
   const [query, setQuery] = useState('')
   const [tagManagerOpen, setTagManagerOpen] = useState(false)
 
-  // Reset search when switching tabs.
-  useEffect(() => { setQuery('') }, [tab])
+  // Reset search when switching tabs. Done in the setter rather than via
+  // a setState-in-effect so the lint rule (and React's render model) stays
+  // happy.
+  const setTab = (next: FacetKey) => {
+    setTabRaw((prev) => {
+      if (prev !== next) setQuery('')
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!open) return
@@ -144,8 +151,6 @@ export default function HighlighterPanel() {
   }, [open, setOpen])
 
   const containerRef = useRef<HTMLDivElement>(null)
-
-  if (!workspace) return null
 
   // Build the active tab's content from a single descriptor so the rest of
   // the panel stays purely presentational.
@@ -224,6 +229,8 @@ export default function HighlighterPanel() {
   // Stable order — values keep their position regardless of selection so
   // toggling a chip doesn't shuffle the layout under the user's cursor.
   const ordered = filteredValues
+
+  if (!workspace) return null
 
   return (
     <div

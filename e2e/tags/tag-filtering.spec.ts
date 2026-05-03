@@ -36,7 +36,7 @@ test.describe('Tag Filtering', () => {
     await workspace.clickNode('New System')
     await workspace.addTag('Critical')
 
-    let panel = await openHighlighter(workspace)
+    const panel = await openHighlighter(workspace)
     await panel.getByRole('button', { name: /^Critical\b/, exact: false }).click()
     await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
