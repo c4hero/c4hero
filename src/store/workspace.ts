@@ -90,10 +90,11 @@ interface WorkspaceState extends UndoState {
   clearFocusElement: () => void
 
   // Canvas settings
-  activeTagFilter: string | null
-  activeStatusFilter: ElementStatus | null
+  activeTagFilter: string[]
+  activeStatusFilter: ElementStatus[]
   /** Multi-select tech filter — element matches if any of its technology tokens is in this set. */
   activeTechFilter: string[]
+  activeTeamFilter: string[]
   minimapEnabled: boolean
   snapToGrid: boolean
   multiSelectMode: boolean
@@ -187,10 +188,15 @@ interface WorkspaceState extends UndoState {
   layoutVersion: number
 
   // Canvas settings
-  setActiveTagFilter: (tag: string | null) => void
-  setActiveStatusFilter: (status: ElementStatus | null) => void
+  setActiveTagFilter: (tags: string[]) => void
+  toggleActiveTagFilter: (tag: string) => void
+  setActiveStatusFilter: (statuses: ElementStatus[]) => void
+  toggleActiveStatusFilter: (status: ElementStatus) => void
   setActiveTechFilter: (techs: string[]) => void
   toggleActiveTechFilter: (tech: string) => void
+  setActiveTeamFilter: (teams: string[]) => void
+  toggleActiveTeamFilter: (team: string) => void
+  clearAllSpotlightFilters: () => void
   updateElementStyle: (style: import('@/types/model').ElementStyle) => void
   removeElementStyle: (tag: string) => void
   renameTag: (oldTag: string, newTag: string) => void
@@ -333,9 +339,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   viewsPanelOpen: false,
   focusElementId: null,
   clearFocusElement: () => set({ focusElementId: null }),
-  activeTagFilter: null,
-  activeStatusFilter: null,
+  activeTagFilter: [],
+  activeStatusFilter: [],
   activeTechFilter: [],
+  activeTeamFilter: [],
   minimapEnabled: true,
   snapToGrid: false,
   multiSelectMode: false,
@@ -371,9 +378,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       redoStack: [],
       lastSavedUndoLength: 0, // reset so the save indicator doesn't inherit a stale saved position
       // Clear view filters so they don't bleed from a previous workspace
-      activeTagFilter: null,
-      activeStatusFilter: null,
+      activeTagFilter: [],
+      activeStatusFilter: [],
       activeTechFilter: [],
+      activeTeamFilter: [],
       scopeViolations: validateScope(workspace),
     })
   },
@@ -1381,14 +1389,36 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   // ─── Canvas Settings ──────────────────────────────────────────
 
-  setActiveTagFilter: (tag) => set({ activeTagFilter: tag }),
-  setActiveStatusFilter: (status) => set({ activeStatusFilter: status }),
+  setActiveTagFilter: (tags) => set({ activeTagFilter: tags }),
+  toggleActiveTagFilter: (tag) => set((s) => ({
+    activeTagFilter: s.activeTagFilter.includes(tag)
+      ? s.activeTagFilter.filter((t) => t !== tag)
+      : [...s.activeTagFilter, tag],
+  })),
+  setActiveStatusFilter: (statuses) => set({ activeStatusFilter: statuses }),
+  toggleActiveStatusFilter: (status) => set((s) => ({
+    activeStatusFilter: s.activeStatusFilter.includes(status)
+      ? s.activeStatusFilter.filter((x) => x !== status)
+      : [...s.activeStatusFilter, status],
+  })),
   setActiveTechFilter: (techs) => set({ activeTechFilter: techs }),
   toggleActiveTechFilter: (tech) => set((s) => ({
     activeTechFilter: s.activeTechFilter.includes(tech)
       ? s.activeTechFilter.filter((t) => t !== tech)
       : [...s.activeTechFilter, tech],
   })),
+  setActiveTeamFilter: (teams) => set({ activeTeamFilter: teams }),
+  toggleActiveTeamFilter: (team) => set((s) => ({
+    activeTeamFilter: s.activeTeamFilter.includes(team)
+      ? s.activeTeamFilter.filter((t) => t !== team)
+      : [...s.activeTeamFilter, team],
+  })),
+  clearAllSpotlightFilters: () => set({
+    activeTagFilter: [],
+    activeStatusFilter: [],
+    activeTechFilter: [],
+    activeTeamFilter: [],
+  }),
   updateElementStyle: (style) => set((s) => {
     const ws = cloneWs(s)
     if (!ws) return s
@@ -1438,7 +1468,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return {
       ...pushUndo(s),
       workspace: ws,
-      activeTagFilter: s.activeTagFilter === oldTag ? newTag : s.activeTagFilter,
+      activeTagFilter: s.activeTagFilter.map((t) => (t === oldTag ? newTag : t)),
     }
   }),
 
@@ -1461,7 +1491,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return {
       ...pushUndo(s),
       workspace: ws,
-      activeTagFilter: s.activeTagFilter === tag ? null : s.activeTagFilter,
+      activeTagFilter: s.activeTagFilter.filter((t) => t !== tag),
     }
   }),
 

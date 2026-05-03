@@ -691,12 +691,14 @@ describe('multiSelectMode', () => {
 
   it('loadWorkspace clears activeTagFilter and activeStatusFilter', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
-    useWorkspaceStore.setState({ activeTagFilter: 'Database', activeStatusFilter: 'Live' })
-    expect(useWorkspaceStore.getState().activeTagFilter).toBe('Database')
+    useWorkspaceStore.setState({ activeTagFilter: ['Database'], activeStatusFilter: ['Live'], activeTechFilter: ['Go'], activeTeamFilter: ['Platform'] })
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual(['Database'])
     // Load a fresh workspace — filters should reset
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
-    expect(useWorkspaceStore.getState().activeTagFilter).toBeNull()
-    expect(useWorkspaceStore.getState().activeStatusFilter).toBeNull()
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
+    expect(useWorkspaceStore.getState().activeStatusFilter).toEqual([])
+    expect(useWorkspaceStore.getState().activeTechFilter).toEqual([])
+    expect(useWorkspaceStore.getState().activeTeamFilter).toEqual([])
   })
 })
 
@@ -2819,9 +2821,9 @@ describe('renameTag', () => {
   })
 
   it('updates the active tag filter when renaming the active tag', () => {
-    useWorkspaceStore.getState().setActiveTagFilter('VIP')
+    useWorkspaceStore.getState().setActiveTagFilter(['VIP'])
     useWorkspaceStore.getState().renameTag('VIP', 'Premium')
-    expect(useWorkspaceStore.getState().activeTagFilter).toBe('Premium')
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual(['Premium'])
   })
 
   it('supports undo', () => {
@@ -2894,9 +2896,9 @@ describe('removeTagGlobal', () => {
   })
 
   it('clears the active tag filter when removing the active tag', () => {
-    useWorkspaceStore.getState().setActiveTagFilter('VIP')
+    useWorkspaceStore.getState().setActiveTagFilter(['VIP'])
     useWorkspaceStore.getState().removeTagGlobal('VIP')
-    expect(useWorkspaceStore.getState().activeTagFilter).toBeNull()
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
   })
 
   it('supports undo', () => {
@@ -3183,33 +3185,47 @@ describe('setActiveTagFilter and setActiveStatusFilter', () => {
   })
 
   it('setActiveTagFilter sets the filter', () => {
-    useWorkspaceStore.getState().setActiveTagFilter('VIP')
-    expect(useWorkspaceStore.getState().activeTagFilter).toBe('VIP')
+    useWorkspaceStore.getState().setActiveTagFilter(['VIP'])
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual(['VIP'])
   })
 
-  it('setActiveTagFilter clears the filter with null', () => {
-    useWorkspaceStore.getState().setActiveTagFilter('VIP')
-    useWorkspaceStore.getState().setActiveTagFilter(null)
-    expect(useWorkspaceStore.getState().activeTagFilter).toBeNull()
+  it('setActiveTagFilter clears the filter with empty array', () => {
+    useWorkspaceStore.getState().setActiveTagFilter(['VIP'])
+    useWorkspaceStore.getState().setActiveTagFilter([])
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
   })
 
   it('setActiveStatusFilter sets the status filter', () => {
-    useWorkspaceStore.getState().setActiveStatusFilter('Live')
-    expect(useWorkspaceStore.getState().activeStatusFilter).toBe('Live')
+    useWorkspaceStore.getState().setActiveStatusFilter(['Live'])
+    expect(useWorkspaceStore.getState().activeStatusFilter).toEqual(['Live'])
   })
 
-  it('setActiveStatusFilter clears the filter with null', () => {
-    useWorkspaceStore.getState().setActiveStatusFilter('Deprecated')
-    useWorkspaceStore.getState().setActiveStatusFilter(null)
-    expect(useWorkspaceStore.getState().activeStatusFilter).toBeNull()
+  it('setActiveStatusFilter clears the filter with empty array', () => {
+    useWorkspaceStore.getState().setActiveStatusFilter(['Deprecated'])
+    useWorkspaceStore.getState().setActiveStatusFilter([])
+    expect(useWorkspaceStore.getState().activeStatusFilter).toEqual([])
   })
 
   it('loadWorkspace resets both filters', () => {
-    useWorkspaceStore.getState().setActiveTagFilter('VIP')
-    useWorkspaceStore.getState().setActiveStatusFilter('Live')
+    useWorkspaceStore.getState().setActiveTagFilter(['VIP'])
+    useWorkspaceStore.getState().setActiveStatusFilter(['Live'])
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
-    expect(useWorkspaceStore.getState().activeTagFilter).toBeNull()
-    expect(useWorkspaceStore.getState().activeStatusFilter).toBeNull()
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
+    expect(useWorkspaceStore.getState().activeStatusFilter).toEqual([])
+  })
+
+  it('clearAllSpotlightFilters resets all four facets', () => {
+    const s = useWorkspaceStore.getState()
+    s.setActiveTagFilter(['x'])
+    s.setActiveStatusFilter(['Live'])
+    s.setActiveTechFilter(['Go'])
+    s.setActiveTeamFilter(['Platform'])
+    s.clearAllSpotlightFilters()
+    const after = useWorkspaceStore.getState()
+    expect(after.activeTagFilter).toEqual([])
+    expect(after.activeStatusFilter).toEqual([])
+    expect(after.activeTechFilter).toEqual([])
+    expect(after.activeTeamFilter).toEqual([])
   })
 })
 
