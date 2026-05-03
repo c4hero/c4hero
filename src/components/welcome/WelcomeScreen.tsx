@@ -83,7 +83,9 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlSlug])
 
-  const view = initialView ?? (getCurrentDirHandle() !== null ? 'collection' : 'startup')
+  const view = !hasFolderAccess()
+    ? 'startup'
+    : initialView ?? (getCurrentDirHandle() !== null ? 'collection' : 'startup')
   function setView(v: 'startup' | 'collection', slug?: string) {
     if (v === 'collection') {
       const s = slug ?? getCurrentDirHandle()?.name ?? urlSlug ?? ''
@@ -691,8 +693,17 @@ function StartupView({
           <ArchitectureArtwork />
           <h1>Diagram your <em>architecture</em>.</h1>
           <p className="welcome-lede">
-            Visual architecture modelling that lives with your code. Open a folder, or start a
-            new collection — c4hero saves everything as plain <code>.dsl</code> documents.
+            {canUseCollections ? (
+              <>
+                Visual architecture modelling saved as plain <code>.dsl</code> documents. Open an
+                existing collection (a folder of <code>.dsl</code> files), or start a new one.
+              </>
+            ) : (
+              <>
+                Visual architecture modelling saved as plain <code>.dsl</code> documents. Open
+                one to get started.
+              </>
+            )}
           </p>
 
           {canUseCollections ? (
@@ -717,7 +728,6 @@ function StartupView({
           )}
 
           <FeatureStrip />
-          <p className="welcome-code-line">Architecture diagrams that live with your code.</p>
         </div>
       )}
 

@@ -276,7 +276,7 @@ test.describe('Collection workspace canvas DSL journey', () => {
     if (settingsText === null) throw new Error('Expected collection settings to be written')
     expect(JSON.parse(settingsText) as { name?: string }).toMatchObject({ name: collectionName })
 
-    await page.getByRole('button', { name: /New Workspace/ }).click()
+    await page.getByRole('button', { name: /New Workspace/ }).first().click()
     await page.locator('input:not([type="file"]):not([type="checkbox"])').first().fill(workspaceName)
     await page.getByPlaceholder('Briefly describe this workspace...').fill(workspaceDescription)
     await page.getByRole('button', { name: 'Create Workspace' }).click()

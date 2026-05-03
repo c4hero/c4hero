@@ -35,7 +35,7 @@ test.describe('Core end-to-end journeys', () => {
   test('1. welcome screen can transition from startup into a loaded sample workspace', async ({ workspace }) => {
     await workspace.goto()
 
-    await expect(workspace.page.getByText('Visual architecture modelling...')).toBeVisible()
+    await expect(workspace.page.getByText(/Visual architecture modelling/)).toBeVisible()
     await workspace.page.evaluate(() => (window as Record<string, unknown>).__testLoadSample?.())
 
     await workspace.page.waitForURL(/\/collection\//)
@@ -163,6 +163,10 @@ test.describe('Core end-to-end journeys', () => {
 
     await workspace.openSearch()
     await workspace.page.getByRole('dialog', { name: 'Search' }).getByRole('button', { name: 'Critical' }).click()
+    // After tag click, focus is on the button — clicking the search input
+    // returns focus there so the Enter keydown reaches the dialog's keyboard
+    // handler (which selects results[selectedIndex]).
+    await workspace.page.getByPlaceholder('Search elements, views, technology...').click()
     await workspace.page.keyboard.press('Enter')
     await workspace.expectInspectorFor('Catalog Service')
 

@@ -186,6 +186,7 @@ export default function FloatingTopPill() {
     <>
       <div
         data-canvas-fit-chrome="top"
+        data-canvas-chrome="top-pill"
         style={{
           position: 'fixed',
           top: 'max(14px, calc(env(safe-area-inset-top, 0px) + 8px))',

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
-import { saveDSLFile, getCurrentFileHandle } from '@/lib/fileIO'
+import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess } from '@/lib/fileIO'
 import { getCurrentDirHandle } from '@/lib/folderIO'
 import { announce } from '@/lib/announce'
 
@@ -25,6 +25,7 @@ export default function SaveIndicator() {
   const [savedUndoLength, setSavedUndoLength] = useState(lastSavedUndoLength)
   const savedFlashTimer = useRef<ReturnType<typeof setTimeout>>(null)
   const hasFileHandle = isWorkspaceLinked(activeFilename)
+  const canLinkFiles = hasFileSystemAccess()
 
   async function handleSave() {
     if (!workspace) return
@@ -64,13 +65,14 @@ export default function SaveIndicator() {
     : isFileDirty ? '0 0 6px var(--color-warning)'
     : '0 0 6px var(--color-success)'
   const tooltip =
-    saveStatus === 'saving' ? 'Saving\u2026'
-    : saveStatus === 'saved' ? 'Saved to file'
-    : saveStatus === 'error' ? 'Save failed \u2014 click to retry'
+    saveStatus === 'saving' ? (canLinkFiles ? 'Saving\u2026' : 'Downloading\u2026')
+    : saveStatus === 'saved' ? (canLinkFiles ? 'Saved to file' : 'Downloaded')
+    : saveStatus === 'error' ? (canLinkFiles ? 'Save failed \u2014 click to retry' : 'Download failed \u2014 click to retry')
+    : !canLinkFiles ? 'Click to download .dsl'
     : !hasFileHandle ? 'No file linked \u2014 click to save to a .dsl file'
     : isFileDirty ? 'Unsaved changes \u2014 click to save'
     : 'All changes saved'
-  const isUnlinked = !hasFileHandle && saveStatus === 'idle'
+  const isUnlinked = canLinkFiles && !hasFileHandle && saveStatus === 'idle'
 
   const dotBg = isUnlinked ? 'var(--color-warning)' : dotColor
   const dotShadow = isUnlinked ? '0 0 6px var(--color-warning)' : dotGlow

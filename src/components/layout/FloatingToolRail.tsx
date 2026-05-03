@@ -129,6 +129,7 @@ export default function FloatingToolRail() {
       role="toolbar"
       aria-label="Canvas tools"
       data-canvas-fit-chrome="left"
+      data-canvas-chrome="tool-rail"
       style={{
         position: 'fixed',
         left: 14,

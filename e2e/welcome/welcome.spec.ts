@@ -4,9 +4,11 @@ test.describe('Welcome Screen', () => {
   test('renders welcome screen with the current startup actions', async ({ workspace }) => {
     await workspace.goto()
     await expect(workspace.page.getByText('Visual architecture modelling')).toBeVisible()
-    await expect(workspace.page.getByText('Open collection')).toBeVisible()
-    await expect(workspace.page.getByText('New collection')).toBeVisible()
-    await expect(workspace.page.getByText('Architecture diagrams that')).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'Open collection' })).toBeVisible()
+    await expect(workspace.page.getByRole('button', { name: 'New collection' })).toBeVisible()
+    // Footer slogan was removed in the welcome redesign; the headline carries
+    // the diagram-y framing now.
+    await expect(workspace.page.getByRole('heading', { name: /Diagram your architecture/ })).toBeVisible()
   })
 
   test('loads sample workspace and shows canvas', async ({ workspace }) => {
@@ -26,7 +28,7 @@ test.describe('Welcome Screen', () => {
 
   test('welcome screen shows capability pills for the supported workflow', async ({ workspace }) => {
     await workspace.goto()
-    await expect(workspace.page.getByText('.dsl files')).toBeVisible()
+    await expect(workspace.page.getByText('.dsl files', { exact: true })).toBeVisible()
     await expect(workspace.page.getByText('Git-friendly')).toBeVisible()
     await expect(workspace.page.getByText('C4 model')).toBeVisible()
     await expect(workspace.page.getByText('Export PNG/SVG')).toBeVisible()

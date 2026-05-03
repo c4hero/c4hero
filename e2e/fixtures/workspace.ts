@@ -302,7 +302,9 @@ export class WorkspaceHelper {
   }
 
   async selectStatus(value: string) {
-    await this.page.getByTestId('element-status').selectOption(value)
+    // Status is now rendered as a button group (replaced the native <select>);
+    // each option is a button whose accessible name is "Status: <value>".
+    await this.page.getByTestId('element-status').getByRole('button', { name: `Status: ${value}` }).click()
   }
 
   async toggleInspectorTab(name: 'Properties' | 'Relations' | 'Tags') {

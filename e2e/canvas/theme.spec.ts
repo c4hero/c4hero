@@ -3,12 +3,15 @@ import { test, expect } from '../fixtures/workspace'
 async function openCanvasSettings(page: import('@playwright/test').Page) {
   const settingsBtn = page.getByRole('button', { name: /canvas settings/i })
   await settingsBtn.first().click()
-  await page.getByRole('radio', { name: 'Structurizr' }).waitFor({ state: 'visible' })
+  // Theme picker trigger is a button with aria-haspopup="listbox". Click it
+  // to open the popover with the option list.
+  await page.locator('button[aria-haspopup="listbox"]').click()
+  await page.getByRole('option', { name: 'Structurizr' }).waitFor({ state: 'visible' })
 }
 
 async function switchToStructurizr(page: import('@playwright/test').Page) {
   await openCanvasSettings(page)
-  await page.getByRole('radio', { name: 'Structurizr' }).click()
+  await page.getByRole('option', { name: 'Structurizr' }).click()
   await page.keyboard.press('Escape')
   await page.waitForTimeout(200)
 }
