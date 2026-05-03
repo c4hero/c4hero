@@ -63,14 +63,13 @@ export function fitNodesToViewport(
 
   const padding = options.padding ?? DEFAULT_PADDING
   const insets = getCanvasFitInsets(canvas)
-  // Symmetrize the horizontal inset so a single-sided chrome (e.g. just the
-  // tool rail on the left, no inspector on the right) doesn't push the
-  // fitted diagram off-center. Same idea vertically: top + bottom mirror so
-  // the content reads as centered regardless of which side has chrome.
+  // Mirror horizontal insets so single-sided chrome (e.g. tool rail on the
+  // left, no panel on the right) doesn't push the fitted diagram off-center.
   const horizontal = Math.max(insets.left, insets.right)
-  const vertical = Math.max(insets.top, insets.bottom)
   insets.left = insets.right = horizontal
-  insets.top = insets.bottom = vertical
+  // Fixed bottom margin — vertical asymmetry is intentional: the top pill
+  // reserves what it needs, the bottom only reserves a minimum gutter.
+  insets.bottom = Math.max(insets.bottom, 16)
   const usableWidth = Math.max(1, canvas.width - insets.left - insets.right)
   const usableHeight = Math.max(1, canvas.height - insets.top - insets.bottom)
   const paddedWidth = Math.max(1, usableWidth * (1 - padding * 2))
