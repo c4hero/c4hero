@@ -1585,6 +1585,36 @@ body {
   filter: drop-shadow(0 0 4px color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 55%, transparent));
 }
 
+/* Spotlit node — bright ring around the node body so matches POP against
+   dimmed neighbors. We target the INNER .c4-node div (descendant of the
+   React Flow wrapper that carries .c4-node-spotlit) so the box-shadow
+   follows the actual node shape (rounded rect or person pill). Color is
+   derived from --node-glow (the node's tier color, set in BaseC4Node from
+   the resolved borderColor) and brightened with white so it reads as a
+   glow rather than just a thicker stroke. */
+.c4-node-spotlit > .c4-node {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 70%, white 40%),
+    0 0 22px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 50%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Faded sibling — non-matching node when spotlight is active. Stays
+   readable as ghost context but visibly recedes. Edges with a faded
+   endpoint also dim so the focus stays on the spotlit subgraph. */
+.react-flow__node.c4-node-spotlit-faded {
+  opacity: 0.28;
+  filter: saturate(0.7);
+  transition: opacity 0.18s ease, filter 0.18s ease;
+}
+.c4-edge-spotlit-faded path.react-flow__edge-path {
+  opacity: 0.18 !important;
+  transition: opacity 0.18s ease;
+}
+.c4-edge-spotlit-faded text {
+  opacity: 0.35;
+}
+
 .c4-node-violation {
   position: absolute;
   top: -8px;

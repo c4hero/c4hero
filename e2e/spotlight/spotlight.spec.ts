@@ -29,18 +29,25 @@ test.describe('spotlight panel', () => {
     await expect(workspace.page.getByLabel('Element properties')).toBeVisible()
   })
 
-  test('spotlit nodes are not dimmed; non-matches stay at full opacity', async ({ workspace }) => {
+  test('focus mode: spotlit nodes pop, non-matches fade as ghost context', async ({ workspace }) => {
     await workspace.loadSample()
 
     await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
     const panel = workspace.page.getByRole('complementary', { name: 'Highlighter' })
     await panel.getByRole('button', { name: /^Customer\b/, exact: false }).click()
 
-    const nodes = workspace.page.locator('.react-flow__node:not(.react-flow__node-group)')
-    const count = await nodes.count()
-    for (let i = 0; i < count; i++) {
-      const opacity = await nodes.nth(i).evaluate((n) => Number(getComputedStyle(n).opacity))
-      expect(opacity).toBeGreaterThanOrEqual(0.95)
-    }
+    // At least one node should carry the spotlit class — the focused match.
+    const spotlit = workspace.page.locator('.react-flow__node.c4-node-spotlit')
+    await expect.poll(async () => spotlit.count()).toBeGreaterThan(0)
+
+    // At least one other node should carry the faded class — ghost context.
+    const faded = workspace.page.locator('.react-flow__node.c4-node-spotlit-faded')
+    await expect.poll(async () => faded.count()).toBeGreaterThan(0)
+
+    // Faded nodes are visibly dimmed (allow a beat for the opacity transition).
+    await expect.poll(
+      async () => Number(await faded.first().evaluate((n) => getComputedStyle(n).opacity)),
+      { timeout: 2000 },
+    ).toBeLessThan(0.5)
   })
 })

@@ -198,8 +198,10 @@ function buildNodes(
         spotlit,
         viewCount: viewCountMap.get(element.id) ?? 1,
       },
-      // No more opacity dim. Spotlit nodes get the ring class; non-matches render normally.
-      className: spotlit ? 'c4-node-spotlit' : undefined,
+      // Highlighter focus mode: matched nodes get the spotlit ring; the rest
+      // fade to ghost context. When no facets are active, every node renders
+      // normally (no class either way).
+      className: active ? (spotlit ? 'c4-node-spotlit' : 'c4-node-spotlit-faded') : undefined,
     })
   }
 
@@ -457,17 +459,27 @@ function buildEdges(
   }
 
   // Build final edges with slot-assigned handles.
-  // Edges only spotlight when a tech filter is active (the only facet that
-  // applies to relationships). Without this gate, tag/status/team selections
-  // would light every edge because isSpotlitRel is vacuously true with no techs.
+  // Spotlight rules:
+  //   - Tech filter active: edges that match the tech AND get the bright ring.
+  //   - Any facet active: edges whose source or target is faded also fade so
+  //     focus stays on the spotlit subgraph.
+  const active = spotlightActive(filters)
   const techActive = filters.techs.length > 0
+  const spotlitNodeIds = new Set(nodes.filter((n) => (n.data as { spotlit?: boolean })?.spotlit).map((n) => n.id))
   const edges: Edge[] = []
   for (let i = 0; i < edgeInfos.length; i++) {
     const e = edgeInfos[i]
     const srcSlot = sourceSlots.get(i) ?? 'b'
     const tgtSlot = targetSlots.get(i) ?? 'b'
 
-    const spotlit = techActive && isSpotlitRel(e.rel, filters)
+    const techSpotlit = techActive && isSpotlitRel(e.rel, filters)
+    const endpointsSpotlit = spotlitNodeIds.has(e.sourceId) && spotlitNodeIds.has(e.targetId)
+    const spotlit = techSpotlit || (active && endpointsSpotlit)
+    const faded = active && !spotlit
+
+    let className: string | undefined
+    if (spotlit) className = 'c4-edge-spotlit'
+    else if (faded) className = 'c4-edge-spotlit-faded'
 
     edges.push({
       id: e.rel.id,
@@ -477,7 +489,7 @@ function buildEdges(
       targetHandle: `${e.targetSide}-${tgtSlot}-target`,
       type: 'relationship',
       data: { relationship: e.rel, relationshipStyle: e.relStyle, spotlit },
-      className: spotlit ? 'c4-edge-spotlit' : undefined,
+      className,
     })
   }
 
