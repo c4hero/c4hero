@@ -112,7 +112,14 @@ export default function SpotlightPanel() {
   const viewTeams = useMemo(() => Array.from(teamCounts.keys()).sort((a, b) => a.localeCompare(b)), [teamCounts])
 
   const tagStyles = workspace?.views.configuration.styles.elements ?? []
-  const tagColorFor = (t: string) => tagStyles.find((s) => s.tag === t)?.background
+  // Tag chips render with the SAME background + foreground + stroke as the
+  // node tag style — so the chip in the panel previews exactly what the node
+  // will look like once highlighted.
+  const tagSwatchFor = (t: string): { bg?: string; color?: string; stroke?: string } | undefined => {
+    const s = tagStyles.find((x) => x.tag === t)
+    if (!s) return undefined
+    return { bg: s.background, color: s.color, stroke: s.stroke }
+  }
 
   const total = tags.length + statuses.length + techs.length + teams.length
   const counts: Record<FacetKey, number> = {
@@ -150,7 +157,7 @@ export default function SpotlightPanel() {
     setMode: (m: 'any' | 'all') => void
     onToggle: (v: string) => void
     onClear: () => void
-    colorFor?: (v: string) => string | undefined
+    colorFor?: (v: string) => string | { bg?: string; color?: string; stroke?: string } | undefined
     label: string
     placeholder: string
   } = (() => {
@@ -164,7 +171,7 @@ export default function SpotlightPanel() {
           setMode: setTagMode,
           onToggle: toggleTag,
           onClear: () => setTags([]),
-          colorFor: tagColorFor,
+          colorFor: tagSwatchFor,
           label: 'tags',
           placeholder: 'Search tags…',
         }
@@ -214,12 +221,9 @@ export default function SpotlightPanel() {
     return tabContent.available.filter((v) => v.toLowerCase().includes(q))
   }, [tabContent.available, query])
 
-  // Selected-first ordering inside the tab.
-  const ordered = useMemo(() => {
-    const sel = filteredValues.filter((v) => tabContent.selected.includes(v))
-    const unsel = filteredValues.filter((v) => !tabContent.selected.includes(v))
-    return [...sel, ...unsel]
-  }, [filteredValues, tabContent.selected])
+  // Stable order — values keep their position regardless of selection so
+  // toggling a chip doesn't shuffle the layout under the user's cursor.
+  const ordered = filteredValues
 
   return (
     <div
@@ -519,8 +523,12 @@ export default function SpotlightPanel() {
             )}
             {ordered.map((value) => {
               const isSel = tabContent.selected.includes(value)
-              const swatch = tabContent.colorFor?.(value)
+              const raw = tabContent.colorFor?.(value)
+              const swatch = typeof raw === 'string' ? { bg: raw } : raw
               const cnt = tabContent.counts.get(value) ?? 0
+              const selBg = swatch?.bg ?? 'var(--color-accent)'
+              const selFg = swatch?.color ?? 'var(--color-bg-primary)'
+              const dotBg = swatch?.stroke ?? swatch?.bg ?? 'var(--color-accent)'
               return (
                 <button
                   key={value}
@@ -537,9 +545,11 @@ export default function SpotlightPanel() {
                     gap: 5,
                     fontSize: 11,
                     fontWeight: 600,
-                    background: isSel ? (swatch ?? 'var(--color-accent)') : 'var(--color-surface-2)',
-                    color: isSel ? 'var(--color-bg-primary)' : 'var(--color-text-primary)',
-                    border: isSel ? 'none' : '1px solid var(--color-border)',
+                    background: isSel ? selBg : 'var(--color-surface-2)',
+                    color: isSel ? selFg : 'var(--color-text-primary)',
+                    border: isSel
+                      ? `1px solid ${swatch?.stroke ?? selBg}`
+                      : '1px solid var(--color-border)',
                     cursor: 'pointer',
                     maxWidth: '100%',
                     overflow: 'hidden',
@@ -553,7 +563,7 @@ export default function SpotlightPanel() {
                         width: 6,
                         height: 6,
                         borderRadius: '50%',
-                        background: isSel ? 'var(--glass-bg)' : swatch,
+                        background: isSel ? selFg : dotBg,
                         flexShrink: 0,
                       }}
                     />
