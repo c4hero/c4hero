@@ -1,8 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
-import { X, Plus, ArrowRight, ExternalLink, Sparkles, Loader2, Eye, ChevronRight, Trash2 } from 'lucide-react'
-import { generateDescription, getAIConfig } from '@/lib/ai'
+import { X, Plus, ArrowRight, ExternalLink, Eye, ChevronRight, Trash2 } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
@@ -89,29 +88,6 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const hasLocation = element.type === 'person' || element.type === 'softwareSystem'
   const location = (element as Person | SoftwareSystem).location
   const typeColor = TYPE_COLORS[element.type] ?? 'var(--color-accent)'
-
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiError, setAiError] = useState<string | null>(null)
-
-  const handleGenerateDescription = async () => {
-    if (!getAIConfig()) return
-    setAiLoading(true)
-    setAiError(null)
-    try {
-      const desc = await generateDescription(
-        element.name,
-        getElementTypeLabel(element),
-        hasTech ? tech : undefined,
-        workspace?.name,
-      )
-      if (desc) updateElement(element.id, { description: desc })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'AI description generation failed'
-      setAiError(msg)
-    } finally {
-      setAiLoading(false)
-    }
-  }
 
   // Find which views contain this element
   const appearsInViews = workspace ? getAllViews(workspace).filter(v =>
@@ -206,25 +182,6 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             <div>
               <FieldLabel>Description</FieldLabel>
               <EditableField value={element.description ?? ''} placeholder="Describe this element..." aria-label="Description" onLiveChange={(v) => updateElementLive(element.id, { description: v || undefined })} onCommit={(v) => updateElement(element.id, { description: v || undefined })} multiline />
-              {getAIConfig() && (
-                <>
-                  <button
-                    onClick={handleGenerateDescription}
-                    disabled={aiLoading}
-                    className="mt-1.5 flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium transition-colors hover:bg-[var(--color-surface-3)]"
-                    style={{ color: 'var(--color-accent)' }}
-                    data-testid="ai-generate-description"
-                  >
-                    {aiLoading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                    {aiLoading ? 'Generating...' : 'Generate with AI'}
-                  </button>
-                  {aiError && (
-                    <div className="mt-1 rounded px-2 py-1 text-[10px]" style={{ color: 'var(--color-error)', background: 'var(--color-tint-error)' }}>
-                      {aiError}
-                    </div>
-                  )}
-                </>
-              )}
             </div>
 
             {/* Status */}

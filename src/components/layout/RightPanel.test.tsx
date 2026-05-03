@@ -4,11 +4,6 @@ import { useWorkspaceStore } from '@/store/workspace'
 import type { Workspace } from '@/types/model'
 import RightPanel from './RightPanel'
 
-vi.mock('@/lib/ai', () => ({
-  getAIConfig: () => null,
-  generateDescription: vi.fn(),
-}))
-
 vi.mock('lucide-react', () => ({
   X: () => null,
   Plus: () => null,

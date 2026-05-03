@@ -23,16 +23,6 @@ vi.mock('lucide-react', () => ({
   X: () => null,
 }))
 
-// Mock AI dialogs (lazy-loaded)
-vi.mock('@/components/ai/AISettingsDialog', () => ({ default: () => null }))
-vi.mock('@/components/ai/DescribeSystemDialog', () => ({ default: () => null }))
-
-// Mock AI lib
-vi.mock('@/lib/ai', () => ({
-  getAIConfig: () => null,
-  generateDescription: vi.fn(),
-}))
-
 // Mock fileIO — hasFileSystemAccess returns false so saveDSLFile won't be called on blank workspace
 vi.mock('@/lib/fileIO', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/lib/fileIO')>()
