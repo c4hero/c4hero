@@ -13,8 +13,6 @@ import NodeHandles from './NodeHandles'
 import ZoomHoverCard from './ZoomHoverCard'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useZoomLevel } from '@/hooks/useZoomLevel'
-import type { ModelElement } from '@/types/model'
-import type { SpotlightFilters } from '@/lib/spotlight'
 import { pickSpotlitReason } from '@/lib/spotlight'
 
 /** Map Structurizr shape names to Lucide icons */

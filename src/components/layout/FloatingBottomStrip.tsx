@@ -4,7 +4,6 @@ import { useWorkspaceStore, buildElementMap, BUILTIN_TAGS } from '@/store/worksp
 import type { ElementStyle } from '@/types/model'
 import { X, Palette, Pencil, Plus, Check, AlertTriangle } from 'lucide-react'
 import type { ScopeViolation } from '@/lib/scopeValidation'
-import SpotlightBar from './spotlight/SpotlightBar'
 
 const DEFAULT_BUILTIN_TAGS = ['Person', 'Software System', 'Container', 'Component', 'Element', 'Relationship',
   'Web Application', 'Service', 'Database', 'Queue', 'Mobile App', 'File System']
@@ -44,7 +43,6 @@ export default function FloatingBottomStrip() {
             pointerEvents: 'auto',
           }}
         >
-          <SpotlightBar />
           <button
             type="button"
             onClick={() => setTagManagerOpen((o) => !o)}

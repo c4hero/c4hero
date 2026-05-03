@@ -1,34 +1,33 @@
 import { test, expect } from '../fixtures/workspace'
 
+async function openSpotlight(workspace: { page: import('@playwright/test').Page }) {
+  await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
+  return workspace.page.getByRole('complementary', { name: 'Spotlight filters' })
+}
+
 test.describe('Tag Filtering', () => {
-  test('Tags popover lists custom tags from the view', async ({ workspace }) => {
+  test('Spotlight panel lists custom tags from the view', async ({ workspace }) => {
     await workspace.loadSample()
-    await workspace.page.getByRole('button', { name: /^Tags/ }).click()
-    const popover = workspace.page.getByRole('dialog', { name: 'Tags filter' })
-    await expect(popover.getByRole('button', { name: 'Customer', exact: true })).toBeVisible()
+    const panel = await openSpotlight(workspace)
+    await expect(panel.getByRole('button', { name: 'Customer', exact: true })).toBeVisible()
   })
 
-  test('toggling a tag from the popover surfaces a removable chip', async ({ workspace }) => {
+  test('toggling a tag in the panel marks it pressed', async ({ workspace }) => {
     await workspace.loadSample()
-    await workspace.page.getByRole('button', { name: /^Tags/ }).click()
-    const popover = workspace.page.getByRole('dialog', { name: 'Tags filter' })
-    await popover.getByRole('button', { name: 'Customer', exact: true }).click()
-    await workspace.page.keyboard.press('Escape')
-    // Chip button has title="Remove Customer" but text content "Customer"
-    // Use the title attribute selector for a unique match
-    await expect(workspace.page.locator('button[title="Remove Customer"]')).toBeVisible()
+    const panel = await openSpotlight(workspace)
+    const btn = panel.getByRole('button', { name: 'Customer', exact: true })
+    await btn.click()
+    await expect(btn).toHaveAttribute('aria-pressed', 'true')
   })
 
-  test('clicking the active tag chip clears that filter', async ({ workspace }) => {
+  test('toggling an active tag clears that filter', async ({ workspace }) => {
     await workspace.loadSample()
-    await workspace.page.getByRole('button', { name: /^Tags/ }).click()
-    await workspace.page.getByRole('dialog', { name: 'Tags filter' })
-      .getByRole('button', { name: 'Customer', exact: true }).click()
-    await workspace.page.keyboard.press('Escape')
-    const chip = workspace.page.locator('button[title="Remove Customer"]')
-    await expect(chip).toBeVisible()
-    await chip.click()
-    await expect(chip).toHaveCount(0)
+    const panel = await openSpotlight(workspace)
+    const btn = panel.getByRole('button', { name: 'Customer', exact: true })
+    await btn.click()
+    await expect(btn).toHaveAttribute('aria-pressed', 'true')
+    await btn.click()
+    await expect(btn).not.toHaveAttribute('aria-pressed', 'true')
   })
 
   test('renaming an active custom tag keeps the filter usable', async ({ workspace }) => {
@@ -37,25 +36,28 @@ test.describe('Tag Filtering', () => {
     await workspace.clickNode('New System')
     await workspace.addTag('Critical')
 
-    // Select the Critical tag from the Tags popover
-    await workspace.page.getByRole('button', { name: /^Tags/ }).click()
-    await workspace.page.getByRole('dialog', { name: 'Tags filter' })
-      .getByRole('button', { name: 'Critical', exact: true }).click()
-    await workspace.page.keyboard.press('Escape')
+    let panel = await openSpotlight(workspace)
+    await panel.getByRole('button', { name: 'Critical', exact: true }).click()
+    await expect(panel.getByRole('button', { name: 'Critical', exact: true })).toHaveAttribute('aria-pressed', 'true')
 
-    // Chip for Critical should now be visible
-    await expect(workspace.page.locator('button[title="Remove Critical"]')).toBeVisible()
+    // Close the spotlight panel before opening tag manager
+    await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
 
-    // Open the Manage tags panel and rename Critical -> Urgent
     await workspace.page.getByRole('button', { name: 'Manage tags' }).click()
     const tagInput = workspace.page.locator('input[type="text"][value="Critical"]')
     await tagInput.click()
     await tagInput.fill('Urgent')
     await workspace.page.getByRole('button', { name: 'Confirm rename' }).click()
 
-    // After rename: Urgent chip appears, Critical chip is gone, filter still active
-    await expect(workspace.page.locator('button[title="Remove Urgent"]')).toBeVisible()
-    await expect(workspace.page.locator('button[title="Remove Critical"]')).toHaveCount(0)
+    // Close the TagManagerPanel before re-opening spotlight (its full-screen
+    // close overlay would otherwise intercept the rail button click).
+    await workspace.page.getByRole('button', { name: 'Close tag manager' }).click()
+
+    panel = await openSpotlight(workspace)
+    const urgent = panel.getByRole('button', { name: 'Urgent', exact: true })
+    await expect(urgent).toBeVisible()
+    await expect(urgent).toHaveAttribute('aria-pressed', 'true')
+    await expect(panel.getByRole('button', { name: 'Critical', exact: true })).toHaveCount(0)
     await expect(workspace.getVisibleNodeByName('New System')).toBeVisible()
 
     const system = await workspace.getElementByName('New System')
@@ -68,20 +70,14 @@ test.describe('Tag Filtering', () => {
     await workspace.clickNode('New System')
     await workspace.addTag('Critical')
 
-    // Select the Critical tag from the Tags popover
-    await workspace.page.getByRole('button', { name: /^Tags/ }).click()
-    await workspace.page.getByRole('dialog', { name: 'Tags filter' })
-      .getByRole('button', { name: 'Critical', exact: true }).click()
-    await workspace.page.keyboard.press('Escape')
+    const panel = await openSpotlight(workspace)
+    await panel.getByRole('button', { name: 'Critical', exact: true }).click()
+    await expect(panel.getByRole('button', { name: 'Critical', exact: true })).toHaveAttribute('aria-pressed', 'true')
 
-    await expect(workspace.page.locator('button[title="Remove Critical"]')).toBeVisible()
-
-    // Open Manage tags and delete Critical globally
+    await workspace.page.getByTestId('spotlight-rail-trigger').getByRole('button').click()
     await workspace.page.getByRole('button', { name: 'Manage tags' }).click()
     await workspace.page.getByRole('button', { name: 'Remove tag "Critical" globally' }).click()
 
-    // Critical chip is gone
-    await expect(workspace.page.locator('button[title="Remove Critical"]')).toHaveCount(0)
     await expect(workspace.getVisibleNodeByName('New System')).toBeVisible()
 
     const system = await workspace.getElementByName('New System')

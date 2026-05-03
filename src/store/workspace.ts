@@ -220,6 +220,8 @@ interface WorkspaceState extends UndoState {
   setCanvasSettingsOpen: (open: boolean) => void
   addElementPanelOpen: boolean
   setAddElementPanelOpen: (open: boolean) => void
+  spotlightPanelOpen: boolean
+  setSpotlightPanelOpen: (open: boolean) => void
   createViewDialogOpen: boolean
   setCreateViewDialogOpen: (open: boolean) => void
   setPresentationMode: (on: boolean) => void
@@ -329,6 +331,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   commandPaletteOpen: false,
   canvasSettingsOpen: false,
   addElementPanelOpen: false,
+  spotlightPanelOpen: false,
   createViewDialogOpen: false,
   pendingDelete: null,
   pendingZoomConfirm: null,
@@ -1514,6 +1517,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
   setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
+  setSpotlightPanelOpen: (open) => set({ spotlightPanelOpen: open, commandPaletteOpen: false }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
   confirmDelete: (message, onConfirm) => set({ pendingDelete: { message, onConfirm } }),
   cancelDelete: () => set({ pendingDelete: null }),

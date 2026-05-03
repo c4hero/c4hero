@@ -12,6 +12,7 @@ import {
   Maximize2,
   Settings,
   MousePointerClick,
+  Filter,
 } from 'lucide-react'
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
@@ -49,6 +50,11 @@ export default function FloatingToolRail() {
 
   const canvasSettingsOpen = useWorkspaceStore((s) => s.canvasSettingsOpen)
   const setCanvasSettingsOpen = useWorkspaceStore((s) => s.setCanvasSettingsOpen)
+  const spotlightPanelOpen = useWorkspaceStore((s) => s.spotlightPanelOpen)
+  const setSpotlightPanelOpen = useWorkspaceStore((s) => s.setSpotlightPanelOpen)
+  const activeFilterCount = useWorkspaceStore(
+    (s) => s.activeTagFilter.length + s.activeStatusFilter.length + s.activeTechFilter.length + s.activeTeamFilter.length,
+  )
 
   const arrangeFlyoutRef = useRef<HTMLDivElement>(null)
 
@@ -222,6 +228,47 @@ export default function FloatingToolRail() {
         active={multiSelectMode}
         onClick={() => setMultiSelectMode(!multiSelectMode)}
       />
+
+      {/* Spotlight (filter highlights) */}
+      <RailSep />
+      <div style={{ position: 'relative' }} data-testid="spotlight-rail-trigger">
+        <RailBtn
+          icon={<Filter size={16} />}
+          label={
+            spotlightPanelOpen
+              ? 'Hide filter panel'
+              : activeFilterCount > 0
+                ? `Filter (${activeFilterCount} active)`
+                : 'Filter / highlight'
+          }
+          active={spotlightPanelOpen || activeFilterCount > 0}
+          onClick={() => setSpotlightPanelOpen(!spotlightPanelOpen)}
+        />
+        {activeFilterCount > 0 && !spotlightPanelOpen && (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              minWidth: 14,
+              height: 14,
+              padding: '0 3px',
+              borderRadius: 999,
+              background: 'var(--color-accent)',
+              color: 'var(--color-bg-primary)',
+              fontSize: 9,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            {activeFilterCount}
+          </span>
+        )}
+      </div>
 
       {/* Zoom to fit */}
       <RailSep />
