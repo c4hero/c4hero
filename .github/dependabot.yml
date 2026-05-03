@@ -5,11 +5,21 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    # Group only minor/patch updates so a single failing major bump can't
+    # block the rest. Major bumps come as individual PRs and can be
+    # reviewed (and tested) one at a time.
     groups:
       dev-dependencies:
         dependency-type: development
+        update-types: [minor, patch]
       production-dependencies:
         dependency-type: production
+        update-types: [minor, patch]
+    ignore:
+      # vite-plugin-pwa (latest 1.2.0) only supports vite up to ^7.
+      # Hold vite at 7.x until the PWA plugin announces vite 8 support.
+      - dependency-name: vite
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
