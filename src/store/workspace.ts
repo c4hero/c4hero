@@ -248,7 +248,9 @@ interface WorkspaceState extends UndoState {
 
 // ─── Internal Helpers ────────────────────────────────────────────────
 
-/** Push current workspace to undo stack before mutation */
+/** Push current workspace to undo stack before mutation. Returns a partial
+ *  UndoState for spread-merging into `set` returns — used by the legacy
+ *  cloneWs-based actions during the migration. */
 function pushUndo(s: WorkspaceState): Partial<UndoState> {
   if (!s.workspace) return {}
   // Inside an Immer producer s.workspace is a draft; snapshot it via current()
@@ -258,6 +260,19 @@ function pushUndo(s: WorkspaceState): Partial<UndoState> {
   const snapshot = isDraft(s.workspace) ? (current(s.workspace) as Workspace) : s.workspace
   const undoStack = [...s.undoStack, snapshot].slice(-MAX_UNDO)
   return { undoStack, redoStack: [] }
+}
+
+/** Draft-mutation variant: snapshot the *pre-mutation* draft and append it
+ *  to undoStack in place. Call BEFORE any draft mutations within an action so
+ *  the snapshot captures pre-change state. Clears redoStack. No-op when
+ *  there's no workspace. */
+function pushUndoSnapshot(s: WorkspaceState): void {
+  if (!s.workspace) return
+  const snapshot = isDraft(s.workspace) ? (current(s.workspace) as Workspace) : s.workspace
+  s.undoStack.push(snapshot)
+  // Trim to MAX_UNDO entries from the front (oldest first).
+  if (s.undoStack.length > MAX_UNDO) s.undoStack.splice(0, s.undoStack.length - MAX_UNDO)
+  s.redoStack.length = 0
 }
 
 // Re-alias imported helpers under the names used internally
@@ -368,13 +383,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
     }),
 
   updateWorkspaceMeta: (patch) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    let changed = false
-    if (patch.name !== undefined && ws.name !== patch.name) { ws.name = patch.name; changed = true }
-    if (patch.description !== undefined && ws.description !== patch.description) { ws.description = patch.description; changed = true }
-    if (!changed) return s
-    return { ...pushUndo(s), workspace: ws }
+    if (!s.workspace) return
+    const ws = s.workspace
+    const willChange =
+      (patch.name !== undefined && ws.name !== patch.name) ||
+      (patch.description !== undefined && ws.description !== patch.description)
+    if (!willChange) return
+    pushUndoSnapshot(s)
+    if (patch.name !== undefined) ws.name = patch.name
+    if (patch.description !== undefined) ws.description = patch.description
   }),
 
   // ─── Navigation ─────────────────────────────────────────────────
