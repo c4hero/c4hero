@@ -318,9 +318,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   // ─── Scope Validation ───────────────────────────────────────────
 
   scopeViolations: [],
-  revalidateScope: () => set(s => ({
-    scopeViolations: s.workspace ? validateScope(s.workspace) : [],
-  })),
+  revalidateScope: () => set((s) => {
+    s.scopeViolations = s.workspace ? validateScope(s.workspace) : []
+  }),
 
   // ─── Workspace Lifecycle ────────────────────────────────────────
 
@@ -382,20 +382,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   setActiveView: (key) => set({ activeViewKey: key, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 
   drillInto: (elementId) => set((s) => {
-    if (!s.workspace || !s.activeViewKey) return s
+    if (!s.workspace || !s.activeViewKey) return
     const childView = findChildView(s.workspace, elementId)
-    if (!childView) return s
+    if (!childView) return
     // No-op if the "child" view is the one we're already on. This happens when
     // drilling on a system inside its own systemContext view and no container
     // view exists — findChildView falls back to the same systemContext view.
-    if (childView.key === s.activeViewKey) return s
-    return {
-      activeViewKey: childView.key,
-      viewHistory: [...s.viewHistory, s.activeViewKey],
-      selectedElementIds: [],
-      selectedRelationshipId: null,
-      selectedGroupId: null,
-    }
+    if (childView.key === s.activeViewKey) return
+    s.viewHistory.push(s.activeViewKey)
+    s.activeViewKey = childView.key
+    s.selectedElementIds = []
+    s.selectedRelationshipId = null
+    s.selectedGroupId = null
   }),
 
   zoomInto: (elementId) => {
@@ -429,10 +427,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
     get().addView(pending.targetType, pending.elementId, title)
     // Restore breadcrumb history so navigateBack returns to the caller view.
     if (prevActive) {
-      set((curr) => ({
-        viewHistory: [...curr.viewHistory, prevActive],
-        pendingZoomConfirm: null,
-      }))
+      set((curr) => {
+        curr.viewHistory.push(prevActive)
+        curr.pendingZoomConfirm = null
+      })
     } else {
       set({ pendingZoomConfirm: null })
     }
@@ -453,25 +451,36 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   setCreateViewDefaults: (defaults) => set({ createViewDefaults: defaults }),
 
   navigateBack: () => set((s) => {
-    if (s.viewHistory.length === 0) return s
-    const history = [...s.viewHistory]
-    const previous = history.pop()!
-    return {
-      activeViewKey: previous,
-      viewHistory: history,
-      selectedElementIds: [],
-      selectedRelationshipId: null,
-      selectedGroupId: null,
-    }
+    if (s.viewHistory.length === 0) return
+    const previous = s.viewHistory.pop()!
+    s.activeViewKey = previous
+    s.selectedElementIds = []
+    s.selectedRelationshipId = null
+    s.selectedGroupId = null
   }),
 
   // ─── Selection ──────────────────────────────────────────────────
 
   // Selecting any canvas object closes the Highlighter panel so the Inspector
   // (right side) doesn't stack underneath / behind it.
-  selectElements: (ids) => set((s) => ({ selectedElementIds: ids, selectedRelationshipId: null, selectedGroupId: null, highlighterPanelOpen: ids.length > 0 ? false : s.highlighterPanelOpen })),
-  selectRelationship: (id) => set((s) => ({ selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null, highlighterPanelOpen: id ? false : s.highlighterPanelOpen })),
-  selectGroup: (id) => set((s) => ({ selectedGroupId: id, selectedElementIds: [], selectedRelationshipId: null, highlighterPanelOpen: id ? false : s.highlighterPanelOpen })),
+  selectElements: (ids) => set((s) => {
+    s.selectedElementIds = ids
+    s.selectedRelationshipId = null
+    s.selectedGroupId = null
+    if (ids.length > 0) s.highlighterPanelOpen = false
+  }),
+  selectRelationship: (id) => set((s) => {
+    s.selectedRelationshipId = id
+    s.selectedElementIds = []
+    s.selectedGroupId = null
+    if (id) s.highlighterPanelOpen = false
+  }),
+  selectGroup: (id) => set((s) => {
+    s.selectedGroupId = id
+    s.selectedElementIds = []
+    s.selectedRelationshipId = null
+    if (id) s.highlighterPanelOpen = false
+  }),
   clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 
   // ─── Element CRUD ───────────────────────────────────────────────
@@ -1065,29 +1074,29 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   // ─── Canvas Settings ──────────────────────────────────────────
 
   setActiveTagFilter: (tags) => set({ activeTagFilter: tags }),
-  toggleActiveTagFilter: (tag) => set((s) => ({
-    activeTagFilter: s.activeTagFilter.includes(tag)
-      ? s.activeTagFilter.filter((t) => t !== tag)
-      : [...s.activeTagFilter, tag],
-  })),
+  toggleActiveTagFilter: (tag) => set((s) => {
+    const idx = s.activeTagFilter.indexOf(tag)
+    if (idx >= 0) s.activeTagFilter.splice(idx, 1)
+    else s.activeTagFilter.push(tag)
+  }),
   setActiveStatusFilter: (statuses) => set({ activeStatusFilter: statuses }),
-  toggleActiveStatusFilter: (status) => set((s) => ({
-    activeStatusFilter: s.activeStatusFilter.includes(status)
-      ? s.activeStatusFilter.filter((x) => x !== status)
-      : [...s.activeStatusFilter, status],
-  })),
+  toggleActiveStatusFilter: (status) => set((s) => {
+    const idx = s.activeStatusFilter.indexOf(status)
+    if (idx >= 0) s.activeStatusFilter.splice(idx, 1)
+    else s.activeStatusFilter.push(status)
+  }),
   setActiveTechFilter: (techs) => set({ activeTechFilter: techs }),
-  toggleActiveTechFilter: (tech) => set((s) => ({
-    activeTechFilter: s.activeTechFilter.includes(tech)
-      ? s.activeTechFilter.filter((t) => t !== tech)
-      : [...s.activeTechFilter, tech],
-  })),
+  toggleActiveTechFilter: (tech) => set((s) => {
+    const idx = s.activeTechFilter.indexOf(tech)
+    if (idx >= 0) s.activeTechFilter.splice(idx, 1)
+    else s.activeTechFilter.push(tech)
+  }),
   setActiveTeamFilter: (teams) => set({ activeTeamFilter: teams }),
-  toggleActiveTeamFilter: (team) => set((s) => ({
-    activeTeamFilter: s.activeTeamFilter.includes(team)
-      ? s.activeTeamFilter.filter((t) => t !== team)
-      : [...s.activeTeamFilter, team],
-  })),
+  toggleActiveTeamFilter: (team) => set((s) => {
+    const idx = s.activeTeamFilter.indexOf(team)
+    if (idx >= 0) s.activeTeamFilter.splice(idx, 1)
+    else s.activeTeamFilter.push(team)
+  }),
   clearAllHighlightFilters: () => set({
     activeTagFilter: [],
     activeStatusFilter: [],
@@ -1170,19 +1179,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
     }
   }),
 
-  toggleMinimap: () => set((s) => ({ minimapEnabled: !s.minimapEnabled })),
-  toggleSnapToGrid: () => set((s) => ({ snapToGrid: !s.snapToGrid })),
+  toggleMinimap: () => set((s) => { s.minimapEnabled = !s.minimapEnabled }),
+  toggleSnapToGrid: () => set((s) => { s.snapToGrid = !s.snapToGrid }),
   setMultiSelectMode: (on) => set({ multiSelectMode: on }),
 
   // ─── Views Panel ─────────────────────────────────────────────────
 
   setViewsPanelOpen: (open) => set({ viewsPanelOpen: open }),
-  toggleViewsPanel: () => set((s) => ({ viewsPanelOpen: !s.viewsPanelOpen })),
+  toggleViewsPanel: () => set((s) => { s.viewsPanelOpen = !s.viewsPanelOpen }),
 
   // ─── UI Toggles ─────────────────────────────────────────────────
 
-  toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
-  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+  toggleLeftPanel: () => set((s) => { s.leftPanelOpen = !s.leftPanelOpen }),
+  toggleRightPanel: () => set((s) => { s.rightPanelOpen = !s.rightPanelOpen }),
   setLeftPanelOpen: (open) => set({ leftPanelOpen: open }),
   setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
   setSearchOpen: (open) => set({ searchOpen: open, commandPaletteOpen: false }),
