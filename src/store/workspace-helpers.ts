@@ -59,6 +59,17 @@ export function getElementIndex(ws: Workspace): Map<string, ModelElement> {
   return idx
 }
 
+/**
+ * Drop the cached id → element index for a workspace. Call after a helper
+ * mutates `ws.model` so the next reader (e.g. Canvas's buildElementMap)
+ * rebuilds against the new tree. Without this, helpers that read through
+ * findElementHelper before pushing/removing elements leave a stale index
+ * behind and the canvas renders against pre-mutation state.
+ */
+export function invalidateElementIndex(ws: Workspace): void {
+  elementIndexCache.delete(ws)
+}
+
 /** Patch shape that updateElement / updateElementLive both consume. */
 export type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>>
   & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string }
@@ -394,6 +405,10 @@ export function duplicateElementsInTree(
     }
   }
 
+  // Mutated the model (pushed people / containers / components / systems and
+  // possibly relationships); evict the stale id→element index so the next
+  // reader rebuilds it against the post-mutation tree.
+  invalidateElementIndex(ws)
   return newIds
 }
 
@@ -481,5 +496,6 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
     elementIds: g.elementIds.filter((eid) => !allDeletedIds.has(eid)),
   }))
 
+  invalidateElementIndex(ws)
   return { allDeletedIds, deletedContainerIds }
 }
