@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 /** Where the dialog body sits within the viewport.
@@ -32,6 +32,19 @@ export default function DialogShell({
     }
   }, [onClose])
 
+  // Global Escape listener: the per-element onKeyDown handlers only fire when
+  // focus is inside the dialog tree, but Escape should dismiss regardless of
+  // where focus lives (e.g. focus parked on document.body before the trap
+  // settles). React's synthetic event delegation also doesn't surface
+  // document-level keydowns to nested handlers.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') handleClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [handleClose])
+
   if (position === 'shade') {
     // Slide-down panel pattern: an invisible click-catcher behind the panel
     // (low z) dismisses on outside click; the panel itself uses the
@@ -50,7 +63,6 @@ export default function DialogShell({
           aria-label={ariaLabel}
           className={`shade-panel ${className ?? ''}`.trim()}
           style={{ zIndex: 49, ...style }}
-          onKeyDown={(e) => { if (e.key === 'Escape') handleClose() }}
           onClick={(e) => e.stopPropagation()}
         >
           {children}
@@ -60,10 +72,7 @@ export default function DialogShell({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center"
-      onKeyDown={(e) => { if (e.key === 'Escape') handleClose() }}
-    >
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="panel-backdrop absolute inset-0" onClick={handleClose} />
       <div
         ref={trapRef}
