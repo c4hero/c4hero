@@ -25,9 +25,9 @@ import { useSettingsStore } from '@/store/settings'
 
 import { listDSLFiles, readDSLFile, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/folderIO'
 import { parseDSL } from '@/lib/dsl'
-import { parseSidecar, applySidecar } from '@/lib/sidecar'
 import { useNavigate } from 'react-router-dom'
 import { WorkspaceTile } from '@/components/welcome/WelcomeLeaves'
+import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
 
 interface WsEntry {
   filename: string
@@ -106,13 +106,11 @@ export default function FloatingTopPill() {
     setWsPickerOpen(false)
     const file = await readDSLFile(filename)
     if (!file) return
-    const { workspace } = parseDSL(file.content)
-    if (!workspace) return
-    if (!workspace.name) workspace.name = filename.replace(/\.dsl$/, '')
-    if (file.sidecarJson) {
-      const sidecar = parseSidecar(file.sidecarJson)
-      if (sidecar) applySidecar(workspace, sidecar)
-    }
+    const { workspace } = parseWorkspaceDocument({
+      content: file.content,
+      fallbackName: filename.replace(/\.dsl$/, ''),
+      sidecarJson: file.sidecarJson,
+    })
     loadWorkspace(workspace)
     useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
   }, [loadWorkspace])

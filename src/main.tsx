@@ -42,9 +42,8 @@ if (import.meta.env.DEV) {
     useWorkspaceStore.getState().setActiveView(key)
   }
   ;(window as unknown as Record<string, unknown>).__testParseAndLoad = async (dsl: string) => {
-    const mod = await import('./lib/dsl')
-    const { workspace } = mod.parseDSL(dsl)
-    if (!workspace.name) workspace.name = 'test'
+    const { parseWorkspaceDocument } = await import('./lib/workspaceDocument')
+    const { workspace } = parseWorkspaceDocument({ content: dsl, fallbackName: 'test' })
     useWorkspaceStore.getState().loadWorkspace(workspace)
   }
   ;(window as unknown as Record<string, unknown>).__testLoadTemplate = (name: string) => {

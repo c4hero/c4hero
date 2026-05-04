@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView } from '@/store/workspace'
-import { serializeDSL, parseDSL } from '@/lib/dsl'
+import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
-import { parseSidecar, applySidecar, extractSidecar, serializeSidecar } from '@/lib/sidecar'
+import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
+import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
 
 const log = createLogger('keyboard')
 
@@ -45,16 +46,13 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   'mod+o': (store) => {
     openDSLFile().then(file => {
       if (!file) return
-      const { workspace: ws, errors } = parseDSL(file.content)
+      const { workspace, errors } = parseWorkspaceDocument({
+        content: file.content,
+        fallbackName: file.name.replace(/\.dsl$/, ''),
+        sidecarJson: file.sidecarJson,
+      })
       if (errors.length > 0) log.warn('DSL parse warnings', errors)
-      if (ws) {
-        if (!ws.name) ws.name = file.name.replace(/\.dsl$/, '')
-        if (file.sidecarJson) {
-          const sidecar = parseSidecar(file.sidecarJson)
-          if (sidecar) applySidecar(ws, sidecar)
-        }
-        store.loadWorkspace(ws)
-      }
+      store.loadWorkspace(workspace)
     })
   },
   'p': (store) => {

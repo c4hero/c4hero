@@ -20,7 +20,8 @@ import {
 } from '@/lib/folderIO'
 import { getRecentFolders, addRecentFolder, pruneRecentFolders, removeRecentFolder } from '@/lib/fileIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
-import { parseSidecar, applySidecar, sidecarName } from '@/lib/sidecar'
+import { sidecarName } from '@/lib/sidecar'
+import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
 import { AlertTriangle } from 'lucide-react'
 import {
   TemplateDialog,
@@ -285,19 +286,14 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     try {
       const file = await readDSLFile(filename)
       if (!file) return
-      const { workspace, errors } = parseDSL(file.content)
+      const { workspace, errors } = parseWorkspaceDocument({
+        content: file.content,
+        fallbackName: filename.replace(/\.dsl$/, ''),
+        sidecarJson: file.sidecarJson,
+      })
       if (errors.length > 0) log.warn("DSL parse warnings", errors)
-      if (workspace) {
-        if (!workspace.name) workspace.name = filename.replace(/\.dsl$/, '')
-        if (file.sidecarJson) {
-          const sidecar = parseSidecar(file.sidecarJson)
-          if (sidecar) applySidecar(workspace, sidecar)
-        }
-        loadWorkspace(workspace)
-        useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
-      } else {
-        setErrorMsg('Failed to parse DSL file. Please check the file format.')
-      }
+      loadWorkspace(workspace)
+      useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
     } finally {
       setLoadingWorkspace(null)
     }
@@ -437,14 +433,12 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
 	    setErrorMsg(err instanceof Error ? err.message : 'Failed to read DSL file.')
 	    return
 	  }
-    const { workspace, errors } = parseDSL(content)
+    const { workspace, errors } = parseWorkspaceDocument({
+      content,
+      fallbackName: file.name.replace(/\.dsl$/, ''),
+    })
     if (errors.length > 0) log.warn("DSL parse warnings", errors)
-    if (workspace) {
-      if (!workspace.name) workspace.name = file.name.replace(/\.dsl$/, '')
-      loadWorkspace(workspace)
-    } else {
-      setErrorMsg('Failed to parse DSL file. Please check the file format.')
-    }
+    loadWorkspace(workspace)
   }
 
   async function handleOpenFile() {
@@ -456,18 +450,13 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     if (!file) return
     setLoadingWorkspace(file.name.replace(/\.dsl$/, ''))
     try {
-      const { workspace, errors } = parseDSL(file.content)
+      const { workspace, errors } = parseWorkspaceDocument({
+        content: file.content,
+        fallbackName: file.name.replace(/\.dsl$/, ''),
+        sidecarJson: file.sidecarJson,
+      })
       if (errors.length > 0) log.warn("DSL parse warnings", errors)
-      if (workspace) {
-        if (!workspace.name) workspace.name = file.name.replace(/\.dsl$/, '')
-        if (file.sidecarJson) {
-          const sidecar = parseSidecar(file.sidecarJson)
-          if (sidecar) applySidecar(workspace, sidecar)
-        }
-        loadWorkspace(workspace)
-      } else {
-        setErrorMsg('Failed to parse DSL file. Please check the file format.')
-      }
+      loadWorkspace(workspace)
     } finally {
       setLoadingWorkspace(null)
     }
