@@ -20,7 +20,6 @@ import {
   allViewsOf,
   findViewHelper,
   forEachElementHelper,
-  findElementHelper,
   applyElementPatch,
   elementExists,
   VIEW_ARRAY_KEYS,
@@ -28,6 +27,8 @@ import {
   uniqueElementName,
   addToCurrentView,
   cloneWorkspace,
+  cascadeDeleteElements,
+  duplicateElementsInTree,
 } from './workspace-helpers'
 export { allViewsOf } from './workspace-helpers'
 export {
@@ -257,7 +258,6 @@ function pushUndo(s: WorkspaceState): Partial<UndoState> {
 // Re-alias imported helpers under the names used internally
 const findView = findViewHelper
 const forEachElement = forEachElementHelper
-const findElement = findElementHelper
 
 /** Clone the active workspace for safe mutation. */
 function cloneWs(s: WorkspaceState): Workspace | null {
@@ -589,68 +589,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => {
       const ws = cloneWs(s)
       if (!ws) return s
-      const idSet = new Set(ids)
-
-      // Collect container and component IDs that will be implicitly removed so that
-      // relationships referencing them (and scoped views) are cleaned up correctly.
-      const deletedContainerIds = new Set<string>()
-      const deletedComponentIds = new Set<string>()
-      for (const sys of ws.model.softwareSystems) {
-        if (idSet.has(sys.id)) {
-          for (const c of sys.containers) {
-            deletedContainerIds.add(c.id)
-            for (const comp of c.components) deletedComponentIds.add(comp.id)
-          }
-        } else {
-          for (const c of sys.containers) {
-            if (idSet.has(c.id)) {
-              deletedContainerIds.add(c.id)
-              for (const comp of c.components) deletedComponentIds.add(comp.id)
-            } else {
-              for (const comp of c.components) {
-                if (idSet.has(comp.id)) deletedComponentIds.add(comp.id)
-              }
-            }
-          }
-        }
-      }
-
-      // Build the full set of element IDs being removed (direct + implicit children)
-      const allDeletedIds = new Set([...idSet, ...deletedContainerIds, ...deletedComponentIds])
-
-      ws.model.people = ws.model.people.filter(p => !idSet.has(p.id))
-      ws.model.softwareSystems = ws.model.softwareSystems.filter(sys => {
-        if (idSet.has(sys.id)) return false
-        sys.containers = sys.containers.filter(c => {
-          if (idSet.has(c.id)) return false
-          c.components = c.components.filter(comp => !idSet.has(comp.id))
-          return true
-        })
-        return true
-      })
-      ws.model.relationships = ws.model.relationships.filter(
-        r => !allDeletedIds.has(r.sourceId) && !allDeletedIds.has(r.destinationId)
-      )
-      const survivingRelIds = new Set(ws.model.relationships.map(r => r.id))
-      forEachView(ws, (v) => {
-        v.elements = v.elements.filter(e => !allDeletedIds.has(e.id))
-        v.relationships = v.relationships.filter(r => survivingRelIds.has(r.id))
-      })
-      // Remove scoped views whose scope element was deleted
-      ws.views.systemContextViews = ws.views.systemContextViews.filter(
-        v => !v.softwareSystemId || !idSet.has(v.softwareSystemId)
-      )
-      ws.views.containerViews = ws.views.containerViews.filter(
-        v => !v.softwareSystemId || !idSet.has(v.softwareSystemId)
-      )
-      // Remove component views scoped to deleted containers (explicit or via parent system)
-      ws.views.componentViews = ws.views.componentViews.filter(
-        v => !v.containerId || (!idSet.has(v.containerId) && !deletedContainerIds.has(v.containerId))
-      )
-      ws.model.groups = ws.model.groups.map(g => ({
-        ...g,
-        elementIds: g.elementIds.filter(eid => !allDeletedIds.has(eid)),
-      }))
+      cascadeDeleteElements(ws, ids)
       // If the active view was among the ones just removed, fall back to the first remaining view.
       // Also purge stale keys from viewHistory so navigateBack never jumps to a ghost view.
       const activeStillExists = s.activeViewKey ? !!findView(ws, s.activeViewKey) : false
@@ -671,162 +610,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   duplicateElements: (ids) => {
-    const newIds: string[] = []
+    let createdIds: string[] = []
     set((s) => {
       const ws = cloneWs(s)
       if (!ws || !s.activeViewKey) return s
-      const uniqueIds = [...new Set(ids)]
-      if (uniqueIds.length === 0) return s
-      const view = findView(ws, s.activeViewKey)
-      if (!view) return s
-
-      // Map from original element ID → new clone ID, built as we go
-      const idMapping = new Map<string, string>()
-
-      for (const id of uniqueIds) {
-        const element = findElement(ws, id)
-        if (!element) continue
-
-        const inView = view.elements.find(e => e.id === id)
-        const offsetX = (inView?.x ?? 200) + 60
-        const offsetY = (inView?.y ?? 200) + 30
-        const newId = nanoid(8)
-
-        // Create the model clone first; only register the new ID if the clone succeeds.
-        let cloned = false
-
-        if (element.type === 'person') {
-          ws.model.people.push({
-            ...structuredClone(element),
-            id: newId,
-            name: uniqueElementName(`${element.name} copy`, ws),
-          })
-          cloned = true
-        } else if (element.type === 'softwareSystem') {
-          const clonedContainers = element.containers.map(c => ({
-            ...structuredClone(c),
-            id: nanoid(8),
-            components: c.components.map(comp => ({ ...structuredClone(comp), id: nanoid(8) })),
-          }))
-          ws.model.softwareSystems.push({
-            ...structuredClone(element),
-            id: newId,
-            name: uniqueElementName(`${element.name} copy`, ws),
-            containers: clonedContainers,
-          })
-          cloned = true
-        } else if (element.type === 'container') {
-          const parent = ws.model.softwareSystems.find(sys => sys.containers.some(c => c.id === id))
-          if (parent) {
-            parent.containers.push({
-              ...structuredClone(element),
-              id: newId,
-              name: uniqueElementName(`${element.name} copy`, ws),
-              components: element.components.map(comp => ({ ...structuredClone(comp), id: nanoid(8) })),
-            })
-            cloned = true
-          }
-        } else if (element.type === 'component') {
-          outer: for (const sys of ws.model.softwareSystems) {
-            for (const container of sys.containers) {
-              if (container.components.some(c => c.id === id)) {
-                container.components.push({
-                  ...structuredClone(element),
-                  id: newId,
-                  name: uniqueElementName(`${element.name} copy`, ws),
-                })
-                cloned = true
-                break outer
-              }
-            }
-          }
-        }
-
-        if (!cloned) continue
-        idMapping.set(id, newId)
-        newIds.push(newId)
-        // Add to active view with a small position offset from the original
-        view.elements.push({ id: newId, x: offsetX, y: offsetY })
-        // Mirror the auto-add-to-sibling-views behaviour of addPerson / addContainer /
-        // addComponent so that the clone appears everywhere the original appeared.
-        if (element.type === 'person' || element.type === 'softwareSystem') {
-          for (const v of ws.views.systemLandscapeViews) {
-            if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === newId)) {
-              v.elements.push({ id: newId })
-            }
-          }
-        } else if (element.type === 'container') {
-          // parentSysId: the system that now owns the clone (same as the original's parent)
-          const parentSysId = ws.model.softwareSystems.find(sys =>
-            sys.containers.some(c => c.id === newId)
-          )?.id
-          if (parentSysId) {
-            for (const v of ws.views.containerViews) {
-              if (v.softwareSystemId === parentSysId && v.key !== s.activeViewKey && !v.elements.some(e => e.id === newId)) {
-                v.elements.push({ id: newId })
-              }
-            }
-          }
-        } else if (element.type === 'component') {
-          const parentContainerId = (() => {
-            for (const sys of ws.model.softwareSystems) {
-              for (const c of sys.containers) {
-                if (c.components.some(comp => comp.id === newId)) return c.id
-              }
-            }
-            return null
-          })()
-          if (parentContainerId) {
-            for (const v of ws.views.componentViews) {
-              if (v.containerId === parentContainerId && v.key !== s.activeViewKey && !v.elements.some(e => e.id === newId)) {
-                v.elements.push({ id: newId })
-              }
-            }
-          }
-        }
-      }
-
-      // Duplicate relationships that connect two elements within the duplicated set.
-      // This preserves the internal connectivity of the cloned selection.
-      for (const rel of ws.model.relationships) {
-        const newSourceId = idMapping.get(rel.sourceId)
-        const newDestId = idMapping.get(rel.destinationId)
-        if (newSourceId && newDestId) {
-          const newRelId = nanoid(8)
-          ws.model.relationships.push({
-            ...structuredClone(rel),
-            id: newRelId,
-            sourceId: newSourceId,
-            destinationId: newDestId,
-          })
-          // Propagate the relationship ref to every view that now contains both clone
-          // endpoints (mirrors addRelationship behaviour instead of only updating the
-          // active view).
-          for (const v of allViewsOf(ws)) {
-            const viewElIds = new Set(v.elements.map(e => e.id))
-            if (viewElIds.has(newSourceId) && viewElIds.has(newDestId)) {
-              if (!v.relationships.some(r => r.id === newRelId)) {
-                v.relationships.push({ id: newRelId })
-              }
-            }
-          }
-        }
-      }
-
-      if (newIds.length === 0) return s
+      createdIds = duplicateElementsInTree(ws, ids, s.activeViewKey, () => nanoid(8))
+      if (createdIds.length === 0) return s
       return {
         ...pushUndo(s),
         workspace: ws,
-        selectedElementIds: newIds,
+        selectedElementIds: createdIds,
         selectedRelationshipId: null,
         selectedGroupId: null,
       }
     })
-    if (newIds.length > 0) {
-      announce(newIds.length === 1 ? 'Element duplicated' : `${newIds.length} elements duplicated`)
+    if (createdIds.length > 0) {
+      announce(createdIds.length === 1 ? 'Element duplicated' : `${createdIds.length} elements duplicated`)
       get().revalidateScope()
     }
-    return newIds
+    return createdIds
   },
 
   // ─── Group CRUD ─────────────────────────────────────────────────

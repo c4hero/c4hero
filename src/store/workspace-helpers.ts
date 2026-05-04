@@ -140,3 +140,252 @@ export function addToCurrentView(
 export function cloneWorkspace(ws: Workspace | null): Workspace | null {
   return ws ? structuredClone(ws) : null
 }
+
+/** Result of a cascade delete: the model is mutated in place, and the caller
+ *  gets back the full set of element IDs that were removed (direct + implicit
+ *  children) so it can clear selection state, etc. */
+export interface CascadeDeleteResult {
+  /** Direct + implicit child IDs that were removed from the model. */
+  allDeletedIds: Set<string>
+  /** Container IDs implicitly removed because their parent system was deleted. */
+  deletedContainerIds: Set<string>
+}
+
+/**
+ * Duplicate the given elements within the active view. Mutates the workspace in
+ * place — clones each model element with a new ID and a "<name> copy" name,
+ * mirrors the auto-add-to-sibling-views behaviour of addPerson/Container/
+ * Component, and clones intra-set relationships so the cloned subgraph
+ * preserves its internal connectivity.
+ *
+ * Returns the array of newly-created element IDs (in the order they were
+ * created). Empty array means no elements were duplicated.
+ */
+export function duplicateElementsInTree(
+  ws: Workspace,
+  ids: string[],
+  activeViewKey: string,
+  nanoid: () => string,
+): string[] {
+  const newIds: string[] = []
+  const view = findViewHelper(ws, activeViewKey)
+  if (!view) return newIds
+
+  const uniqueIds = [...new Set(ids)]
+  if (uniqueIds.length === 0) return newIds
+
+  const idMapping = new Map<string, string>()
+
+  for (const id of uniqueIds) {
+    const element = findElementHelper(ws, id)
+    if (!element) continue
+
+    const inView = view.elements.find((e) => e.id === id)
+    const offsetX = (inView?.x ?? 200) + 60
+    const offsetY = (inView?.y ?? 200) + 30
+    const newId = nanoid()
+    let cloned = false
+
+    if (element.type === 'person') {
+      ws.model.people.push({
+        ...structuredClone(element),
+        id: newId,
+        name: uniqueElementName(`${element.name} copy`, ws),
+      })
+      cloned = true
+    } else if (element.type === 'softwareSystem') {
+      const clonedContainers = element.containers.map((c) => ({
+        ...structuredClone(c),
+        id: nanoid(),
+        components: c.components.map((comp) => ({ ...structuredClone(comp), id: nanoid() })),
+      }))
+      ws.model.softwareSystems.push({
+        ...structuredClone(element),
+        id: newId,
+        name: uniqueElementName(`${element.name} copy`, ws),
+        containers: clonedContainers,
+      })
+      cloned = true
+    } else if (element.type === 'container') {
+      const parent = ws.model.softwareSystems.find((sys) => sys.containers.some((c) => c.id === id))
+      if (parent) {
+        parent.containers.push({
+          ...structuredClone(element),
+          id: newId,
+          name: uniqueElementName(`${element.name} copy`, ws),
+          components: element.components.map((comp) => ({ ...structuredClone(comp), id: nanoid() })),
+        })
+        cloned = true
+      }
+    } else if (element.type === 'component') {
+      outer: for (const sys of ws.model.softwareSystems) {
+        for (const container of sys.containers) {
+          if (container.components.some((c) => c.id === id)) {
+            container.components.push({
+              ...structuredClone(element),
+              id: newId,
+              name: uniqueElementName(`${element.name} copy`, ws),
+            })
+            cloned = true
+            break outer
+          }
+        }
+      }
+    }
+
+    if (!cloned) continue
+    idMapping.set(id, newId)
+    newIds.push(newId)
+    view.elements.push({ id: newId, x: offsetX, y: offsetY })
+
+    // Mirror auto-add-to-sibling-views from addPerson / addContainer / addComponent.
+    if (element.type === 'person' || element.type === 'softwareSystem') {
+      for (const v of ws.views.systemLandscapeViews) {
+        if (v.key !== activeViewKey && !v.elements.some((e) => e.id === newId)) {
+          v.elements.push({ id: newId })
+        }
+      }
+    } else if (element.type === 'container') {
+      const parentSysId = ws.model.softwareSystems.find((sys) =>
+        sys.containers.some((c) => c.id === newId),
+      )?.id
+      if (parentSysId) {
+        for (const v of ws.views.containerViews) {
+          if (v.softwareSystemId === parentSysId && v.key !== activeViewKey
+            && !v.elements.some((e) => e.id === newId)) {
+            v.elements.push({ id: newId })
+          }
+        }
+      }
+    } else if (element.type === 'component') {
+      let parentContainerId: string | null = null
+      for (const sys of ws.model.softwareSystems) {
+        for (const c of sys.containers) {
+          if (c.components.some((comp) => comp.id === newId)) { parentContainerId = c.id; break }
+        }
+        if (parentContainerId) break
+      }
+      if (parentContainerId) {
+        for (const v of ws.views.componentViews) {
+          if (v.containerId === parentContainerId && v.key !== activeViewKey
+            && !v.elements.some((e) => e.id === newId)) {
+            v.elements.push({ id: newId })
+          }
+        }
+      }
+    }
+  }
+
+  // Duplicate relationships that connect two elements within the duplicated set
+  // so the cloned subgraph keeps its internal connectivity.
+  for (const rel of ws.model.relationships) {
+    const newSourceId = idMapping.get(rel.sourceId)
+    const newDestId = idMapping.get(rel.destinationId)
+    if (newSourceId && newDestId) {
+      const newRelId = nanoid()
+      ws.model.relationships.push({
+        ...structuredClone(rel),
+        id: newRelId,
+        sourceId: newSourceId,
+        destinationId: newDestId,
+      })
+      for (const v of allViewsOf(ws)) {
+        const viewElIds = new Set(v.elements.map((e) => e.id))
+        if (viewElIds.has(newSourceId) && viewElIds.has(newDestId)) {
+          if (!v.relationships.some((r) => r.id === newRelId)) {
+            v.relationships.push({ id: newRelId })
+          }
+        }
+      }
+    }
+  }
+
+  return newIds
+}
+
+/**
+ * Cascade-delete elements from the workspace tree:
+ *   - removes the targeted elements from the model
+ *   - removes any children rolled up under them (containers in deleted
+ *     systems, components in deleted containers)
+ *   - prunes relationships whose endpoints were deleted
+ *   - removes view element refs and view relationship refs that point at
+ *     deleted IDs
+ *   - removes scoped views (systemContext / container / component) whose
+ *     scope element was deleted
+ *   - removes deleted IDs from group memberships
+ *
+ * Mutates the workspace in place. The caller is expected to have cloned
+ * the workspace before invoking.
+ */
+export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): CascadeDeleteResult {
+  const idSet = new Set(ids)
+  const deletedContainerIds = new Set<string>()
+  const deletedComponentIds = new Set<string>()
+
+  // First pass: collect implicit children of any deleted system/container.
+  for (const sys of ws.model.softwareSystems) {
+    if (idSet.has(sys.id)) {
+      for (const c of sys.containers) {
+        deletedContainerIds.add(c.id)
+        for (const comp of c.components) deletedComponentIds.add(comp.id)
+      }
+    } else {
+      for (const c of sys.containers) {
+        if (idSet.has(c.id)) {
+          deletedContainerIds.add(c.id)
+          for (const comp of c.components) deletedComponentIds.add(comp.id)
+        } else {
+          for (const comp of c.components) {
+            if (idSet.has(comp.id)) deletedComponentIds.add(comp.id)
+          }
+        }
+      }
+    }
+  }
+
+  const allDeletedIds = new Set([...idSet, ...deletedContainerIds, ...deletedComponentIds])
+
+  // Filter people + tree
+  ws.model.people = ws.model.people.filter((p) => !idSet.has(p.id))
+  ws.model.softwareSystems = ws.model.softwareSystems.filter((sys) => {
+    if (idSet.has(sys.id)) return false
+    sys.containers = sys.containers.filter((c) => {
+      if (idSet.has(c.id)) return false
+      c.components = c.components.filter((comp) => !idSet.has(comp.id))
+      return true
+    })
+    return true
+  })
+
+  // Prune relationships referencing any deleted endpoint
+  ws.model.relationships = ws.model.relationships.filter(
+    (r) => !allDeletedIds.has(r.sourceId) && !allDeletedIds.has(r.destinationId),
+  )
+  const survivingRelIds = new Set(ws.model.relationships.map((r) => r.id))
+
+  // Prune view element refs + view relationship refs
+  forEachView(ws, (v) => {
+    v.elements = v.elements.filter((e) => !allDeletedIds.has(e.id))
+    v.relationships = v.relationships.filter((r) => survivingRelIds.has(r.id))
+  })
+
+  // Remove scoped views whose scope element was deleted
+  ws.views.systemContextViews = ws.views.systemContextViews.filter(
+    (v) => !v.softwareSystemId || !idSet.has(v.softwareSystemId),
+  )
+  ws.views.containerViews = ws.views.containerViews.filter(
+    (v) => !v.softwareSystemId || !idSet.has(v.softwareSystemId),
+  )
+  ws.views.componentViews = ws.views.componentViews.filter(
+    (v) => !v.containerId || (!idSet.has(v.containerId) && !deletedContainerIds.has(v.containerId)),
+  )
+
+  // Drop deleted IDs from group memberships
+  ws.model.groups = ws.model.groups.map((g) => ({
+    ...g,
+    elementIds: g.elementIds.filter((eid) => !allDeletedIds.has(eid)),
+  }))
+
+  return { allDeletedIds, deletedContainerIds }
+}
