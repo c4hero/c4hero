@@ -687,33 +687,31 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   addGroup: (name, elementIds = []) => {
     const id = nanoid(8)
     set((s) => {
-      const ws = cloneWs(s)
-      if (!ws) return s
+      if (!s.workspace) return
+      pushUndoSnapshot(s)
       const group: Group = { id, name, elementIds }
-      ws.model.groups.push(group)
-      return { ...pushUndo(s), workspace: ws }
+      s.workspace.model.groups.push(group)
     })
     return id
   },
 
   updateGroup: (id, patch) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    const group = ws.model.groups.find(g => g.id === id)
-    if (!group) return s
+    if (!s.workspace) return
+    const group = s.workspace.model.groups.find(g => g.id === id)
+    if (!group) return
     let changed = false
     if (patch.name !== undefined && group.name !== patch.name) { group.name = patch.name; changed = true }
     if (patch.elementIds !== undefined) { group.elementIds = patch.elementIds; changed = true } // array, always treat as a change
-    if (!changed) return s
-    return { ...pushUndo(s), workspace: ws }
+    if (!changed) return
+    pushUndoSnapshot(s)
   }),
 
   deleteGroup: (id) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    if (!ws.model.groups.some(g => g.id === id)) return s
-    ws.model.groups = ws.model.groups.filter(g => g.id !== id)
-    return { ...pushUndo(s), workspace: ws, selectedGroupId: s.selectedGroupId === id ? null : s.selectedGroupId }
+    if (!s.workspace) return
+    if (!s.workspace.model.groups.some(g => g.id === id)) return
+    pushUndoSnapshot(s)
+    s.workspace.model.groups = s.workspace.model.groups.filter(g => g.id !== id)
+    if (s.selectedGroupId === id) s.selectedGroupId = null
   }),
 
   // ─── Relationship CRUD ──────────────────────────────────────────
