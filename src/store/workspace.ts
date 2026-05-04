@@ -28,7 +28,6 @@ import {
   forEachView,
   uniqueElementName,
   addToCurrentView,
-  cloneWorkspace,
   cascadeDeleteElements,
   duplicateElementsInTree,
   buildInitialViewContent,
@@ -257,20 +256,10 @@ function undoSnapshot(s: WorkspaceState): Workspace | null {
   return isDraft(s.workspace) ? (original(s.workspace) as Workspace) : s.workspace
 }
 
-/** Push current workspace to undo stack before mutation. Returns a partial
- *  UndoState for spread-merging into `set` returns — used by the legacy
- *  cloneWs-based actions during the migration. */
-function pushUndo(s: WorkspaceState): Partial<UndoState> {
-  const snapshot = undoSnapshot(s)
-  if (!snapshot) return {}
-  const undoStack = [...s.undoStack, snapshot].slice(-MAX_UNDO)
-  return { undoStack, redoStack: [] }
-}
-
-/** Draft-mutation variant: append the pre-produce workspace snapshot to
- *  undoStack in place. Safe to call before OR after mutations — original()
- *  always returns the pre-produce ref, so position within the producer
- *  doesn't matter. Clears redoStack. */
+/** Append the pre-produce workspace snapshot to undoStack and clear redoStack
+ *  in place. Safe to call before OR after mutations — original() always
+ *  returns the pre-produce ref, so position within the producer doesn't
+ *  matter. */
 function pushUndoSnapshot(s: WorkspaceState): void {
   const snapshot = undoSnapshot(s)
   if (!snapshot) return
@@ -283,16 +272,6 @@ function pushUndoSnapshot(s: WorkspaceState): void {
 // Re-alias imported helpers under the names used internally
 const findView = findViewHelper
 const forEachElement = forEachElementHelper
-
-/** Clone the active workspace for safe mutation. */
-function cloneWs(s: WorkspaceState): Workspace | null {
-  if (!s.workspace) return null
-  // Unwrap drafts before cloning: structuredClone'ing a proxy works but the
-  // result still references sub-drafts that get revoked post-producer. current()
-  // returns a stable plain snapshot which structuredClone then deep-copies safely.
-  const source = isDraft(s.workspace) ? (current(s.workspace) as Workspace) : s.workspace
-  return cloneWorkspace(source)
-}
 
 export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   workspace: null,
@@ -997,32 +976,42 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
 
   undo: () => {
     set((s) => {
-      if (s.undoStack.length === 0 || !s.workspace) return s
-      const undoStack = [...s.undoStack]
-      const previous = undoStack.pop()!
-      const redoStack = [...s.redoStack, s.workspace]
-      // If the current active view no longer exists in the restored workspace, fall back to first view
+      if (s.undoStack.length === 0 || !s.workspace) return
+      // Capture the pre-produce (= current) workspace ref for the redo stack.
+      // original() avoids deep-copying — it's the same immutable ref that
+      // shares structure with whatever this undo replaces.
+      const currentWs = undoSnapshot(s)!
+      const previous = s.undoStack.pop()!
+      s.redoStack.push(currentWs)
+      // Replace the draft's workspace with the popped snapshot. Immer treats
+      // a wholesale property replacement just fine — the new state has
+      // workspace === previous (a frozen plain object from the stack).
+      s.workspace = previous
       const activeStillExists = s.activeViewKey ? !!findView(previous, s.activeViewKey) : false
-      const activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(previous)
-      // Purge any viewHistory entries that no longer exist in the restored workspace
-      const viewHistory = s.viewHistory.filter(k => !!findView(previous, k))
-      return { workspace: previous, undoStack, redoStack, activeViewKey, viewHistory, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null, scopeViolations: validateScope(previous) }
+      s.activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(previous)
+      s.viewHistory = s.viewHistory.filter(k => !!findView(previous, k))
+      s.selectedElementIds = []
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
+      s.scopeViolations = validateScope(previous)
     })
     announce('Undone')
   },
 
   redo: () => {
     set((s) => {
-      if (s.redoStack.length === 0 || !s.workspace) return s
-      const redoStack = [...s.redoStack]
-      const next = redoStack.pop()!
-      const undoStack = [...s.undoStack, s.workspace]
-      // If the current active view no longer exists in the target workspace, fall back to first view
+      if (s.redoStack.length === 0 || !s.workspace) return
+      const currentWs = undoSnapshot(s)!
+      const next = s.redoStack.pop()!
+      s.undoStack.push(currentWs)
+      s.workspace = next
       const activeStillExists = s.activeViewKey ? !!findView(next, s.activeViewKey) : false
-      const activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(next)
-      // Purge any viewHistory entries that no longer exist in the target workspace
-      const viewHistory = s.viewHistory.filter(k => !!findView(next, k))
-      return { workspace: next, undoStack, redoStack, activeViewKey, viewHistory, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null, scopeViolations: validateScope(next) }
+      s.activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(next)
+      s.viewHistory = s.viewHistory.filter(k => !!findView(next, k))
+      s.selectedElementIds = []
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
+      s.scopeViolations = validateScope(next)
     })
     announce('Redone')
   },
@@ -1133,79 +1122,67 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
     activeTeamFilter: [],
   }),
   updateElementStyle: (style) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    const styles = ws.views.configuration.styles.elements
+    if (!s.workspace) return
+    const styles = s.workspace.views.configuration.styles.elements
     const idx = styles.findIndex((es) => es.tag === style.tag)
     if (idx >= 0) {
       // No-op guard: if every incoming field already matches, skip the undo push
       const existing = styles[idx]
       const keys = Object.keys(style) as (keyof typeof style)[]
       const changed = keys.some(k => k !== 'tag' && style[k] !== existing[k])
-      if (!changed) return s
+      if (!changed) return
+      pushUndoSnapshot(s)
       styles[idx] = { ...existing, ...style }
     } else {
+      pushUndoSnapshot(s)
       styles.push(style)
     }
-    return { ...pushUndo(s), workspace: ws }
   }),
   removeElementStyle: (tag) => set((s) => {
     // Built-in tag styles CAN be removed — the theme provides the fallback.
-    const ws = cloneWs(s)
-    if (!ws) return s
-    const exists = ws.views.configuration.styles.elements.some((es) => es.tag === tag)
-    if (!exists) return s
-    ws.views.configuration.styles.elements = ws.views.configuration.styles.elements.filter((es) => es.tag !== tag)
-    return { ...pushUndo(s), workspace: ws }
+    if (!s.workspace) return
+    const styles = s.workspace.views.configuration.styles.elements
+    if (!styles.some((es) => es.tag === tag)) return
+    pushUndoSnapshot(s)
+    s.workspace.views.configuration.styles.elements = styles.filter((es) => es.tag !== tag)
   }),
   renameTag: (oldTag, newTag) => set((s) => {
-    if (!newTag.trim() || oldTag === newTag) return s
-    if (BUILTIN_TAGS.has(oldTag)) return s // Built-in tags cannot be renamed
-    if (BUILTIN_TAGS.has(newTag.trim())) return s // Cannot rename a custom tag to a built-in name
-    if (!s.workspace) return s
-    // Quick existence check before the expensive clone + undo push
-    const src = s.workspace
-    let exists = src.views.configuration.styles.elements.some(es => es.tag === oldTag)
-      || src.views.configuration.styles.relationships.some(rs => rs.tag === oldTag)
-      || src.model.relationships.some(r => r.tags.includes(oldTag))
-    if (!exists) forEachElement(src, (el) => { if (el.tags.includes(oldTag)) { exists = true; return true } })
-    if (!exists) return s
-    const ws = cloneWs(s)
-    if (!ws) return s
+    if (!newTag.trim() || oldTag === newTag) return
+    if (BUILTIN_TAGS.has(oldTag)) return // Built-in tags cannot be renamed
+    if (BUILTIN_TAGS.has(newTag.trim())) return // Cannot rename a custom tag to a built-in name
+    if (!s.workspace) return
+    const ws = s.workspace
+    // Quick existence check before doing any mutation
+    let exists = ws.views.configuration.styles.elements.some(es => es.tag === oldTag)
+      || ws.views.configuration.styles.relationships.some(rs => rs.tag === oldTag)
+      || ws.model.relationships.some(r => r.tags.includes(oldTag))
+    if (!exists) forEachElement(ws, (el) => { if (el.tags.includes(oldTag)) { exists = true; return true } })
+    if (!exists) return
+    pushUndoSnapshot(s)
     forEachElement(ws, (el) => { el.tags = el.tags.map(t => t === oldTag ? newTag : t) })
     for (const rel of ws.model.relationships) { rel.tags = rel.tags.map(t => t === oldTag ? newTag : t) }
     const elStyle = ws.views.configuration.styles.elements.find(es => es.tag === oldTag)
     if (elStyle) elStyle.tag = newTag
     const relStyle = ws.views.configuration.styles.relationships.find(rs => rs.tag === oldTag)
     if (relStyle) relStyle.tag = newTag
-    return {
-      ...pushUndo(s),
-      workspace: ws,
-      activeTagFilter: s.activeTagFilter.map((t) => (t === oldTag ? newTag : t)),
-    }
+    s.activeTagFilter = s.activeTagFilter.map((t) => (t === oldTag ? newTag : t))
   }),
 
   removeTagGlobal: (tag) => set((s) => {
-    if (BUILTIN_TAGS.has(tag)) return s // Built-in tags cannot be removed
-    if (!s.workspace) return s
-    // Quick existence check on the pre-clone workspace to avoid unnecessary cloning
-    const src = s.workspace
-    let exists = src.views.configuration.styles.elements.some(es => es.tag === tag)
-      || src.views.configuration.styles.relationships.some(rs => rs.tag === tag)
-      || src.model.relationships.some(r => r.tags.includes(tag))
-    if (!exists) forEachElement(src, (el) => { if (el.tags.includes(tag)) { exists = true; return true } })
-    if (!exists) return s
-    const ws = cloneWs(s)
-    if (!ws) return s
+    if (BUILTIN_TAGS.has(tag)) return // Built-in tags cannot be removed
+    if (!s.workspace) return
+    const ws = s.workspace
+    let exists = ws.views.configuration.styles.elements.some(es => es.tag === tag)
+      || ws.views.configuration.styles.relationships.some(rs => rs.tag === tag)
+      || ws.model.relationships.some(r => r.tags.includes(tag))
+    if (!exists) forEachElement(ws, (el) => { if (el.tags.includes(tag)) { exists = true; return true } })
+    if (!exists) return
+    pushUndoSnapshot(s)
     forEachElement(ws, (el) => { el.tags = el.tags.filter(t => t !== tag) })
     for (const rel of ws.model.relationships) { rel.tags = rel.tags.filter(t => t !== tag) }
     ws.views.configuration.styles.elements = ws.views.configuration.styles.elements.filter(es => es.tag !== tag)
     ws.views.configuration.styles.relationships = ws.views.configuration.styles.relationships.filter(rs => rs.tag !== tag)
-    return {
-      ...pushUndo(s),
-      workspace: ws,
-      activeTagFilter: s.activeTagFilter.filter((t) => t !== tag),
-    }
+    s.activeTagFilter = s.activeTagFilter.filter((t) => t !== tag)
   }),
 
   toggleMinimap: () => set((s) => { s.minimapEnabled = !s.minimapEnabled }),

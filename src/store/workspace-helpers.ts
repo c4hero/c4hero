@@ -157,11 +157,6 @@ export function addToCurrentView(
   }
 }
 
-/** Deep-clone the workspace for safe mutation. Returns null when there's
- *  no workspace loaded. Handles Immer drafts via current() unwrap. */
-export function cloneWorkspace(ws: Workspace | null): Workspace | null {
-  return ws ? deepCloneMaybeDraft(ws) : null
-}
 
 /** Result of a cascade delete: the model is mutated in place, and the caller
  *  gets back the full set of element IDs that were removed (direct + implicit
