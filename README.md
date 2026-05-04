@@ -53,11 +53,15 @@ The Vite dev server runs on `http://localhost:3004` with `strictPort: true`.
 ```bash
 npm run dev
 npm run build
+npm run typecheck
 npm run lint
 npm run preview
 npm test
+npm run test:unit
 npm run test:watch
 npm run test:e2e
+npm run audit
+npm run check
 ```
 
 ## Privacy

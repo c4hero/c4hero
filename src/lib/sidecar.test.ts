@@ -291,6 +291,11 @@ describe('sidecarName', () => {
   })
 
   it('handles just .dsl extension', () => {
-    expect(sidecarName('.dsl')).toBe('.c4hero.json')
+    expect(sidecarName('.dsl')).toBe('workspace.c4hero.json')
+  })
+
+  it('sanitizes unsafe sidecar base names', () => {
+    expect(sidecarName('../CON.dsl')).toBe('__CON.c4hero.json')
+    expect(sidecarName('line\nbreak.dsl')).toBe('line_break.c4hero.json')
   })
 })

@@ -2,6 +2,8 @@ import type { Workspace } from '@/types/model'
 import { downloadBlob } from '@/lib/exportUtils'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isNonEmptyString, isRecord, isStringArray, isStringRecord } from '@/lib/guards'
+import { sidecarName } from '@/lib/sidecar'
+import { safeSuggestedDslName } from '@/lib/filenames'
 
 const log = createLogger('fileIO')
 
@@ -61,10 +63,6 @@ function normalizeRecentFolders(value: unknown): RecentFolder[] {
       openedAt: item.openedAt,
     }]
   })
-}
-
-function sidecarNameForDsl(dslName: string): string {
-  return dslName.replace(/\.dsl$/i, '') + '.c4hero.json'
 }
 
 export function getRecentFiles(): RecentFile[] {
@@ -164,7 +162,7 @@ export async function writeSidecarToHandle(json: string): Promise<boolean> {
       const dirHandle = await currentFileHandle.getParent?.()
       if (dirHandle) {
         const dslFile = await currentFileHandle.getFile()
-        const sidecarFileName = sidecarNameForDsl(dslFile.name)
+        const sidecarFileName = sidecarName(dslFile.name)
         currentSidecarHandle = await dirHandle.getFileHandle(sidecarFileName, { create: true })
         const writable = await currentSidecarHandle.createWritable()
         await writable.write(json)
@@ -195,6 +193,12 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
   if (hasFileSystemAccess()) {
     try {
       const [handle] = await window.showOpenFilePicker({
+        types: [
+          {
+            description: 'Structurizr DSL or text',
+            accept: { 'text/plain': ['.dsl', '.txt'] },
+          },
+        ],
         excludeAcceptAllOption: false,
       })
       currentFileHandle = handle
@@ -207,7 +211,7 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
       try {
         const dirHandle = await handle.getParent?.()
         if (dirHandle) {
-          const sidecarFileName = sidecarNameForDsl(file.name)
+          const sidecarFileName = sidecarName(file.name)
           const sidecarFileHandle = await dirHandle.getFileHandle(sidecarFileName)
           currentSidecarHandle = sidecarFileHandle
           const sidecarFile = await sidecarFileHandle.getFile()
@@ -248,11 +252,12 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
 
 /** Save content to the current file handle or prompt for new file */
 export async function saveDSLFile(content: string, suggestedName?: string): Promise<boolean> {
+  const safeSuggestedName = safeSuggestedDslName(suggestedName)
   if (hasFileSystemAccess()) {
     try {
       if (!currentFileHandle) {
         currentFileHandle = await window.showSaveFilePicker({
-          suggestedName: suggestedName ?? 'workspace.dsl',
+          suggestedName: safeSuggestedName,
           types: [
             {
               description: 'Structurizr DSL (.dsl)',
@@ -273,7 +278,7 @@ export async function saveDSLFile(content: string, suggestedName?: string): Prom
   }
 
   // Fallback: trigger download
-  downloadBlob(new Blob([content], { type: 'text/plain' }), suggestedName ?? 'workspace.dsl')
+  downloadBlob(new Blob([content], { type: 'text/plain' }), safeSuggestedName)
   return true
 }
 

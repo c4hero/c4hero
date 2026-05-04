@@ -3,20 +3,9 @@ import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElemen
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
 import { X, Plus, ArrowRight, ExternalLink, Eye, ChevronRight, Trash2 } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
+import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
-
-/** Returns the URL if it uses a safe protocol (http, https, or protocol-relative), otherwise null. */
-function getSafeUrl(raw: string): string | null {
-  try {
-    if (raw.startsWith('//')) return raw
-    const parsed = new URL(raw)
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return raw
-    return null
-  } catch {
-    return null
-  }
-}
 
 const STATUS_OPTIONS: { value: ElementStatus | undefined; label: string; color: string | null }[] = [
   { value: undefined, label: 'Not set', color: null },
@@ -88,6 +77,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const hasLocation = element.type === 'person' || element.type === 'softwareSystem'
   const location = (element as Person | SoftwareSystem).location
   const typeColor = TYPE_COLORS[element.type] ?? 'var(--color-accent)'
+  const safeUrl = element.url ? normalizeSafeExternalUrl(element.url) : null
 
   // Find which views contain this element
   const appearsInViews = workspace ? getAllViews(workspace).filter(v =>
@@ -236,15 +226,15 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                     value={element.url ?? ''}
                     placeholder="https://..."
                     aria-label="URL"
-                    aria-invalid={!!element.url && !getSafeUrl(element.url)}
-                    aria-describedby={element.url && !getSafeUrl(element.url) ? `url-error-${element.id}` : undefined}
+                    aria-invalid={!!element.url && !safeUrl}
+                    aria-describedby={element.url && !safeUrl ? `url-error-${element.id}` : undefined}
                     onLiveChange={(v) => updateElementLive(element.id, { url: v || undefined })}
                     onCommit={(v) => updateElement(element.id, { url: v || undefined })}
                   />
                 </div>
-                {element.url && getSafeUrl(element.url) && (
+                {safeUrl && (
                   <a
-                    href={getSafeUrl(element.url)!}
+                    href={safeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-icon !min-h-8 !min-w-8 !p-1.5 shrink-0"
@@ -255,7 +245,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                   </a>
                 )}
               </div>
-              {element.url && !getSafeUrl(element.url) && (
+              {element.url && !safeUrl && (
                 <div
                   id={`url-error-${element.id}`}
                   role="alert"
@@ -344,6 +334,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
   const source = elementMap.get(relationship.sourceId)
   const dest = elementMap.get(relationship.destinationId)
+  const safeUrl = relationship.url ? normalizeSafeExternalUrl(relationship.url) : null
 
   return (
     <div className="flex flex-1 flex-col">
@@ -477,9 +468,9 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
             <div className="flex-1">
               <EditableField value={relationship.url ?? ''} placeholder="https://..." aria-label="URL" onCommit={(v) => updateRelationship(relationship.id, { url: v || undefined })} />
             </div>
-            {relationship.url && getSafeUrl(relationship.url) && (
+            {safeUrl && (
               <a
-                href={getSafeUrl(relationship.url)!}
+                href={safeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-icon !min-h-8 !min-w-8 !p-1.5 shrink-0"
@@ -643,4 +634,3 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
 }
 
 // ─── Group Properties ─────────────────────────────────────────────────
-

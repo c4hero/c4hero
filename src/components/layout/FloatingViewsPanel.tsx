@@ -1,8 +1,10 @@
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import type { View } from '@/types/model'
 import { X, ChevronDown, ChevronRight, Plus } from 'lucide-react'
-import CreateViewDialog from '@/components/views/CreateViewDialog'
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
+import LoadingDot from '@/components/shared/LoadingDot'
+
+const CreateViewDialog = lazy(() => import('@/components/views/CreateViewDialog'))
 
 const VIEW_TYPE_LABELS: Record<string, string> = {
   systemLandscape: 'System Landscape',
@@ -101,7 +103,11 @@ export default function FloatingViewsPanel() {
         </div>
       </div>
 
-      {showCreateView && <CreateViewDialog onClose={() => setShowCreateView(false)} />}
+      {showCreateView && (
+        <Suspense fallback={<LoadingDot />}>
+          <CreateViewDialog onClose={() => setShowCreateView(false)} />
+        </Suspense>
+      )}
     </>
   )
 }

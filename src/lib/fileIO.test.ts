@@ -314,6 +314,56 @@ describe('hasFileSystemAccess', () => {
   })
 })
 
+describe('file picker hardening', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.resetModules()
+  })
+
+  it('limits the native open picker to DSL and text files', async () => {
+    const { mock } = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', mock)
+
+    const file = new File(['workspace {}'], 'example.dsl', { type: 'text/plain' })
+    const handle = { getFile: vi.fn().mockResolvedValue(file) }
+    const showOpenFilePicker = vi.fn().mockResolvedValue([handle])
+    vi.stubGlobal('showOpenFilePicker', showOpenFilePicker)
+
+    const { openDSLFile } = await import('./fileIO')
+    const result = await openDSLFile()
+
+    expect(result).toMatchObject({ content: 'workspace {}', name: 'example.dsl' })
+    expect(showOpenFilePicker).toHaveBeenCalledWith(expect.objectContaining({
+      types: [
+        expect.objectContaining({
+          accept: { 'text/plain': ['.dsl', '.txt'] },
+        }),
+      ],
+    }))
+  })
+
+  it('sanitizes suggested names passed to the native save picker', async () => {
+    const writable = {
+      write: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+    }
+    const handle = { createWritable: vi.fn().mockResolvedValue(writable) }
+    const showSaveFilePicker = vi.fn().mockResolvedValue(handle)
+    vi.stubGlobal('showOpenFilePicker', vi.fn())
+    vi.stubGlobal('showSaveFilePicker', showSaveFilePicker)
+
+    const { saveDSLFile } = await import('./fileIO')
+    const saved = await saveDSLFile('workspace {}', '../CON.dsl')
+
+    expect(saved).toBe(true)
+    expect(showSaveFilePicker).toHaveBeenCalledWith(expect.objectContaining({
+      suggestedName: '__CON.dsl',
+    }))
+    expect(writable.write).toHaveBeenCalledWith('workspace {}')
+    expect(writable.close).toHaveBeenCalled()
+  })
+})
+
 // ─── addRecentFile edge cases ────────────────────────────────────────
 
 describe('addRecentFile edge cases', () => {

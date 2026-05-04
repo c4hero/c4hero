@@ -10,7 +10,20 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -21,7 +34,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npx tsc -b
+      - run: npm run typecheck
 
   test:
     runs-on: ubuntu-latest
@@ -66,4 +79,4 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=moderate
+      - run: npm run audit

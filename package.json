@@ -1,6 +1,7 @@
 {
   "name": "c4hero",
   "version": "0.1.0",
+  "private": true,
   "description": "Local-first visual architecture modelling for the C4 model. Edit visually, save as Structurizr DSL — your architecture lives in your repo.",
   "license": "MIT",
   "homepage": "https://c4hero.com",
@@ -28,12 +29,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "audit": "npm audit --audit-level=moderate",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

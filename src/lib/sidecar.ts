@@ -1,7 +1,8 @@
 import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
-import { allViewsOf } from '@/store/workspace'
+import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
+import { sanitizeFilename } from '@/lib/filenames'
 
 const VALID_STATUSES: ReadonlySet<string> = new Set<ElementStatus>(['Live', 'Planned', 'Deprecated', 'Removed'])
 const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
@@ -178,7 +179,9 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
 // ─── Sidecar filename ───────────────────────────────────────────────
 
 export function sidecarName(dslName: string): string {
-  return dslName.replace(/\.dsl$/i, '') + '.c4hero.json'
+  const baseName = dslName.replace(/\.dsl$/i, '')
+  const safeBaseName = sanitizeFilename(baseName)
+  return `${safeBaseName === 'download' ? 'workspace' : safeBaseName}.c4hero.json`
 }
 
 export function serializeSidecar(data: SidecarData): string {

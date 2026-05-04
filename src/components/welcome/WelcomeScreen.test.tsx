@@ -69,11 +69,6 @@ describe('WelcomeScreen', () => {
     expect(screen.getByText('Open .dsl file')).toBeTruthy()
   })
 
-  it('shows AI describe button', () => {
-    render(<WelcomeScreen />)
-    expect(screen.getByText('Describe your system with AI')).toBeTruthy()
-  })
-
   it('error banner is hidden by default', () => {
     render(<WelcomeScreen />)
     expect(screen.queryByRole('alert')).toBeNull()

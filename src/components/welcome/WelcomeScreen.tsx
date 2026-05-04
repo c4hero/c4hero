@@ -741,9 +741,6 @@ function StartupView({
         </div>
       )}
 
-      {/* sr-only: preserves test assertion for AI describe */}
-      <span className="sr-only">Describe your system with AI</span>
-
       <WelcomeFooter />
     </>
   )
@@ -752,8 +749,8 @@ function StartupView({
 function WelcomeFooter() {
   return (
     <div className="welcome-footer">
-      <a href="https://github.com/c4hero/c4hero" target="_blank" rel="noreferrer">GitHub</a>
-      <a href="https://c4hero.com" target="_blank" rel="noreferrer">c4hero.com</a>
+      <a href="https://github.com/c4hero/c4hero" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://c4hero.com" target="_blank" rel="noopener noreferrer">c4hero.com</a>
     </div>
   )
 }

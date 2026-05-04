@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
 import { createLogger, addTransport, type LogEntry } from './lib/logger'
+import { normalizeRemoteLogEndpoint } from './lib/remoteLogEndpoint'
 import { useWorkspaceStore } from './store/workspace'
 import {
   createBigBankSample,
@@ -105,7 +106,7 @@ window.addEventListener('unhandledrejection', (e) => {
 // Optional remote log transport. Activates only when VITE_LOG_ENDPOINT is set
 // at build time. Batches warn/error entries and flushes via sendBeacon so errors
 // survive page unload. Entries include the session correlation ID from the logger.
-const remoteEndpoint = import.meta.env.VITE_LOG_ENDPOINT as string | undefined
+const remoteEndpoint = normalizeRemoteLogEndpoint(import.meta.env.VITE_LOG_ENDPOINT as string | undefined)
 if (remoteEndpoint) {
   const buffer: LogEntry[] = []
   const flush = () => {

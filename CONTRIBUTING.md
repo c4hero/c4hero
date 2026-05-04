@@ -53,7 +53,6 @@ Keep local overrides out of git.
 ```text
 src/
 ├── components/
-│   ├── ai/
 │   ├── canvas/
 │   ├── command-palette/
 │   ├── dialogs/
@@ -70,6 +69,7 @@ src/
 └── types/
 
 e2e/                     # Playwright end-to-end coverage
+docs/                    # Historical design notes and architecture references
 public/                  # Static assets
 ```
 
@@ -80,18 +80,24 @@ public/                  # Static assets
 ```bash
 npm run dev
 npm run lint
+npm run typecheck
 npm test
 npm run build
 npm run test:e2e
+npm run audit
+npm run check
 ```
 
 ### What Each Command Does
 
 - `npm run dev` starts the local app
 - `npm run lint` runs ESLint across the repo
+- `npm run typecheck` runs the TypeScript project build without emitting files
 - `npm test` runs Vitest in non-watch mode
 - `npm run build` runs the TypeScript build and Vite production build
 - `npm run test:e2e` runs Playwright tests from `e2e/`
+- `npm run audit` runs `npm audit --audit-level=moderate`
+- `npm run check` runs the local release gate: lint, typecheck, unit tests, and build
 
 If you are changing canvas interactions, file import/export flows, DSL parsing,
 or onboarding behavior, please run the relevant tests and do a quick manual

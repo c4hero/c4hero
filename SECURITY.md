@@ -27,9 +27,7 @@ reports are:
 - The Structurizr DSL parser and serializer (`src/lib/dsl/**`) — parser
   crashes or malformed-input handling issues
 - The file and folder I/O layer (`src/lib/fileIO.ts`, `src/lib/folderIO.ts`)
-- Handling of user-provided AI API keys (`src/lib/ai.ts`) — they are stored
-  in `sessionStorage` by design; reports about additional exposure paths are
-  welcome
+- Local persistence boundaries for `localStorage` and `IndexedDB` data
 - Content Security Policy, HTTP security headers, and any XSS sinks in the
   React tree
 

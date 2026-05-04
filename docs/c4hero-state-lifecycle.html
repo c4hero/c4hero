@@ -3,9 +3,6 @@
 <head>
 <meta charset="UTF-8" />
 <title>c4hero · State Lifecycle</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0a0b0f;
@@ -21,6 +18,8 @@
     --accent-2: #7aa8ff;
     --accent-soft: rgba(79,139,255,0.10);
     --accent-glow: rgba(79,139,255,0.35);
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --font-serif: Georgia, "Times New Roman", serif;
     --radius: 14px;
     --radius-lg: 22px;
     --shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 20px 60px -20px rgba(0,0,0,0.6);
@@ -30,7 +29,7 @@
     margin: 0; padding: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 14px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
@@ -65,7 +64,7 @@
   }
   .lifeline .step + .step { border-left: 1px solid var(--line); }
   .lifeline .step .num {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    font-family: var(--font-mono); font-size: 11px;
     color: var(--accent); letter-spacing: 0.1em;
     margin-bottom: 4px;
   }
@@ -91,7 +90,7 @@
     border-bottom: 1px solid var(--line);
   }
   .section-header .label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px; color: var(--accent);
     letter-spacing: 0.12em; text-transform: uppercase;
   }
@@ -99,7 +98,7 @@
   .section-header .blurb { color: var(--text-2); font-size: 13px; max-width: 480px; text-align: right; }
   .section-header .matrix {
     display: inline-flex; gap: 8px; margin-top: 10px;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    font-family: var(--font-mono); font-size: 11px;
   }
   .section-header .matrix .chip {
     padding: 3px 8px; border-radius: 4px;
@@ -134,7 +133,7 @@
   }
   .frame-bar .dot { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,0.10); }
   .frame-bar .url {
-    margin-left: 12px; font-family: 'JetBrains Mono', monospace;
+    margin-left: 12px; font-family: var(--font-mono);
     font-size: 11px; color: var(--text-3);
   }
 
@@ -187,7 +186,7 @@
   }
   .pill:hover { color: var(--text); border-color: var(--line-2); }
   .pill.on { background: var(--text); color: var(--bg); border-color: var(--text); }
-  .pill .ct { color: var(--text-3); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .pill .ct { color: var(--text-3); font-family: var(--font-mono); font-size: 11px; }
   .pill.on .ct { color: rgba(10,11,15,0.55); }
   .pill.add { border-style: dashed; color: var(--text-3); }
   .pill.add:hover { color: var(--accent); border-color: var(--accent); }
@@ -208,12 +207,12 @@
     transition: padding .2s;
   }
   .ws-row:hover { padding-left: 8px; }
-  .ws-row .idx { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-3); }
+  .ws-row .idx { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
   .ws-row .name { font-size: 22px; font-weight: 500; letter-spacing: -0.015em; }
   .ws-row .desc { color: var(--text-3); font-size: 13px; margin-top: 3px; }
   .ws-row .stats {
     display: flex; gap: 16px;
-    font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-3);
+    font-family: var(--font-mono); font-size: 12px; color: var(--text-3);
   }
   .ws-row .arrow {
     width: 32px; height: 32px; border-radius: 50%;
@@ -242,8 +241,8 @@
     color: var(--text-3);
   }
   .recent-row .name { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
-  .recent-row .slug { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-3); margin-top: 2px; }
-  .recent-row .meta { color: var(--text-3); font-size: 12px; font-family: 'JetBrains Mono', monospace; text-align: right; white-space: nowrap; }
+  .recent-row .slug { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .recent-row .meta { color: var(--text-3); font-size: 12px; font-family: var(--font-mono); text-align: right; white-space: nowrap; }
   .recent-row .arrow {
     width: 28px; height: 28px; border-radius: 50%;
     border: 1px solid var(--line);
@@ -264,10 +263,10 @@
   }
   .empty-zone .badge {
     font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--text-3); font-family: 'JetBrains Mono', monospace;
+    color: var(--text-3); font-family: var(--font-mono);
   }
   .empty-zone h3 {
-    font-family: 'Instrument Serif', serif;
+    font-family: var(--font-serif);
     font-size: 32px; font-weight: 400;
     letter-spacing: -0.015em; margin: 0;
   }
@@ -296,7 +295,7 @@
   }
   .welcome .art svg { width: 100%; height: 100%; overflow: visible; }
   .welcome h1 {
-    font-family: 'Instrument Serif', serif;
+    font-family: var(--font-serif);
     font-size: 48px; font-weight: 400;
     letter-spacing: -0.02em; line-height: 1;
     margin: 0 0 14px;
@@ -336,7 +335,7 @@
   .toc-label {
     font-size: 11px; color: var(--text-3);
     letter-spacing: 0.16em; text-transform: uppercase;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     padding-bottom: 12px;
     border-bottom: 1px solid var(--line);
     margin-bottom: 4px;
@@ -350,7 +349,7 @@
 <div class="page-intro">
   <div class="c4-logo" style="margin-bottom:18px;">
     <span class="c4-mark">c4</span>
-    <span style="color:var(--text-2);font-size:12px;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;">state lifecycle · 4 states</span>
+    <span style="color:var(--text-2);font-size:12px;font-family:var(--font-mono);letter-spacing:0.12em;text-transform:uppercase;">state lifecycle · 4 states</span>
   </div>
   <h1>One design, every state.</h1>
   <p>Same shell, same type, same posture — content adapts to what the user has. Below is the natural lifecycle a user passes through, from first launch to a fully populated collection.</p>
@@ -444,7 +443,7 @@
         </div>
 
         <h1>Start with an <em>architecture</em>.</h1>
-        <p class="lede">Open a folder you already have, or create a fresh collection — c4hero saves everything as plain <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text-2);">.dsl</code> files alongside your code.</p>
+        <p class="lede">Open a folder you already have, or create a fresh collection — c4hero saves everything as plain <code style="font-family:var(--font-mono);font-size:13px;color:var(--text-2);">.dsl</code> files alongside your code.</p>
 
         <div class="ctas">
           <div class="btn primary">
@@ -600,7 +599,7 @@
         </div>
 
         <h1 class="display">Workspaces<span class="accent">.</span></h1>
-        <p class="summary">This collection is empty. Add a workspace to start mapping the system — each workspace is a separate diagram saved as its own <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text-2);">.dsl</code> file.</p>
+        <p class="summary">This collection is empty. Add a workspace to start mapping the system — each workspace is a separate diagram saved as its own <code style="font-family:var(--font-mono);font-size:13px;color:var(--text-2);">.dsl</code> file.</p>
 
         <div class="empty-zone">
           <div class="empty-illu">
@@ -621,7 +620,7 @@
           </div>
           <div class="badge">No workspaces · 0 of ∞</div>
           <h3>Map your first system.</h3>
-          <p>Workspaces are where your diagrams live. You can start from a template or paste in an existing <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text-2);">.dsl</code> file.</p>
+          <p>Workspaces are where your diagrams live. You can start from a template or paste in an existing <code style="font-family:var(--font-mono);font-size:13px;color:var(--text-2);">.dsl</code> file.</p>
           <div class="ctas">
             <div class="btn primary">
               <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
