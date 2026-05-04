@@ -133,3 +133,7 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+
+// Report Core Web Vitals through the structured logger so any configured
+// remote transport (or a future Sentry adapter) gets perf telemetry too.
+import('./lib/webVitals').then(({ reportWebVitals }) => reportWebVitals())
