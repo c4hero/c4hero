@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useWorkspaceStore, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, View, Container, Component } from '@/types/model'
 import { Search, X, LayoutGrid } from 'lucide-react'
-import { useFocusTrap } from '@/hooks/useFocusTrap'
+import DialogShell from '@/components/shared/DialogShell'
 import { TYPE_ICONS, TYPE_COLORS } from '@/lib/elementMeta'
 
 const TYPE_FILTERS = [
@@ -119,29 +119,18 @@ export default function SearchDialog() {
     setTagFilter(prev => prev === tag ? null : tag)
   }
 
-  const trapRef = useFocusTrap<HTMLDivElement>()
   const resultsListId = 'search-results-list'
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 panel-backdrop"
-        onClick={() => setSearchOpen(false)}
-      />
-
-      {/* Dialog */}
-      <div
-        ref={trapRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Search"
-        className="relative w-full max-w-lg rounded-xl border shadow-2xl"
-        style={{
-          background: 'var(--color-surface-1)',
-          borderColor: 'var(--color-border)',
-        }}
-      >
+    <DialogShell
+      onClose={() => setSearchOpen(false)}
+      ariaLabel="Search"
+      className="w-full max-w-lg rounded-xl border shadow-2xl"
+      style={{
+        background: 'var(--color-surface-1)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
         {/* Search input */}
         <div className="flex items-center gap-3 border-b px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
           <Search size={16} style={{ color: 'var(--color-text-muted)' }} />
@@ -282,7 +271,6 @@ export default function SearchDialog() {
             <kbd className="rounded border px-1 py-0.5" style={{ borderColor: 'var(--color-border)' }}>Esc</kbd> Close
           </span>
         </div>
-      </div>
-    </div>
+    </DialogShell>
   )
 }
