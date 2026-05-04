@@ -21,6 +21,13 @@ import {
   findViewHelper,
   forEachElementHelper,
   findElementHelper,
+  applyElementPatch,
+  elementExists,
+  VIEW_ARRAY_KEYS,
+  forEachView,
+  uniqueElementName,
+  addToCurrentView,
+  cloneWorkspace,
 } from './workspace-helpers'
 export { allViewsOf } from './workspace-helpers'
 export {
@@ -247,83 +254,14 @@ function pushUndo(s: WorkspaceState): Partial<UndoState> {
   return { undoStack, redoStack: [] }
 }
 
-/** Clone workspace for safe mutation */
-function cloneWs(s: WorkspaceState): Workspace | null {
-  return s.workspace ? structuredClone(s.workspace) : null
-}
-
 // Re-alias imported helpers under the names used internally
 const findView = findViewHelper
 const forEachElement = forEachElementHelper
 const findElement = findElementHelper
 
-type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>>
-  & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string }
-
-/** Apply a patch to an element in-place. Shared by updateElement and updateElementLive.
- *  Returns true only when the element was found AND at least one field changed.
- *  Returning false (either element not found, or no-op patch) prevents phantom undo entries. */
-function elementExists(ws: Workspace, id: string): boolean {
-  return !!findElement(ws, id)
-}
-
-function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch): boolean {
-  let changed = false
-  forEachElement(ws, (el) => {
-    if (el.id !== id) return false
-    // Use 'key in patch' for fields that can be legitimately cleared to undefined.
-    // This distinguishes { status: undefined } (clear) from {} (leave unchanged),
-    // which matters because the UI passes { status: undefined } when the user
-    // deselects a value (e.g. clears description or picks "no status").
-    if (patch.name !== undefined && el.name !== patch.name) { el.name = patch.name; changed = true }
-    if ('description' in patch && el.description !== patch.description) { el.description = patch.description; changed = true }
-    if (patch.tags !== undefined) {
-      const tagsChanged = patch.tags.length !== el.tags.length || patch.tags.some((t, i) => t !== el.tags[i])
-      if (tagsChanged) { el.tags = patch.tags; changed = true }
-    }
-    if ('status' in patch && el.status !== patch.status) { el.status = patch.status; changed = true }
-    if ('owner' in patch && el.owner !== patch.owner) { el.owner = patch.owner; changed = true }
-    if ('url' in patch && el.url !== patch.url) { el.url = patch.url; changed = true }
-    if (patch.location !== undefined && (el.type === 'person' || el.type === 'softwareSystem')) {
-      const cur = (el as Person | SoftwareSystem).location
-      if (cur !== patch.location) { (el as Person | SoftwareSystem).location = patch.location; changed = true }
-    }
-    if (patch.technology !== undefined && (el.type === 'container' || el.type === 'component')) {
-      const cur = (el as Container | Component).technology
-      if (cur !== patch.technology) { (el as Container | Component).technology = patch.technology; changed = true }
-    }
-    return true
-  })
-  return changed
-}
-
-/** The four view-type array keys — used wherever we need to iterate or locate views by type */
-const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews'] as const
-
-/** Apply a callback to every view in the workspace (mutates views in place) */
-function forEachView(ws: Workspace, fn: (v: View) => void): void {
-  for (const key of VIEW_ARRAY_KEYS) {
-    for (const v of ws.views[key]) fn(v)
-  }
-}
-
-/** Return a name that doesn't collide with any existing element name. */
-function uniqueElementName(base: string, ws: Workspace): string {
-  const taken = new Set<string>()
-  forEachElement(ws, (el) => { taken.add(el.name) })
-  if (!taken.has(base)) return base
-  let n = 2
-  while (taken.has(`${base} ${n}`)) n++
-  return `${base} ${n}`
-}
-
-/** Add an element to the current view */
-function addToCurrentView(ws: Workspace, activeViewKey: string | null, elementId: string, position?: { x: number; y: number }) {
-  if (!activeViewKey) return
-  const view = findView(ws, activeViewKey)
-  if (view && !view.elements.some(e => e.id === elementId)) {
-    view.elements.push({ id: elementId, x: position?.x, y: position?.y })
-  }
+/** Clone the active workspace for safe mutation. */
+function cloneWs(s: WorkspaceState): Workspace | null {
+  return cloneWorkspace(s.workspace)
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
