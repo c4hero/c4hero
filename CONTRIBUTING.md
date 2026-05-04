@@ -32,8 +32,6 @@ Optional variables are documented in `.env.example`:
 
 - `VITE_HMR_TUNNEL`, for secure HMR when developing through a tunnel or reverse
   proxy that terminates TLS
-- `VITE_ANTHROPIC_API_URL`, to override the default Anthropic API endpoint
-- `VITE_OPENAI_API_URL`, to override the default OpenAI API endpoint
 - `VITE_LOG_ENDPOINT`, to send warn/error logs to an HTTPS endpoint; remember to
   add that origin to the deployment CSP `connect-src`
 

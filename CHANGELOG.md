@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- AI features (description suggestions, prompt-to-workspace bootstrap) and the bring-your-own-key infrastructure that supported them. The `VITE_ANTHROPIC_API_URL` and `VITE_OPENAI_API_URL` build-time variables are gone with them. The open source build no longer talks to any LLM provider.
+
 ### Added
 - Highlighter panel: a side panel for highlighting nodes by tag, status, technology, or team — with stackable AND-across-facets matching, per-facet `Any of` / `All of` mode, and per-value match counts. Opens from the left tool rail.
 - Owner picker on elements: autocomplete from existing teams in the workspace, mirroring the technology field's UX.

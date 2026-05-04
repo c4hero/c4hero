@@ -18,7 +18,6 @@ This repository currently contains a browser-based React app with:
 - local file and folder workflows, plus local crash-recovery storage in the browser
 - search, command palette, keyboard shortcuts, layout controls, tags, styles, groups, and presentation-oriented canvas controls
 - import/export paths for Structurizr DSL plus PNG and SVG export
-- optional AI helpers for generating element descriptions and bootstrapping a workspace from a text prompt
 - unit and Playwright coverage for core editing flows
 
 ## Browser support
@@ -61,20 +60,9 @@ npm run test:watch
 npm run test:e2e
 ```
 
-## AI keys
-
-AI features are optional.
-
-- c4hero does not require an AI key for normal use
-- if you want AI features, you bring your own OpenAI or Anthropic API key
-- keys are stored in `sessionStorage`, so they stay local to the current browser session
-- keys are sent directly to the configured AI provider endpoint, not to c4hero servers
-- because keys live in the browser, any browser extension or XSS bug in the app could read them; only use AI features in trusted sessions
-- optional endpoint overrides are documented in [`.env.example`](.env.example)
-
 ## Privacy
 
-c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a c4hero server. AI features require a key you bring yourself, and the key is sent directly to the provider you choose. Full details in [PRIVACY.md](PRIVACY.md).
+c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a c4hero server. There are no third-party tracking scripts in the open source build. Full details in [PRIVACY.md](PRIVACY.md).
 
 ## Changelog
 
