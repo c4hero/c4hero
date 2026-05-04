@@ -159,7 +159,7 @@ export function buildNodes(
 /** Build group background nodes using post-layout element positions. */
 export function buildGroupNodes(
   workspace: Workspace,
-  groups: Workspace['model']['groups'],
+  groups: typeof workspace.model.groups,
   laidOutNodes: Node[],
 ): Node[] {
   const PADDING = 24
