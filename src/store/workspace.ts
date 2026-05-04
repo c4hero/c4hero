@@ -1033,11 +1033,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   // ─── View Element Management ────────────────────────────────────
 
   toggleElementInView: (viewKey, elementId) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
+    if (!s.workspace) return
+    const ws = s.workspace
     const view = findView(ws, viewKey)
-    if (!view) return s
+    if (!view) return
     const idx = view.elements.findIndex(e => e.id === elementId)
+    pushUndoSnapshot(s)
     if (idx >= 0) {
       view.elements.splice(idx, 1)
       // Also remove relationships that reference this element
@@ -1064,14 +1065,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
         }
       }
     }
-    return { ...pushUndo(s), workspace: ws }
   }),
 
   setLayoutDirection: (viewKey, direction) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    const view = findView(ws, viewKey)
-    if (!view) return s
+    if (!s.workspace) return
+    const view = findView(s.workspace, viewKey)
+    if (!view) return
+    pushUndoSnapshot(s)
     view.autoLayout = { ...view.autoLayout, direction }
     // Reset positions and pinned flags to trigger full re-layout
     for (const el of view.elements) {
@@ -1079,14 +1079,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
       el.y = undefined
       el.pinned = undefined
     }
-    return { ...pushUndo(s), workspace: ws, layoutVersion: s.layoutVersion + 1 }
+    s.layoutVersion += 1
   }),
 
   resetAndRelayout: (viewKey, direction) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    const view = findView(ws, viewKey)
-    if (!view) return s
+    if (!s.workspace) return
+    const view = findView(s.workspace, viewKey)
+    if (!view) return
+    pushUndoSnapshot(s)
     // Reset positions and pinned flags
     for (const el of view.elements) {
       el.x = undefined
@@ -1097,7 +1097,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
     if (direction) {
       view.autoLayout = { ...view.autoLayout, direction }
     }
-    return { ...pushUndo(s), workspace: ws, layoutVersion: s.layoutVersion + 1 }
+    s.layoutVersion += 1
   }),
 
   // ─── Canvas Settings ──────────────────────────────────────────
