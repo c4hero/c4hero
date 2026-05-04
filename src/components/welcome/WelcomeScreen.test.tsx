@@ -97,8 +97,8 @@ describe('WelcomeScreen', () => {
     expect(screen.getByRole('alert')).toBeTruthy()
   })
 
-  it('document title is set to "c4hero"', () => {
+  it('document title describes c4hero on the startup view', () => {
     render(<WelcomeScreen />)
-    expect(document.title).toBe('c4hero')
+    expect(document.title).toBe('c4hero — visual architecture modelling')
   })
 })

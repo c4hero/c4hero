@@ -24,22 +24,6 @@ data the app handles, where it lives, and what is sent over the network.
   `IndexedDB` so c4hero can re-open them on reload; revoking permission in your
   browser revokes c4hero's access immediately.
 
-## AI features
-
-AI features (description suggestions, prompt-to-workspace bootstrap) are
-**opt-in** and require you to provide your own API key.
-
-- Keys are entered in the AI settings dialog and stored in `sessionStorage`,
-  scoped to the current browser session.
-- Keys are sent **directly** to the configured AI provider endpoint
-  (Anthropic or OpenAI by default). They are never proxied through a c4hero
-  server.
-- Because keys live in the browser, any browser extension or XSS bug in the
-  app could read them. Treat browser sessions accordingly: only enable AI
-  features in trusted sessions, and clear the key before sharing your screen.
-- The default endpoints can be overridden via the `VITE_ANTHROPIC_API_URL` and
-  `VITE_OPENAI_API_URL` build-time variables (see `.env.example`).
-
 ## Logging and telemetry
 
 - The app emits structured logs in the browser console for diagnostics.
@@ -62,7 +46,6 @@ c4hero does not set cookies.
 | --- | --- | --- |
 | Active workspace (crash recovery) | `localStorage` | Clearing site data; loading a different workspace |
 | Recent file/folder handles | `IndexedDB` | Clearing site data; revoking handle in the browser |
-| AI API key | `sessionStorage` | Closing the tab; clearing site data |
 | Settings (theme, panel state) | `localStorage` | Clearing site data |
 | Workspace files (`.dsl`, `.c4hero.json` sidecar) | Filesystem (your machine) | Deleting the files |
 

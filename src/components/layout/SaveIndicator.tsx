@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Download } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess } from '@/lib/fileIO'
@@ -95,16 +96,30 @@ export default function SaveIndicator() {
       title={tooltip}
       aria-label={tooltip}
     >
-      <div
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: dotBg,
-          boxShadow: dotShadow,
-          transition: 'background 0.3s, box-shadow 0.3s',
-        }}
-      />
+      {!canLinkFiles ? (
+        <Download
+          size={14}
+          color={
+            saveStatus === 'saving' ? 'var(--color-info)'
+            : saveStatus === 'saved' ? 'var(--color-success)'
+            : saveStatus === 'error' ? 'var(--color-error)'
+            : isFileDirty ? 'var(--color-warning)'
+            : 'var(--color-text-muted)'
+          }
+          style={{ transition: 'color 0.3s' }}
+        />
+      ) : (
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: dotBg,
+            boxShadow: dotShadow,
+            transition: 'background 0.3s, box-shadow 0.3s',
+          }}
+        />
+      )}
     </button>
   )
 }

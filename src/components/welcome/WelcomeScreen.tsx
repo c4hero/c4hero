@@ -55,7 +55,10 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const navigate = useNavigate()
   const location = useLocation()
   const { slug: urlSlug } = useParams<{ slug?: string }>()
-  useEffect(() => { document.title = 'c4hero' }, [])
+  // Title reflects which view of the welcome screen is active. The active
+  // view is derived later in this component (`view` + `urlSlug`); we re-run
+  // the effect whenever those change so navigating between startup and
+  // collection updates the tab title.
 
   // Auto-open scope picker when navigated here with ?new=1
   useEffect(() => {
@@ -84,6 +87,19 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const view = !hasFolderAccess()
     ? 'startup'
     : initialView ?? (getCurrentDirHandle() !== null ? 'collection' : 'startup')
+
+  // Set the browser tab title based on which view of the welcome screen is
+  // active. Collection view tries to surface the friendly collection name
+  // from recent folders; falls back to the URL slug.
+  useEffect(() => {
+    if (view === 'collection') {
+      const friendly = getRecentFolders().find((f) => f.name === urlSlug)?.displayName
+      const label = friendly ?? urlSlug ?? 'Collection'
+      document.title = `${label} · Workspaces · c4hero`
+    } else {
+      document.title = 'c4hero — visual architecture modelling'
+    }
+  }, [view, urlSlug])
   function setView(v: 'startup' | 'collection', slug?: string) {
     if (v === 'collection') {
       const s = slug ?? getCurrentDirHandle()?.name ?? urlSlug ?? ''

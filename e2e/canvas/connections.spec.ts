@@ -339,16 +339,6 @@ test.describe('Node Connections', () => {
       }
     })
 
-    // Log for debugging (this helps identify the correct CSS class name)
-    console.log('React Flow classes during drag:', connectingClass)
-
-    // Check target handles on nodeB during drag
-    const targetHandle = nodeB.locator('[data-handleid$="-b-target"]').first()
-    const pointerEvents = await targetHandle.evaluate((el) => {
-      return window.getComputedStyle(el).pointerEvents
-    })
-    console.log('Target handle pointer-events during drag:', pointerEvents)
-
     // Release
     await workspace.page.mouse.move(nodeBBox.x + nodeBBox.width / 2, nodeBBox.y + nodeBBox.height / 2)
     await workspace.page.mouse.up()
