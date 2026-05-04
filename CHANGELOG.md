@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Element CRUD: `cascadeDeleteElements` and `duplicateElementsInTree` extracted as pure tree-manipulation helpers; the store actions reduce to thin shells handling state-shape concerns (active view fallback, focus, undo, announce).
 - View management: `buildInitialViewContent` extracted from `addView` — the auto-population logic for systemLandscape / systemContext / container / component views now lives as a pure, testable helper.
 - Cumulative effect: `workspace.ts` shrank from **1543 → 1209 lines (-21.6%)** across the refactor pass. `workspace-helpers.ts` grew from 35 → 485 lines as the new home for pure data-shape helpers.
+- Welcome screen decomposed: `WelcomeScreen.tsx` shrank from **1371 → 669 lines (-51%)**. `StartupView`, `CollectionView`, `RowMenu`, and the small presentational atoms (`C4Mark`, `LifecycleButton`, `WelcomeFooter`, artwork, feature strip) now each live in their own file. `WelcomeScreen.tsx` is now a focused state-machine routing between the two screens.
 - Marked the app package as private to prevent accidental npm publication.
 - Removed internal agent planning artifacts from tracked public docs and made the remaining standalone docs fully local with no third-party font requests.
 - Extracted filename and external-URL sanitization into shared tested helpers used by downloads, file saves, sidecars, and inspector links.
