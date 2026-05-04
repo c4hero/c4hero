@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- DSL parser decomposed: `src/lib/dsl/parser.ts` shrank from **1683 → 492 lines (-71%)**. Each major DSL section now lives in its own file alongside the entry-point parser:
+  - `parser-styles.ts` — `styles { ... }` and per-style property dispatch (154 lines).
+  - `parser-views.ts` — the `views { ... }` block, the four view-type parsers, and per-view body (305 lines).
+  - `parser-relationship.ts` — the `a -> b "..."` relationship statement (158 lines).
+  - `parser-model.ts` — the `model { ... }` block plus all element parsers (person / softwareSystem / container / component) and shared element-body helpers (574 lines).
+
+  Section parsers are standalone functions that take the parser instance as their first argument, so they share the token-navigation helpers without inheriting the full 1.6k-line class. `parser.ts` now contains only the class scaffolding, token navigation, the `workspace { ... }` entry, and `createEmptyWorkspace()`. All 278 DSL parser tests pass; the round-trip contract is unchanged.
+
 ## [0.1.0] - 2026-05-04
 
 Initial public release.
