@@ -5,6 +5,9 @@ import { customAlphabet } from 'nanoid'
 import type { WorkspaceState } from './workspace-types'
 import { MAX_UNDO } from './workspace-types'
 import { createFilterSlice } from './slices/filter-slice'
+import { createUiSlice } from './slices/ui-slice'
+import { createSelectionSlice } from './slices/selection-slice'
+import { createNavigationSlice } from './slices/navigation-slice'
 export type { WorkspaceState, UndoState } from './workspace-types'
 
 // IDs must be valid Structurizr DSL identifiers from the moment they are created
@@ -47,8 +50,7 @@ export {
   getBreadcrumb,
   getCreatableTypes,
 } from './workspace-selectors'
-import { getFirstViewKey, findChildViewHelper as findChildView } from './workspace-selectors'
-import { getZoomTarget } from './workspace-selectors'
+import { getFirstViewKey } from './workspace-selectors'
 
 // ─── Built-in Tags ──────────────────────────────────────────────────
 
@@ -90,32 +92,12 @@ const forEachElement = forEachElementHelper
 
 export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get, store) => ({
   ...createFilterSlice(set, get, store),
+  ...createUiSlice(set, get, store),
+  ...createSelectionSlice(set, get, store),
+  ...createNavigationSlice(set, get, store),
   workspace: null,
-  activeViewKey: null,
-  viewHistory: [],
-  selectedElementIds: [],
-  selectedRelationshipId: null,
-  selectedGroupId: null,
-  leftPanelOpen: true,
-  rightPanelOpen: true,
-  searchOpen: false,
-  commandPaletteOpen: false,
-  canvasSettingsOpen: false,
-  addElementPanelOpen: false,
-  highlighterPanelOpen: false,
-  createViewDialogOpen: false,
-  pendingDelete: null,
-  pendingZoomConfirm: null,
-  createViewDefaults: null,
   lastSavedUndoLength: 0,
   setLastSavedUndoLength: (n) => set({ lastSavedUndoLength: n }),
-  presentationMode: false,
-  viewsPanelOpen: false,
-  focusElementId: null,
-  clearFocusElement: () => set({ focusElementId: null }),
-  minimapEnabled: true,
-  snapToGrid: false,
-  multiSelectMode: false,
   undoStack: [],
   redoStack: [],
   layoutVersion: 0,
@@ -185,112 +167,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get, store
     if (patch.name !== undefined) ws.name = patch.name
     if (patch.description !== undefined) ws.description = patch.description
   }),
-
-  // ─── Navigation ─────────────────────────────────────────────────
-
-  setActiveView: (key) => set({ activeViewKey: key, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
-
-  drillInto: (elementId) => set((s) => {
-    if (!s.workspace || !s.activeViewKey) return
-    const childView = findChildView(s.workspace, elementId)
-    if (!childView) return
-    // No-op if the "child" view is the one we're already on. This happens when
-    // drilling on a system inside its own systemContext view and no container
-    // view exists — findChildView falls back to the same systemContext view.
-    if (childView.key === s.activeViewKey) return
-    s.viewHistory.push(s.activeViewKey)
-    s.activeViewKey = childView.key
-    s.selectedElementIds = []
-    s.selectedRelationshipId = null
-    s.selectedGroupId = null
-  }),
-
-  zoomInto: (elementId) => {
-    const s = get()
-    if (!s.workspace || !s.activeViewKey) return
-    // Existing child view? Navigate like drillInto.
-    const childView = findChildView(s.workspace, elementId, s.activeViewKey)
-    if (childView && childView.key !== s.activeViewKey) {
-      get().drillInto(elementId)
-      return
-    }
-    // No child view yet — figure out what type we *would* create.
-    const target = getZoomTarget(s.workspace, elementId)
-    if (!target) return // not drillable (person/component/external/etc.)
-    set({
-      pendingZoomConfirm: { elementId, elementName: target.elementName, targetType: target.targetType },
-    })
-  },
-
-  confirmZoomCreate: () => {
-    const s = get()
-    const pending = s.pendingZoomConfirm
-    if (!pending || !s.workspace) return
-    // Build a friendly title and create the view.
-    const viewTypeName = pending.targetType === 'container' ? 'Container' : 'Component'
-    const title = `${pending.elementName} — ${viewTypeName}s`
-    // addView auto-populates elements and switches to the new view. It also
-    // pushes an undo entry. We want the new view to be drillable-from the
-    // current view, so preserve viewHistory.
-    const prevActive = s.activeViewKey
-    get().addView(pending.targetType, pending.elementId, title)
-    // Restore breadcrumb history so navigateBack returns to the caller view.
-    if (prevActive) {
-      set((curr) => {
-        curr.viewHistory.push(prevActive)
-        curr.pendingZoomConfirm = null
-      })
-    } else {
-      set({ pendingZoomConfirm: null })
-    }
-  },
-
-  cancelZoomConfirm: () => set({ pendingZoomConfirm: null }),
-
-  openCreateViewFromZoom: () => {
-    const pending = get().pendingZoomConfirm
-    if (!pending) return
-    set({
-      pendingZoomConfirm: null,
-      createViewDefaults: { type: pending.targetType, scopeId: pending.elementId },
-      createViewDialogOpen: true,
-    })
-  },
-
-  setCreateViewDefaults: (defaults) => set({ createViewDefaults: defaults }),
-
-  navigateBack: () => set((s) => {
-    if (s.viewHistory.length === 0) return
-    const previous = s.viewHistory.pop()!
-    s.activeViewKey = previous
-    s.selectedElementIds = []
-    s.selectedRelationshipId = null
-    s.selectedGroupId = null
-  }),
-
-  // ─── Selection ──────────────────────────────────────────────────
-
-  // Selecting any canvas object closes the Highlighter panel so the Inspector
-  // (right side) doesn't stack underneath / behind it.
-  selectElements: (ids) => set((s) => {
-    s.selectedElementIds = ids
-    s.selectedRelationshipId = null
-    s.selectedGroupId = null
-    if (ids.length > 0) s.highlighterPanelOpen = false
-  }),
-  selectRelationship: (id) => set((s) => {
-    s.selectedRelationshipId = id
-    s.selectedElementIds = []
-    s.selectedGroupId = null
-    if (id) s.highlighterPanelOpen = false
-  }),
-  selectGroup: (id) => set((s) => {
-    s.selectedGroupId = id
-    s.selectedElementIds = []
-    s.selectedRelationshipId = null
-    if (id) s.highlighterPanelOpen = false
-  }),
-  clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 
   // ─── Element CRUD ───────────────────────────────────────────────
 
@@ -963,28 +839,4 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get, store
     s.activeTagFilter = s.activeTagFilter.filter((t) => t !== tag)
   }),
 
-  toggleMinimap: () => set((s) => { s.minimapEnabled = !s.minimapEnabled }),
-  toggleSnapToGrid: () => set((s) => { s.snapToGrid = !s.snapToGrid }),
-  setMultiSelectMode: (on) => set({ multiSelectMode: on }),
-
-  // ─── Views Panel ─────────────────────────────────────────────────
-
-  setViewsPanelOpen: (open) => set({ viewsPanelOpen: open }),
-  toggleViewsPanel: () => set((s) => { s.viewsPanelOpen = !s.viewsPanelOpen }),
-
-  // ─── UI Toggles ─────────────────────────────────────────────────
-
-  toggleLeftPanel: () => set((s) => { s.leftPanelOpen = !s.leftPanelOpen }),
-  toggleRightPanel: () => set((s) => { s.rightPanelOpen = !s.rightPanelOpen }),
-  setLeftPanelOpen: (open) => set({ leftPanelOpen: open }),
-  setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
-  setSearchOpen: (open) => set({ searchOpen: open, commandPaletteOpen: false }),
-  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
-  setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
-  setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
-  setHighlighterPanelOpen: (open) => set({ highlighterPanelOpen: open, commandPaletteOpen: false }),
-  setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
-  confirmDelete: (message, onConfirm) => set({ pendingDelete: { message, onConfirm } }),
-  cancelDelete: () => set({ pendingDelete: null }),
-  setPresentationMode: (on) => set({ presentationMode: on }),
 })))
