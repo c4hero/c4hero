@@ -14,10 +14,14 @@ export interface AnchoredPopoverOptions {
   /** Width of the popover in px — needed to clamp horizontal position to the
    *  viewport. */
   width: number
+  /** Height of the popover in px. Optional; only used when `side: "auto"` to
+   *  pick the side with more room. */
+  height?: number
   /** Pixels of gap between the trigger and the popover. Defaults to 6. */
   gap?: number
-  /** Side of the trigger to anchor to. Defaults to "bottom". */
-  side?: Placement['side']
+  /** Side of the trigger to anchor to. "auto" picks whichever side has more
+   *  room (requires `height`); defaults to "bottom". */
+  side?: Placement['side'] | 'auto'
   /** Horizontal alignment of the popover relative to the trigger.
    *  - "right-edge": right edge of popover aligns with right edge of trigger
    *  - "left-edge":  left edge aligns with left edge of trigger (default)
@@ -54,7 +58,7 @@ export interface AnchoredPopover<T extends HTMLElement, P extends HTMLElement> {
 export function useAnchoredPopover<T extends HTMLElement = HTMLButtonElement, P extends HTMLElement = HTMLDivElement>(
   options: AnchoredPopoverOptions,
 ): AnchoredPopover<T, P> {
-  const { width, gap = 6, side = 'bottom', align = 'left-edge' } = options
+  const { width, height, gap = 6, side: rawSide = 'bottom', align = 'left-edge' } = options
   const [open, setOpenState] = useState(false)
   const [coords, setCoords] = useState<Coords | null>(null)
   const triggerRef = useRef<T | null>(null)
@@ -79,7 +83,17 @@ export function useAnchoredPopover<T extends HTMLElement = HTMLButtonElement, P 
     else if (align === 'center') left = r.left + r.width / 2 - width / 2
     else left = r.left
     left = Math.max(8, Math.min(left, window.innerWidth - width - 8))
-    const top = side === 'bottom' ? r.bottom + gap : r.top - gap // caller positions via top; for "top" anchoring the popup reads bottom
+    // Resolve "auto" side based on which side has more room. Requires height
+    // to be specified; otherwise fall through to the default (bottom).
+    let side: Placement['side'] = rawSide === 'auto' ? 'bottom' : rawSide
+    if (rawSide === 'auto' && height !== undefined) {
+      const roomBelow = window.innerHeight - r.bottom
+      const roomAbove = r.top
+      side = roomBelow >= height + gap || roomBelow >= roomAbove ? 'bottom' : 'top'
+    }
+    const top = side === 'bottom'
+      ? r.bottom + gap
+      : r.top - gap - (height ?? 0)
     setCoords({ top, left })
 
     function onDocClick(e: MouseEvent) {
@@ -106,7 +120,7 @@ export function useAnchoredPopover<T extends HTMLElement = HTMLButtonElement, P 
       window.removeEventListener('scroll', onReposition, true)
       window.removeEventListener('resize', onReposition)
     }
-  }, [open, width, gap, side, align])
+  }, [open, width, height, gap, rawSide, align])
 
   return { open, setOpen, toggle, triggerRef, popupRef, coords }
 }

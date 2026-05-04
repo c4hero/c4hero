@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useAnchoredPopover } from '@/hooks/useAnchoredPopover'
 import { useWorkspaceStore, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
 import type { ElementStyle } from '@/types/model'
 import { X, Palette, Plus, Check, AlertTriangle } from 'lucide-react'
@@ -465,25 +466,16 @@ function StyleField({ label, children }: { label: string; children: React.ReactN
 function ColorPicker({ value, onChange, presets }: {
   value: string; onChange: (value: string) => void; presets: string[]
 }) {
-  const [showPresets, setShowPresets] = useState(false)
-  const swatchRef = useRef<HTMLButtonElement>(null)
-  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null)
-
   // Popup dimensions: 6 items per row × 22px + gaps + padding
   const POPUP_W = 158
   const POPUP_H = 64
-
-  useEffect(() => {
-    if (!showPresets || !swatchRef.current) return
-    const rect = swatchRef.current.getBoundingClientRect()
-    // Prefer above the swatch; if not enough room, flip below
-    const roomAbove = rect.top
-    const preferAbove = roomAbove >= POPUP_H + 8
-    const top = preferAbove ? rect.top - POPUP_H - 4 : rect.bottom + 4
-    // Align left edge to swatch, but keep within viewport
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - POPUP_W - 8))
-    setPopupPos({ top, left })
-  }, [showPresets])
+  const { open: showPresets, toggle, setOpen: setShowPresets, triggerRef, popupRef, coords } =
+    useAnchoredPopover<HTMLButtonElement, HTMLDivElement>({
+      width: POPUP_W,
+      height: POPUP_H,
+      side: 'auto', // prefer the side with more room
+      gap: 4,
+    })
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, position: 'relative' }}>
@@ -495,46 +487,35 @@ function ColorPicker({ value, onChange, presets }: {
         style={{ flex: 1, height: 26, padding: '0 8px', paddingLeft: 26, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', outline: 'none' }}
       />
       <button
-        ref={swatchRef}
-        onClick={() => setShowPresets((o) => !o)}
+        ref={triggerRef}
+        onClick={toggle}
         style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, borderRadius: 3, border: '1px solid var(--color-border)', background: value || 'transparent', cursor: 'pointer', padding: 0 }}
       />
-      {showPresets && popupPos && createPortal(
-        <>
-          <button
-            type="button"
-            aria-label="Close presets"
-            onClick={() => setShowPresets(false)}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 9998,
-              background: 'transparent', border: 'none', padding: 0, cursor: 'default',
-            }}
-          />
-          <div style={{
-            position: 'fixed',
-            top: popupPos.top,
-            left: popupPos.left,
-            zIndex: 9999,
-            padding: 6,
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--color-border)',
-            background: 'var(--color-surface-1)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(6, 22px)',
-            gap: 4,
-          }}>
-            {presets.map((c) => (
-              <button key={c} onClick={() => { onChange(c); setShowPresets(false) }}
-                style={{ width: 22, height: 22, borderRadius: 'var(--radius-sm)', border: value === c ? '2px solid var(--color-accent)' : '1px solid var(--color-border)', background: c, cursor: 'pointer', padding: 0 }}
-              />
-            ))}
-            <button onClick={() => { onChange(''); setShowPresets(false) }}
-              style={{ width: 22, height: 22, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={10} />
-            </button>
-          </div>
-        </>,
+      {showPresets && coords && createPortal(
+        <div ref={popupRef} style={{
+          position: 'fixed',
+          top: coords.top,
+          left: coords.left,
+          zIndex: 9999,
+          padding: 6,
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--color-border)',
+          background: 'var(--color-surface-1)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, 22px)',
+          gap: 4,
+        }}>
+          {presets.map((c) => (
+            <button key={c} onClick={() => { onChange(c); setShowPresets(false) }}
+              style={{ width: 22, height: 22, borderRadius: 'var(--radius-sm)', border: value === c ? '2px solid var(--color-accent)' : '1px solid var(--color-border)', background: c, cursor: 'pointer', padding: 0 }}
+            />
+          ))}
+          <button onClick={() => { onChange(''); setShowPresets(false) }}
+            style={{ width: 22, height: 22, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={10} />
+          </button>
+        </div>,
         document.body
       )}
     </div>

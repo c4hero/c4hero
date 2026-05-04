@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useAnchoredPopover } from '@/hooks/useAnchoredPopover'
 import { X, Check, ChevronDown } from 'lucide-react'
 import { useSettingsStore, type MinimapMode, type ColorTheme } from '@/store/settings'
 import DialogShell from '@/components/shared/DialogShell'
@@ -323,48 +323,20 @@ function ThemeSwatchPicker({
   value: ColorTheme
   onChange: (v: ColorTheme) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const [coords, setCoords] = useState<{ top: number; right: number; minWidth: number } | null>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const popupRef = useRef<HTMLDivElement>(null)
-
-  function openPopup() {
-    const trigger = triggerRef.current
-    if (!trigger) return
-    const r = trigger.getBoundingClientRect()
-    setCoords({
-      top: r.bottom + 6,
-      right: window.innerWidth - r.right,
-      minWidth: Math.max(r.width, 240),
-    })
-    setOpen(true)
-  }
-
-  useEffect(() => {
-    if (!open) return
-    function onDocClick(e: MouseEvent) {
-      const t = e.target as Node
-      if (popupRef.current?.contains(t)) return
-      if (triggerRef.current?.contains(t)) return
-      setOpen(false)
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDocClick)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDocClick)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  // Width = 240 (the popup's minWidth); align right-edge to the trigger so the
+  // popover hangs below-right like a typical select dropdown.
+  const POPUP_WIDTH = 240
+  const { open, setOpen, toggle, triggerRef, popupRef, coords } = useAnchoredPopover<HTMLButtonElement, HTMLDivElement>({
+    width: POPUP_WIDTH,
+    align: 'right-edge',
+  })
 
   return (
     <>
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => (open ? setOpen(false) : openPopup())}
+        onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
         style={{
@@ -393,8 +365,8 @@ function ThemeSwatchPicker({
           style={{
             position: 'fixed',
             top: coords.top,
-            right: coords.right,
-            minWidth: coords.minWidth,
+            left: coords.left,
+            width: POPUP_WIDTH,
             zIndex: 1100,
             padding: 6,
             borderRadius: 12,

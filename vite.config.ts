@@ -104,9 +104,17 @@ export default defineConfig({
         'src/types/**',
         'src/components/welcome/mocks/**',
       ],
-      // Reporting only — thresholds will be reintroduced once coverage
-      // climbs above the current ~38% baseline. Tracking the trend is the
-      // immediate goal; enforcing a number prematurely produces churn.
+      // Baseline thresholds set at current measured values rounded down.
+      // CI will fail on regression, but won't block until coverage actually
+      // drops. As coverage rises (UI components are the laggard), tighten
+      // these gates. The src/lib and src/store layers are already well above
+      // 90% — the floor here is dragged down by component-level UI tests.
+      thresholds: {
+        statements: 42,
+        branches: 78,
+        functions: 65,
+        lines: 42,
+      },
     },
   },
 })
