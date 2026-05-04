@@ -29,7 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Consolidated to a single `ErrorBoundary` (the richer `src/components/shared/ErrorBoundary.tsx`); the older root-level boundary was removed and the root mount in `main.tsx` now uses the shared component with `onReset={() => window.location.reload()}`.
 - `SearchDialog`, `ExportDialog`, and `CommandPalette` migrated onto `DialogShell` (centered for Search; new `position="shade"` for Export and CommandPalette). Drops ~70 lines of duplicated modal scaffolding.
-- Workspace store helpers (`applyElementPatch`, `elementExists`, `forEachView`, `uniqueElementName`, `addToCurrentView`, `cloneWorkspace`, `VIEW_ARRAY_KEYS`, `ElementPatch`) extracted into the existing `workspace-helpers.ts` module — `workspace.ts` shrank from 1543 → 1481 lines.
+- Workspace store helpers (`applyElementPatch`, `elementExists`, `forEachView`, `uniqueElementName`, `addToCurrentView`, `cloneWorkspace`, `VIEW_ARRAY_KEYS`, `ElementPatch`) extracted into the existing `workspace-helpers.ts` module.
+- Element CRUD: `cascadeDeleteElements` and `duplicateElementsInTree` extracted as pure tree-manipulation helpers; the store actions reduce to thin shells handling state-shape concerns (active view fallback, focus, undo, announce).
+- View management: `buildInitialViewContent` extracted from `addView` — the auto-population logic for systemLandscape / systemContext / container / component views now lives as a pure, testable helper.
+- Cumulative effect: `workspace.ts` shrank from **1543 → 1209 lines (-21.6%)** across the refactor pass. `workspace-helpers.ts` grew from 35 → 485 lines as the new home for pure data-shape helpers.
 - Marked the app package as private to prevent accidental npm publication.
 - Removed internal agent planning artifacts from tracked public docs and made the remaining standalone docs fully local with no third-party font requests.
 - Extracted filename and external-URL sanitization into shared tested helpers used by downloads, file saves, sidecars, and inspector links.
