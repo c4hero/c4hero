@@ -20,23 +20,28 @@ function dismiss(hintId: string) {
 }
 
 export default function CanvasHints() {
-  const workspace = useWorkspaceStore((s) => s.workspace)
+  // Subscribe to just the two scalars we need for the hint condition rather
+  // than the entire workspace; live-typing edits to elements never alter the
+  // active view's element/relationship counts, so this stops re-rendering
+  // once a hint is shown or dismissed.
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const elementCount = useWorkspaceStore((s) =>
+    s.workspace && activeViewKey ? (getActiveView(s.workspace, activeViewKey)?.elements.length ?? 0) : 0,
+  )
+  const relationshipCount = useWorkspaceStore((s) =>
+    s.workspace && activeViewKey ? (getActiveView(s.workspace, activeViewKey)?.relationships.length ?? 0) : 0,
+  )
   const [dismissed, setDismissed] = useState(getDismissed)
-
-  const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
   function handleDismiss(id: string) {
     dismiss(id)
     setDismissed((prev) => new Set(prev).add(id))
   }
 
-  if (!workspace || !view) return null
-
-  // Empty canvas hint suppressed — covered by the canvas empty state overlay
+  if (!activeViewKey) return null
 
   // First element added — connection hint
-  if (view.elements.length >= 2 && view.relationships.length === 0 && !dismissed.has('connect-hint')) {
+  if (elementCount >= 2 && relationshipCount === 0 && !dismissed.has('connect-hint')) {
     return (
       <Hint id="connect-hint" onDismiss={handleDismiss}>
         Drag from a node edge to another node to create a connection

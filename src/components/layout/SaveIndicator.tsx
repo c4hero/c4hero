@@ -16,7 +16,9 @@ function isWorkspaceLinked(activeFilename: string | null): boolean {
 }
 
 export default function SaveIndicator() {
-  const workspace = useWorkspaceStore((s) => s.workspace)
+  // Note: we deliberately don't subscribe to the workspace itself — only
+  // primitives that change when save status actually changes. Keeps this
+  // component out of the inspector-typing re-render fanout.
   const activeFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
   const currentUndoLength = useWorkspaceStore((s) => s.undoStack.length)
   const isDirty = currentUndoLength > 0
@@ -29,6 +31,9 @@ export default function SaveIndicator() {
   const canLinkFiles = hasFileSystemAccess()
 
   async function handleSave() {
+    // Read the current workspace at click time rather than subscribing to it;
+    // the latest snapshot is what we want to serialize anyway.
+    const workspace = useWorkspaceStore.getState().workspace
     if (!workspace) return
     setSaveStatus('saving')
     const wsName = workspace.name ?? 'workspace'
