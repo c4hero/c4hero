@@ -848,9 +848,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   addView: (type, scopeId, title) => {
     const key = nanoid(8)
     set((s) => {
-      const ws = cloneWs(s)
-      if (!ws) return s
-
+      if (!s.workspace) return
+      pushUndoSnapshot(s)
+      const ws = s.workspace
       const { elements, relationships } = buildInitialViewContent(ws.model, type, scopeId)
       const view: View = {
         type,
@@ -868,77 +868,77 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
         case 'container': ws.views.containerViews.push(view); break
         case 'component': ws.views.componentViews.push(view); break
       }
-      return { ...pushUndo(s), workspace: ws, activeViewKey: key, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
+      s.activeViewKey = key
+      s.selectedElementIds = []
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
     })
     return key
   },
 
   deleteView: (key) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
+    if (!s.workspace) return
+    const ws = s.workspace
     // Find which array contains the key and only filter that one
     let found = false
     for (const arrKey of VIEW_ARRAY_KEYS) {
       const idx = ws.views[arrKey].findIndex(v => v.key === key)
       if (idx !== -1) {
+        pushUndoSnapshot(s)
         ws.views[arrKey].splice(idx, 1)
         found = true
         break
       }
     }
-    if (!found) return s
-    const newActiveKey = s.activeViewKey === key ? getFirstViewKey(ws) : s.activeViewKey
-    // Remove the deleted key from navigation history so navigateBack never lands on a ghost view
-    const newHistory = s.viewHistory.filter(k => k !== key)
-    // Clear selection when the active view is being deleted (we're switching to a different view)
+    if (!found) return
     const switchingViews = s.activeViewKey === key
-    return {
-      ...pushUndo(s),
-      workspace: ws,
-      activeViewKey: newActiveKey,
-      viewHistory: newHistory,
-      ...(switchingViews ? { selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null } : {}),
+    if (switchingViews) {
+      s.activeViewKey = getFirstViewKey(ws)
+      s.selectedElementIds = []
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
     }
+    s.viewHistory = s.viewHistory.filter(k => k !== key)
   }),
 
   renameView: (key, title) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    let found = false
-    for (const arr of [ws.views.systemLandscapeViews, ws.views.systemContextViews, ws.views.containerViews, ws.views.componentViews] as { key: string; title?: string }[][]) {
-      const v = arr.find(v => v.key === key)
+    if (!s.workspace) return
+    const ws = s.workspace
+    for (const arrKey of VIEW_ARRAY_KEYS) {
+      const v = ws.views[arrKey].find(v => v.key === key)
       if (v) {
-        if (v.title === title) return s // no-op: title unchanged
+        if (v.title === title) return // no-op: title unchanged
+        pushUndoSnapshot(s)
         v.title = title
-        found = true
-        break
+        return
       }
     }
-    if (!found) return s
-    return { ...pushUndo(s), workspace: ws }
   }),
 
   duplicateView: (key) => {
     const newKey = nanoid(8)
     set((s) => {
-      const ws = cloneWs(s)
-      if (!ws) return s
-      let found = false
+      if (!s.workspace) return
+      const ws = s.workspace
       for (const arrKey of VIEW_ARRAY_KEYS) {
         const src = ws.views[arrKey].find(v => v.key === key)
-        if (src) {
-          const copy: View = {
-            ...structuredClone(src),
-            key: newKey,
-            title: `${src.title ?? 'View'} copy`,
-          }
-          ws.views[arrKey].push(copy)
-          found = true
-          break
+        if (!src) continue
+        pushUndoSnapshot(s)
+        // Deep-copy via current() unwrap so the clone is fully detached from
+        // any existing view's draft sub-objects.
+        const detached = current(src) as View
+        const copy: View = {
+          ...structuredClone(detached),
+          key: newKey,
+          title: `${src.title ?? 'View'} copy`,
         }
+        ws.views[arrKey].push(copy)
+        s.activeViewKey = newKey
+        s.selectedElementIds = []
+        s.selectedRelationshipId = null
+        s.selectedGroupId = null
+        return
       }
-      if (!found) return s
-      return { ...pushUndo(s), workspace: ws, activeViewKey: newKey, selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }
     })
     return newKey
   },
