@@ -2643,9 +2643,11 @@ describe('getBreadcrumb', () => {
   })
 
   it('falls back to key as label when title is missing', () => {
-    // Manually set a view without a title
-    ws.views.systemLandscapeViews[0].title = undefined
-    const crumbs = getBreadcrumb(ws, [], keyA)
+    // Manually set a view without a title (clone since the store-returned
+    // workspace is frozen by Immer)
+    const wsLocal = structuredClone(ws)
+    wsLocal.views.systemLandscapeViews[0].title = undefined
+    const crumbs = getBreadcrumb(wsLocal, [], keyA)
     expect(crumbs[0].label).toBe(keyA)
   })
 })
@@ -2920,11 +2922,9 @@ describe('removeTagGlobal', () => {
     // Attach a custom tag to a container and confirm removeTagGlobal strips it
     const containerId = useWorkspaceStore.getState().addContainer('api', 'Cache')
     useWorkspaceStore.setState((s) => {
-      const ws = s.workspace ? { ...s.workspace, model: structuredClone(s.workspace.model) } : s.workspace
-      if (!ws) return s
-      const container = ws.model.softwareSystems.find(sys => sys.id === 'api')!.containers.find(c => c.id === containerId)!
+      if (!s.workspace) return
+      const container = s.workspace.model.softwareSystems.find(sys => sys.id === 'api')!.containers.find(c => c.id === containerId)!
       container.tags = ['Element', 'Container', 'VIP']
-      return { workspace: ws }
     })
     useWorkspaceStore.getState().removeTagGlobal('VIP')
     const ws = useWorkspaceStore.getState().workspace!
@@ -2937,11 +2937,9 @@ describe('removeTagGlobal', () => {
     const containerId = useWorkspaceStore.getState().addContainer('api', 'Backend')
     const compId = useWorkspaceStore.getState().addComponent(containerId, 'Handler')
     useWorkspaceStore.setState((s) => {
-      const ws = s.workspace ? { ...s.workspace, model: structuredClone(s.workspace.model) } : s.workspace
-      if (!ws) return s
-      const comp = ws.model.softwareSystems.find(sys => sys.id === 'api')!.containers.find(c => c.id === containerId)!.components.find(comp => comp.id === compId)!
+      if (!s.workspace) return
+      const comp = s.workspace.model.softwareSystems.find(sys => sys.id === 'api')!.containers.find(c => c.id === containerId)!.components.find(comp => comp.id === compId)!
       comp.tags = ['Element', 'Component', 'VIP']
-      return { workspace: ws }
     })
     useWorkspaceStore.getState().removeTagGlobal('VIP')
     const ws = useWorkspaceStore.getState().workspace!
@@ -3529,12 +3527,10 @@ describe('renameTag — nested elements (containers and components)', () => {
     useWorkspaceStore.getState().addComponent(containerId, 'Schema')
     // Give the component the same custom tag by patching the workspace
     useWorkspaceStore.setState((s) => {
-      const ws = s.workspace ? { ...s.workspace, model: structuredClone(s.workspace.model) } : s.workspace
-      if (!ws) return s
-      const sys = ws.model.softwareSystems.find(sys => sys.id === 'api')!
+      if (!s.workspace) return
+      const sys = s.workspace.model.softwareSystems.find(sys => sys.id === 'api')!
       const comp = sys.containers.find(c => c.id === containerId)!.components[0]
       comp.tags = ['Element', 'Component', 'Legacy']
-      return { workspace: ws }
     })
   })
 

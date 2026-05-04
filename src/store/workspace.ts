@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
+import { current, isDraft } from 'immer'
 import { customAlphabet } from 'nanoid'
 
 // IDs must be valid Structurizr DSL identifiers from the moment they are created
@@ -249,10 +251,12 @@ interface WorkspaceState extends UndoState {
 /** Push current workspace to undo stack before mutation */
 function pushUndo(s: WorkspaceState): Partial<UndoState> {
   if (!s.workspace) return {}
-  // Workspace mutations clone before writing, so the current workspace object is
-  // an immutable snapshot. Store the reference instead of deep-cloning the whole
-  // graph on every undoable action.
-  const undoStack = [...s.undoStack, s.workspace].slice(-MAX_UNDO)
+  // Inside an Immer producer s.workspace is a draft; snapshot it via current()
+  // so the undo stack doesn't hold a proxy that gets revoked when the producer
+  // finalizes. Outside a producer (e.g. unit-test setState shortcuts) the
+  // workspace is already a plain immutable snapshot.
+  const snapshot = isDraft(s.workspace) ? (current(s.workspace) as Workspace) : s.workspace
+  const undoStack = [...s.undoStack, snapshot].slice(-MAX_UNDO)
   return { undoStack, redoStack: [] }
 }
 
@@ -262,10 +266,15 @@ const forEachElement = forEachElementHelper
 
 /** Clone the active workspace for safe mutation. */
 function cloneWs(s: WorkspaceState): Workspace | null {
-  return cloneWorkspace(s.workspace)
+  if (!s.workspace) return null
+  // Unwrap drafts before cloning: structuredClone'ing a proxy works but the
+  // result still references sub-drafts that get revoked post-producer. current()
+  // returns a stable plain snapshot which structuredClone then deep-copies safely.
+  const source = isDraft(s.workspace) ? (current(s.workspace) as Workspace) : s.workspace
+  return cloneWorkspace(source)
 }
 
-export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
   workspace: null,
   activeViewKey: null,
   viewHistory: [],
@@ -566,11 +575,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   }),
 
   updateElementLive: (id, patch) => set((s) => {
-    if (!s.workspace) return s
-    // Shallow-clone workspace, deep-clone only the model for live typing perf
-    const ws = { ...s.workspace, model: structuredClone(s.workspace.model) }
-    if (!applyElementPatch(ws, id, patch)) return s
-    return { workspace: ws } // no undo push
+    if (!s.workspace) return
+    // Mutate the draft directly — Immer detects no-op patches and skips
+    // state replacement when applyElementPatch reports no change. No undo push.
+    applyElementPatch(s.workspace, id, patch)
   }),
 
   updateElementTechnology: (id, technology) => set((s) => {
@@ -898,69 +906,53 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   updateNodePosition: (nodeId, x, y) => set((s) => {
-    if (!s.workspace || !s.activeViewKey) return s
-    // Shallow-clone only the view arrays and the affected view/element — avoids cloning entire workspace on every drag
-    const ws = { ...s.workspace }
-    ws.views = { ...ws.views }
+    if (!s.workspace || !s.activeViewKey) return
     for (const key of VIEW_ARRAY_KEYS) {
-      const idx = ws.views[key].findIndex(v => v.key === s.activeViewKey)
-      if (idx === -1) continue
-      ws.views[key] = [...ws.views[key]]
-      const view = { ...ws.views[key][idx] }
-      view.elements = view.elements.map(e =>
-        e.id === nodeId ? { ...e, x, y, pinned: true } : e
-      )
-      ws.views[key][idx] = view
-      break
+      const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
+      if (!view) continue
+      const el = view.elements.find(e => e.id === nodeId)
+      if (!el) return
+      el.x = x
+      el.y = y
+      el.pinned = true
+      return
     }
     // Don't push undo for every drag position — too noisy
-    return { workspace: ws }
   }),
 
   updateNodePositions: (updates) => set((s) => {
-    if (!s.workspace || !s.activeViewKey) return s
+    if (!s.workspace || !s.activeViewKey) return
     const updateMap = new Map(updates.map(u => [u.id, u]))
-    const ws = { ...s.workspace }
-    ws.views = { ...ws.views }
     for (const key of VIEW_ARRAY_KEYS) {
-      const idx = ws.views[key].findIndex(v => v.key === s.activeViewKey)
-      if (idx === -1) continue
-      ws.views[key] = [...ws.views[key]]
-      const view = { ...ws.views[key][idx] }
-      view.elements = view.elements.map(e => {
-        const u = updateMap.get(e.id)
-        return u ? { ...e, x: u.x, y: u.y, pinned: true } : e
-      })
-      ws.views[key][idx] = view
-      break
+      const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
+      if (!view) continue
+      for (const el of view.elements) {
+        const u = updateMap.get(el.id)
+        if (!u) continue
+        el.x = u.x
+        el.y = u.y
+        el.pinned = true
+      }
+      return
     }
-    return { workspace: ws }
   }),
 
   syncAutoLayoutPositions: (viewKey, updates) => set((s) => {
-    if (!s.workspace || updates.size === 0) return s
-    const ws = { ...s.workspace }
-    ws.views = { ...ws.views }
+    if (!s.workspace || updates.size === 0) return
     for (const key of VIEW_ARRAY_KEYS) {
-      const idx = ws.views[key].findIndex(v => v.key === viewKey)
-      if (idx === -1) continue
-      ws.views[key] = [...ws.views[key]]
-      const view = { ...ws.views[key][idx] }
-      let changed = false
-      view.elements = view.elements.map(e => {
+      const view = s.workspace.views[key].find(v => v.key === viewKey)
+      if (!view) continue
+      for (const el of view.elements) {
         // Only fill in missing positions; never override saved ones (those
         // came from a drag, a load, or a prior sync).
-        if (e.x !== undefined && e.y !== undefined) return e
-        const u = updates.get(e.id)
-        if (!u) return e
-        changed = true
-        return { ...e, x: u.x, y: u.y }
-      })
-      if (!changed) return s
-      ws.views[key][idx] = view
-      break
+        if (el.x !== undefined && el.y !== undefined) continue
+        const u = updates.get(el.id)
+        if (!u) continue
+        el.x = u.x
+        el.y = u.y
+      }
+      return
     }
-    return { workspace: ws }
   }),
 
   // ─── Undo / Redo ───────────────────────────────────────────────
@@ -1206,4 +1198,4 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   confirmDelete: (message, onConfirm) => set({ pendingDelete: { message, onConfirm } }),
   cancelDelete: () => set({ pendingDelete: null }),
   setPresentationMode: (on) => set({ presentationMode: on }),
-}))
+})))
