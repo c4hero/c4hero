@@ -442,6 +442,18 @@ body {
   50%      { background: color-mix(in srgb, var(--color-warning) 12%, transparent); }
 }
 
+/* Skeleton placeholder shimmer used by src/components/shared/Skeleton.tsx. */
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [aria-busy="true"] {
+    animation: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .save-indicator-pulse {
     animation: none;
@@ -1127,6 +1139,40 @@ body {
   padding: 18px 0;
   color: var(--color-text-muted);
   font-size: 14px;
+}
+
+/* ─── Mobile / narrow viewport adjustments for the editor chrome ───── */
+
+@media (max-width: 760px) {
+  /* Top pill: pin to the top edge with smaller padding so it doesn't crowd
+     the diagram. The pill itself has its own internal layout. */
+  [data-canvas-fit-chrome="top"] {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+  /* Floating tool rail: collapse to a horizontal strip near the top edge
+     instead of a vertical column on the left. Vertical orientation eats
+     too much horizontal space on narrow viewports. */
+  [data-canvas-chrome="tool-rail"] {
+    top: auto !important;
+    bottom: 14px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    flex-direction: row !important;
+    padding: 0 8px !important;
+  }
+  /* Right-side panels (Inspector, Highlighter): full-width below the
+     diagram instead of a 280-300px column that would squish the canvas. */
+  [aria-label="Element properties"],
+  [data-canvas-chrome="highlighter-panel"] {
+    width: calc(100vw - 28px) !important;
+    max-width: 360px !important;
+  }
+  /* Fallback button on the welcome screen for browsers without folder
+     access — keep its CTA from running off the edge. */
+  .welcome-fallback {
+    width: 100% !important;
+  }
 }
 
 @media (max-width: 760px) {

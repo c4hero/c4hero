@@ -94,17 +94,36 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
             <div>
               <label htmlFor="cv-scope" className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
                 Scope
+                <span aria-hidden="true" style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>
+                <span className="sr-only">required</span>
               </label>
               <select
                 id="cv-scope"
                 value={scopeId}
                 onChange={(e) => setScopeId(e.target.value)}
+                required
+                aria-required="true"
+                aria-invalid={!scopeId}
+                aria-describedby={!scopeId ? 'cv-scope-error' : undefined}
                 className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-                style={{ background: 'var(--color-surface-2)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+                style={{
+                  background: 'var(--color-surface-2)',
+                  borderColor: !scopeId ? 'var(--color-border-error)' : 'var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                }}
               >
                 <option value="">Select...</option>
                 {scopeOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
+              {!scopeId && (
+                <div
+                  id="cv-scope-error"
+                  className="mt-1 text-[11px]"
+                  style={{ color: 'var(--color-error-text)' }}
+                >
+                  Pick a {type === 'component' ? 'container' : 'system'} for this view.
+                </div>
+              )}
             </div>
           )}
 
