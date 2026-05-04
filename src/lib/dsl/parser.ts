@@ -12,17 +12,12 @@ import type {
     Relationship,
     InteractionStyle,
     View,
-    ViewType,
-    AutoLayout,
-    LayoutDirection,
-    ElementStyle,
-    RelationshipStyle,
-    ViewConfiguration,
     ElementInView,
     LineStyle,
 } from '@/types/model'
 import { lex } from './lexer'
 import type { Token, TokenType } from './lexer'
+import { parseViewsBody } from './parser-views'
 
 /**
  * Expand an `include *` wildcard into the actual elements appropriate for the view type.
@@ -128,45 +123,11 @@ function nextId(): string {
     return `p${globalIdCounter}`
 }
 
-/** Generate a stable, unique view key when the DSL doesn't provide one.
- *  Mirrors the Structurizr default-key convention (Type-ScopeRef) and falls
- *  back to a numeric suffix on collision. Empty/missing keys break navigation
- *  in the workspace store, so we always assign one. */
-function ensureViewKey(view: View, viewsContainer: ViewsContainer, elementRef: string | undefined): void {
-    if (view.key) return
-    const typeKey =
-        view.type === 'systemLandscape' ? 'SystemLandscape'
-        : view.type === 'systemContext' ? 'SystemContext'
-        : view.type === 'container' ? 'Containers'
-        : 'Components'
-    const base = elementRef ? `${typeKey}-${elementRef}` : typeKey
-    const existing = [
-        ...viewsContainer.systemLandscapeViews,
-        ...viewsContainer.systemContextViews,
-        ...viewsContainer.containerViews,
-        ...viewsContainer.componentViews,
-    ]
-    let candidate = base
-    let suffix = 2
-    while (existing.some(v => v.key === candidate)) {
-        candidate = `${base}-${suffix++}`
-    }
-    view.key = candidate
-    view.autoKey = true
-}
-
-interface ViewsContainer {
-    systemLandscapeViews: View[]
-    systemContextViews: View[]
-    containerViews: View[]
-    componentViews: View[]
-}
-
 // ─── Parser Implementation ──────────────────────────────────────────
 
 const MAX_DEPTH = 50
 
-class ContextAwareParser {
+export class ContextAwareParser {
     private tokens: Token[]
     private pos = 0
     private errors: ParseError[] = []
@@ -180,7 +141,7 @@ class ContextAwareParser {
     private relCounter = 0
 
     // Track elements excluded per view (used in post-processing to apply `exclude` directives)
-    private viewExcludedIds = new Map<View, Set<string>>()
+    viewExcludedIds = new Map<View, Set<string>>()
 
     getExcludedIdsForView(view: View): Set<string> {
         return this.viewExcludedIds.get(view) ?? new Set()
@@ -192,25 +153,25 @@ class ContextAwareParser {
 
     // ─── Token Navigation ────────────────────────────────────────────
 
-    private peek(): Token {
+    peek(): Token {
         return this.tokens[this.pos]
     }
 
-    private peekType(): TokenType {
+    peekType(): TokenType {
         return this.tokens[this.pos].type
     }
 
-    private peekValue(): string {
+    peekValue(): string {
         return this.tokens[this.pos].value
     }
 
-    private advance(): Token {
+    advance(): Token {
         const token = this.tokens[this.pos]
         this.pos++
         return token
     }
 
-    private expect(type: TokenType, expectedValue?: string): Token {
+    expect(type: TokenType, expectedValue?: string): Token {
         const token = this.peek()
         if (token.type !== type || (expectedValue !== undefined && token.value !== expectedValue)) {
             this.addError(
@@ -222,7 +183,7 @@ class ContextAwareParser {
         return this.advance()
     }
 
-    private match(type: TokenType, value?: string): boolean {
+    match(type: TokenType, value?: string): boolean {
         const token = this.peek()
         if (token.type === type && (value === undefined || token.value === value)) {
             this.advance()
@@ -231,12 +192,12 @@ class ContextAwareParser {
         return false
     }
 
-    private check(type: TokenType, value?: string): boolean {
+    check(type: TokenType, value?: string): boolean {
         const token = this.peek()
         return token.type === type && (value === undefined || token.value === value)
     }
 
-    private skipNewlines(): void {
+    skipNewlines(): void {
         while (this.peekType() === 'NEWLINE' || this.peekType() === 'COMMENT') {
             this.advance()
         }
@@ -251,11 +212,11 @@ class ContextAwareParser {
         }
     }
 
-    private addError(message: string, token: Token): void {
+    addError(message: string, token: Token): void {
         this.errors.push({ message, line: token.line, column: token.column })
     }
 
-    private skipBraceBlock(): void {
+    skipBraceBlock(): void {
         if (!this.match('LBRACE')) return
         let depth = 1
         while (depth > 0 && this.peekType() !== 'EOF') {
@@ -269,7 +230,7 @@ class ContextAwareParser {
     /** Consume inline args (until newline/EOF/LBRACE), then skip any following brace
      *  block. Used to gracefully ignore unknown keywords/identifiers in element bodies
      *  without mistakenly consuming the parent's closing `}`. */
-    private skipUnknownDirective(): void {
+    skipUnknownDirective(): void {
         while (this.peekType() !== 'NEWLINE' && this.peekType() !== 'EOF' && !this.check('LBRACE')) {
             this.advance()
         }
@@ -288,7 +249,7 @@ class ContextAwareParser {
         }
     }
 
-    private resolveRef(ref: string): string | undefined {
+    resolveRef(ref: string): string | undefined {
         if (this.varToId.has(ref)) return this.varToId.get(ref)
         if (this.nameToId.has(ref)) return this.nameToId.get(ref)
         if (this.elementsById.has(ref)) return ref
@@ -297,18 +258,18 @@ class ContextAwareParser {
 
     // ─── Helpers ─────────────────────────────────────────────────────
 
-    private readOptionalString(): string | undefined {
+    readOptionalString(): string | undefined {
         if (this.check('STRING')) return this.advance().value
         return undefined
     }
 
-    private readString(): string {
+    readString(): string {
         if (this.check('STRING')) return this.advance().value
         this.addError(`Expected string, got ${this.peekType()} '${this.peekValue()}'`, this.peek())
         return ''
     }
 
-    private readOptionalStringOrIdentifier(): string | undefined {
+    readOptionalStringOrIdentifier(): string | undefined {
         if (this.check('STRING')) return this.advance().value
         if (this.check('IDENTIFIER')) return this.advance().value
         return undefined
@@ -325,7 +286,7 @@ class ContextAwareParser {
         return tags
     }
 
-    private readStyleValue(): string | undefined {
+    readStyleValue(): string | undefined {
         if (this.check('STRING')) return this.advance().value
         if (this.check('NUMBER')) return this.advance().value
         if (this.check('IDENTIFIER') || this.check('KEYWORD')) return this.advance().value
@@ -407,7 +368,7 @@ class ContextAwareParser {
                     this.advance()
                     this.skipNewlines()
                     if (this.match('LBRACE')) {
-                        this.parseViewsBody(workspace.views)
+                        parseViewsBody(this, workspace.views)
                         this.skipNewlines()
                         this.expect('RBRACE')
                     }
@@ -1202,418 +1163,6 @@ class ContextAwareParser {
         }
 
         return rel
-    }
-
-    // ─── Views ──────────────────────────────────────────────────────
-
-    private parseViewsBody(views: Workspace['views']): void {
-        while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
-            this.skipNewlines()
-            if (this.check('RBRACE') || this.peekType() === 'EOF') break
-
-            const token = this.peek()
-
-            if (token.type === 'COMMENT') { this.advance(); continue }
-
-            if (token.type === 'KEYWORD') {
-                const kw = token.value.toLowerCase()
-
-                if (kw === 'systemlandscape') {
-                    const view = this.parseSystemLandscapeView()
-                    if (view) {
-                        ensureViewKey(view, views,undefined)
-                        views.systemLandscapeViews.push(view)
-                    }
-                    continue
-                }
-                if (kw === 'systemcontext') {
-                    const view = this.parseElementView('systemContext')
-                    if (view) {
-                        ensureViewKey(view, views,view.softwareSystemId)
-                        views.systemContextViews.push(view)
-                    }
-                    continue
-                }
-                if (kw === 'container') {
-                    const view = this.parseElementView('container')
-                    if (view) {
-                        ensureViewKey(view, views,view.softwareSystemId)
-                        views.containerViews.push(view)
-                    }
-                    continue
-                }
-                if (kw === 'component') {
-                    const view = this.parseElementView('component')
-                    if (view) {
-                        ensureViewKey(view, views,view.containerId)
-                        views.componentViews.push(view)
-                    }
-                    continue
-                }
-                if (kw === 'styles') {
-                    this.advance()
-                    this.skipNewlines()
-                    if (this.match('LBRACE')) {
-                        this.parseStylesBody(views.configuration)
-                        this.skipNewlines()
-                        this.expect('RBRACE')
-                    }
-                    continue
-                }
-                if (kw === 'theme' || kw === 'themes') {
-                    this.advance()
-                    const themes: string[] = []
-                    while (this.check('STRING') || this.check('IDENTIFIER')) {
-                        themes.push(this.advance().value)
-                    }
-                    views.configuration.themes = themes
-                    continue
-                }
-                if (kw === 'dynamic' || kw === 'deployment' || kw === 'filtered' || kw === 'custom') {
-                    this.advance()
-                    while (this.check('STRING') || this.check('IDENTIFIER')) this.advance()
-                    this.skipNewlines()
-                    this.skipBraceBlock()
-                    continue
-                }
-                if (kw === 'branding' || kw === 'terminology' || kw === 'configuration' || kw === 'properties') {
-                    this.advance()
-                    this.skipNewlines()
-                    this.skipBraceBlock()
-                    continue
-                }
-                this.advance()
-                this.skipUnknownDirective()
-                continue
-            }
-
-            if (token.type === 'IDENTIFIER') {
-                this.advance()
-                this.skipUnknownDirective()
-                continue
-            }
-
-            this.advance()
-        }
-    }
-
-    private parseSystemLandscapeView(): View | null {
-        this.advance() // consume 'systemLandscape'
-        const key = this.readOptionalStringOrIdentifier() ?? ''
-        const positionalDescription = this.readOptionalString()
-
-        const view: View = {
-            type: 'systemLandscape',
-            key,
-            // Structurizr defines the second optional view header string as
-            // the view description. Keep it as a display title fallback too so
-            // existing DSL authored for c4hero still labels views usefully.
-            title: positionalDescription,
-            description: positionalDescription,
-            elements: [],
-            relationships: [],
-        }
-
-        this.skipNewlines()
-        if (this.match('LBRACE')) {
-            this.parseViewBody(view)
-            this.skipNewlines()
-            this.expect('RBRACE')
-        }
-
-        return view
-    }
-
-    private parseElementView(type: ViewType): View | null {
-        this.advance() // consume keyword
-
-        const elementRef = this.readOptionalStringOrIdentifier()
-        const key = this.readOptionalStringOrIdentifier() ?? ''
-        const positionalDescription = this.readOptionalString()
-
-        const view: View = {
-            type,
-            key,
-            // Structurizr defines the second optional view header string as
-            // the view description. Keep it as a display title fallback too so
-            // existing DSL authored for c4hero still labels views usefully.
-            title: positionalDescription,
-            description: positionalDescription,
-            elements: [],
-            relationships: [],
-        }
-
-        if (elementRef) {
-            const resolvedId = this.resolveRef(elementRef)
-            if (type === 'systemContext' || type === 'container') {
-                view.softwareSystemId = resolvedId ?? elementRef
-            } else if (type === 'component') {
-                view.containerId = resolvedId ?? elementRef
-            }
-        }
-
-        this.skipNewlines()
-        if (this.match('LBRACE')) {
-            this.parseViewBody(view)
-            this.skipNewlines()
-            this.expect('RBRACE')
-        }
-
-        return view
-    }
-
-    private parseViewBody(view: View): void {
-        while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
-            this.skipNewlines()
-            if (this.check('RBRACE') || this.peekType() === 'EOF') break
-
-            const token = this.peek()
-
-            if (token.type === 'COMMENT') { this.advance(); continue }
-
-            if (token.type === 'KEYWORD') {
-                const kw = token.value.toLowerCase()
-
-                if (kw === 'include') {
-                    this.advance()
-                    if (this.match('STAR')) {
-                        view.elements.push({ id: '*' })
-                    } else {
-                        while (this.check('IDENTIFIER') || this.check('STRING') || this.check('KEYWORD')) {
-                            const ref = this.advance().value
-                            const resolvedId = this.resolveRef(ref)
-                            view.elements.push({ id: resolvedId ?? ref })
-                        }
-                    }
-                    continue
-                }
-
-                if (kw === 'exclude') {
-                    this.advance()
-                    const excluded = this.viewExcludedIds.get(view) ?? new Set<string>()
-                    while (this.check('STAR') || this.check('IDENTIFIER') || this.check('STRING') || this.check('KEYWORD')) {
-                        const ref = this.advance().value
-                        const resolvedId = this.resolveRef(ref)
-                        excluded.add(resolvedId ?? ref)
-                    }
-                    this.viewExcludedIds.set(view, excluded)
-                    continue
-                }
-
-                if (kw === 'autolayout') {
-                    this.advance()
-                    const layout: AutoLayout = { direction: 'TB' }
-                    if (this.check('IDENTIFIER') || this.check('KEYWORD')) {
-                        const dir = this.peekValue().toUpperCase()
-                        if (dir === 'TB' || dir === 'BT' || dir === 'LR' || dir === 'RL') {
-                            layout.direction = dir as LayoutDirection
-                            this.advance()
-                        }
-                    }
-                    if (this.check('NUMBER')) {
-                        layout.rankSeparation = parseInt(this.advance().value, 10)
-                    }
-                    if (this.check('NUMBER')) {
-                        layout.nodeSeparation = parseInt(this.advance().value, 10)
-                    }
-                    view.autoLayout = layout
-                    continue
-                }
-
-                if (kw === 'animation') {
-                    this.advance()
-                    this.skipNewlines()
-                    this.skipBraceBlock()
-                    continue
-                }
-
-                if (kw === 'title') {
-                    this.advance()
-                    view.title = this.readOptionalString()
-                    continue
-                }
-
-                if (kw === 'description') {
-                    this.advance()
-                    view.description = this.readOptionalString()
-                    continue
-                }
-
-                if (kw === 'properties') {
-                    this.advance()
-                    this.skipNewlines()
-                    this.skipBraceBlock()
-                    continue
-                }
-
-                if (kw === 'default') {
-                    this.advance()
-                    continue
-                }
-
-                // Unknown keyword: consume it and any inline args (stopping before LBRACE),
-                // then skip any brace block so the view's closing RBRACE is not consumed.
-                this.advance()
-                this.skipUnknownDirective()
-                continue
-            }
-
-            // Unknown identifier (non-keyword directive): consume it and any inline args,
-            // then skip any following brace block for the same reason as the KEYWORD path.
-            if (token.type === 'IDENTIFIER') {
-                this.advance()
-                this.skipUnknownDirective()
-                continue
-            }
-
-            this.advance()
-        }
-    }
-
-    // ─── Styles ─────────────────────────────────────────────────────
-
-    private parseStylesBody(config: ViewConfiguration): void {
-        while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
-            this.skipNewlines()
-            if (this.check('RBRACE') || this.peekType() === 'EOF') break
-
-            const token = this.peek()
-            if (token.type === 'COMMENT') { this.advance(); continue }
-
-            if (token.type === 'KEYWORD') {
-                const kw = token.value.toLowerCase()
-
-                if (kw === 'element') {
-                    this.advance()
-                    const style = this.parseElementStyleBlock()
-                    if (style) config.styles.elements.push(style)
-                    continue
-                }
-
-                if (kw === 'relationship') {
-                    this.advance()
-                    const style = this.parseRelationshipStyleBlock()
-                    if (style) config.styles.relationships.push(style)
-                    continue
-                }
-            }
-
-            this.advance()
-        }
-    }
-
-    private parseElementStyleBlock(): ElementStyle | null {
-        const tag = this.readString()
-        const style: ElementStyle = { tag }
-
-        this.skipNewlines()
-        if (!this.match('LBRACE')) return style
-
-        while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
-            this.skipNewlines()
-            if (this.check('RBRACE') || this.peekType() === 'EOF') break
-
-            const token = this.peek()
-            if (token.type === 'COMMENT') { this.advance(); continue }
-
-            if (token.type === 'KEYWORD' || token.type === 'IDENTIFIER') {
-                const prop = this.advance().value.toLowerCase()
-                this.applyStyleProperty(style, prop)
-                continue
-            }
-
-            this.advance()
-        }
-
-        this.skipNewlines()
-        this.expect('RBRACE')
-
-        return style
-    }
-
-    private parseRelationshipStyleBlock(): RelationshipStyle | null {
-        const tag = this.readString()
-        const style: RelationshipStyle = { tag }
-
-        this.skipNewlines()
-        if (!this.match('LBRACE')) return style
-
-        while (!this.check('RBRACE') && this.peekType() !== 'EOF') {
-            this.skipNewlines()
-            if (this.check('RBRACE') || this.peekType() === 'EOF') break
-
-            const token = this.peek()
-            if (token.type === 'COMMENT') { this.advance(); continue }
-
-            if (token.type === 'KEYWORD' || token.type === 'IDENTIFIER') {
-                const prop = this.advance().value.toLowerCase()
-                this.applyRelStyleProperty(style, prop)
-                continue
-            }
-
-            this.advance()
-        }
-
-        this.skipNewlines()
-        this.expect('RBRACE')
-
-        return style
-    }
-
-    private applyStyleProperty(style: ElementStyle, prop: string): void {
-        const val = this.readStyleValue()
-        if (val === undefined) return
-
-        switch (prop) {
-            case 'background': style.background = val; break
-            case 'color': case 'colour': style.color = val; break
-            case 'shape': style.shape = val; break
-            case 'fontsize': {
-                const n = parseInt(val, 10)
-                if (!isNaN(n)) style.fontSize = n
-                break
-            }
-            case 'border': style.border = val; break
-            case 'opacity': {
-                const n = parseInt(val, 10)
-                if (!isNaN(n)) style.opacity = n
-                break
-            }
-            case 'icon': style.icon = val; break
-            case 'stroke': style.stroke = val; break
-            case 'strokewidth': {
-                const n = parseInt(val, 10)
-                if (!isNaN(n)) style.strokeWidth = n
-                break
-            }
-            // Silently consume unknown properties
-        }
-    }
-
-    private applyRelStyleProperty(style: RelationshipStyle, prop: string): void {
-        const val = this.readStyleValue()
-        if (val === undefined) return
-
-        switch (prop) {
-            case 'color': case 'colour': style.color = val; break
-            case 'thickness': {
-                const n = parseInt(val, 10)
-                if (!isNaN(n)) style.thickness = n
-                break
-            }
-            case 'dashed': style.dashed = val.toLowerCase() === 'true'; break
-            case 'fontsize': {
-                const n = parseInt(val, 10)
-                if (!isNaN(n)) style.fontSize = n
-                break
-            }
-            case 'opacity': {
-                const n = parseInt(val, 10)
-                if (!isNaN(n)) style.opacity = n
-                break
-            }
-            // Silently consume unknown properties
-        }
     }
 }
 
