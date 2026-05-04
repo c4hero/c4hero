@@ -9,7 +9,7 @@
 
 **Try it: [c4hero.com](https://c4hero.com)**
 
-![c4hero canvas — a system, containers, and a person, with relationships between them](docs/screenshots/canvas-hero.svg)
+![c4hero canvas showing the Big Bank sample's container view — top pill with workspace + view picker, left tool rail, the rendered C4 diagram, and the right-side element inspector for "Personal Banking Customer"](docs/screenshots/canvas-hero.png)
 
 ---
 

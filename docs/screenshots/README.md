@@ -4,7 +4,7 @@ Visual assets for the project README and documentation.
 
 ## Files
 
-- **`canvas-hero.svg`** — stylized representation of the canvas used as the README hero. Replace with a real screenshot (`canvas-hero.png`, ~1200×540) and update the README path when one is available.
+- **`canvas-hero.png`** — README hero. The Big Bank sample's container view rendered in c4hero, captured with full app chrome (top pill, tool rail, inspector, bottom strip).
 
 ## Conventions
 
