@@ -1,40 +1,23 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import { current, isDraft, original } from 'immer'
-import { customAlphabet } from 'nanoid'
+import { current } from 'immer'
+import type { View } from '@/types/model'
 import type { WorkspaceState } from './workspace-types'
-import { MAX_UNDO } from './workspace-types'
+import { nanoid, pushUndoSnapshot, undoSnapshot } from './internals'
 import { createFilterSlice } from './slices/filter-slice'
 import { createUiSlice } from './slices/ui-slice'
 import { createSelectionSlice } from './slices/selection-slice'
 import { createNavigationSlice } from './slices/navigation-slice'
-export type { WorkspaceState, UndoState } from './workspace-types'
-
-// IDs must be valid Structurizr DSL identifiers from the moment they are created
-// so they survive a serialize → parse roundtrip without any sanitization:
-//   - No hyphens: the serializer maps `-` → `_`, changing the ID.
-//   - No leading digits: the serializer prepends `e` to digit-prefixed IDs,
-//     changing them (e.g. `0abc1234` → var name `e0abc1234` → new ID `e0abc1234`).
-// Using only letters guarantees IDs are always valid as-is.
-const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 8)
-import type {
-  Workspace, Relationship, View, Group,
-  Person, SoftwareSystem, Container, Component,
-} from '@/types/model'
+import { createElementSlice } from './slices/element-slice'
+import { createGroupSlice } from './slices/group-slice'
+import { createRelationshipSlice } from './slices/relationship-slice'
 import { announce } from '@/lib/announce'
 import { validateScope } from '@/lib/scopeValidation'
+export type { WorkspaceState, UndoState } from './workspace-types'
 import {
-  allViewsOf,
   findViewHelper,
   forEachElementHelper,
-  applyElementPatch,
-  elementExists,
   VIEW_ARRAY_KEYS,
-  forEachView,
-  uniqueElementName,
-  addToCurrentView,
-  cascadeDeleteElements,
-  duplicateElementsInTree,
   buildInitialViewContent,
 } from './workspace-helpers'
 export { allViewsOf } from './workspace-helpers'
@@ -59,32 +42,9 @@ import { getFirstViewKey } from './workspace-selectors'
  *  included here so removeTagGlobal can't strip it from the model. */
 export const BUILTIN_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component', 'Relationship', 'Database'])
 
-// State shape lives in workspace-types.ts so per-domain slices in ./slices/
-// can import the type without circling back through this file.
-
-// ─── Internal Helpers ────────────────────────────────────────────────
-
-/** Resolve the pre-mutation workspace reference suitable for the undo stack.
- *  Inside an Immer producer, original(draft) returns the pre-produce ref —
- *  immutable, structurally shared with the next state. Outside a producer
- *  (e.g. test setState shortcuts), s.workspace is already a stable snapshot. */
-function undoSnapshot(s: WorkspaceState): Workspace | null {
-  if (!s.workspace) return null
-  return isDraft(s.workspace) ? (original(s.workspace) as Workspace) : s.workspace
-}
-
-/** Append the pre-produce workspace snapshot to undoStack and clear redoStack
- *  in place. Safe to call before OR after mutations — original() always
- *  returns the pre-produce ref, so position within the producer doesn't
- *  matter. */
-function pushUndoSnapshot(s: WorkspaceState): void {
-  const snapshot = undoSnapshot(s)
-  if (!snapshot) return
-  s.undoStack.push(snapshot)
-  // Trim to MAX_UNDO entries from the front (oldest first).
-  if (s.undoStack.length > MAX_UNDO) s.undoStack.splice(0, s.undoStack.length - MAX_UNDO)
-  s.redoStack.length = 0
-}
+// State shape lives in workspace-types.ts; nanoid + undo helpers live in
+// internals.ts so per-domain slices in ./slices/ can use both without
+// circular imports.
 
 // Re-alias imported helpers under the names used internally
 const findView = findViewHelper
@@ -95,6 +55,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get, store
   ...createUiSlice(set, get, store),
   ...createSelectionSlice(set, get, store),
   ...createNavigationSlice(set, get, store),
+  ...createElementSlice(set, get, store),
+  ...createGroupSlice(set, get, store),
+  ...createRelationshipSlice(set, get, store),
   workspace: null,
   lastSavedUndoLength: 0,
   setLastSavedUndoLength: (n) => set({ lastSavedUndoLength: n }),
@@ -166,344 +129,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get, store
     pushUndoSnapshot(s)
     if (patch.name !== undefined) ws.name = patch.name
     if (patch.description !== undefined) ws.description = patch.description
-  }),
-
-  // ─── Element CRUD ───────────────────────────────────────────────
-
-  addPerson: (name, position, location) => {
-    const id = nanoid(8)
-    set((s) => {
-      if (!s.workspace) return
-      pushUndoSnapshot(s)
-      const ws = s.workspace
-      const person: Person = { id, type: 'person', name: uniqueElementName(name, ws), tags: ['Element', 'Person'], properties: {}, location: location ?? 'Internal' }
-      ws.model.people.push(person)
-      addToCurrentView(ws, s.activeViewKey, id, position)
-      // Auto-add to all system landscape views (they display every person/system)
-      for (const v of ws.views.systemLandscapeViews) {
-        if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === id)) {
-          v.elements.push({ id })
-        }
-      }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-    })
-    announce('Person created')
-    return id
-  },
-
-  addSoftwareSystem: (name, position, location) => {
-    const id = nanoid(8)
-    set((s) => {
-      if (!s.workspace) return
-      pushUndoSnapshot(s)
-      const ws = s.workspace
-      const system: SoftwareSystem = { id, type: 'softwareSystem', name: uniqueElementName(name, ws), tags: ['Element', 'Software System'], properties: {}, containers: [], location: location ?? 'Internal' }
-      ws.model.softwareSystems.push(system)
-      addToCurrentView(ws, s.activeViewKey, id, position)
-      // Auto-add to all system landscape views (they display every person/system)
-      for (const v of ws.views.systemLandscapeViews) {
-        if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === id)) {
-          v.elements.push({ id })
-        }
-      }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-    })
-    get().revalidateScope()
-    announce('System created')
-    return id
-  },
-
-  addContainer: (systemId, name, position, extraTag) => {
-    const id = nanoid(8)
-    let added = false
-    set((s) => {
-      if (!s.workspace) return
-      const ws = s.workspace
-      const system = ws.model.softwareSystems.find(sys => sys.id === systemId)
-      if (!system) return
-      pushUndoSnapshot(s)
-      const tags = extraTag ? ['Element', 'Container', extraTag] : ['Element', 'Container']
-      const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
-      system.containers.push(container)
-      addToCurrentView(ws, s.activeViewKey, id, position)
-      // Also auto-add to all other container views scoped to the same system
-      for (const v of ws.views.containerViews) {
-        if (v.softwareSystemId === systemId && v.key !== s.activeViewKey) {
-          if (!v.elements.some(e => e.id === id)) v.elements.push({ id })
-        }
-      }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-      added = true
-    })
-    if (added) {
-      get().revalidateScope()
-      announce('Container created')
-    }
-    return id
-  },
-
-  addComponent: (containerId, name, position) => {
-    const id = nanoid(8)
-    let added = false
-    set((s) => {
-      if (!s.workspace) return
-      const ws = s.workspace
-      for (const sys of ws.model.softwareSystems) {
-        const container = sys.containers.find(c => c.id === containerId)
-        if (!container) continue
-        pushUndoSnapshot(s)
-        const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Element', 'Component'], properties: {} }
-        container.components.push(comp)
-        addToCurrentView(ws, s.activeViewKey, id, position)
-        // Also auto-add to all other component views scoped to the same container
-        for (const v of ws.views.componentViews) {
-          if (v.containerId === containerId && v.key !== s.activeViewKey) {
-            if (!v.elements.some(e => e.id === id)) v.elements.push({ id })
-          }
-        }
-        s.focusElementId = id
-        s.selectedElementIds = [id]
-        s.selectedRelationshipId = null
-        s.selectedGroupId = null
-        added = true
-        return
-      }
-    })
-    if (added) announce('Component created')
-    return id
-  },
-
-  updateElement: (id, patch) => set((s) => {
-    if (!s.workspace) return
-    // Mutate first to detect no-op patches; only push undo if something changed.
-    // applyElementPatch operates directly on the draft and is no-op-safe.
-    if (!applyElementPatch(s.workspace, id, patch)) return
-    pushUndoSnapshot(s)
-  }),
-
-  updateElementLive: (id, patch) => set((s) => {
-    if (!s.workspace) return
-    // Mutate the draft directly — Immer detects no-op patches and skips
-    // state replacement when applyElementPatch reports no change. No undo push.
-    applyElementPatch(s.workspace, id, patch)
-  }),
-
-  updateElementTechnology: (id, technology) => set((s) => {
-    if (!s.workspace) return
-    if (!applyElementPatch(s.workspace, id, { technology })) return
-    pushUndoSnapshot(s)
-  }),
-
-  deleteElement: (id) => {
-    // Delegate to batch implementation
-    useWorkspaceStore.getState().deleteElements([id])
-  },
-
-  deleteElements: (ids) => {
-    if (ids.length === 0) return
-    set((s) => {
-      if (!s.workspace) return
-      pushUndoSnapshot(s)
-      cascadeDeleteElements(s.workspace, ids)
-      // If the active view was among the ones just removed, fall back to the first remaining view.
-      // Also purge stale keys from viewHistory so navigateBack never jumps to a ghost view.
-      const activeStillExists = s.activeViewKey ? !!findView(s.workspace, s.activeViewKey) : false
-      s.activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(s.workspace)
-      s.viewHistory = s.viewHistory.filter(k => !!findView(s.workspace!, k))
-      s.selectedElementIds = []
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-    })
-    get().revalidateScope()
-    announce(ids.length === 1 ? 'Element deleted' : `${ids.length} elements deleted`)
-  },
-
-  duplicateElements: (ids) => {
-    let createdIds: string[] = []
-    set((s) => {
-      if (!s.workspace || !s.activeViewKey) return
-      createdIds = duplicateElementsInTree(s.workspace, ids, s.activeViewKey, () => nanoid(8))
-      if (createdIds.length === 0) return
-      pushUndoSnapshot(s)
-      s.selectedElementIds = createdIds
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-    })
-    if (createdIds.length > 0) {
-      announce(createdIds.length === 1 ? 'Element duplicated' : `${createdIds.length} elements duplicated`)
-      get().revalidateScope()
-    }
-    return createdIds
-  },
-
-  // ─── Group CRUD ─────────────────────────────────────────────────
-
-  addGroup: (name, elementIds = []) => {
-    const id = nanoid(8)
-    set((s) => {
-      if (!s.workspace) return
-      pushUndoSnapshot(s)
-      const group: Group = { id, name, elementIds }
-      s.workspace.model.groups.push(group)
-    })
-    return id
-  },
-
-  updateGroup: (id, patch) => set((s) => {
-    if (!s.workspace) return
-    const group = s.workspace.model.groups.find(g => g.id === id)
-    if (!group) return
-    let changed = false
-    if (patch.name !== undefined && group.name !== patch.name) { group.name = patch.name; changed = true }
-    if (patch.elementIds !== undefined) { group.elementIds = patch.elementIds; changed = true } // array, always treat as a change
-    if (!changed) return
-    pushUndoSnapshot(s)
-  }),
-
-  deleteGroup: (id) => set((s) => {
-    if (!s.workspace) return
-    if (!s.workspace.model.groups.some(g => g.id === id)) return
-    pushUndoSnapshot(s)
-    s.workspace.model.groups = s.workspace.model.groups.filter(g => g.id !== id)
-    if (s.selectedGroupId === id) s.selectedGroupId = null
-  }),
-
-  // ─── Relationship CRUD ──────────────────────────────────────────
-
-  addRelationship: (sourceId, destinationId, description, technology) => {
-    const id = nanoid(8)
-    let created = false
-    set((s) => {
-      if (!s.workspace) return
-      if (sourceId === destinationId) return
-      const ws = s.workspace
-      if (!elementExists(ws, sourceId) || !elementExists(ws, destinationId)) return
-      pushUndoSnapshot(s)
-      const rel: Relationship = {
-        id,
-        sourceId,
-        destinationId,
-        description,
-        technology,
-        tags: ['Relationship'],
-        properties: {},
-      }
-      ws.model.relationships.push(rel)
-      created = true
-      // For systemContext views: if one endpoint is the scoped system, auto-add
-      // the other endpoint (external actor) to the view so the context diagram stays
-      // consistent — a person/system related to the scope should appear in its context view.
-      for (const v of ws.views.systemContextViews) {
-        if (!v.softwareSystemId) continue
-        const scopeId = v.softwareSystemId
-        const sourceIsScope = sourceId === scopeId
-        const destIsScope = destinationId === scopeId
-        if (sourceIsScope || destIsScope) {
-          const actorId = sourceIsScope ? destinationId : sourceId
-          if (!v.elements.some(e => e.id === actorId)) {
-            v.elements.push({ id: actorId })
-          }
-        }
-      }
-      // Add relationship ref to every view that now has both endpoints
-      for (const view of allViewsOf(ws)) {
-        const viewElIds = new Set(view.elements.map(e => e.id))
-        if (viewElIds.has(sourceId) && viewElIds.has(destinationId)) {
-          if (!view.relationships.some(r => r.id === id)) {
-            view.relationships.push({ id })
-          }
-        }
-      }
-      s.selectedRelationshipId = id
-      s.selectedElementIds = []
-      s.selectedGroupId = null
-    })
-    return created ? id : ''
-  },
-
-  updateRelationship: (id, patch) => set((s) => {
-    if (!s.workspace) return
-    const rel = s.workspace.model.relationships.find(r => r.id === id)
-    if (!rel) return
-    // Use 'key in patch' for optional fields that the UI may legitimately clear by passing
-    // undefined (e.g. empty text field → { description: undefined }).  This mirrors the same
-    // pattern used in applyElementPatch.
-    // No-op guard: only push undo if at least one field actually changes.
-    let changed = false
-    if ('description' in patch && rel.description !== patch.description) { rel.description = patch.description; changed = true }
-    if ('technology' in patch && rel.technology !== patch.technology) { rel.technology = patch.technology; changed = true }
-    if ('interactionStyle' in patch && rel.interactionStyle !== patch.interactionStyle) { rel.interactionStyle = patch.interactionStyle; changed = true }
-    if ('lineStyle' in patch && rel.lineStyle !== patch.lineStyle) { rel.lineStyle = patch.lineStyle; changed = true }
-    if ('url' in patch && rel.url !== patch.url) { rel.url = patch.url; changed = true }
-    if (patch.tags !== undefined) {
-      const tagsChanged = patch.tags.length !== rel.tags.length || patch.tags.some((t, i) => t !== rel.tags[i])
-      if (tagsChanged) { rel.tags = patch.tags; changed = true }
-    }
-    if (!changed) return
-    pushUndoSnapshot(s)
-  }),
-
-  reconnectRelationship: (id, newSourceId, newTargetId) => set((s) => {
-    if (!s.workspace) return
-    const ws = s.workspace
-    const rel = ws.model.relationships.find(r => r.id === id)
-    if (!rel) return
-    if (rel.sourceId === newSourceId && rel.destinationId === newTargetId) return
-    if (newSourceId === newTargetId) return
-    if (!elementExists(ws, newSourceId) || !elementExists(ws, newTargetId)) return
-    pushUndoSnapshot(s)
-    rel.sourceId = newSourceId
-    rel.destinationId = newTargetId
-
-    // Mirror addRelationship semantics for system context views: when one endpoint
-    // is the scoped system, ensure the other endpoint is visible so the context
-    // diagram still expresses the relationship after reconnecting.
-    for (const v of ws.views.systemContextViews) {
-      if (!v.softwareSystemId) continue
-      const scopeId = v.softwareSystemId
-      const sourceIsScope = newSourceId === scopeId
-      const destIsScope = newTargetId === scopeId
-      if (sourceIsScope || destIsScope) {
-        const actorId = sourceIsScope ? newTargetId : newSourceId
-        if (!v.elements.some(e => e.id === actorId)) {
-          v.elements.push({ id: actorId })
-        }
-      }
-    }
-
-    // Sync view.relationships: keep only in views where both new endpoints exist
-    forEachView(ws, (v) => {
-      const elIds = new Set(v.elements.map(e => e.id))
-      const hasRel = v.relationships.some(r => r.id === id)
-      const bothPresent = elIds.has(newSourceId) && elIds.has(newTargetId)
-      if (hasRel && !bothPresent) {
-        v.relationships = v.relationships.filter(r => r.id !== id)
-      } else if (!hasRel && bothPresent) {
-        v.relationships.push({ id })
-      }
-    })
-  }),
-
-  deleteRelationship: (id) => set((s) => {
-    if (!s.workspace) return
-    const ws = s.workspace
-    if (!ws.model.relationships.some(r => r.id === id)) return
-    pushUndoSnapshot(s)
-    ws.model.relationships = ws.model.relationships.filter(r => r.id !== id)
-    // Remove from all views
-    forEachView(ws, (v) => {
-      v.relationships = v.relationships.filter(r => r.id !== id)
-    })
-    if (s.selectedRelationshipId === id) s.selectedRelationshipId = null
   }),
 
   // ─── View Management ────────────────────────────────────────────
