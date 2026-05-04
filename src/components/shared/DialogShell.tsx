@@ -1,15 +1,26 @@
 import { useRef, useCallback } from 'react'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 
+/** Where the dialog body sits within the viewport.
+ *  - "center" — classic centered modal (default; backdrop covers viewport)
+ *  - "shade"  — slide-down panel anchored to the top pill (no backdrop;
+ *               clicking outside dismisses via an invisible click catcher,
+ *               matching the existing `.shade-panel` CSS class) */
+type DialogPosition = 'center' | 'shade'
+
 interface DialogShellProps {
   onClose: () => void
   ariaLabel: string
   children: React.ReactNode
   className?: string
   style?: React.CSSProperties
+  /** Defaults to "center". Use "shade" for top-pill-anchored slide-downs. */
+  position?: DialogPosition
 }
 
-export default function DialogShell({ onClose, ariaLabel, children, className, style }: DialogShellProps) {
+export default function DialogShell({
+  onClose, ariaLabel, children, className, style, position = 'center',
+}: DialogShellProps) {
   const trapRef = useFocusTrap<HTMLDivElement>()
   const previouslyFocusedRef = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null)
 
@@ -20,6 +31,33 @@ export default function DialogShell({ onClose, ariaLabel, children, className, s
       requestAnimationFrame(() => el.focus())
     }
   }, [onClose])
+
+  if (position === 'shade') {
+    // Slide-down panel pattern: an invisible click-catcher behind the panel
+    // (low z) dismisses on outside click; the panel itself uses the
+    // `shade-panel` CSS class which positions it under the top pill.
+    return (
+      <>
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }}
+          onClick={handleClose}
+          aria-hidden="true"
+        />
+        <div
+          ref={trapRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={ariaLabel}
+          className={`shade-panel ${className ?? ''}`.trim()}
+          style={{ zIndex: 49, ...style }}
+          onKeyDown={(e) => { if (e.key === 'Escape') handleClose() }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {children}
+        </div>
+      </>
+    )
+  }
 
   return (
     <div

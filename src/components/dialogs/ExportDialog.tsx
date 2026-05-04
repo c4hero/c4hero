@@ -3,6 +3,7 @@ import { Download, Copy, Check } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ExportTheme } from '@/lib/exportUtils'
 import { createLogger } from '@/lib/logger'
+import DialogShell from '@/components/shared/DialogShell'
 
 const log = createLogger('ExportDialog')
 
@@ -23,12 +24,6 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
   const [busy, setBusy] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
 
   useEffect(() => () => {
     if (doneTimer.current) clearTimeout(doneTimer.current)
@@ -125,19 +120,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
   ]
 
   return (
-    <>
-      <div
-        style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Export workspace"
-        className="shade-panel"
-        style={{ zIndex: 49 }}
-      >
+    <DialogShell onClose={onClose} ariaLabel="Export workspace" position="shade">
         {/* Header */}
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--color-border)' }}>
           <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
@@ -173,7 +156,6 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
             </div>
           ))}
         </div>
-      </div>
-    </>
+    </DialogShell>
   )
 }

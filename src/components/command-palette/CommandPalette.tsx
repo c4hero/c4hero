@@ -3,6 +3,7 @@ import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getCommands, CATEGORY_ORDER, CATEGORY_LABELS, type Command } from '@/lib/commands'
 import { Command as CommandIcon } from 'lucide-react'
+import DialogShell from '@/components/shared/DialogShell'
 
 export default function CommandPalette() {
   const setCommandPaletteOpen = useWorkspaceStore((s) => s.setCommandPaletteOpen)
@@ -91,23 +92,8 @@ export default function CommandPalette() {
   const resultsListId = 'command-palette-results'
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        style={{ position: 'fixed', inset: 0, zIndex: 48, pointerEvents: 'auto' }}
-        onClick={close}
-        aria-hidden="true"
-      />
-
-      {/* Shade panel — no position:fixed, no top/left/transform; inherits pill column width */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Command palette"
-        className="shade-panel"
-        style={{ zIndex: 49 }}
-        onKeyDown={handleKeyDown}
-      >
+    <DialogShell onClose={close} ariaLabel="Command palette" position="shade">
+      <div onKeyDown={handleKeyDown}>
         {/* Search input */}
         <div
           className="flex items-center gap-3 border-b px-4 py-3"
@@ -212,7 +198,7 @@ export default function CommandPalette() {
           </span>
         </div>
       </div>
-    </>
+    </DialogShell>
   )
 }
 
