@@ -85,7 +85,7 @@ export default function App() {
         <FloatingZoomHud />
         <CanvasHints />
         <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
-        <div className="commit-hash">{__COMMIT_HASH__}</div>
+        <div className="commit-hash">v{__APP_VERSION__} · {__COMMIT_HASH__}</div>
       </div>
       {searchOpen && <Suspense fallback={<LoadingDot />}><SearchDialog /></Suspense>}
     </ReactFlowProvider>

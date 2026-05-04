@@ -609,7 +609,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           kind={loadingWorkspace ? 'workspace' : 'collection'}
         />
       )}
-      <div className="commit-hash">{__COMMIT_HASH__}</div>
+      <div className="commit-hash">v{__APP_VERSION__} · {__COMMIT_HASH__}</div>
     </div>
   )
 }

@@ -4,8 +4,10 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import { execSync } from 'child_process'
+import { readFileSync } from 'fs'
 
 const commitHash = execSync('git rev-parse --short HEAD').toString().trim()
+const appVersion = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')).version
 
 export default defineConfig({
   plugins: [
@@ -37,6 +39,7 @@ export default defineConfig({
   ],
   define: {
     __COMMIT_HASH__: JSON.stringify(commitHash),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   resolve: {
     alias: {

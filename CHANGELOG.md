@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-04
+
+Initial public release.
+
 ### Removed
 - AI features (description suggestions, prompt-to-workspace bootstrap) and the bring-your-own-key infrastructure that supported them. The `VITE_ANTHROPIC_API_URL` and `VITE_OPENAI_API_URL` build-time variables are gone with them. The open source build no longer talks to any LLM provider.
 
@@ -58,4 +62,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tightened hosted CSP by removing stale AI provider connection allowances and explicitly disallowing frames and form submissions.
 - Sanitized native file-save suggestions and sidecar filenames consistently before writing or downloading files.
 
-[Unreleased]: https://github.com/c4hero/c4hero/compare/main...HEAD
+[Unreleased]: https://github.com/c4hero/c4hero/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/c4hero/c4hero/releases/tag/v0.1.0
