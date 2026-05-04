@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useRef, useState } from 'react'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import type { LayoutDirection } from '@/types/model'
@@ -66,18 +67,11 @@ export default function FloatingToolRail() {
   // Track which trigger to return focus to on close
   const lastOpenPanel = useRef<'add' | 'arrange' | 'align' | null>(null)
 
-  // Escape key closes any open flyout
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setAddPanelOpen(false)
-        setArrangePanelOpen(false)
-
-      }
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [setAddPanelOpen, setArrangePanelOpen])
+  // Escape key closes any open flyout (active only while one is open).
+  useEscapeKey(addPanelOpen || arrangePanelOpen, () => {
+    setAddPanelOpen(false)
+    setArrangePanelOpen(false)
+  })
 
   // Outside-click closes any open flyout. Document-level listener works across
   // stacking contexts (the tool rail is z:50 like other floating UI, so a fixed

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getCommands, CATEGORY_ORDER, CATEGORY_LABELS, type Command } from '@/lib/commands'
@@ -28,11 +29,7 @@ export default function CommandPalette() {
     setCommandPaletteOpen(false)
   }, [setCommandPaletteOpen])
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [close])
+  useEscapeKey(true, close)
 
   const allCommands = useMemo(() => getCommands(reactFlow), [reactFlow])
 

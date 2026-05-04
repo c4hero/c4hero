@@ -2,7 +2,7 @@
 
 **Repo:** c4hero
 **Date:** 2026-05-04
-**Composite Score:** 8.7/10
+**Composite Score:** 8.0/10 (was 8.7 — same parser win, but auditors weighted Performance + Reuse findings more heavily this round)
 
 ## How to use this list
 
@@ -16,84 +16,90 @@ _None — no CRITICAL findings._
 
 ## High Priority
 
-- [ ] **[Simplicity]** `parser.ts` is 1683 lines with 7 methods exceeding 90 lines (`parseRelationship` 156, `parseModelBody` 149, `parseViewBody` 110, `parseSoftwareSystemBody` 98, `parseContainerBody` 92, `parseViewsBody` 91, `applyRelStyleProperty` 90). Multi-level nesting in keyword dispatch. — `src/lib/dsl/parser.ts`
-  - **Fix:** Extract per-keyword handlers into a dispatch table (`Map<keyword, handler>`) and split `parseModelBody` / `parseRelationship` into smaller focused helpers (e.g. `parsePropertyBlock`, `parseTags`, `parseRelationshipStyle`).
+- [ ] **[Performance]** 17 components subscribe to the entire workspace via `useWorkspaceStore((s) => s.workspace)`; every mutation forces them all to re-render. — `src/components/canvas/Canvas.tsx:60`, `src/components/layout/RightPanel.tsx:40,74,329,497`, `FloatingInspector.tsx:6`, `FloatingTopPill.tsx:46`, `FloatingBottomStrip.tsx:15,30`, `FloatingToolRail.tsx:38`, `FloatingViewsPanel.tsx:17`, `ViewSwitcher.tsx:38,111`, `AddElementPanel.tsx:33`, `HighlighterPanel.tsx:30`, `right-panel/fields.tsx:116,408`, `GroupProperties.tsx:9`, `SearchDialog.tsx:20`, `CreateViewDialog.tsx:21`
+  - **Fix:** Replace whole-workspace selectors with narrowed selectors using `useShallow` (mirroring `SaveIndicator`/`CanvasHints`). Pull only the slices each component renders.
+
+- [ ] **[Performance]** Every store mutation does `structuredClone` of the full workspace via `cloneWs` at 30+ call sites — every keystroke-level operation deep-clones the entire model. — `src/store/workspace.ts:264`, `src/store/workspace-helpers.ts:152`
+  - **Fix:** Adopt Immer (`zustand/middleware/immer`) so only mutated branches are copied; structural sharing eliminates O(workspace) allocation per edit and lets shallow selectors actually skip re-renders. Coordinate with the selector-narrowing fix above.
+
+- [ ] **[Simplicity]** 13 source files exceed 500 lines: `workspace.ts` (1209), `Canvas.tsx` (835), `FloatingTopPill.tsx` (720), `WelcomeScreen.tsx` (669), `HighlighterPanel.tsx` (642), `RightPanel.tsx` (636), `serializer.ts` (605), `right-panel/fields.tsx` (605), `parser-model.ts` (574), `FloatingBottomStrip.tsx` (558), `WelcomeDialogs.tsx` (503), `workspace-helpers.ts` (501). — `src/store/workspace.ts`, `src/components/...`
+  - **Fix:** Apply the parser-style decomposition pattern. Split `workspace.ts` into per-domain action slices (model, views, selection, history); extract sub-panels from `Canvas.tsx`, `FloatingTopPill.tsx`, `HighlighterPanel.tsx` into sibling files.
+
+- [ ] **[Simplicity]** `Canvas.tsx` contains 34 hook calls (useEffect/useCallback/useMemo) in a single 835-line component, indicating the component owns many independent concerns. — `src/components/canvas/Canvas.tsx`
+  - **Fix:** Extract concern-specific custom hooks (`useCanvasSelection`, `useCanvasViewport`, `useCanvasKeyboard`, `useCanvasDragHandlers`) so the top-level component reads as composition rather than orchestration.
+
+- [ ] **[Reuse]** Anchored-popover pattern (portal + `getBoundingClientRect` coords + outside-click + Escape + scroll/resize reposition) is reimplemented in at least 5 places. — `src/components/welcome/RowMenu.tsx:15-60`, `src/components/settings/CanvasSettingsDialog.tsx:326-360`, `src/components/layout/FloatingBottomStrip.tsx:470-516`, `src/components/layout/FloatingToolRail.tsx:69-110`, `src/components/layout/highlighter/HighlighterPanel.tsx:148`, `src/components/layout/FloatingInspector.tsx:21-40`
+  - **Fix:** Extract a `useAnchoredPopover` hook (or `<FloatingPanel anchorRef>` component) that owns coords computation, document-level mousedown, Escape, and scroll/resize repositioning. Migrate the 5+ duplicate sites.
 
 ## Medium Priority
 
-- [ ] **[Performance]** 23+ components subscribe to the entire workspace via `useWorkspaceStore((s) => s.workspace)`; any mutation re-renders all of them. — `src/components/layout/RightPanel.tsx`, `FloatingTopPill.tsx`, `ViewSwitcher.tsx`, `FloatingInspector.tsx`, `AddElementPanel.tsx`, etc.
-  - **Fix:** Use narrower selectors with shallow equality (e.g. `s.workspace.model.softwareSystems`, or selector helpers in `workspace-selectors.ts`).
+- [ ] **[Performance]** Canvas's `viewStructureKey` selector iterates every view and concatenates element IDs into a string on every store change. — `src/components/canvas/Canvas.tsx:164-169`
+  - **Fix:** Cache the fingerprint store-side (recompute only on element/view add/remove) or hash counts incrementally.
 
-- [ ] **[Performance]** Every store mutation does `structuredClone` of the full workspace; expensive on large workspaces and live-typing patches. — `src/store/workspace-helpers.ts:152`, `src/store/workspace.ts` (cloneWs usage throughout)
-  - **Fix:** Adopt structural sharing (Immer producer or targeted shallow-clone-along-path) for hot paths, or scope deep clones to the affected sub-tree as `updateElementLive` already does.
+- [ ] **[Performance]** Several iteration patterns in `workspace-helpers.ts` use `flatMap` + `find` over softwareSystems/containers without a shared element index. — `src/store/workspace-helpers.ts:209,229,288,315,354`
+  - **Fix:** Reuse `buildElementMap` consistently in lookup-heavy helpers.
 
-- [ ] **[Performance]** Canvas `initialNodes/initialEdges` memo depends on the full workspace reference, so any unrelated change invalidates the dagre layout rebuild. — `src/components/canvas/Canvas.tsx:183-225`
-  - **Fix:** Depend on `workspace.model` / `workspace.model.groups` / `view` slices, or memoize `buildRelationshipMap` / `buildDrillableSet` separately.
+- [ ] **[Maintainability]** ESLint `ecmaVersion` pinned to 2020 despite Node 22 / TS 5.9 / Vite 7 supporting modern syntax. — `eslint.config.js`
+  - **Fix:** Bump to 2022 (or `'latest'`).
 
-- [ ] **[Simplicity]** 13 source files exceed 500 lines (workspace.ts 1209, Canvas.tsx 835, FloatingTopPill.tsx 720, WelcomeScreen.tsx 669, HighlighterPanel.tsx 642, RightPanel.tsx 636, serializer.ts 605, right-panel/fields.tsx 605, FloatingBottomStrip.tsx 558, WelcomeDialogs.tsx 503, workspace-helpers.ts 501). — `src/store/workspace.ts`, `src/components/canvas/Canvas.tsx`, `src/components/layout/FloatingTopPill.tsx`, `src/components/welcome/WelcomeScreen.tsx`
-  - **Fix:** Continue decomposition — extract Canvas event handlers (drag/drop, selection) into hooks; lift FloatingTopPill's inline `WorkspaceSwitcherPanel` (182 lines) into a sibling file; consider splitting workspace.ts by slice (model/view/selection/undo).
+- [ ] **[Maintainability]** `lucide-react` pinned to `^1.14.0` — unusual major (mainline is 0.x). — `package.json`
+  - **Fix:** Verify against upstream and align/document the choice.
 
-- [ ] **[Simplicity]** Top-level React components have very long bodies: Canvas 776, WelcomeScreen 591, FloatingTopPill 463, ElementProperties 207. — `src/components/canvas/Canvas.tsx:60`, `src/components/welcome/WelcomeScreen.tsx`, `src/components/layout/RightPanel.tsx`
-  - **Fix:** Hoist event handlers into custom hooks (`useCanvasDragHandlers`, `useSelectionSync`) and extract JSX sub-sections into smaller named components. Aim for component bodies under 250 lines.
+- [ ] **[Maintainability]** Stale audit-artifact markdown files appear modified/deleted in the working tree. — repo root
+  - **Fix:** Land or discard the in-flight working changes; move audit/checklist files into `docs/`.
 
-- [ ] **[Simplicity]** Pockets of 5–6 level nesting in `parser.ts` (column 24+ indentation on if/for inside `parseModelBody` / `parseSoftwareSystemBody`). — `src/lib/dsl/parser.ts`
-  - **Fix:** Apply early-return / guard-clause refactors and use lookup tables for keyword dispatch instead of nested if/else ladders.
+- [ ] **[Reuse]** ~15 ad-hoc Escape handlers remain outside DialogShell's reach. — `RowMenu.tsx`, `FloatingToolRail.tsx`, `CanvasSettingsDialog.tsx`, `ViewSwitcher` rename, `fields.tsx` (×3), `HighlighterPanel.tsx`, `FloatingBottomStrip.tsx` (×2), `InlineName.tsx`, `ScopePickerDialog.tsx`, `CommandPalette.tsx`, `SearchDialog.tsx`, `WelcomeDialogs.tsx` (×2)
+  - **Fix:** Introduce `useEscapeKey(active, onEscape)` and route all transient overlays through it.
 
-- [ ] **[Maintainability]** Same set of oversized modules. — `src/lib/dsl/parser.ts`, `src/store/workspace.ts`, `src/components/canvas/Canvas.tsx`, `src/components/layout/FloatingTopPill.tsx`, `src/components/welcome/WelcomeScreen.tsx`
-  - **Fix:** Decompose into focused submodules; extract workspace.ts slices into the existing workspace-helpers/workspace-selectors pattern.
+- [ ] **[Reuse]** Several non-dialog overlays duplicate the `createPortal` + fixed-position boilerplate that DialogShell encapsulates. — `RowMenu.tsx`, `CanvasSettingsDialog.tsx`, `FloatingBottomStrip.tsx`, `HighlighterPanel.tsx`
+  - **Fix:** Add a thin `<FloatingPanel anchorRef>` primitive in `src/components/shared/`.
 
-- [ ] **[Maintainability]** ESLint `ecmaVersion` set to 2020 even though codebase targets Node 22 / modern browsers. — `eslint.config.js:19`
-  - **Fix:** Bump `ecmaVersion` to 2023+ (or `'latest'`).
+- [ ] **[Simplicity]** Deep JSX nesting (≥6 logical levels) in some panels. — `src/components/layout/RightPanel.tsx:152`, `src/components/layout/highlighter/HighlighterPanel.tsx:570`
+  - **Fix:** Hoist deeply-nested branches into named sub-components or early-return helpers.
 
-- [ ] **[Reuse]** Inline Escape-key handling is reimplemented in 8+ components with similar `useEffect` + keydown listener patterns. — `src/components/layout/FloatingToolRail.tsx:72`, `src/components/settings/CanvasSettingsDialog.tsx:352`, `src/components/welcome/RowMenu.tsx:44`, `src/components/welcome/WelcomeDialogs.tsx:105,454`, `src/components/command-palette/CommandPalette.tsx:32`
-  - **Fix:** Add a `useEscape(callback, enabled?)` hook in `src/hooks/` and replace the duplicated useEffect blocks across menus and flyouts.
+- [ ] **[Simplicity]** `workspace.ts` mixes selectors, history (cloneWs/pushUndo), and 60+ mutator actions. — `src/store/workspace.ts`
+  - **Fix:** Split into slices via Zustand `combine()` or a folder of action modules.
 
-- [ ] **[UI/UX]** All user-facing strings are hardcoded English; no i18n library present. — `package.json`, `src/components/**`
-  - **Fix:** If multi-locale support is on the roadmap, integrate i18next or react-intl and extract user-visible strings to translation catalogs.
+- [ ] **[UI/UX]** No i18n library; user-facing strings hardcoded English. — `src/components/**`
+  - **Fix:** If multi-locale support is on the roadmap, integrate `react-i18next` or LinguiJS.
 
-- [ ] **[UI/UX]** No global toast/notification system; user feedback for non-fatal async ops relies on inline state or `SaveIndicator` only. — `src/components/**`
-  - **Fix:** Add a lightweight toast primitive (or adopt sonner) for confirmations like "View created", "Export failed — retry?".
+- [ ] **[UI/UX]** Limited responsive coverage — `useBreakpoint` consumed in only 2 components; many floating panels use fixed pixel sizes. — `src/components/layout/`, `src/index.css`
+  - **Fix:** Audit floating panels at sub-768px widths; add breakpoint-aware layouts (or document desktop-only support).
 
-- [ ] **[Observability]** No default error-tracking platform (Sentry/Datadog/Rollbar) wired in. — `src/main.tsx:106-122`, `src/lib/logger.ts:18-52`
-  - **Fix:** Ship a default Sentry adapter behind an env flag so production builds get error grouping, release tagging, and alerting.
+- [ ] **[UI/UX]** Some inputs rely on aria-label/placeholder rather than associated `<label htmlFor>`. — `FloatingBottomStrip.tsx`, `CommandPalette.tsx`, `WelcomeScreen.tsx`
+  - **Fix:** Standardize on visible `<label htmlFor>` for form fields.
 
-- [ ] **[DevOps]** No Dockerfile / container configuration. — repo root
-  - **Fix:** Optionally add a multi-stage Dockerfile (node build + nginx/caddy serve, non-root) and `.dockerignore` for self-hosters.
+- [ ] **[Observability]** No default error-tracking platform (Sentry/Datadog) wired in by default. — `src/main.tsx`, `src/lib/logger.ts`
+  - **Fix:** Ship a default Sentry adapter behind an env flag.
 
-- [ ] **[DevOps]** No infrastructure-as-code for the Vercel deployment. — repo root
-  - **Fix:** Capture project/domain/header configuration in IaC (e.g. Terraform Vercel provider).
+- [ ] **[Testability]** Component-level test coverage is thin (~17% of components have a colocated test). — `src/components/`
+  - **Fix:** Add tests for high-logic components (RightPanel, FloatingInspector, Canvas wrappers) using `@testing-library/react`.
 
-- [ ] **[Testability]** UI component coverage thinner than lib/store layers (~45% by file count). — `src/components/canvas/`, `src/components/layout/`
-  - **Fix:** Expand unit tests for canvas-node and layout components.
-
-- [ ] **[Security]** `index.html` meta CSP includes `'unsafe-eval'` for script-src and `ws:`/`wss:` in connect-src — looser than the production Vercel header. — `index.html:15`
-  - **Fix:** Drop `'unsafe-eval'` and `ws:`/`wss:` from the production index.html CSP (move dev-only relaxations into Vite dev middleware) so meta CSP matches the Vercel header.
+- [ ] **[Security]** `index.html` meta CSP allows `'unsafe-eval'` in script-src. — `index.html:16`
+  - **Fix:** Drop `'unsafe-eval'` from the meta CSP for production builds (move dev-only relaxations into Vite dev middleware).
 
 ## Suggestions
 
-- [ ] **[Security]** No CodeQL or scheduled `npm audit` job in CI beyond Dependabot. — `.github/workflows/ci.yml`
-  - **Fix:** Add a CodeQL workflow and/or a scheduled `npm audit --production` step.
+- [ ] **[Security]** No CodeQL workflow in CI beyond gitleaks + dependency-review. — `.github/workflows/ci.yml`
+  - **Fix:** Add a CodeQL workflow for static JS/TS analysis.
 
-- [ ] **[Testability]** Test data constructed inline via per-file `makeWorkspace()` helpers; some duplication. — `src/store/workspace.test.ts`, `src/lib/dsl/*.test.ts`
-  - **Fix:** Extract shared test fixture/factory builders for `Workspace`, `Element`, `Relationship`.
+- [ ] **[Testability]** No coverage thresholds enforced. — `vite.config.ts` / CI
+  - **Fix:** Add lines/statements ≥ 70% gate.
 
-- [ ] **[Testability]** `WelcomeScreen.test.tsx` contains extensive ad-hoc `vi.mock()` calls for lucide-react and fileIO. — `src/components/welcome/WelcomeScreen.test.tsx`
-  - **Fix:** Move common module mocks into a shared vitest setup file.
+- [ ] **[Testability]** No standalone `vitest.config.ts`. — repo root
+  - **Fix:** Extract for clarity (setupFiles, env, coverage thresholds).
 
-- [ ] **[Reuse]** Per-node C4 type wrappers (PersonNode, SystemNode, ComponentNode, ContainerNode) duplicate isExternal/typeColor/border ternaries. — `src/components/canvas/nodes/{Person,System,Component,Container}Node.tsx`
-  - **Fix:** Move typeColor/tint/borderStyle/chipLabel/icon computation into `elementMeta.ts`; nodes shrink to passthroughs.
+- [ ] **[UI/UX]** ErrorBoundary coverage could expand to dialog and right-panel subtrees. — `App.tsx`
+  - **Fix:** Wrap RightPanel, FloatingInspector, and dialogs in localized ErrorBoundary instances.
 
-- [ ] **[Reuse]** Workspace-listing pipeline (`listDSLFiles` + parse + stats) duplicated between WelcomeScreen and FloatingTopPill. — `src/components/layout/FloatingTopPill.tsx`, `src/components/welcome/WelcomeScreen.tsx`
-  - **Fix:** Extract a `useWorkspaceList()` / `loadWorkspaceEntries()` hook.
+- [ ] **[Observability]** No application-level metrics beyond Core Web Vitals. — `src/lib/webVitals.ts`
+  - **Fix:** Emit `log.info` events for open/save/export and DSL parse-failure counts.
 
-- [ ] **[UI/UX]** Only one layout breakpoint (`max-width: 760px`); narrow responsive coverage for mid-sized viewports. — `src/index.css`, `src/hooks/useBreakpoint.ts`
-  - **Fix:** Add an intermediate breakpoint (~1024px) and audit floating panels (Inspector, BottomStrip, RightPanel) for overlap at mid widths.
+- [ ] **[Observability]** Per-session correlation ID exists but isn't surfaced in UI or attached as top-level field on remote-log payload. — `src/lib/logger.ts`, `src/main.tsx`
+  - **Fix:** Show sessionId in About panel; include as top-level field on sendBeacon batches.
 
-- [ ] **[Observability]** Per-session correlation ID exists but no per-operation/trace ID — multi-step flows can't be correlated as a unit. — `src/lib/logger.ts:110-123`
-  - **Fix:** Add an optional `operationId`/`traceId` field on `createLogger` or a `withContext()` helper.
+- [ ] **[DevOps]** CI doesn't include an explicit deploy job — Vercel auto-deploy is implicit via the GitHub integration. — `.github/workflows/ci.yml`
+  - **Fix:** Document the Vercel auto-deploy trigger in `docs/DEPLOYMENT.md`.
 
-- [ ] **[Observability]** No application-level metrics beyond Core Web Vitals. — `src/lib/webVitals.ts`, `src/lib/logger.ts`
-  - **Fix:** Emit info-level events for key user actions (`workspace_loaded`, `export_succeeded`, `export_failed`).
-
-- [ ] **[DevOps]** CI builds but doesn't smoke-test the production artifact. — `.github/workflows/ci.yml`
-  - **Fix:** Run Playwright e2e against `vite preview` of the built dist/, or upload dist/ as an artifact.
+- [ ] **[DevOps]** No Dockerfile / no IaC for Vercel. — repo root
+  - **Fix:** Optional multi-stage Dockerfile + `.dockerignore` for self-hosters; Terraform Vercel provider for project/domain config.

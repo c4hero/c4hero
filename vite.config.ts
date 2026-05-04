@@ -13,6 +13,24 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // Strip dev-only CSP relaxations from index.html in production builds.
+    // Vite's HMR client uses eval() and a websocket connection, so the dev
+    // server needs `unsafe-eval` in script-src and `ws:`/`wss:` in connect-src.
+    // Production has neither, so the meta CSP can be tighter — matching the
+    // strict Vercel response-header CSP for self-hosters who don't replicate
+    // those headers on their origin.
+    {
+      name: 'tighten-csp-in-prod',
+      transformIndexHtml: {
+        order: 'pre' as const,
+        handler(html: string, ctx: { server?: unknown }) {
+          if (ctx.server) return html // dev — leave CSP loose for HMR
+          return html
+            .replace(" 'unsafe-eval'", '')
+            .replace(' ws: wss:', '')
+        },
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'c4-logo.svg', 'apple-touch-icon.png'],

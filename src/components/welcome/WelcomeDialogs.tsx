@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { Building2, Network, Box, Zap, Trash2, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -101,11 +102,7 @@ export function TemplateDialog({
 
   const [hovered, setHovered] = useState<string | null>(null)
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  useEscapeKey(true, onClose)
 
   return (
     <div

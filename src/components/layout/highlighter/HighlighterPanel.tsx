@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { createPortal } from 'react-dom'
 import { Tag, Activity, Cpu, Users, X, Trash2, Search, Pencil } from 'lucide-react'
 import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/workspace'
@@ -143,12 +144,7 @@ export default function HighlighterPanel() {
     })
   }
 
-  useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, setOpen])
+  useEscapeKey(open, () => setOpen(false))
 
   const containerRef = useRef<HTMLDivElement>(null)
 
