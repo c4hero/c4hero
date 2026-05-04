@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
-import ErrorBoundary from './components/ErrorBoundary'
+import ErrorBoundary from './components/shared/ErrorBoundary'
 import { createLogger, addTransport, type LogEntry } from './lib/logger'
 import { normalizeRemoteLogEndpoint } from './lib/remoteLogEndpoint'
 import { useWorkspaceStore } from './store/workspace'
@@ -123,7 +123,10 @@ if (remoteEndpoint) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
+    <ErrorBoundary
+      label="Something went wrong"
+      onReset={() => window.location.reload()}
+    >
       <BrowserRouter>
         <App />
       </BrowserRouter>

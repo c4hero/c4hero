@@ -1,31 +1,22 @@
 import { useState, useEffect } from 'react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { X } from 'lucide-react'
+import { readJSON, writeJSON } from '@/lib/safeStorage'
 
 const HINTS_DISMISSED_KEY = 'c4hero_hints_dismissed'
 
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((id) => typeof id === 'string')
+}
+
 function getDismissed(): Set<string> {
-  try {
-    if (typeof localStorage === 'undefined') return new Set()
-    const data = localStorage.getItem(HINTS_DISMISSED_KEY)
-    if (!data) return new Set()
-    const parsed = JSON.parse(data)
-    return Array.isArray(parsed)
-      ? new Set(parsed.filter((id): id is string => typeof id === 'string'))
-      : new Set()
-  } catch {
-    return new Set()
-  }
+  return new Set(readJSON<string[]>(HINTS_DISMISSED_KEY, isStringArray, []) ?? [])
 }
 
 function dismiss(hintId: string) {
-  try {
-    const set = getDismissed()
-    set.add(hintId)
-    localStorage.setItem(HINTS_DISMISSED_KEY, JSON.stringify([...set]))
-  } catch {
-    // Hints are optional polish; storage failures should never block canvas work.
-  }
+  const set = getDismissed()
+  set.add(hintId)
+  writeJSON(HINTS_DISMISSED_KEY, [...set])
 }
 
 export default function CanvasHints() {

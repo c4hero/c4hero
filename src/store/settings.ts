@@ -1,8 +1,6 @@
 import { create } from 'zustand'
-import { createLogger } from '@/lib/logger'
 import { isRecord } from '@/lib/guards'
-
-const log = createLogger('settings')
+import { readJSON, writeJSON } from '@/lib/safeStorage'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -88,22 +86,13 @@ function normalizeSettings(value: unknown): AppSettings {
 // ─── Persistence ────────────────────────────────────────────────────
 
 function load(): AppSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { ...DEFAULTS }
-    return normalizeSettings(JSON.parse(raw))
-  } catch (err) {
-    log.warn('Failed to load settings from localStorage', err)
-    return { ...DEFAULTS }
-  }
+  // normalizeSettings already absorbs any shape — pass-through validator.
+  const raw = readJSON<unknown>(STORAGE_KEY, (v): v is unknown => v !== null && v !== undefined)
+  return normalizeSettings(raw)
 }
 
 function persist(settings: AppSettings) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings, null, 2))
-  } catch (err) {
-    log.warn('Failed to persist settings to localStorage', err)
-  }
+  writeJSON(STORAGE_KEY, settings)
 }
 
 // ─── Store ──────────────────────────────────────────────────────────

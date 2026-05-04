@@ -64,6 +64,19 @@ npm run audit
 npm run check
 ```
 
+## Deployment
+
+c4hero is a static SPA. The hosted instance at [c4hero.com](https://c4hero.com) is deployed to Vercel from the `main` branch using the configuration in `vercel.json` (SPA rewrites, immutable asset caching, strict CSP, HSTS, and other security headers). Self-hosting is straightforward — `npm run build` produces a static bundle in `dist/` that any static host (Netlify, Cloudflare Pages, S3 + CloudFront, GitHub Pages, plain nginx) can serve.
+
+For Vercel deployments:
+
+- Pushes to `main` trigger production deploys; pull requests get preview URLs.
+- No environment variables are required for a default build. Optional `VITE_*` vars are documented in `.env.example`.
+- Rollback via the Vercel dashboard (Deployments → ⋯ → "Promote to production") or `vercel rollback` from the CLI.
+- Browser support and preview-URL caveats track [Vercel's framework-detection defaults](https://vercel.com/docs/frameworks).
+
+If you self-host, replicate the security headers from `vercel.json` on your origin (the CSP in particular).
+
 ## Privacy
 
 c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a c4hero server. There are no third-party tracking scripts in the open source build. Full details in [PRIVACY.md](PRIVACY.md).

@@ -6,6 +6,7 @@
 // collide.
 
 import { isFiniteNumber, isRecord } from '@/lib/guards'
+import { readJSON, writeJSON } from '@/lib/safeStorage'
 
 export interface SavedViewport {
   x: number
@@ -32,26 +33,12 @@ export function saveViewport(
   viewKey: string,
   vp: SavedViewport,
 ): void {
-  try {
-    localStorage.setItem(storageKey(workspaceName, viewKey), JSON.stringify(vp))
-  } catch {
-    // localStorage unavailable (private mode, quota, etc.) — silently no-op
-  }
+  writeJSON(storageKey(workspaceName, viewKey), vp)
 }
 
 export function loadViewport(
   workspaceName: string | undefined,
   viewKey: string,
 ): SavedViewport | null {
-  try {
-    const raw = localStorage.getItem(storageKey(workspaceName, viewKey))
-    if (!raw) return null
-    const parsed: unknown = JSON.parse(raw)
-    if (isSavedViewport(parsed)) {
-      return parsed as SavedViewport
-    }
-    return null
-  } catch {
-    return null
-  }
+  return readJSON(storageKey(workspaceName, viewKey), isSavedViewport)
 }
