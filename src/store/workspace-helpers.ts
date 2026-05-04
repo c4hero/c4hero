@@ -1,5 +1,6 @@
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
+  ViewType, ElementInView,
 } from '@/types/model'
 
 /** Get flat array of all views */
@@ -149,6 +150,99 @@ export interface CascadeDeleteResult {
   allDeletedIds: Set<string>
   /** Container IDs implicitly removed because their parent system was deleted. */
   deletedContainerIds: Set<string>
+}
+
+/**
+ * Compute the initial elements + relationships for a freshly-created view
+ * so the canvas isn't empty when the user adds a new view. Auto-population
+ * rules (preserving Structurizr's "include the scope + everything related"
+ * convention):
+ *
+ *  - systemLandscape: all people + all software systems
+ *  - systemContext:   the scoped system + every person/system with a
+ *                     relationship to it
+ *  - container:       all containers of the scoped system + people/other
+ *                     systems/other containers that interact with them
+ *  - component:       all components of the scoped container + people/
+ *                     systems/containers that interact with them (other
+ *                     containers shown as the C4 boundary if a child
+ *                     component is related)
+ *
+ * Returns the auto-populated element refs and the relationship refs whose
+ * endpoints both ended up in the view.
+ */
+export function buildInitialViewContent(
+  model: Workspace['model'],
+  type: ViewType,
+  scopeId: string | undefined,
+): { elements: ElementInView[]; relationships: { id: string }[] } {
+  const elements: ElementInView[] = []
+
+  if (type === 'systemLandscape') {
+    for (const p of model.people) elements.push({ id: p.id })
+    for (const sys of model.softwareSystems) elements.push({ id: sys.id })
+  } else if (type === 'systemContext' && scopeId) {
+    elements.push({ id: scopeId })
+    const related = new Set<string>()
+    for (const rel of model.relationships) {
+      if (rel.sourceId === scopeId) related.add(rel.destinationId)
+      if (rel.destinationId === scopeId) related.add(rel.sourceId)
+    }
+    for (const p of model.people) {
+      if (related.has(p.id)) elements.push({ id: p.id })
+    }
+    for (const sys of model.softwareSystems) {
+      if (sys.id !== scopeId && related.has(sys.id)) elements.push({ id: sys.id })
+    }
+  } else if (type === 'container' && scopeId) {
+    const sys = model.softwareSystems.find((s) => s.id === scopeId)
+    if (sys) {
+      for (const c of sys.containers) elements.push({ id: c.id })
+    }
+    const containerIds = new Set(elements.map((e) => e.id))
+    const related = new Set<string>()
+    for (const rel of model.relationships) {
+      if (containerIds.has(rel.sourceId)) related.add(rel.destinationId)
+      if (containerIds.has(rel.destinationId)) related.add(rel.sourceId)
+    }
+    for (const p of model.people) {
+      if (related.has(p.id)) elements.push({ id: p.id })
+    }
+    for (const otherSys of model.softwareSystems) {
+      if (otherSys.id !== scopeId && related.has(otherSys.id)) elements.push({ id: otherSys.id })
+      for (const c of otherSys.containers) {
+        if (related.has(c.id)) elements.push({ id: c.id })
+      }
+    }
+  } else if (type === 'component' && scopeId) {
+    const container = model.softwareSystems.flatMap((s) => s.containers).find((c) => c.id === scopeId)
+    if (container) {
+      for (const comp of container.components) elements.push({ id: comp.id })
+    }
+    const componentIds = new Set(elements.map((e) => e.id))
+    const related = new Set<string>()
+    for (const rel of model.relationships) {
+      if (componentIds.has(rel.sourceId)) related.add(rel.destinationId)
+      if (componentIds.has(rel.destinationId)) related.add(rel.sourceId)
+    }
+    for (const p of model.people) {
+      if (related.has(p.id)) elements.push({ id: p.id })
+    }
+    for (const otherSys of model.softwareSystems) {
+      if (related.has(otherSys.id)) elements.push({ id: otherSys.id })
+      for (const c of otherSys.containers) {
+        if (c.id !== scopeId && related.has(c.id)) elements.push({ id: c.id })
+        else if (c.id !== scopeId && c.components.some((comp) => related.has(comp.id))) elements.push({ id: c.id })
+      }
+    }
+  }
+
+  const elementIdSet = new Set(elements.map((e) => e.id))
+  const relationships = model.relationships
+    .filter((r) => elementIdSet.has(r.sourceId) && elementIdSet.has(r.destinationId))
+    .map((r) => ({ id: r.id }))
+
+  return { elements, relationships }
 }
 
 /**
