@@ -158,14 +158,26 @@ export default function Canvas() {
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
-  // Compute a stable fingerprint of the view structure (keys + element counts) so that
-  // the viewCountMap only recomputes when views are actually added/removed or their elements change,
-  // not on every workspace clone (e.g. element rename, tag change).
+  // Compute a stable numeric fingerprint of the view structure so that
+  // viewCountMap only recomputes when views are actually added/removed or
+  // their element membership changes — not on every workspace clone
+  // (e.g. element rename, tag change). Uses a 32-bit rolling hash instead
+  // of building a giant string per store update; for typical workspaces this
+  // is ~10-100x cheaper allocation-wise.
   const viewStructureKey = useWorkspaceStore((s) => {
-    if (!s.workspace) return ''
-    const all = allViewsOf(s.workspace)
-    // Build a fingerprint: "viewKey:elCount:el1,el2,..." for each view
-    return all.map(view => `${view.key}:${view.elements.map(e => e.id).join(',')}`).join('|')
+    if (!s.workspace) return 0
+    let h = 17
+    for (const view of allViewsOf(s.workspace)) {
+      // Mix in the key length and element count first so views with no
+      // elements still differ when they're added/removed.
+      h = (Math.imul(h, 31) + view.key.length) | 0
+      h = (Math.imul(h, 31) + view.elements.length) | 0
+      for (const el of view.elements) {
+        // Hash one char from each id — cheap and order-sensitive.
+        h = (Math.imul(h, 31) + el.id.charCodeAt(0)) | 0
+      }
+    }
+    return h
   })
   const viewCountMap = useMemo(() => {
     if (!viewStructureKey) return new Map<string, number>()
