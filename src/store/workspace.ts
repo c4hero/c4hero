@@ -720,10 +720,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
     const id = nanoid(8)
     let created = false
     set((s) => {
-      const ws = cloneWs(s)
-      if (!ws) return s
-      if (sourceId === destinationId) return s
-      if (!elementExists(ws, sourceId) || !elementExists(ws, destinationId)) return s
+      if (!s.workspace) return
+      if (sourceId === destinationId) return
+      const ws = s.workspace
+      if (!elementExists(ws, sourceId) || !elementExists(ws, destinationId)) return
+      pushUndoSnapshot(s)
       const rel: Relationship = {
         id,
         sourceId,
@@ -759,16 +760,17 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
           }
         }
       }
-      return { ...pushUndo(s), workspace: ws, selectedRelationshipId: id, selectedElementIds: [], selectedGroupId: null }
+      s.selectedRelationshipId = id
+      s.selectedElementIds = []
+      s.selectedGroupId = null
     })
     return created ? id : ''
   },
 
   updateRelationship: (id, patch) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    const rel = ws.model.relationships.find(r => r.id === id)
-    if (!rel) return s
+    if (!s.workspace) return
+    const rel = s.workspace.model.relationships.find(r => r.id === id)
+    if (!rel) return
     // Use 'key in patch' for optional fields that the UI may legitimately clear by passing
     // undefined (e.g. empty text field → { description: undefined }).  This mirrors the same
     // pattern used in applyElementPatch.
@@ -780,22 +782,22 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
     if ('lineStyle' in patch && rel.lineStyle !== patch.lineStyle) { rel.lineStyle = patch.lineStyle; changed = true }
     if ('url' in patch && rel.url !== patch.url) { rel.url = patch.url; changed = true }
     if (patch.tags !== undefined) {
-      // Tags array: compare by serialized form since the reference always differs post-clone
       const tagsChanged = patch.tags.length !== rel.tags.length || patch.tags.some((t, i) => t !== rel.tags[i])
       if (tagsChanged) { rel.tags = patch.tags; changed = true }
     }
-    if (!changed) return s
-    return { ...pushUndo(s), workspace: ws }
+    if (!changed) return
+    pushUndoSnapshot(s)
   }),
 
   reconnectRelationship: (id, newSourceId, newTargetId) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
+    if (!s.workspace) return
+    const ws = s.workspace
     const rel = ws.model.relationships.find(r => r.id === id)
-    if (!rel) return s
-    if (rel.sourceId === newSourceId && rel.destinationId === newTargetId) return s
-    if (newSourceId === newTargetId) return s
-    if (!elementExists(ws, newSourceId) || !elementExists(ws, newTargetId)) return s
+    if (!rel) return
+    if (rel.sourceId === newSourceId && rel.destinationId === newTargetId) return
+    if (newSourceId === newTargetId) return
+    if (!elementExists(ws, newSourceId) || !elementExists(ws, newTargetId)) return
+    pushUndoSnapshot(s)
     rel.sourceId = newSourceId
     rel.destinationId = newTargetId
 
@@ -826,23 +828,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(immer((set, get) => ({
         v.relationships.push({ id })
       }
     })
-    return { ...pushUndo(s), workspace: ws }
   }),
 
   deleteRelationship: (id) => set((s) => {
-    const ws = cloneWs(s)
-    if (!ws) return s
-    if (!ws.model.relationships.some(r => r.id === id)) return s
+    if (!s.workspace) return
+    const ws = s.workspace
+    if (!ws.model.relationships.some(r => r.id === id)) return
+    pushUndoSnapshot(s)
     ws.model.relationships = ws.model.relationships.filter(r => r.id !== id)
     // Remove from all views
     forEachView(ws, (v) => {
       v.relationships = v.relationships.filter(r => r.id !== id)
     })
-    return {
-      ...pushUndo(s),
-      workspace: ws,
-      selectedRelationshipId: s.selectedRelationshipId === id ? null : s.selectedRelationshipId,
-    }
+    if (s.selectedRelationshipId === id) s.selectedRelationshipId = null
   }),
 
   // ─── View Management ────────────────────────────────────────────
