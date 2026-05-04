@@ -4,6 +4,7 @@ import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isNonEmptyString, isRecord, isStringArray, isStringRecord } from '@/lib/guards'
 import { sidecarName } from '@/lib/sidecar'
 import { safeSuggestedDslName } from '@/lib/filenames'
+import { readJSON, writeJSON, writeString, removeKey } from '@/lib/safeStorage'
 
 const log = createLogger('fileIO')
 
@@ -66,14 +67,8 @@ function normalizeRecentFolders(value: unknown): RecentFolder[] {
 }
 
 export function getRecentFiles(): RecentFile[] {
-  try {
-    const data = localStorage.getItem(RECENT_FILES_KEY)
-    if (!data) return []
-    return normalizeRecentFiles(JSON.parse(data))
-  } catch (err) {
-    log.warn('Failed to read recent files from localStorage', err)
-    return []
-  }
+  const raw = readJSON<unknown>(RECENT_FILES_KEY, (v): v is unknown => v !== undefined && v !== null)
+  return raw === null ? [] : normalizeRecentFiles(raw)
 }
 
 export function addRecentFile(name: string) {
@@ -81,37 +76,21 @@ export function addRecentFile(name: string) {
   if (!trimmedName) return
   const recent = getRecentFiles().filter(f => f.name !== trimmedName)
   recent.unshift({ name: trimmedName, openedAt: new Date().toISOString() })
-  try {
-    localStorage.setItem(RECENT_FILES_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
-  } catch (err) {
-    log.warn('Failed to save recent file to localStorage', err)
-  }
+  writeJSON(RECENT_FILES_KEY, recent.slice(0, MAX_RECENT))
 }
 
 export function getRecentFolders(): RecentFolder[] {
-  try {
-    const data = localStorage.getItem(RECENT_FOLDERS_KEY)
-    if (!data) return []
-    return normalizeRecentFolders(JSON.parse(data))
-  } catch (err) {
-    log.warn('Failed to read recent folders from localStorage', err)
-    return []
-  }
+  const raw = readJSON<unknown>(RECENT_FOLDERS_KEY, (v): v is unknown => v !== undefined && v !== null)
+  return raw === null ? [] : normalizeRecentFolders(raw)
 }
 
 export function removeRecentFolder(name: string): void {
-  const filtered = getRecentFolders().filter(f => f.name !== name)
-  try {
-    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(filtered))
-  } catch (err) { log.warn('Failed to remove recent folder from localStorage', err) }
+  writeJSON(RECENT_FOLDERS_KEY, getRecentFolders().filter(f => f.name !== name))
 }
 
 export function pruneRecentFolders(validNames: string[]): void {
   const validSet = new Set(validNames)
-  const filtered = getRecentFolders().filter(f => validSet.has(f.name))
-  try {
-    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(filtered))
-  } catch (err) { log.warn('Failed to prune recent folders in localStorage', err) }
+  writeJSON(RECENT_FOLDERS_KEY, getRecentFolders().filter(f => validSet.has(f.name)))
 }
 
 export function addRecentFolder({ name, path, displayName }: { name: string; path: string; displayName?: string }) {
@@ -120,11 +99,7 @@ export function addRecentFolder({ name, path, displayName }: { name: string; pat
   if (!trimmedName || !trimmedPath) return
   const recent = getRecentFolders().filter(f => f.path !== trimmedPath)
   recent.unshift({ name: trimmedName, path: trimmedPath, displayName: displayName?.trim() || undefined, openedAt: new Date().toISOString() })
-  try {
-    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
-  } catch (err) {
-    log.warn('Failed to save recent folder to localStorage', err)
-  }
+  writeJSON(RECENT_FOLDERS_KEY, recent.slice(0, MAX_RECENT))
 }
 
 /** Get the current file handle for auto-save */
@@ -287,18 +262,20 @@ const MAX_CRASH_RECOVERY_BYTES = 4 * 1024 * 1024
 
 /** Save workspace JSON to localStorage for crash recovery */
 export function saveToLocalStorage(workspace: Workspace) {
+  let json: string
   try {
-    const json = JSON.stringify(workspace)
-    const sizeBytes = new TextEncoder().encode(json).length
-    if (sizeBytes > MAX_CRASH_RECOVERY_BYTES) {
-      log.warn(`Workspace too large for crash recovery (${(sizeBytes / 1024 / 1024).toFixed(1)}MB). Skipping localStorage save.`)
-      return
-    }
-    localStorage.setItem('c4hero_crash_recovery', json)
-    localStorage.setItem('c4hero_crash_recovery_time', new Date().toISOString())
+    json = JSON.stringify(workspace)
   } catch (err) {
-    log.warn('Failed to save crash recovery data to localStorage', err)
+    log.warn('Failed to serialize workspace for crash recovery', err)
+    return
   }
+  const sizeBytes = new TextEncoder().encode(json).length
+  if (sizeBytes > MAX_CRASH_RECOVERY_BYTES) {
+    log.warn(`Workspace too large for crash recovery (${(sizeBytes / 1024 / 1024).toFixed(1)}MB). Skipping localStorage save.`)
+    return
+  }
+  writeString('c4hero_crash_recovery', json)
+  writeString('c4hero_crash_recovery_time', new Date().toISOString())
 }
 
 function isBaseElementShape(value: unknown): value is Record<string, unknown> {
@@ -434,26 +411,13 @@ export function isWorkspaceShape(obj: unknown): obj is Workspace {
 
 /** Load workspace from localStorage crash recovery */
 export function loadFromLocalStorage(): Workspace | null {
-  try {
-    const data = localStorage.getItem('c4hero_crash_recovery')
-    if (!data) return null
-    const parsed = JSON.parse(data)
-    if (!isWorkspaceShape(parsed)) return null
-    return parsed
-  } catch (err) {
-    log.warn('Failed to load crash recovery data from localStorage', err)
-    return null
-  }
+  return readJSON<Workspace>('c4hero_crash_recovery', isWorkspaceShape)
 }
 
 /** Clear crash recovery data */
 export function clearLocalStorage() {
-  try {
-    localStorage.removeItem('c4hero_crash_recovery')
-    localStorage.removeItem('c4hero_crash_recovery_time')
-  } catch (err) {
-    log.warn('Failed to clear crash recovery data from localStorage', err)
-  }
+  removeKey('c4hero_crash_recovery')
+  removeKey('c4hero_crash_recovery_time')
 }
 
 // ─── File System Access API type declarations ─────────────────────

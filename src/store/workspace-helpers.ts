@@ -31,9 +31,31 @@ export function forEachElementHelper(ws: Workspace, fn: (el: ModelElement) => bo
 
 /** Find an element by ID in the model tree */
 export function findElementHelper(ws: Workspace, id: string): ModelElement | undefined {
-  let found: ModelElement | undefined
-  forEachElementHelper(ws, (el) => { if (el.id === id) { found = el; return true } })
-  return found
+  return getElementIndex(ws).get(id)
+}
+
+/**
+ * Workspace-scoped id → element cache. Keyed by Workspace identity, so
+ * each cloned workspace snapshot gets its own index built lazily on the
+ * first lookup and reused thereafter. Replaces the O(n) tree walks that
+ * findElementHelper used to do on every call — relevant for hot paths
+ * that look up multiple elements per render (e.g. relationship resolution
+ * on the canvas, view derivation, undo/redo recompute).
+ *
+ * The WeakMap means cached snapshots are GC'd as soon as the store
+ * releases its reference.
+ */
+const elementIndexCache = new WeakMap<Workspace, Map<string, ModelElement>>()
+
+/** Build (or fetch from cache) the id → element map for a workspace. */
+export function getElementIndex(ws: Workspace): Map<string, ModelElement> {
+  let idx = elementIndexCache.get(ws)
+  if (!idx) {
+    idx = new Map()
+    forEachElementHelper(ws, (el) => { idx!.set(el.id, el) })
+    elementIndexCache.set(ws, idx)
+  }
+  return idx
 }
 
 /** Patch shape that updateElement / updateElementLive both consume. */
@@ -75,7 +97,7 @@ export function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch
 
 /** True if an element with the given ID exists in the model tree. */
 export function elementExists(ws: Workspace, id: string): boolean {
-  return !!findElementHelper(ws, id)
+  return getElementIndex(ws).has(id)
 }
 
 /** The four view-type array keys — used wherever we need to iterate or locate views by type. */

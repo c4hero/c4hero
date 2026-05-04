@@ -1,7 +1,5 @@
 import type { Workspace, View, ModelElement, Relationship } from '@/types/model'
-import { allViewsOf, findViewHelper, findElementHelper } from './workspace-helpers'
-
-const elementMapCache = new WeakMap<Workspace, Map<string, ModelElement>>()
+import { allViewsOf, findViewHelper, findElementHelper, getElementIndex } from './workspace-helpers'
 const relationshipMapCache = new WeakMap<Workspace, Map<string, Relationship>>()
 
 function getFirstViewKey(workspace: Workspace): string | null {
@@ -17,19 +15,9 @@ export function getActiveView(workspace: Workspace, key: string): View | undefin
 }
 
 export function buildElementMap(workspace: Workspace): Map<string, ModelElement> {
-  const cached = elementMapCache.get(workspace)
-  if (cached) return cached
-  const map = new Map<string, ModelElement>()
-  for (const p of workspace.model.people) map.set(p.id, p)
-  for (const sys of workspace.model.softwareSystems) {
-    map.set(sys.id, sys)
-    for (const c of sys.containers) {
-      map.set(c.id, c)
-      for (const comp of c.components) map.set(comp.id, comp)
-    }
-  }
-  elementMapCache.set(workspace, map)
-  return map
+  // Reuse the workspace-scoped element index from workspace-helpers — same
+  // shape, same cache, no need to maintain two parallel structures.
+  return getElementIndex(workspace)
 }
 
 export function buildRelationshipMap(workspace: Workspace): Map<string, Relationship> {
