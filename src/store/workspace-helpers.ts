@@ -1,7 +1,17 @@
+import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
   ViewType, ElementInView,
 } from '@/types/model'
+
+/** Deep-clone an object that may be an Immer draft. structuredClone'ing a
+ *  draft proxy throws DataCloneError; current() unwraps the draft to a plain
+ *  snapshot first, then structuredClone produces a writable detached copy.
+ *  Acts as identity for plain (non-draft) inputs. */
+function deepCloneMaybeDraft<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value
+  return structuredClone(isDraft(value) ? (current(value as object) as T) : value)
+}
 
 /** Get flat array of all views */
 export function allViewsOf(ws: Workspace): View[] {
@@ -148,9 +158,9 @@ export function addToCurrentView(
 }
 
 /** Deep-clone the workspace for safe mutation. Returns null when there's
- *  no workspace loaded. */
+ *  no workspace loaded. Handles Immer drafts via current() unwrap. */
 export function cloneWorkspace(ws: Workspace | null): Workspace | null {
-  return ws ? structuredClone(ws) : null
+  return ws ? deepCloneMaybeDraft(ws) : null
 }
 
 /** Result of a cascade delete: the model is mutated in place, and the caller
@@ -293,19 +303,19 @@ export function duplicateElementsInTree(
 
     if (element.type === 'person') {
       ws.model.people.push({
-        ...structuredClone(element),
+        ...deepCloneMaybeDraft(element),
         id: newId,
         name: uniqueElementName(`${element.name} copy`, ws),
       })
       cloned = true
     } else if (element.type === 'softwareSystem') {
       const clonedContainers = element.containers.map((c) => ({
-        ...structuredClone(c),
+        ...deepCloneMaybeDraft(c),
         id: nanoid(),
-        components: c.components.map((comp) => ({ ...structuredClone(comp), id: nanoid() })),
+        components: c.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: nanoid() })),
       }))
       ws.model.softwareSystems.push({
-        ...structuredClone(element),
+        ...deepCloneMaybeDraft(element),
         id: newId,
         name: uniqueElementName(`${element.name} copy`, ws),
         containers: clonedContainers,
@@ -315,10 +325,10 @@ export function duplicateElementsInTree(
       const parent = ws.model.softwareSystems.find((sys) => sys.containers.some((c) => c.id === id))
       if (parent) {
         parent.containers.push({
-          ...structuredClone(element),
+          ...deepCloneMaybeDraft(element),
           id: newId,
           name: uniqueElementName(`${element.name} copy`, ws),
-          components: element.components.map((comp) => ({ ...structuredClone(comp), id: nanoid() })),
+          components: element.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: nanoid() })),
         })
         cloned = true
       }
@@ -327,7 +337,7 @@ export function duplicateElementsInTree(
         for (const container of sys.containers) {
           if (container.components.some((c) => c.id === id)) {
             container.components.push({
-              ...structuredClone(element),
+              ...deepCloneMaybeDraft(element),
               id: newId,
               name: uniqueElementName(`${element.name} copy`, ws),
             })
@@ -389,7 +399,7 @@ export function duplicateElementsInTree(
     if (newSourceId && newDestId) {
       const newRelId = nanoid()
       ws.model.relationships.push({
-        ...structuredClone(rel),
+        ...deepCloneMaybeDraft(rel),
         id: newRelId,
         sourceId: newSourceId,
         destinationId: newDestId,
