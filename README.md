@@ -2,35 +2,58 @@
 
 [![CI](https://github.com/c4hero/c4hero/actions/workflows/ci.yml/badge.svg)](https://github.com/c4hero/c4hero/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](#prerequisites)
+[![Latest release](https://img.shields.io/github/v/release/c4hero/c4hero?label=release)](https://github.com/c4hero/c4hero/releases)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](#local-development)
 
-c4hero is a local-first visual architecture modelling tool for teams that use the C4 model and want to keep their architecture definitions in files, not a hosted black box.
+> Local-first C4 architecture diagrams in your browser. Edit visually, save as plain `.dsl` files. Structurizr DSL compatible, no signup, no server.
 
-It is designed around Structurizr-compatible workflows. You edit architecture visually, and c4hero reads and writes Structurizr DSL so your workspace can live in your repo, stay reviewable in pull requests, and avoid vendor lock-in.
+**Try it: [c4hero.com](https://c4hero.com)**
 
-## Current status
+![c4hero canvas — a system, containers, and a person, with relationships between them](docs/screenshots/canvas-hero.svg)
 
-This repository currently contains a browser-based React app with:
+---
 
-- visual editing for C4-style people, software systems, containers, and components
-- multiple view types, including landscape, system context, container, and component views
-- Structurizr DSL parsing and serialization, with a substantial round-trip test suite
-- local file and folder workflows, plus local crash-recovery storage in the browser
-- search, command palette, keyboard shortcuts, layout controls, tags, styles, groups, and presentation-oriented canvas controls
-- import/export paths for Structurizr DSL plus PNG and SVG export
-- unit and Playwright coverage for core editing flows
+## The 30-second pitch
+
+You write Structurizr DSL like this:
+
+```dsl
+workspace "E-Commerce Platform" {
+  model {
+    customer = person "Customer" "Browses + buys"
+    platform = softwareSystem "E-Commerce Platform" {
+      apiGateway = container "API Gateway" "Routes + auth" "Node.js"
+      userService = container "User Service" "Accounts + profiles" "Spring Boot"
+      orderService = container "Order Service" "Cart + checkout" "Go"
+      postgres = container "Postgres" "Users + orders" "Database"
+    }
+    customer -> apiGateway "Browses"
+    apiGateway -> userService "Authenticates"
+    apiGateway -> orderService "Routes"
+    userService -> postgres "Reads + writes"
+    orderService -> postgres "Reads + writes"
+  }
+  views { container platform "Containers" { include * } }
+}
+```
+
+c4hero renders it as a diagram, lets you edit it visually, and writes the DSL back to disk when you save. Your architecture lives in your repo, reviews in pull requests, and never gets locked behind a vendor's login screen.
+
+## Why c4hero
+
+- **Local-first.** Files stay on your device. There is no c4hero server. No accounts, no syncing, no telemetry by default.
+- **Plain text.** `.dsl` files diff cleanly in git, review in PRs, and survive any tool you use after this one.
+- **Structurizr-compatible.** Read and write the same DSL the official Structurizr tools use — c4hero is one option in an interoperable ecosystem, not a fork.
+- **Fast.** Code-split bundle, idle-scheduled autosave, dagre auto-layout, no network round-trips during editing.
+- **Accessible.** Focus-trap dialogs, ARIA-labeled canvas, keyboard shortcuts for every common action, `prefers-reduced-motion` support.
+
+A more detailed feature catalogue lives in [`docs/FEATURES.md`](docs/FEATURES.md).
 
 ## Browser support
 
-c4hero runs in any modern browser, but **folder collections** rely on the
-[File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API).
-That API is currently only available in **Chromium-based browsers** (Chrome,
-Edge, Brave, Arc, Opera).
+c4hero runs in any modern browser. **Folder collections** rely on the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API), which is currently only available in Chromium browsers (Chrome, Edge, Brave, Arc, Opera).
 
-In Firefox and Safari you can still open and edit a single `.dsl` file at a
-time, export PNG / SVG / DSL, and use every other feature. When folder
-workflows aren't supported, c4hero automatically falls back to the single-file
-flow.
+In Firefox and Safari you can still open and edit a single `.dsl` file at a time, export PNG / SVG / DSL, and use every other feature. When folder workflows aren't supported, c4hero automatically falls back to the single-file flow.
 
 ## Local development
 
@@ -48,48 +71,39 @@ npm run dev
 
 The Vite dev server runs on `http://localhost:3004` with `strictPort: true`.
 
-## Available commands
+### Available commands
 
 ```bash
-npm run dev
-npm run build
-npm run typecheck
-npm run lint
-npm run preview
-npm test
-npm run test:unit
-npm run test:watch
-npm run test:e2e
-npm run audit
-npm run check
+npm run dev          # dev server with HMR
+npm run build        # production bundle in dist/
+npm run preview      # serve the production bundle
+npm run typecheck    # tsc -b
+npm run lint         # eslint
+npm test             # unit (vitest) + e2e (playwright)
+npm run test:unit    # vitest only
+npm run test:watch   # vitest in watch mode
+npm run test:e2e     # playwright only
+npm run audit        # npm audit (production)
+npm run check        # typecheck + lint + audit
 ```
 
 ## Deployment
 
-c4hero is a static SPA. The hosted instance at [c4hero.com](https://c4hero.com) is deployed to Vercel from the `main` branch using the configuration in `vercel.json` (SPA rewrites, immutable asset caching, strict CSP, HSTS, and other security headers). Self-hosting is straightforward — `npm run build` produces a static bundle in `dist/` that any static host (Netlify, Cloudflare Pages, S3 + CloudFront, GitHub Pages, plain nginx) can serve.
-
-For Vercel deployments:
-
-- Pushes to `main` trigger production deploys; pull requests get preview URLs.
-- No environment variables are required for a default build. Optional `VITE_*` vars are documented in `.env.example`.
-- Rollback via the Vercel dashboard (Deployments → ⋯ → "Promote to production") or `vercel rollback` from the CLI.
-- Browser support and preview-URL caveats track [Vercel's framework-detection defaults](https://vercel.com/docs/frameworks).
-
-If you self-host, replicate the security headers from `vercel.json` on your origin (the CSP in particular).
+Deployment guidance — Vercel pipeline, env-var expectations, security headers for self-hosting — is documented in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Privacy
 
-c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a c4hero server. There are no third-party tracking scripts in the open source build. Full details in [PRIVACY.md](PRIVACY.md).
+c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a c4hero server. There are no third-party tracking scripts in the open source build. Full details in [`PRIVACY.md`](PRIVACY.md).
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a list of notable changes.
+See [`CHANGELOG.md`](CHANGELOG.md) for a list of notable changes. The current release is tagged in [GitHub Releases](https://github.com/c4hero/c4hero/releases).
 
 ## Contributing
 
-Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for setup, workflow, and testing guidance, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, workflow, and testing guidance, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-To report a security issue, see [SECURITY.md](SECURITY.md).
+To report a security issue, see [`SECURITY.md`](SECURITY.md).
 
 ## License
 
