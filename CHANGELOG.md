@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AI features (description suggestions, prompt-to-workspace bootstrap) and the bring-your-own-key infrastructure that supported them. The `VITE_ANTHROPIC_API_URL` and `VITE_OPENAI_API_URL` build-time variables are gone with them. The open source build no longer talks to any LLM provider.
 
 ### Added
+- Core Web Vitals reporting (LCP/INP/CLS/FCP/TTFB) through the existing structured logger so any configured remote transport gets perf telemetry.
+- `safeStorage` helper (`readJSON`, `writeJSON`, `readString`, `writeString`, `removeKey`) centralizing localStorage I/O with consistent error handling. All call sites in `viewportStorage`, `settings`, `fileIO`, and `CanvasHints` now go through it.
+- Workspace-scoped element index cache (WeakMap-backed) — element id lookups are O(1) instead of O(n) tree-walks; `findElement`, `elementExists`, and `buildElementMap` share the same per-snapshot index.
+- README "Deployment" section documenting the Vercel pipeline, env-var expectations, rollback steps, and self-hosting guidance.
+- Vitest coverage now runs in CI; coverage report uploaded as a workflow artifact. Playwright HTML report uploaded on e2e failure.
+- Gitleaks secret-scanning job in CI catches accidental secret commits before they hit `main`.
+- `DialogShell` gained a `position` prop ("center" | "shade") so top-pill-anchored slide-down panels can share the same focus-trap, focus-restoration, ARIA, and Escape-handling primitives as centered modals.
 - Open source release checklist covering repository hygiene, security/privacy, and launch smoke tests.
 - Dependency review in CI for pull requests, plus local `typecheck`, `audit`, and `check` npm scripts.
 - Runtime validation for optional remote log endpoints; only HTTPS remotes and same-origin paths are accepted.
@@ -20,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Match-mode controls in the Highlighter: per-facet toggle between `Any of` and `All of`.
 
 ### Changed
+- Consolidated to a single `ErrorBoundary` (the richer `src/components/shared/ErrorBoundary.tsx`); the older root-level boundary was removed and the root mount in `main.tsx` now uses the shared component with `onReset={() => window.location.reload()}`.
+- `SearchDialog`, `ExportDialog`, and `CommandPalette` migrated onto `DialogShell` (centered for Search; new `position="shade"` for Export and CommandPalette). Drops ~70 lines of duplicated modal scaffolding.
+- Workspace store helpers (`applyElementPatch`, `elementExists`, `forEachView`, `uniqueElementName`, `addToCurrentView`, `cloneWorkspace`, `VIEW_ARRAY_KEYS`, `ElementPatch`) extracted into the existing `workspace-helpers.ts` module — `workspace.ts` shrank from 1543 → 1481 lines.
 - Marked the app package as private to prevent accidental npm publication.
 - Removed internal agent planning artifacts from tracked public docs and made the remaining standalone docs fully local with no third-party font requests.
 - Extracted filename and external-URL sanitization into shared tested helpers used by downloads, file saves, sidecars, and inspector links.
