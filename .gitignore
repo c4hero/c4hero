@@ -44,3 +44,4 @@ src/components/welcome/mocks/
 *.njsproj
 *.sln
 *.sw?
+coverage/
