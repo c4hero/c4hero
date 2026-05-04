@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, type RefObject } from 'react'
 
 export type Placement = {
   /** Anchor the top of the popover to the bottom of the trigger (default). */
@@ -69,19 +69,21 @@ export function useAnchoredPopover<T extends HTMLElement = HTMLButtonElement, P 
   }, [])
   const toggle = useCallback(() => setOpenState((v) => !v), [])
 
-  useEffect(() => {
+  // Measure the trigger's bounding rect and set coords synchronously before
+  // paint so the popup doesn't flash in at (0,0). useLayoutEffect is the right
+  // primitive here; useEffect would be flagged by react-hooks/set-state-in-effect
+  // and would also paint the popup at a stale position for one frame.
+  useLayoutEffect(() => {
     if (!open) return
     const trigger = triggerRef.current
     if (!trigger) return
-
-    // Compute initial position from the trigger's bounding rect; clamp
-    // horizontally to the viewport with an 8px margin so the popup doesn't
-    // get cut off near edges.
     const r = trigger.getBoundingClientRect()
     let left: number
     if (align === 'right-edge') left = r.right - width
     else if (align === 'center') left = r.left + r.width / 2 - width / 2
     else left = r.left
+    // Clamp horizontally to the viewport with an 8px margin so the popup
+    // doesn't get cut off near edges.
     left = Math.max(8, Math.min(left, window.innerWidth - width - 8))
     // Resolve "auto" side based on which side has more room. Requires height
     // to be specified; otherwise fall through to the default (bottom).
@@ -94,8 +96,16 @@ export function useAnchoredPopover<T extends HTMLElement = HTMLButtonElement, P 
     const top = side === 'bottom'
       ? r.bottom + gap
       : r.top - gap - (height ?? 0)
+    // DOM measurement: we can only call getBoundingClientRect after the trigger
+    // mounts, so coords must be derived in a layout effect rather than during
+    // render. useLayoutEffect runs before paint so the popup never flashes at
+    // the wrong position.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCoords({ top, left })
+  }, [open, width, height, gap, rawSide, align])
 
+  useEffect(() => {
+    if (!open) return
     function onDocClick(e: MouseEvent) {
       const target = e.target as Node
       if (popupRef.current?.contains(target)) return
@@ -120,7 +130,7 @@ export function useAnchoredPopover<T extends HTMLElement = HTMLButtonElement, P 
       window.removeEventListener('scroll', onReposition, true)
       window.removeEventListener('resize', onReposition)
     }
-  }, [open, width, height, gap, rawSide, align])
+  }, [open])
 
   return { open, setOpen, toggle, triggerRef, popupRef, coords }
 }
