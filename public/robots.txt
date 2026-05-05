@@ -1,0 +1,7 @@
+# app.c4hero.com is the SPA application surface.
+# The marketing site at https://c4hero.com is canonical for search results.
+# We deliberately do not want crawlers indexing the app shell (every URL
+# resolves to the same React app via the Vercel rewrite rule).
+
+User-agent: *
+Disallow: /

@@ -5,8 +5,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to file a bug report! Please fill in the
-        sections below. For security issues, do **not** file a public issue —
+        Thanks for taking the time to file a bug report!
+
+        c4hero is maintained by one person in their spare time. To help me
+        triage your issue quickly, **please fill in every required field**.
+        Issues missing browser, OS, or reproduction steps may be closed
+        with a request to add them.
+
+        For security issues, do **not** file a public issue —
         see [SECURITY.md](../SECURITY.md) instead.
 
   - type: textarea
@@ -22,7 +28,7 @@ body:
     id: repro
     attributes:
       label: Steps to reproduce
-      description: The exact sequence you followed. Include a minimal workspace DSL or screenshot if useful.
+      description: The exact sequence you followed. Numbered steps preferred.
       placeholder: |
         1. Load the Big Bank sample.
         2. Open the Container view for Internet Banking System.
@@ -35,6 +41,7 @@ body:
     id: expected
     attributes:
       label: Expected behavior
+      description: What did you expect to happen?
     validations:
       required: true
 
@@ -42,18 +49,37 @@ body:
     id: actual
     attributes:
       label: Actual behavior
+      description: What actually happened?
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser + OS
+      description: Required. Include browser version and operating system.
+      placeholder: "Chrome 131 on macOS 15"
+    validations:
+      required: true
 
   - type: input
     id: version
     attributes:
       label: c4hero version / commit
       description: Either the tag, or the commit SHA shown in the UI footer.
+      placeholder: "v0.1.0"
+    validations:
+      required: true
 
-  - type: input
-    id: browser
+  - type: textarea
+    id: dsl
     attributes:
-      label: Browser + OS
-      placeholder: "Chrome 131 on macOS 15"
+      label: Minimal `.dsl` snippet (if relevant)
+      description: |
+        For DSL parsing, rendering, or save/load bugs, paste the smallest
+        workspace that reproduces the issue. Skip this field if the bug is
+        not DSL-related (e.g. a UI interaction bug).
+      render: text
 
   - type: textarea
     id: console
