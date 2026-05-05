@@ -200,11 +200,25 @@ export function buildInitialViewContent(
     for (const p of model.people) elements.push({ id: p.id })
     for (const sys of model.softwareSystems) elements.push({ id: sys.id })
   } else if (type === 'systemContext' && scopeId) {
+    // Mirror parser's expandWildcard for systemContext: include the scope plus
+    // any people / external systems that have a relationship to the scope OR
+    // to one of its containers/components (the user-friendly equivalent of
+    // Structurizr's "implied relationships"). Without this, DSL files that
+    // express relationships at container granularity produce an empty system
+    // context view.
     elements.push({ id: scopeId })
+    const scopeSys = model.softwareSystems.find((s) => s.id === scopeId)
+    const scopeInternalIds = new Set<string>([scopeId])
+    if (scopeSys) {
+      for (const c of scopeSys.containers) {
+        scopeInternalIds.add(c.id)
+        for (const comp of c.components) scopeInternalIds.add(comp.id)
+      }
+    }
     const related = new Set<string>()
     for (const rel of model.relationships) {
-      if (rel.sourceId === scopeId) related.add(rel.destinationId)
-      if (rel.destinationId === scopeId) related.add(rel.sourceId)
+      if (scopeInternalIds.has(rel.sourceId)) related.add(rel.destinationId)
+      if (scopeInternalIds.has(rel.destinationId)) related.add(rel.sourceId)
     }
     for (const p of model.people) {
       if (related.has(p.id)) elements.push({ id: p.id })
