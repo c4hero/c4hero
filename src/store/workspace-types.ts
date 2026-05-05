@@ -54,6 +54,14 @@ export interface WorkspaceState extends UndoState {
   /** Multi-select tech filter — element matches if any of its technology tokens is in this set. */
   activeTechFilter: string[]
   activeTeamFilter: string[]
+  /** Snapshot of filters that were active before a view-switch cleared them.
+   *  Lets the UI offer a one-click restore. Null when there's nothing to restore. */
+  lastClearedHighlightFilters: {
+    activeTagFilter: string[]
+    activeStatusFilter: ElementStatus[]
+    activeTechFilter: string[]
+    activeTeamFilter: string[]
+  } | null
   minimapEnabled: boolean
   snapToGrid: boolean
   multiSelectMode: boolean
@@ -156,6 +164,10 @@ export interface WorkspaceState extends UndoState {
   setActiveTeamFilter: (teams: string[]) => void
   toggleActiveTeamFilter: (team: string) => void
   clearAllHighlightFilters: () => void
+  /** Re-apply filters from `lastClearedHighlightFilters` and clear the stash. No-op if stash is null. */
+  restoreHighlightFilters: () => void
+  /** Drop the cleared-filters stash without restoring (user dismisses the affordance). */
+  dismissClearedHighlightFiltersHint: () => void
   updateElementStyle: (style: import('@/types/model').ElementStyle) => void
   removeElementStyle: (tag: string) => void
   renameTag: (oldTag: string, newTag: string) => void

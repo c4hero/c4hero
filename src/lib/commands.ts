@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick,
+  Highlighter, MousePointerClick, RotateCcw,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
@@ -232,6 +232,15 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['filter', 'highlight', 'tag', 'tech', 'team', 'status'],
       when: () => !!store().workspace,
       execute: () => store().setHighlighterPanelOpen(!store().highlighterPanelOpen),
+    },
+    {
+      id: 'restore-cleared-highlight-filters',
+      label: 'Restore Highlighter Filters from Previous View',
+      category: 'view',
+      icon: RotateCcw,
+      keywords: ['restore', 'highlight', 'filter', 'previous', 'undo'],
+      when: () => !!store().lastClearedHighlightFilters,
+      execute: () => store().restoreHighlightFilters(),
     },
     {
       id: 'toggle-multi-select',
