@@ -5,7 +5,9 @@
 [![Latest release](https://img.shields.io/github/v/release/c4hero/c4hero?label=release)](https://github.com/c4hero/c4hero/releases)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](#local-development)
 
-> Local-first C4 architecture diagrams in your browser. Edit visually, save as plain `.dsl` files. Structurizr DSL compatible, no signup, no server.
+> A visual GUI for designing C4 architecture diagrams. Saves to plain Structurizr DSL in your repo. Local-first, MIT, no signup.
+
+*I built c4hero because I wanted to design C4 diagrams in a real editor — drag, drop, connect — and still get Structurizr's portable plain-text format on disk.*
 
 **Try it: [c4hero.com](https://c4hero.com)**
 
@@ -15,7 +17,7 @@
 
 ## The 30-second pitch
 
-You write Structurizr DSL like this:
+Design C4 diagrams visually — drop people, software systems, and containers onto the canvas, wire up relationships, and let auto-layout handle the rest. c4hero saves your work as plain Structurizr DSL:
 
 ```dsl
 workspace "E-Commerce Platform" {
@@ -37,7 +39,7 @@ workspace "E-Commerce Platform" {
 }
 ```
 
-c4hero renders it as a diagram, lets you edit it visually, and writes the DSL back to disk when you save. Your architecture lives in your repo, reviews in pull requests, and never gets locked behind a vendor's login screen.
+You never have to write that by hand — but you can. Already have a `.dsl` file? Open it and keep editing; c4hero round-trips Structurizr DSL both ways. Your architecture lives in your repo, reviews in pull requests, and never gets locked behind a vendor's login screen.
 
 ## Why c4hero
 
@@ -98,6 +100,10 @@ c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a 
 ## Changelog
 
 See [`CHANGELOG.md`](CHANGELOG.md) for a list of notable changes. The current release is tagged in [GitHub Releases](https://github.com/c4hero/c4hero/releases).
+
+## Maintenance
+
+c4hero is maintained by one person in their spare time. I aim to respond to issues within a week. If something is broken, please include browser, OS, and a minimal `.dsl` snippet so I can reproduce — the bug template will prompt you. PRs that come with tests get reviewed first.
 
 ## Contributing
 
