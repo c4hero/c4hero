@@ -1,0 +1,85 @@
+{
+  "name": "c4hero",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first visual architecture modelling for the C4 model. Edit visually, save as Structurizr DSL — your architecture lives in your repo.",
+  "license": "MIT",
+  "homepage": "https://c4hero.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/c4hero/c4hero.git"
+  },
+  "bugs": {
+    "url": "https://github.com/c4hero/c4hero/issues"
+  },
+  "keywords": [
+    "c4",
+    "c4-model",
+    "architecture",
+    "structurizr",
+    "diagram",
+    "visual-editor",
+    "local-first"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "audit": "npm audit --audit-level=moderate",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
+    "@xyflow/react": "^12.10.2",
+    "html-to-image": "^1.11.13",
+    "immer": "^11.1.6",
+    "lucide-react": "^1.14.0",
+    "nanoid": "^5.1.11",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-router-dom": "^7.14.2",
+    "web-vitals": "^5.2.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/vite": "^4.2.4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.2.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.59.1",
+    "vite": "^7.3.2",
+    "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "@rollup/plugin-terser": "^1.0.0",
+    "postcss": "^8.5.12",
+    "serialize-javascript": "^7.0.5"
+  }
+}

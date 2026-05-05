@@ -1,0 +1,5 @@
+export { createBigBankSample } from './templates/bigBank'
+export { createMicroservicesTemplate } from './templates/microservices'
+export { createMonolithTemplate } from './templates/monolith'
+export { createEventDrivenTemplate } from './templates/eventDriven'
+export { createBlankWorkspace } from './templates/blank'

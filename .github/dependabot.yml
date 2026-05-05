@@ -1,0 +1,49 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    # Group only minor/patch updates so a single failing major bump can't
+    # block the rest. Major bumps come as individual PRs and can be
+    # reviewed (and tested) one at a time.
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+    ignore:
+      # vite-plugin-pwa (latest 1.2.0) only supports vite up to ^7.
+      # Hold vite at 7.x until the PWA plugin announces vite 8 support.
+      - dependency-name: vite
+        update-types: [version-update:semver-major]
+      # TypeScript 6 surfaces new strict-mode errors that need a deliberate
+      # pass; revisit when we have time for the upgrade.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Vitest 4 changed several test/runner APIs; treat as a focused
+      # upgrade project rather than a bot bump.
+      - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      # @vitejs/plugin-react 6 requires vite 8 — coupled to the vite hold above.
+      - dependency-name: "@vitejs/plugin-react"
+        update-types: [version-update:semver-major]
+      # ESLint 10 isn't yet supported by typescript-eslint / eslint-plugin-react-hooks
+      # peer deps. Hold both eslint and @eslint/js at 9.x until the ecosystem catches up.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      - dependency-name: "@eslint/js"
+        update-types: [version-update:semver-major]
+      # eslint-plugin-react-hooks 7.1+ introduces several new strict rules
+      # (no setState-in-effect, no use-before-define in recursive callbacks)
+      # that flag existing patterns in Canvas.tsx and others. Hold at 7.0.x
+      # until we have time for a focused refactor pass.
+      - dependency-name: "eslint-plugin-react-hooks"
+        versions: [">=7.1.0"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

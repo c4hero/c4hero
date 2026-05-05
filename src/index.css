@@ -1,0 +1,2039 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+@theme {
+  /* Surfaces — canonical c4hero palette */
+  --color-bg-primary: #0d1117;
+  --color-bg-panel: #0f1923;   /* dialog / panel background, one step above primary */
+  --color-surface-1: #161b22;
+  --color-surface-2: #1c2128;
+  --color-surface-3: #21262d;
+  --color-border: rgba(88, 166, 255, 0.16);
+  --color-border-hover: rgba(88, 166, 255, 0.25);
+  --color-accent: #58a6ff;
+  --color-accent-hover: #79b8ff;
+  --color-accent-glow: rgba(88, 166, 255, 0.15);
+  --color-accent-active: rgba(88, 166, 255, 0.12);
+  --color-accent-subtle: rgba(88, 166, 255, 0.08);
+  --color-text-primary: #e6edf3;
+  --color-text-secondary: #8b949e;
+  --color-text-muted: #848d97;
+  --color-text-subtle: #484f58;
+
+  /* C4 diagram node accents */
+  --color-type-person: #fcd34d;
+  --color-type-system: #93c5fd;
+  --color-type-container: #7dd3fc;
+  --color-type-component: #60a5fa;
+
+  /* External element colors */
+  --color-type-external: #9ca3af;
+  --color-tint-external: #1f232a;
+  --color-border-external: rgba(107, 114, 128, 0.5);
+
+  /* C4 type background tints */
+  --color-tint-person: #3a2a0a;
+  --color-tint-system: #1a2f4a;
+  --color-tint-container: #142540;
+  --color-tint-component: #0f1f35;
+
+  /* C4 type border colors */
+  --color-border-person: #f59e0b;
+  --color-border-system: #3b82f6;
+  --color-border-container: #2563eb;
+  --color-border-component: #1d4ed8;
+
+  /* Semantic status colors */
+  --color-status-live: #22c55e;
+  --color-status-planned: #60a5fa;
+  --color-status-deprecated: #f97316;
+  --color-status-removed: #ef4444;
+
+  /* Semantic tint backgrounds */
+  --color-tint-success: rgba(34, 197, 94, 0.12);
+  --color-tint-error: rgba(239, 68, 68, 0.08);
+  --color-border-error: rgba(239, 68, 68, 0.25);
+
+  /* Feedback colors */
+  --color-error: #ef4444;
+  --color-error-text: #fca5a5;  /* lighter red — readable text on dark error tint backgrounds */
+  --color-warning: #f97316;
+  --color-success: #22c55e;
+  --color-info: #58a6ff;
+
+  /* Edge / relationship colors */
+  --color-edge: #484f58;
+
+  /* Glass panel opacity levels */
+  --glass-bg: rgba(30, 38, 50, 0.97);
+  --glass-bg-heavy: rgba(26, 34, 46, 0.99);
+  --glass-blur: 20px;
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* Subtle white glass overlays for input backgrounds and badges */
+  --glass-overlay-xxs: rgba(255, 255, 255, 0.015);
+  --glass-overlay-xs: rgba(255, 255, 255, 0.04);
+  --glass-overlay-sm: rgba(255, 255, 255, 0.08);
+  --glass-overlay-md: rgba(255, 255, 255, 0.1);
+  /* Faint accent-tint for group node backgrounds (nearly invisible tint) */
+  --color-tint-accent-faint: rgba(88, 166, 255, 0.006);
+
+  /* Transparent text colors — for elements rendered directly on canvas */
+  --color-text-dim: rgba(255, 255, 255, 0.35);
+  --color-text-ghost: rgba(255, 255, 255, 0.18);
+
+  /* Radius scale */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+
+  /* Backdrop — used by DialogShell for lightweight dialogs (settings,
+     create form, etc.). Destructive/critical dialogs hard-code a darker
+     value inline for more emphasis. */
+  --color-backdrop: rgba(0, 0, 0, 0.3);
+
+  /* Font size scale */
+  --text-xxs: 9px;
+  --text-xs: 10px;
+  --text-xs-plus: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-lg: 14px;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100vw;
+  height: 100dvh;
+}
+
+/* ─── Welcome / Collection Lifecycle Screens ─────────────────────── */
+
+.welcome-page {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(88, 166, 255, 0.07), transparent 34rem),
+    var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+.welcome-stage {
+  width: min(100%, 1180px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: max(44px, calc(var(--safe-top) + 28px)) 64px max(64px, calc(var(--safe-bottom) + 36px));
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  color: var(--color-error);
+  font-size: 13px;
+}
+
+.welcome-topnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(88, 166, 255, 0.1);
+  background: var(--color-surface-1);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+}
+
+.welcome-logo,
+.welcome-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.welcome-crumb {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.welcome-crumb span {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.welcome-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.welcome-wordmark span:first-child {
+  color: var(--color-accent);
+}
+
+.welcome-wordmark span:last-child {
+  color: var(--color-text-primary);
+}
+
+.welcome-crumb b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.welcome-slash {
+  opacity: 0.45;
+}
+
+.welcome-mark {
+  width: 28px;
+  height: 28px;
+  display: block;
+  flex: none;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 22px rgba(88, 166, 255, 0.18));
+}
+
+.welcome-mark.compact {
+  width: 28px;
+  height: 28px;
+}
+
+.welcome-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.welcome-actions a,
+.welcome-actions button {
+  border: 0;
+  border-radius: 6px;
+  height: 28px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.welcome-actions a:hover,
+.welcome-actions button:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+
+.welcome-actions .primary {
+  height: 30px;
+  margin-left: 4px;
+  padding: 0 12px;
+  background: var(--color-accent);
+  color: var(--color-bg-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.welcome-actions .primary:hover {
+  background: var(--color-accent);
+  color: var(--color-bg-primary);
+  opacity: 0.88;
+}
+
+.welcome-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 64px 0 40px;
+}
+
+.welcome-art {
+  width: 220px;
+  height: 140px;
+  margin-bottom: 36px;
+  opacity: 0.92;
+}
+
+.welcome-art svg,
+.workspace-empty-art svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.welcome-hero h1 {
+  margin: 0 0 16px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 48px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.welcome-hero h1 em {
+  color: var(--color-accent-hover);
+  font-style: italic;
+}
+
+.welcome-lede {
+  max-width: 520px;
+  margin: 0 0 36px;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.58;
+}
+
+.welcome-lede code,
+.workspace-empty-zone code {
+  color: var(--color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+}
+
+.welcome-ctas {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 11px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s, color 0.16s;
+}
+
+.welcome-button:hover {
+  border-color: var(--color-border-hover);
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.welcome-button[data-variant="primary"] {
+  border-color: var(--color-text-primary);
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+}
+
+.welcome-button[data-variant="primary"]:hover {
+  background: #fff;
+  color: var(--color-bg-primary);
+}
+
+.welcome-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.welcome-fallback p {
+  max-width: 420px;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.welcome-features {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  flex-wrap: wrap;
+  margin-top: 44px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.welcome-features span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.welcome-features svg {
+  color: var(--color-text-subtle);
+}
+
+.welcome-code-line {
+  margin: 18px 0 0;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.welcome-content {
+  margin-top: 48px;
+}
+
+.welcome-brand {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 24px;
+}
+
+.welcome-brand .welcome-mark {
+  width: 96px;
+  height: 96px;
+}
+
+/* Save indicator: subtle pulse when no file is linked, instead of a loud
+   warning triangle. Communicates "needs attention" without anxiety. */
+.save-indicator-pulse {
+  animation: save-indicator-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes save-indicator-pulse {
+  0%, 100% { background: transparent; }
+  50%      { background: color-mix(in srgb, var(--color-warning) 12%, transparent); }
+}
+
+/* Skeleton placeholder shimmer used by src/components/shared/Skeleton.tsx. */
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [aria-busy="true"] {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .save-indicator-pulse {
+    animation: none;
+    background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  }
+}
+
+/* ── Collection loading overlay ───────────────────────────────────── */
+
+.collection-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-bg-primary) 78%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: collection-loading-fade 180ms ease-out;
+}
+
+@keyframes collection-loading-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.collection-loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 36px 44px;
+  border-radius: 18px;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  min-width: 260px;
+}
+
+.collection-loading-stage {
+  position: relative;
+  width: 200px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Two boxes draw themselves, then an edge connects them. Loops. */
+.diag-box {
+  stroke-dasharray: 144;
+  stroke-dashoffset: 144;
+  animation: diag-stroke 2.4s ease-in-out infinite;
+}
+.diag-box-2 { animation-delay: 0.45s; }
+
+.diag-edge {
+  stroke-dasharray: 56;
+  stroke-dashoffset: 56;
+  animation: diag-stroke 2.4s ease-in-out infinite;
+  animation-delay: 0.9s;
+}
+
+@keyframes diag-stroke {
+  0%, 8%   { stroke-dashoffset: 144; opacity: 0; }
+  18%      { stroke-dashoffset: 0;   opacity: 1; }
+  78%      { stroke-dashoffset: 0;   opacity: 1; }
+  100%     { stroke-dashoffset: 144; opacity: 0; }
+}
+
+.diag-author {
+  animation: diag-author-bob 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes diag-author-bob {
+  0%, 100% { opacity: 0.85; transform: translateY(0); }
+  50%      { opacity: 1;    transform: translateY(-3px); }
+}
+
+.collection-loading-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.collection-loading-title {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.collection-loading-subtitle {
+  color: var(--color-text-primary);
+  font-size: 17px;
+  font-weight: 650;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+
+.collection-loading-status {
+  color: var(--color-accent);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  min-height: 18px;
+  animation: collection-loading-status 280ms ease-out;
+}
+
+@keyframes collection-loading-status {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diag-box,
+  .diag-edge,
+  .diag-author,
+  .collection-loading-status,
+  .collection-loading {
+    animation: none;
+  }
+  .diag-box, .diag-edge { stroke-dashoffset: 0; opacity: 1; }
+}
+
+.welcome-content-centered {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-top: 0;
+  text-align: left;
+}
+
+.welcome-content-centered .welcome-return-header,
+.welcome-content-centered .welcome-toc-label,
+.welcome-content-centered .welcome-recent-list,
+.welcome-content-centered .collection-pills,
+.welcome-content-centered .workspace-search,
+.welcome-content-centered .workspace-list,
+.welcome-content-centered .workspace-empty-zone,
+.welcome-content-centered .workspace-no-results {
+  width: min(100%, 760px);
+}
+
+.welcome-brand-button {
+  border: 0;
+  background: transparent;
+  padding: 6px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  color: inherit;
+  transition: background 0.18s, transform 0.18s;
+}
+
+.welcome-brand-button:hover,
+.welcome-brand-button:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.welcome-footer {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  padding: 32px 0 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+.welcome-footer a {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.welcome-footer a:hover {
+  color: var(--color-text-primary);
+}
+
+.welcome-return-header {
+  width: min(100%, 760px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 38px;
+}
+
+.welcome-return-copy {
+  min-width: 0;
+}
+
+.welcome-display {
+  margin: 0 0 10px;
+  color: var(--color-text-primary);
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.welcome-display span {
+  color: var(--color-text-subtle);
+  font-weight: 300;
+}
+
+.welcome-summary {
+  max-width: 560px;
+  margin: 0 0 48px;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.welcome-return-header .welcome-summary {
+  margin-bottom: 0;
+}
+
+.welcome-return-header .welcome-ctas {
+  flex: none;
+  justify-content: flex-end;
+  padding-bottom: 3px;
+}
+
+.welcome-toc-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 760px;
+  margin-bottom: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.welcome-toc-label span {
+  text-transform: none;
+  font-weight: 500;
+}
+
+.welcome-recent-list,
+.workspace-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome-recent-list {
+  max-width: 760px;
+}
+
+.welcome-recent-row,
+.workspace-row {
+  display: grid;
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 55%, transparent);
+  cursor: pointer;
+  transition: padding 0.18s, background 0.18s, box-shadow 0.18s;
+}
+
+.welcome-recent-row:hover,
+.welcome-recent-row:focus-within,
+.workspace-row:hover,
+.workspace-row:focus-within {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-accent) 7%, transparent) 0%,
+    color-mix(in srgb, var(--color-accent) 2%, transparent) 60%,
+    transparent 100%
+  );
+  box-shadow: inset 2px 0 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+.welcome-recent-row {
+  grid-template-columns: 60px minmax(0, 1fr) auto auto auto;
+  gap: 18px;
+  padding: 18px 0;
+}
+
+.welcome-recent-row:hover,
+.workspace-row:hover {
+  padding-left: 8px;
+}
+
+.recent-folder-icon {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.recent-main,
+.workspace-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.recent-name {
+  color: var(--color-text-primary);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.recent-slug,
+.recent-meta,
+.workspace-index,
+.workspace-desc {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.recent-meta {
+  white-space: nowrap;
+}
+
+.recent-remove,
+.workspace-row-actions button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.recent-remove:hover,
+.workspace-row-actions button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+.recent-arrow,
+.workspace-arrow {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+
+.welcome-recent-row:hover .recent-arrow,
+.workspace-row:hover .workspace-arrow {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.collection-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 56px;
+}
+
+.collection-pills-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.collection-pill-action {
+  color: var(--color-text-muted);
+  background: transparent;
+  border-style: dashed;
+}
+
+.collection-pill-action:hover {
+  color: var(--color-text-primary);
+  border-style: solid;
+}
+
+.collection-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.collection-pill:hover {
+  border-color: var(--color-border-hover);
+  color: var(--color-text-primary);
+}
+
+.collection-pill.active {
+  border-color: var(--color-text-primary);
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+}
+
+.collection-pill-current {
+  cursor: default;
+  padding-right: 4px;
+}
+
+.collection-pill-current .row-menu-trigger {
+  width: 24px;
+  height: 24px;
+  margin-left: 2px;
+  border-radius: 6px;
+  color: rgba(13, 17, 23, 0.55);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.collection-pill-current .row-menu-trigger:hover {
+  background: rgba(13, 17, 23, 0.1);
+  color: rgba(13, 17, 23, 0.9);
+}
+
+.collection-pill span {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.collection-pill.active span {
+  color: rgba(13, 17, 23, 0.6);
+}
+
+.workspace-search {
+  width: min(100%, 520px);
+  min-height: 38px;
+  margin: -22px 0 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--color-text-muted);
+}
+
+.workspace-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.workspace-search button {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.workspace-empty-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 56px 32px;
+  border: 1px dashed var(--color-border-hover);
+  border-radius: 16px;
+  background: radial-gradient(60% 80% at 50% 0%, rgba(88, 166, 255, 0.05), transparent 70%);
+  text-align: center;
+}
+
+.workspace-empty-art {
+  width: 110px;
+  height: 70px;
+  opacity: 0.75;
+}
+
+.workspace-empty-badge {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.workspace-empty-zone h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 32px;
+  line-height: 1.1;
+  font-weight: 400;
+}
+
+.workspace-empty-zone p {
+  max-width: 440px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.workspace-row {
+  grid-template-columns: 60px minmax(0, 1fr) auto auto auto;
+  gap: 18px;
+  padding: 18px 0;
+}
+
+.workspace-scope-icon {
+  width: 30px;
+  height: 30px;
+  border: 1px solid;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-meta {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.workspace-scope {
+  font-weight: 600;
+}
+
+.workspace-meta-dot {
+  opacity: 0.6;
+}
+
+.workspace-stats,
+.workspace-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.workspace-stats {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.workspace-stats strong {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.workspace-row-actions,
+.recent-actions {
+  display: flex;
+  align-items: center;
+}
+
+.row-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.row-menu-trigger {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s, background 0.14s, color 0.14s;
+}
+
+.workspace-row:hover .row-menu-trigger,
+.workspace-row:focus-within .row-menu-trigger,
+.welcome-recent-row:hover .row-menu-trigger,
+.welcome-recent-row:focus-within .row-menu-trigger,
+.row-menu[data-open] .row-menu-trigger {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.row-menu-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+.row-menu-popup {
+  position: fixed;
+  z-index: 1000;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 90%, #000 10%);
+  border-radius: 10px;
+  background: var(--color-surface-2);
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+}
+
+.row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.row-menu-item:hover,
+.row-menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.row-menu-item.danger {
+  color: var(--color-error);
+}
+
+.row-menu-item.danger:hover,
+.row-menu-item.danger:focus-visible {
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+  color: var(--color-error);
+}
+
+.workspace-no-results {
+  margin: 0;
+  padding: 18px 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+/* ─── Mobile / narrow viewport adjustments for the editor chrome ───── */
+
+@media (max-width: 760px) {
+  /* Top pill: pin to the top edge with smaller padding so it doesn't crowd
+     the diagram. The pill itself has its own internal layout. */
+  [data-canvas-fit-chrome="top"] {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+  /* Floating tool rail: collapse to a horizontal strip near the top edge
+     instead of a vertical column on the left. Vertical orientation eats
+     too much horizontal space on narrow viewports. */
+  [data-canvas-chrome="tool-rail"] {
+    top: auto !important;
+    bottom: 14px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    flex-direction: row !important;
+    padding: 0 8px !important;
+  }
+  /* Right-side panels (Inspector, Highlighter): full-width below the
+     diagram instead of a 280-300px column that would squish the canvas. */
+  [aria-label="Element properties"],
+  [data-canvas-chrome="highlighter-panel"] {
+    width: calc(100vw - 28px) !important;
+    max-width: 360px !important;
+  }
+  /* Fallback button on the welcome screen for browsers without folder
+     access — keep its CTA from running off the edge. */
+  .welcome-fallback {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .welcome-stage {
+    padding: max(28px, calc(var(--safe-top) + 20px)) 22px max(40px, calc(var(--safe-bottom) + 24px));
+  }
+
+  .welcome-topnav {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 10px 12px;
+  }
+
+  .welcome-actions {
+    justify-content: flex-start;
+    gap: 14px;
+  }
+
+  .welcome-hero {
+    align-items: flex-start;
+    text-align: left;
+    padding-top: 48px;
+  }
+
+  .welcome-art {
+    align-self: center;
+    width: 190px;
+    height: 122px;
+  }
+
+  .welcome-hero h1,
+  .welcome-display {
+    font-size: 40px;
+  }
+
+  .welcome-ctas {
+    justify-content: flex-start;
+  }
+
+  .welcome-return-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+    margin-bottom: 34px;
+  }
+
+  .welcome-return-header .welcome-ctas {
+    justify-content: flex-start;
+    padding-bottom: 0;
+  }
+
+  .welcome-features {
+    justify-content: flex-start;
+    gap: 14px;
+  }
+
+  .welcome-recent-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 12px;
+    padding: 18px 0;
+  }
+
+  .workspace-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 12px;
+    padding: 18px 0;
+  }
+
+  .recent-folder-icon,
+  .recent-meta,
+  .workspace-scope-icon,
+  .workspace-stats {
+    display: none;
+  }
+
+  .workspace-name {
+    font-size: 17px;
+  }
+
+  .workspace-empty-zone {
+    align-items: flex-start;
+    padding: 34px 22px;
+    text-align: left;
+  }
+}
+
+/* ─── Safe area insets (notch / dynamic island / home bar) ─── */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* ─── Glass panels ─────────────────────────────────────────── */
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-panel-solid {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Pill bar with an open shade — square bottom corners to merge with shade */
+.glass-panel[data-shade-open="true"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+/* Shade panels that drop down from the top pill */
+.shade-panel {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  animation: slideDownFromBar 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+/* Flyout menus that slide out from panels */
+.glass-flyout {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Section label in flyout menus */
+.flyout-label {
+  padding: 4px 10px;
+  font-size: var(--text-xxs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+
+/* Interactive row in a flyout menu */
+.flyout-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s;
+  border: none;
+}
+
+.flyout-item:hover {
+  background: var(--color-surface-2);
+}
+
+.flyout-item[data-active="true"] {
+  background: var(--color-surface-3);
+  color: var(--color-text-primary);
+}
+
+/* ─── Overlay backdrop ─────────────────────────────────────── */
+
+.panel-backdrop {
+  background: var(--color-backdrop);
+}
+
+/* ─── Transitions ──────────────────────────────────────────── */
+
+.panel-slide-left {
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 200ms ease;
+}
+
+.panel-slide-right {
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 200ms ease;
+}
+
+/* ─── Buttons ──────────────────────────────────────────────── */
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 6px;
+  border: none;
+  transition: background 150ms ease, color 150ms ease, transform 100ms ease;
+  color: var(--color-text-secondary);
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.btn-icon:hover:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+.btn-icon:active {
+  transform: scale(0.95);
+}
+
+.btn-surface {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.btn-surface:hover {
+  background: var(--color-surface-3);
+  border-color: var(--color-border-hover);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.btn-surface:active {
+  transform: scale(0.98);
+}
+
+/* ─── Hover utilities ─────────────────────────────────────── */
+
+/* Subtle hover — barely visible, for inline triggers like logo */
+.hover-subtle:hover:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Surface-2 hover — for list items in flyouts */
+.hover-surface-2:hover:not([data-active="true"]) {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+
+/* Surface-3 hover — for section headers, icon buttons */
+.hover-surface:hover:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Light lift hover — for toolbar buttons, zoom controls */
+.hover-lift:hover:not([data-active="true"]) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+/* Active state — accent tint shown when the button's dropdown/dialog is open.
+   Used alongside any hover utility via `data-active="true"`. */
+.hover-subtle[data-active="true"],
+.hover-surface[data-active="true"],
+.hover-lift[data-active="true"],
+.btn-icon[data-active="true"] {
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--color-accent);
+}
+
+/* Danger hover — for delete actions */
+.hover-danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-error);
+}
+
+/* Danger text hover — for inline destructive buttons */
+.hover-danger-text:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Workspace tile — shared between the top-bar switcher and collection screen */
+.workspace-tile:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.workspace-tile-edit {
+  opacity: 0;
+  transition: opacity 120ms, background-color 120ms;
+}
+.workspace-tile:hover .workspace-tile-edit,
+.workspace-tile:focus-within .workspace-tile-edit {
+  opacity: 1;
+}
+.workspace-tile-edit:hover {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary) !important;
+}
+
+/* Accent subtle hover — for accent-colored interactive rows */
+.hover-accent-subtle:hover {
+  background: rgba(88, 166, 255, 0.06);
+}
+
+/*
+ * Conditional hover: only applies when NOT active.
+ * Use data-active="true" on the element to suppress hover.
+ */
+.hover-lift-inactive:not([data-active="true"]):hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+.hover-subtle-inactive:not([data-active="true"]):hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+.hover-surface-inactive:not([data-active="true"]):hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+.hover-surface-2-inactive:not([data-active="true"]):hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+
+.hover-danger-inactive:not([data-active="true"]):hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-error);
+}
+
+/* Show child actions on parent row hover */
+.group:hover .view-row-actions {
+  opacity: 1 !important;
+}
+
+/* Chip hover — lifts bg to surface-3, uses custom property for border accent */
+.hover-chip:hover {
+  background: var(--color-surface-3);
+  border-color: var(--hover-border-color, var(--color-border-hover));
+  color: var(--color-text-primary);
+}
+
+/* ─── React Flow dark theme ────────────────────────────────── */
+
+.react-flow__background {
+  background-color: var(--canvas-bg, var(--color-bg-primary)) !important;
+}
+
+.react-flow__minimap {
+  background-color: rgba(15, 25, 35, 0.9) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 10px !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.react-flow__controls {
+  display: none !important;
+}
+
+.react-flow__attribution {
+  display: none !important;
+}
+
+.react-flow__node-group {
+  background: transparent !important;
+}
+
+/* Selection halo is rendered by .c4-node.selected so we can use the per-node
+   tier color via --node-glow. Leaving this rule empty preserves the selector
+   in case anything else depends on it without painting a second halo. */
+.react-flow__node.selected {
+  filter: none;
+}
+
+/* Connection line drawn while dragging from a handle to create a new edge */
+.react-flow__connection-path,
+.react-flow__connectionline path {
+  stroke: var(--canvas-selection, var(--color-accent)) !important;
+}
+
+/* ─── Line clamp utilities ─────────────────────────────────── */
+
+.line-clamp-1,
+.line-clamp-2,
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.line-clamp-1 { -webkit-line-clamp: 1; }
+.line-clamp-2 { -webkit-line-clamp: 2; }
+.line-clamp-3 { -webkit-line-clamp: 3; }
+
+/* ─── C4 Node cards ────────────────────────────────────────── */
+
+.c4-node {
+  border-radius: 12px;
+  padding: 16px 14px;
+  min-width: 200px;
+  max-width: 280px;
+  transition: box-shadow 200ms ease, border-color 200ms ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.c4-node:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Tech filter highlight — "marching ants" treatment. Animated dashed
+   marquee on matching elements, distinct from the static selection glow.
+   Nodes get a 4-edge dash overlay; edges animate stroke-dashoffset along
+   the path so the dashes flow source → target. */
+
+/* Edges: thicker accent stroke with a soft glow (static, no marquee). */
+.c4-edge-highlighted path.react-flow__edge-path {
+  stroke: var(--canvas-selection, var(--color-accent)) !important;
+  stroke-width: 2.6 !important;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 55%, transparent));
+}
+
+/* Highlighted node — bright ring around the node body so matches POP against
+   dimmed neighbors. We target the INNER .c4-node div (descendant of the
+   React Flow wrapper that carries .c4-node-highlighted) so the box-shadow
+   follows the actual node shape (rounded rect or person pill). Color is
+   derived from --node-glow (the node's tier color, set in BaseC4Node from
+   the resolved borderColor) and brightened with white so it reads as a
+   glow rather than just a thicker stroke. */
+.c4-node-highlighted > .c4-node {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 70%, white 40%),
+    0 0 22px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 50%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Faded sibling — non-matching node when highlight is active. Stays
+   readable as ghost context but visibly recedes. Edges with a faded
+   endpoint also dim so the focus stays on the highlighted subgraph. */
+.react-flow__node.c4-node-faded {
+  opacity: 0.28;
+  filter: saturate(0.7);
+  transition: opacity 0.18s ease, filter 0.18s ease;
+}
+.c4-edge-faded path.react-flow__edge-path {
+  opacity: 0.18 !important;
+  transition: opacity 0.18s ease;
+}
+.c4-edge-faded text {
+  opacity: 0.35;
+}
+
+.c4-node-violation {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--color-warning, #f59e0b);
+  color: #1c1500;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 2px var(--canvas-bg, var(--color-bg-primary));
+  cursor: help;
+}
+
+.c4-node.selected {
+  box-shadow:
+    0 0 0 3px var(--node-glow, var(--canvas-selection, var(--color-accent))),
+    0 0 0 6px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 25%, transparent),
+    0 4px 24px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 35%, transparent);
+}
+
+/* On light canvases the diffuse halo blooms against the bright background.
+   Tighten the rings + drop the glow so selection reads as a crisp outline. */
+[data-canvas-light] .c4-node.selected {
+  box-shadow:
+    0 0 0 2px var(--node-glow, var(--canvas-selection, var(--color-accent))),
+    0 0 0 3px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 18%, transparent),
+    0 2px 8px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 18%, transparent);
+}
+
+.c4-node-type {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.c4-node-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+}
+
+.c4-node-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+}
+
+.c4-node-tech {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-secondary);
+}
+
+/* ─── Type chip (Option C layout) ────────────────────────── */
+
+.c4-type-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  padding: 0 5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ─── Action buttons (Option C layout) ───────────────────── */
+
+.c4-node-actions {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.c4-node:hover .c4-node-actions {
+  opacity: 1;
+}
+
+/* Touch devices have no hover — surface the actions permanently so the zoom
+ * button is reachable without a hover state. */
+@media (hover: none) {
+  .c4-node-actions {
+    opacity: 1;
+  }
+}
+
+.c4-node-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+  padding: 0;
+}
+
+.c4-node-action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.c4-node-view-count {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+  padding: 0 4px;
+  user-select: none;
+}
+
+.c4-node-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.c4-node-drill {
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.c4-node-drill:hover {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg-primary);
+  transform: scale(1.1);
+  box-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+/* ─── Connection handles ──────────────────────────────────── */
+
+.c4-handle-visible {
+  width: 8px;
+  height: 8px;
+  background: var(--color-border);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+/* Center handles (slot b) show on node hover */
+.c4-node:hover .c4-handle-visible {
+  opacity: 1;
+  background: var(--node-glow, var(--canvas-selection, var(--color-accent)));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 60%, transparent);
+}
+
+/* Inline rename input on canvas — override global focus-visible outline so it
+   matches the active canvas theme rather than the fixed chrome blue. */
+.c4-inline-rename:focus,
+.c4-inline-rename:focus-visible {
+  outline: none;
+  border-bottom-color: var(--node-glow, var(--canvas-selection, var(--color-accent))) !important;
+}
+
+/* Extra handles (slot a, c) on occupied sides show on hover */
+.c4-handle-extra {
+  width: 6px;
+  height: 6px;
+}
+
+/* Extra handles on unoccupied sides stay hidden even on hover */
+.c4-node:hover .c4-handle-hidden-extra {
+  opacity: 0 !important;
+}
+
+.c4-handle-visible:hover {
+  transform: scale(1.5);
+  background: var(--canvas-selection, var(--color-accent-hover)) !important;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--canvas-selection, var(--color-accent-hover)) 60%, transparent) !important;
+}
+
+.c4-handle-target {
+  width: 14px !important;
+  height: 14px !important;
+  background: transparent !important;
+  opacity: 0;
+  pointer-events: none !important;
+}
+
+/* Hidden extra targets stay hidden */
+.c4-handle-target.c4-handle-hidden-extra {
+  width: 0 !important;
+  height: 0 !important;
+  pointer-events: none !important;
+}
+
+/* When React Flow v12 is in connecting mode, valid target handles get class .connectionindicator.
+   Show them as glowing drop zones and re-enable pointer events so React Flow's proximity detection works. */
+.react-flow__handle.connectionindicator.c4-handle-target:not(.c4-handle-hidden-extra) {
+  opacity: 1;
+  background: color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 25%, transparent) !important;
+  border-radius: 50%;
+  border: 2px solid var(--node-glow, var(--canvas-selection, var(--color-accent))) !important;
+  pointer-events: auto !important;
+}
+
+/* ─── Selection rect ───────────────────────────────────────── */
+/* Expand the selection outline so it floats past the nodes' borders
+   instead of hugging them. Applies both to the rubber-band rectangle
+   and the post-selection bounding box. */
+.react-flow__selection,
+.react-flow__nodesselection-rect {
+  border: none !important;
+  outline: 1px dashed color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 65%, transparent);
+  outline-offset: 10px;
+  background: color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 8%, transparent) !important;
+  border-radius: 6px;
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(30, 48, 68, 0.6);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-surface-3);
+}
+
+/* ─── Animations ───────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDownFromBar {
+  from { opacity: 0; transform: translateY(-8px) scaleY(0.96); transform-origin: top center; }
+  to   { opacity: 1; transform: translateY(0)   scaleY(1);    transform-origin: top center; }
+}
+
+/* ─── Touch targets ────────────────────────────────────────── */
+
+@media (pointer: coarse) {
+  .btn-icon {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+}
+
+/* ─── Configurable font ───────────────────────────────────── */
+
+:root {
+  --c4-font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --c4-font-size-base: 14px;
+}
+
+body {
+  font-family: var(--c4-font-family);
+  font-size: var(--c4-font-size-base);
+}
+
+/* ─── Focus visible outlines (accessibility) ──────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* ─── Skip to main content link (screen readers) ─────────── */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.sr-only:focus-visible {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: auto;
+  height: auto;
+  padding: 10px 20px;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: nowrap;
+  background: var(--color-surface-1);
+  color: var(--color-accent);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── High contrast mode ──────────────────────────────────── */
+
+@media (forced-colors: active) {
+  .c4-node {
+    border: 2px solid ButtonText !important;
+  }
+
+  .c4-node.selected {
+    border: 3px solid Highlight !important;
+    box-shadow: none !important;
+  }
+
+  .btn-icon:hover,
+  .btn-surface:hover {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .react-flow__edge path {
+    stroke: ButtonText !important;
+  }
+}
+
+/* ─── Commit hash ────────────────────────────────────────── */
+
+.commit-hash {
+  position: fixed;
+  bottom: 6px;
+  right: 8px;
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  z-index: 9999;
+  user-select: none;
+}
+
+/* ─── Reduced motion ──────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

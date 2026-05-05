@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/c4hero/c4hero/security/advisories/new
+    about: Report security issues privately via GitHub's security advisory flow (see SECURITY.md).
+  - name: Question or discussion
+    url: https://github.com/c4hero/c4hero/discussions
+    about: Ask questions or propose ideas that aren't quite bug reports or feature requests.
