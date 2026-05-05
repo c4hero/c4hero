@@ -51,6 +51,7 @@ export const createLifecycleSlice: StateCreator<
       activeStatusFilter: [],
       activeTechFilter: [],
       activeTeamFilter: [],
+      lastClearedHighlightFilters: null,
       scopeViolations: validateScope(workspace),
     })
   },
@@ -70,6 +71,7 @@ export const createLifecycleSlice: StateCreator<
       createViewDefaults: null,
       undoStack: [],
       redoStack: [],
+      lastClearedHighlightFilters: null,
       scopeViolations: [],
     }),
 

@@ -702,6 +702,133 @@ describe('multiSelectMode', () => {
   })
 })
 
+// ─── Highlighter filters cleared on view change ──────────────────────
+
+describe('Highlighter filters cleared on view change', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('setActiveView clears active filters and stashes them when filters were non-empty', () => {
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'A')
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'B')
+    useWorkspaceStore.getState().setActiveView(keyA)
+    useWorkspaceStore.setState({ activeTagFilter: ['Database'], activeTechFilter: ['Go'] })
+
+    useWorkspaceStore.getState().setActiveView(keyB)
+
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
+    expect(useWorkspaceStore.getState().activeTechFilter).toEqual([])
+    expect(useWorkspaceStore.getState().lastClearedHighlightFilters).toEqual({
+      activeTagFilter: ['Database'],
+      activeStatusFilter: [],
+      activeTechFilter: ['Go'],
+      activeTeamFilter: [],
+    })
+  })
+
+  it('setActiveView leaves the stash alone when there are no active filters to clear', () => {
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'A')
+    const keyB = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'B')
+    useWorkspaceStore.getState().setActiveView(keyA)
+    useWorkspaceStore.setState({
+      lastClearedHighlightFilters: {
+        activeTagFilter: ['Database'], activeStatusFilter: [], activeTechFilter: [], activeTeamFilter: [],
+      },
+    })
+
+    useWorkspaceStore.getState().setActiveView(keyB)
+
+    expect(useWorkspaceStore.getState().lastClearedHighlightFilters).toEqual({
+      activeTagFilter: ['Database'], activeStatusFilter: [], activeTechFilter: [], activeTeamFilter: [],
+    })
+  })
+
+  it('setActiveView with the same key is a no-op for filters', () => {
+    const keyA = useWorkspaceStore.getState().addView('systemLandscape', undefined, 'A')
+    useWorkspaceStore.getState().setActiveView(keyA)
+    useWorkspaceStore.setState({ activeTagFilter: ['Database'] })
+
+    useWorkspaceStore.getState().setActiveView(keyA)
+
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual(['Database'])
+    expect(useWorkspaceStore.getState().lastClearedHighlightFilters).toBeNull()
+  })
+
+  it('drillInto clears active filters and stashes them', () => {
+    useWorkspaceStore.getState().addContainer('api', 'Web')
+    useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(landscapeKey)
+    useWorkspaceStore.setState({ activeTagFilter: ['Database'] })
+
+    useWorkspaceStore.getState().drillInto('api')
+
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
+    expect(useWorkspaceStore.getState().lastClearedHighlightFilters?.activeTagFilter).toEqual(['Database'])
+  })
+
+  it('navigateBack clears active filters and stashes them', () => {
+    const landscapeKey = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().addContainer('api', 'Web')
+    useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    useWorkspaceStore.getState().setActiveView(landscapeKey)
+    useWorkspaceStore.setState({ viewHistory: [landscapeKey], activeTagFilter: ['Database'] })
+
+    useWorkspaceStore.getState().navigateBack()
+
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
+    expect(useWorkspaceStore.getState().lastClearedHighlightFilters?.activeTagFilter).toEqual(['Database'])
+  })
+
+  it('restoreHighlightFilters reapplies the stash and clears it', () => {
+    useWorkspaceStore.setState({
+      lastClearedHighlightFilters: {
+        activeTagFilter: ['Database'], activeStatusFilter: ['Live'], activeTechFilter: ['Go'], activeTeamFilter: ['Platform'],
+      },
+    })
+
+    useWorkspaceStore.getState().restoreHighlightFilters()
+
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual(['Database'])
+    expect(useWorkspaceStore.getState().activeStatusFilter).toEqual(['Live'])
+    expect(useWorkspaceStore.getState().activeTechFilter).toEqual(['Go'])
+    expect(useWorkspaceStore.getState().activeTeamFilter).toEqual(['Platform'])
+    expect(useWorkspaceStore.getState().lastClearedHighlightFilters).toBeNull()
+  })
+
+  it('restoreHighlightFilters is a no-op when stash is null', () => {
+    useWorkspaceStore.setState({ activeTagFilter: ['Live'] })
+    useWorkspaceStore.getState().restoreHighlightFilters()
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual(['Live'])
+  })
+
+  it('clearAllHighlightFilters drops the stash so manual clear is final', () => {
+    useWorkspaceStore.setState({
+      activeTagFilter: ['Database'],
+      lastClearedHighlightFilters: {
+        activeTagFilter: ['OldTag'], activeStatusFilter: [], activeTechFilter: [], activeTeamFilter: [],
+      },
+    })
+
+    useWorkspaceStore.getState().clearAllHighlightFilters()
+
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
+    expect(useWorkspaceStore.getState().lastClearedHighlightFilters).toBeNull()
+  })
+
+  it('dismissClearedHighlightFiltersHint drops the stash without restoring', () => {
+    useWorkspaceStore.setState({
+      lastClearedHighlightFilters: {
+        activeTagFilter: ['Database'], activeStatusFilter: [], activeTechFilter: [], activeTeamFilter: [],
+      },
+    })
+    useWorkspaceStore.getState().dismissClearedHighlightFiltersHint()
+    expect(useWorkspaceStore.getState().lastClearedHighlightFilters).toBeNull()
+    expect(useWorkspaceStore.getState().activeTagFilter).toEqual([])
+  })
+})
+
 // ─── activeWorkspaceFilename ─────────────────────────────────────────
 
 describe('activeWorkspaceFilename', () => {

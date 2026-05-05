@@ -1,6 +1,31 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { findChildViewHelper as findChildView, getZoomTarget } from '../workspace-selectors'
+import { announce } from '@/lib/announce'
+
+/** If any Highlighter filter is non-empty, snapshot all four into
+ *  `lastClearedHighlightFilters` and clear the active filters. Idempotent
+ *  when filters are empty (preserves any pre-existing stash). Modes are
+ *  preferences and are intentionally NOT touched. */
+function clearHighlightFiltersWithStash(s: WorkspaceState): boolean {
+  const hasActive =
+    s.activeTagFilter.length > 0 ||
+    s.activeStatusFilter.length > 0 ||
+    s.activeTechFilter.length > 0 ||
+    s.activeTeamFilter.length > 0
+  if (!hasActive) return false
+  s.lastClearedHighlightFilters = {
+    activeTagFilter: [...s.activeTagFilter],
+    activeStatusFilter: [...s.activeStatusFilter],
+    activeTechFilter: [...s.activeTechFilter],
+    activeTeamFilter: [...s.activeTeamFilter],
+  }
+  s.activeTagFilter = []
+  s.activeStatusFilter = []
+  s.activeTechFilter = []
+  s.activeTeamFilter = []
+  return true
+}
 
 /** Navigation state: which view is active, the breadcrumb history, the
  *  pending zoom-confirm prompt, and a transient focusElementId that the
@@ -28,11 +53,15 @@ export const createNavigationSlice: StateCreator<
 
   clearFocusElement: () => set({ focusElementId: null }),
 
-  setActiveView: (key) => set({
-    activeViewKey: key,
-    selectedElementIds: [],
-    selectedRelationshipId: null,
-    selectedGroupId: null,
+  setActiveView: (key) => set((s) => {
+    const changed = s.activeViewKey !== key
+    s.activeViewKey = key
+    s.selectedElementIds = []
+    s.selectedRelationshipId = null
+    s.selectedGroupId = null
+    if (changed && clearHighlightFiltersWithStash(s)) {
+      announce('Highlighter cleared on view change')
+    }
   }),
 
   drillInto: (elementId) => set((s) => {
@@ -48,6 +77,9 @@ export const createNavigationSlice: StateCreator<
     s.selectedElementIds = []
     s.selectedRelationshipId = null
     s.selectedGroupId = null
+    if (clearHighlightFiltersWithStash(s)) {
+      announce('Highlighter cleared on view change')
+    }
   }),
 
   zoomInto: (elementId) => {
@@ -108,5 +140,8 @@ export const createNavigationSlice: StateCreator<
     s.selectedElementIds = []
     s.selectedRelationshipId = null
     s.selectedGroupId = null
+    if (clearHighlightFiltersWithStash(s)) {
+      announce('Highlighter cleared on view change')
+    }
   }),
 })

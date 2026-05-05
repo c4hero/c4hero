@@ -6,11 +6,13 @@ import type { WorkspaceState } from '../workspace-types'
 export type FilterSlice = Pick<WorkspaceState,
   | 'activeTagFilter' | 'activeStatusFilter' | 'activeTechFilter' | 'activeTeamFilter'
   | 'tagFilterMode' | 'statusFilterMode' | 'techFilterMode' | 'teamFilterMode'
+  | 'lastClearedHighlightFilters'
   | 'setActiveTagFilter' | 'toggleActiveTagFilter'
   | 'setActiveStatusFilter' | 'toggleActiveStatusFilter'
   | 'setActiveTechFilter' | 'toggleActiveTechFilter'
   | 'setActiveTeamFilter' | 'toggleActiveTeamFilter'
   | 'clearAllHighlightFilters'
+  | 'restoreHighlightFilters' | 'dismissClearedHighlightFiltersHint'
   | 'setTagFilterMode' | 'setStatusFilterMode' | 'setTechFilterMode' | 'setTeamFilterMode'
 >
 
@@ -24,6 +26,7 @@ export const createFilterSlice: StateCreator<
   activeStatusFilter: [],
   activeTechFilter: [],
   activeTeamFilter: [],
+  lastClearedHighlightFilters: null,
   tagFilterMode: 'any',
   statusFilterMode: 'any',
   techFilterMode: 'all',
@@ -58,7 +61,21 @@ export const createFilterSlice: StateCreator<
     activeStatusFilter: [],
     activeTechFilter: [],
     activeTeamFilter: [],
+    // Manual clear is intentional — drop any pending "restore from previous view" hint too.
+    lastClearedHighlightFilters: null,
   }),
+
+  restoreHighlightFilters: () => set((s) => {
+    const stash = s.lastClearedHighlightFilters
+    if (!stash) return
+    s.activeTagFilter = stash.activeTagFilter
+    s.activeStatusFilter = stash.activeStatusFilter
+    s.activeTechFilter = stash.activeTechFilter
+    s.activeTeamFilter = stash.activeTeamFilter
+    s.lastClearedHighlightFilters = null
+  }),
+
+  dismissClearedHighlightFiltersHint: () => set({ lastClearedHighlightFilters: null }),
 
   setTagFilterMode: (mode) => set({ tagFilterMode: mode }),
   setStatusFilterMode: (mode) => set({ statusFilterMode: mode }),

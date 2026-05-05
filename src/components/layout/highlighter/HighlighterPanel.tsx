@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { createPortal } from 'react-dom'
-import { Tag, Activity, Cpu, Users, X, Trash2, Search, Pencil } from 'lucide-react'
+import { Tag, Activity, Cpu, Users, X, Trash2, Search, Pencil, RotateCcw } from 'lucide-react'
 import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/workspace'
 import type { ElementStatus } from '@/types/model'
 import { TagManagerPanel } from '../FloatingBottomStrip'
@@ -51,6 +51,9 @@ export default function HighlighterPanel() {
   const setTechs = useWorkspaceStore((s) => s.setActiveTechFilter)
   const setTeams = useWorkspaceStore((s) => s.setActiveTeamFilter)
   const clearAll = useWorkspaceStore((s) => s.clearAllHighlightFilters)
+  const stashedFilters = useWorkspaceStore((s) => s.lastClearedHighlightFilters)
+  const restoreFilters = useWorkspaceStore((s) => s.restoreHighlightFilters)
+  const dismissStash = useWorkspaceStore((s) => s.dismissClearedHighlightFiltersHint)
 
   const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
   const elementMap = useMemo(() => (workspace ? buildElementMap(workspace) : new Map()), [workspace])
@@ -312,6 +315,65 @@ export default function HighlighterPanel() {
           <X size={14} />
         </button>
       </header>
+
+      {/* Restore-from-previous-view banner */}
+      {stashedFilters && (() => {
+        const stashedTotal =
+          stashedFilters.activeTagFilter.length +
+          stashedFilters.activeStatusFilter.length +
+          stashedFilters.activeTechFilter.length +
+          stashedFilters.activeTeamFilter.length
+        return (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 14px',
+              borderBottom: '1px solid var(--color-border)',
+              background: 'var(--color-accent-active)',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-primary)',
+            }}
+          >
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <strong style={{ fontWeight: 700 }}>{stashedTotal}</strong> filter{stashedTotal === 1 ? '' : 's'} cleared on view change
+            </span>
+            <button
+              type="button"
+              onClick={restoreFilters}
+              title="Restore the filters from the previous view"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '3px 8px',
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--color-accent)',
+                background: 'transparent',
+                border: '1px solid var(--color-accent)',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+              }}
+            >
+              <RotateCcw size={11} />
+              Restore
+            </button>
+            <button
+              type="button"
+              onClick={dismissStash}
+              title="Dismiss"
+              aria-label="Dismiss restore hint"
+              className="btn-icon"
+              style={{ minWidth: 20, minHeight: 20, padding: 2 }}
+            >
+              <X size={11} />
+            </button>
+          </div>
+        )
+      })()}
 
       {/* Tabs */}
       <div
