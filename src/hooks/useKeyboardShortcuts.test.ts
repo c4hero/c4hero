@@ -1,6 +1,7 @@
+/** @vitest-environment jsdom */
 import { renderHook } from '@testing-library/react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { useKeyboardShortcuts } from './useKeyboardShortcuts'
+import { useKeyboardShortcuts, shouldSuppressBackspaceNavigation } from './useKeyboardShortcuts'
 import type { Workspace } from '@/types/model'
 
 vi.mock('@xyflow/react', () => ({ useReactFlow: () => { throw new Error('not in flow') } }))
@@ -54,9 +55,7 @@ describe('useKeyboardShortcuts — delete semantics', () => {
 
     const w = useWorkspaceStore.getState().workspace!
     expect(w.views.containerViews[0].elements.map(e => e.id)).toEqual(['c1'])
-    // Model intact:
     expect(w.model.softwareSystems[0].containers.map(c => c.id)).toEqual(['c1', 'c2'])
-    // No confirm dialog raised (lightweight action):
     expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
   })
 
@@ -71,14 +70,11 @@ describe('useKeyboardShortcuts — delete semantics', () => {
     const pd = useWorkspaceStore.getState().pendingDelete
     expect(pd).not.toBeNull()
     expect(pd!.impact?.descendantContainers).toBe(2)
-    expect(pd!.impact?.scopedViews).toBe(1)             // 'cont' view scoped to 'sys'
+    expect(pd!.impact?.scopedViews).toBe(1)
     expect(pd!.message).toMatch(/Delete "S" from the model/)
   })
 
   it('Backspace on a mixed selection drops focal-scope IDs and proceeds with the rest', () => {
-    // The user's selection is ['sys', 'c1'] on the container view scoped to 'sys'.
-    // 'sys' is focal — it should be silently filtered out.
-    // 'c1' is not focal — it should be removed from the view.
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     useWorkspaceStore.getState().setActiveView('cont')
     useWorkspaceStore.getState().selectElements(['sys', 'c1'])
@@ -87,18 +83,12 @@ describe('useKeyboardShortcuts — delete semantics', () => {
     press('Backspace')
 
     const w = useWorkspaceStore.getState().workspace!
-    // c1 removed from the container view, c2 still there:
     expect(w.views.containerViews[0].elements.map(e => e.id)).toEqual(['c2'])
-    // sys still in the model (focal scope is never destroyed by this path):
     expect(w.model.softwareSystems.find(s => s.id === 'sys')).toBeDefined()
-    // No confirm dialog:
     expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
   })
 
   it('Backspace on the focal-scope element of a container view is a no-op', () => {
-    // Defense in depth: the canvas shouldn't show the focal system as a node
-    // on its own container view, but if a future regression lets it be selected,
-    // Backspace must not silently remove or delete it.
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     useWorkspaceStore.getState().setActiveView('cont')
     useWorkspaceStore.getState().selectElements(['sys'])
@@ -108,9 +98,107 @@ describe('useKeyboardShortcuts — delete semantics', () => {
     press('Backspace', { shift: true })
 
     const w = useWorkspaceStore.getState().workspace!
-    // System still in model:
     expect(w.model.softwareSystems.find(s => s.id === 'sys')).toBeDefined()
-    // No confirm raised:
     expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
+  })
+})
+
+// ─── shouldSuppressBackspaceNavigation (browser-back guard) ──────────
+
+function makeInput(type: string, value: string): HTMLInputElement {
+  const el = document.createElement('input')
+  el.type = type
+  el.value = value
+  return el
+}
+
+function makeTextarea(value: string): HTMLTextAreaElement {
+  const el = document.createElement('textarea')
+  el.value = value
+  return el
+}
+
+function makeContentEditable(text: string): HTMLElement {
+  const el = document.createElement('div')
+  el.contentEditable = 'true'
+  el.textContent = text
+  document.body.appendChild(el) // isContentEditable requires DOM attachment
+  return el
+}
+
+describe('shouldSuppressBackspaceNavigation', () => {
+  describe('text-editable inputs with content — should NOT suppress', () => {
+    it('non-empty text input → false (Backspace deletes a char)', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('text', 'hello'))).toBe(false)
+    })
+
+    it('non-empty search input → false', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('search', 'q'))).toBe(false)
+    })
+
+    it('non-empty textarea → false', () => {
+      expect(shouldSuppressBackspaceNavigation(makeTextarea('multi\nline'))).toBe(false)
+    })
+
+    it('non-empty contentEditable → false', () => {
+      expect(shouldSuppressBackspaceNavigation(makeContentEditable('rich text'))).toBe(false)
+    })
+
+    it('input with no type attribute (defaults to text) and content → false', () => {
+      const el = document.createElement('input')
+      el.value = 'abc'
+      expect(shouldSuppressBackspaceNavigation(el)).toBe(false)
+    })
+  })
+
+  describe('text-editable inputs that are empty — SHOULD suppress', () => {
+    it('empty text input → true (browser-back risk on Safari)', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('text', ''))).toBe(true)
+    })
+
+    it('empty search input → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('search', ''))).toBe(true)
+    })
+
+    it('empty password input → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('password', ''))).toBe(true)
+    })
+
+    it('empty textarea → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeTextarea(''))).toBe(true)
+    })
+
+    it('empty contentEditable → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeContentEditable(''))).toBe(true)
+    })
+  })
+
+  describe('non-text inputs — SHOULD suppress regardless of value', () => {
+    it('checkbox → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('checkbox', ''))).toBe(true)
+    })
+
+    it('radio → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('radio', ''))).toBe(true)
+    })
+
+    it('button-typed input → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('button', ''))).toBe(true)
+    })
+
+    it('submit-typed input → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('submit', ''))).toBe(true)
+    })
+
+    it('range input → true', () => {
+      expect(shouldSuppressBackspaceNavigation(makeInput('range', '50'))).toBe(true)
+    })
+  })
+
+  describe('non-input elements — SHOULD suppress', () => {
+    it('select → true', () => {
+      const el = document.createElement('select')
+      expect(shouldSuppressBackspaceNavigation(el)).toBe(true)
+    })
   })
 })
