@@ -35,6 +35,7 @@ if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__testAddGroup = (name: string, ids: string[]) => {
     return useWorkspaceStore.getState().addGroup(name, ids)
   }
+  ;(window as unknown as Record<string, unknown>).__testStore = () => useWorkspaceStore.getState()
   ;(window as unknown as Record<string, unknown>).__testDeleteElements = (ids: string[]) => {
     useWorkspaceStore.getState().deleteElements(ids)
   }
