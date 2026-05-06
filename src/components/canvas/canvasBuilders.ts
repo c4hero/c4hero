@@ -195,15 +195,22 @@ export function buildGroupNodes(
       id: `group-${group.id}`,
       type: 'group',
       position: { x: minX - PADDING, y: minY - PADDING_TOP },
-      style: { width: (maxX - minX) + PADDING * 2, height: (maxY - minY) + PADDING_TOP + PADDING, backgroundColor: 'transparent' },
+      // pointer-events: none on the React Flow wrapper itself lets pinch /
+      // pan / tap pass through the (often huge) group rectangle to the
+      // canvas pane underneath. The .c4-group-handle inside re-enables
+      // pointer-events so the label still receives the drag.
+      style: { width: (maxX - minX) + PADDING * 2, height: (maxY - minY) + PADDING_TOP + PADDING, backgroundColor: 'transparent', pointerEvents: 'none' },
       data: { label: group.name, elementCount: group.elementIds.length },
       zIndex: -1,
       selectable: true,
-      // Draggable: Canvas's onNodeDragStart/onNodeDrag/onNodeDragStop detect
-      // group drags (id starts with `group-`) and translate every member by
-      // the same delta. The group's own position is then re-derived from the
-      // updated members on the next overlay rebuild.
+      // Drag handler: Canvas's onNodeDragStart/onNodeDrag/onNodeDragStop
+      // detect group drags (id starts with `group-`) and translate every
+      // member by the same delta. The group's own position is then re-
+      // derived from the updated members on the next overlay rebuild.
       draggable: true,
+      // Restrict drag initiation to the small label header so touches on
+      // the body pass through (see pointerEvents above).
+      dragHandle: '.c4-group-handle',
     })
   }
   return groupNodes
