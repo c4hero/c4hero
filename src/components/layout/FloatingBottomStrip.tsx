@@ -78,6 +78,7 @@ export function TagManagerPanel({
       />
       <div
         className="glass-panel-solid"
+        data-canvas-chrome="tag-manager"
         style={{
           position: 'fixed',
           bottom: 68,

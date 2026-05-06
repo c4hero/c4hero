@@ -128,7 +128,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.workspace) store.setAddElementPanelOpen(!store.addElementPanelOpen)
   },
   'h': (store) => {
-    if (store.workspace) store.setHighlighterPanelOpen(!store.highlighterPanelOpen)
+    if (store.workspace) store.setHighlighterOpenFacet(store.highlighterOpenFacet ? null : 'tags')
   },
   'm': (store) => {
     if (store.workspace) store.setMultiSelectMode(!store.multiSelectMode)

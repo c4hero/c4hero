@@ -1,18 +1,18 @@
 import { test, expect } from '../fixtures/workspace'
 
 async function openHighlighter(workspace: { page: import('@playwright/test').Page }) {
-  await workspace.page.getByTestId('highlighter-rail-trigger').getByRole('button').click()
-  return workspace.page.getByRole('complementary', { name: 'Highlighter' })
+  await workspace.page.getByTestId('highlighter-segment-tags').click()
+  return workspace.page.getByRole('dialog', { name: /Highlight by Tag/ })
 }
 
 test.describe('Tag Filtering', () => {
-  test('Highlighter panel lists custom tags from the view', async ({ workspace }) => {
+  test('Highlighter Tag flyout lists custom tags from the view', async ({ workspace }) => {
     await workspace.loadSample()
     const panel = await openHighlighter(workspace)
     await expect(panel.getByRole('button', { name: /^Customer\b/, exact: false })).toBeVisible()
   })
 
-  test('toggling a tag in the panel marks it pressed', async ({ workspace }) => {
+  test('toggling a tag in the flyout marks it pressed', async ({ workspace }) => {
     await workspace.loadSample()
     const panel = await openHighlighter(workspace)
     const btn = panel.getByRole('button', { name: /^Customer\b/, exact: false })

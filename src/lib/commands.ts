@@ -231,7 +231,10 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       shortcut: 'H',
       keywords: ['filter', 'highlight', 'tag', 'tech', 'team', 'status'],
       when: () => !!store().workspace,
-      execute: () => store().setHighlighterPanelOpen(!store().highlighterPanelOpen),
+      execute: () => {
+        const s = store()
+        s.setHighlighterOpenFacet(s.highlighterOpenFacet ? null : 'tags')
+      },
     },
     {
       id: 'restore-cleared-highlight-filters',

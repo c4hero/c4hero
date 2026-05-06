@@ -13,6 +13,10 @@ export interface UndoState {
   redoStack: Workspace[]
 }
 
+// ─── Highlighter ─────────────────────────────────────────────────────
+
+export type HighlighterFacet = 'tags' | 'status' | 'tech' | 'teams'
+
 // ─── State Interface ─────────────────────────────────────────────────
 
 export interface WorkspaceState extends UndoState {
@@ -191,8 +195,10 @@ export interface WorkspaceState extends UndoState {
   setCanvasSettingsOpen: (open: boolean) => void
   addElementPanelOpen: boolean
   setAddElementPanelOpen: (open: boolean) => void
-  highlighterPanelOpen: boolean
-  setHighlighterPanelOpen: (open: boolean) => void
+  /** Which Highlighter facet's flyout is currently open above the bottom bar.
+   *  Null when no flyout is showing (bar still visible at minimal size). */
+  highlighterOpenFacet: HighlighterFacet | null
+  setHighlighterOpenFacet: (facet: HighlighterFacet | null) => void
   tagFilterMode: 'any' | 'all'
   statusFilterMode: 'any' | 'all'
   techFilterMode: 'any' | 'all'
