@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { createPortal } from 'react-dom'
-import { Tag, Activity, Cpu, Users, X, Trash2, Search, Pencil } from 'lucide-react'
+import { Tag, Activity, Cpu, Users, X, Ban, Search, Pencil } from 'lucide-react'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/workspace'
 import type { ElementStatus } from '@/types/model'
 import type { HighlighterFacet } from '@/store/workspace-types'
-import { TagManagerPanel } from '../FloatingBottomStrip'
+import TagManagerDialog from './TagManagerDialog'
 
 const STATUS_COLORS: Record<ElementStatus, string> = {
   Live: 'var(--color-status-live)',
@@ -154,7 +155,9 @@ export default function BottomHighlighterBar() {
       // phase, a target that triggers an immediate state change can be gone
       // from the DOM by the time we read closest(), making chrome detection
       // miss legitimate canvas chrome.
-      if (target.closest?.('[data-canvas-chrome]')) return
+      // Modal dialogs (role="dialog" + aria-modal) sit above the canvas
+      // and shouldn't dismiss the flyout when the user interacts with them.
+      if (target.closest?.('[data-canvas-chrome], [role="dialog"][aria-modal="true"]')) return
       setOpenFacet(null)
     }
     document.addEventListener('mousedown', onDocPointer, { capture: true })
@@ -239,7 +242,11 @@ export default function BottomHighlighterBar() {
     setOpenFacet(openFacet === facet ? null : facet)
   }
 
-  if (!workspace) return null
+  // On phone screens the floating tool rail relocates to the bottom edge,
+  // which would collide with this bar. Hide on mobile and let the user
+  // reach the highlighter via the command palette.
+  const breakpoint = useBreakpoint()
+  if (!workspace || breakpoint === 'mobile') return null
 
   return (
     <div
@@ -288,35 +295,20 @@ export default function BottomHighlighterBar() {
           overflow: 'hidden',
         }}
       >
-        {total > 0 && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); clearAll() }}
-            title="Clear all highlight filters"
-            aria-label="Clear all highlight filters"
-            style={{
-              padding: '0 10px',
-              border: 'none',
-              borderRight: '1px solid var(--color-border)',
-              background: 'transparent',
-              color: 'var(--color-text-muted)',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-            }}
-          >
-            <Trash2 size={12} />
-          </button>
-        )}
         {FACETS.map((f, idx) => {
           const active = openFacet === f.key
           const cnt = counts[f.key]
           const Icon = f.icon
-          const isLast = idx === FACETS.length - 1
+          // Only the very last visible element in the bar drops its right
+          // border. When there are active filters the Clear button sits to
+          // the right of the segments, so every segment keeps its border.
+          const isFinal = idx === FACETS.length - 1 && total === 0
           return (
             <button
               key={f.key}
               type="button"
+              className="hover-subtle"
+              data-active={active ? 'true' : undefined}
               data-testid={`highlighter-segment-${f.key}`}
               aria-pressed={active}
               aria-label={`Highlight by ${f.label}${cnt > 0 ? ` (${cnt} active)` : ''}`}
@@ -327,7 +319,7 @@ export default function BottomHighlighterBar() {
                 gap: 6,
                 padding: '8px 14px',
                 border: 'none',
-                borderRight: isLast ? 'none' : '1px solid var(--color-border)',
+                borderRight: isFinal ? 'none' : '1px solid var(--color-border)',
                 background: active ? 'var(--color-accent-active)' : 'transparent',
                 color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 fontSize: 11,
@@ -365,10 +357,32 @@ export default function BottomHighlighterBar() {
             </button>
           )
         })}
+        {total > 0 && (
+          <button
+            type="button"
+            className="hover-subtle"
+            onClick={(e) => { e.stopPropagation(); clearAll() }}
+            title="Clear all highlight filters"
+            aria-label="Clear all highlight filters"
+            style={{
+              padding: '0 12px',
+              alignSelf: 'stretch',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+          >
+            <Ban size={13} />
+          </button>
+        )}
       </div>
 
       {tagManagerOpen && createPortal(
-        <TagManagerPanel onClose={() => setTagManagerOpen(false)} />,
+        <TagManagerDialog onClose={() => setTagManagerOpen(false)} />,
         document.body,
       )}
     </div>
@@ -402,11 +416,21 @@ function FacetFlyout({
   onOpenTagManager: () => void
 }): ReactNode {
   const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const filteredValues = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return content.available
     return content.available.filter((v) => v.toLowerCase().includes(q))
   }, [content.available, query])
+
+  function toggleSearch() {
+    setSearchOpen((prev) => {
+      // Closing search clears the active query so chip ordering doesn't
+      // silently stay filtered after the input vanishes.
+      if (prev) setQuery('')
+      return !prev
+    })
+  }
 
   return (
     <div
@@ -446,6 +470,21 @@ function FacetFlyout({
         <ModeToggle mode={content.mode} onChange={content.setMode} />
         <button
           type="button"
+          onClick={toggleSearch}
+          title={searchOpen ? 'Close search' : 'Search'}
+          aria-label={searchOpen ? 'Close search' : 'Search values'}
+          aria-pressed={searchOpen}
+          className="btn-icon"
+          style={{
+            minWidth: 22, minHeight: 22, padding: 3,
+            color: searchOpen ? 'var(--color-accent)' : undefined,
+            background: searchOpen ? 'var(--color-accent-active)' : undefined,
+          }}
+        >
+          <Search size={12} />
+        </button>
+        <button
+          type="button"
           onClick={onClose}
           title="Close"
           aria-label="Close highlighter flyout"
@@ -456,36 +495,38 @@ function FacetFlyout({
         </button>
       </div>
 
-      <div style={{ position: 'relative' }}>
-        <Search
-          size={12}
-          style={{
-            position: 'absolute',
-            left: 9,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: 'var(--color-text-muted)',
-            pointerEvents: 'none',
-          }}
-        />
-        <input
-          type="text"
-          placeholder={content.placeholder}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          autoFocus
-          style={{
-            width: '100%',
-            padding: '6px 10px 6px 28px',
-            fontSize: 'var(--text-xs)',
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--color-border)',
-            background: 'var(--color-surface-2)',
-            color: 'var(--color-text-primary)',
-            outline: 'none',
-          }}
-        />
-      </div>
+      {searchOpen && (
+        <div style={{ position: 'relative' }}>
+          <Search
+            size={12}
+            style={{
+              position: 'absolute',
+              left: 9,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--color-text-muted)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            placeholder={content.placeholder}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '6px 10px 6px 28px',
+              fontSize: 'var(--text-xs)',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface-2)',
+              color: 'var(--color-text-primary)',
+              outline: 'none',
+            }}
+          />
+        </div>
+      )}
 
       {(content.showTagEditor || content.selected.length > 0) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

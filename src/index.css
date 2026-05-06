@@ -1161,6 +1161,13 @@ body {
     flex-direction: row !important;
     padding: 0 8px !important;
   }
+  /* Rail separators flip from horizontal lines (between stacked buttons)
+     to vertical lines (between row buttons) when the rail is horizontal. */
+  [data-canvas-chrome="tool-rail"] .rail-sep {
+    width: 1px !important;
+    height: 20px !important;
+    margin: 0 6px !important;
+  }
   /* Right-side panels (Inspector, Highlighter): full-width below the
      diagram instead of a 280-300px column that would squish the canvas. */
   [aria-label="Element properties"],

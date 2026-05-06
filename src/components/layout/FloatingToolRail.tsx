@@ -240,8 +240,13 @@ export default function FloatingToolRail() {
 // ─── Rail primitives ──────────────────────────────────────────────────
 
 function RailSep() {
+  // Inline dimensions are for the default (vertical / column) orientation.
+  // On narrow viewports the rail flips to a horizontal row near the bottom
+  // edge — the mobile media query in index.css swaps these dimensions so
+  // the separator becomes a thin vertical line between row buttons.
   return (
     <div
+      className="rail-sep"
       style={{
         width: 28,
         height: 1,

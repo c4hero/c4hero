@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Download } from 'lucide-react'
+import { Save } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess } from '@/lib/fileIO'
@@ -102,7 +102,10 @@ export default function SaveIndicator() {
       aria-label={tooltip}
     >
       {!canLinkFiles ? (
-        <Download
+        // No File System Access API — clicking saves by triggering a browser
+        // download. Use the Save (floppy) icon so this slot is visually
+        // distinct from the Export (download tray) icon further right.
+        <Save
           size={14}
           color={
             saveStatus === 'saving' ? 'var(--color-info)'
