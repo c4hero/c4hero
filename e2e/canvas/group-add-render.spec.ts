@@ -67,12 +67,14 @@ test.describe('group renders when added via multi-select bar', () => {
         .map((e) => ({ id: e.id, x: e.x ?? 0, y: e.y ?? 0 }))
     })
 
-    // Pick up the group by its top-left label corner and drag by (200, 100).
-    const groupNode = workspace.page.locator(`[data-id="group-${groupId}"]`)
-    const gbox = await groupNode.boundingBox()
-    if (!gbox) throw new Error('group node has no bounding box')
-    const startX = gbox.x + 20
-    const startY = gbox.y + 12
+    // Drag must start inside the `.c4-group-handle` label — the rest of the
+    // group node is pointer-events:none so two-finger pinch on mobile can
+    // pass through to React Flow's pan/zoom.
+    const handle = workspace.page.locator(`[data-id="group-${groupId}"] .c4-group-handle`)
+    const hbox = await handle.boundingBox()
+    if (!hbox) throw new Error('group drag handle has no bounding box')
+    const startX = hbox.x + hbox.width / 2
+    const startY = hbox.y + hbox.height / 2
     await workspace.page.mouse.move(startX, startY)
     await workspace.page.mouse.down()
     await workspace.page.mouse.move(startX + 200, startY + 100, { steps: 10 })

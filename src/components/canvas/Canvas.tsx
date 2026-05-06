@@ -607,7 +607,17 @@ export default function Canvas() {
       const elementNodes = selectedNodes.filter(n => !n.id.startsWith('group-'))
 
       if (groupNodes.length > 0) {
-        selectGroup(groupNodes[0].id.slice(6)) // strip 'group-' prefix
+        // Defer group selection on the same 120ms / isDragging-cancel pattern
+        // we use for elements. Without this, pressing a group on a phone
+        // immediately pops the inspector — a tap-and-drag (long-press to move
+        // the cluster) selects-then-drags, leaving the inspector flashing
+        // open before the drag suppresses it.
+        const groupId = groupNodes[0].id.slice(6) // strip 'group-' prefix
+        if (inspectorTimer.current) clearTimeout(inspectorTimer.current)
+        inspectorTimer.current = setTimeout(() => {
+          inspectorTimer.current = null
+          if (!isDragging.current) selectGroup(groupId)
+        }, 120)
       } else if (elementNodes.length > 0) {
         const ids = elementNodes.map((n) => n.id)
         // If multiple nodes selected (shift+click or rubber-band), apply immediately — no delay
