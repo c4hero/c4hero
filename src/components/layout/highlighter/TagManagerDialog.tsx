@@ -82,6 +82,14 @@ export default function TagManagerDialog({ onClose }: { onClose: () => void }) {
         maxHeight: 'min(82vh, 760px)',
         display: 'flex',
         flexDirection: 'column',
+        // DialogShell ships no default background — without these the modal
+        // body sits transparent over the dimmed canvas backdrop. Match the
+        // surface tones used by SearchDialog / ExportDialog for consistency.
+        background: 'var(--color-bg-panel)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: '0 24px 60px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.2)',
+        overflow: 'hidden',
       }}
     >
       {/* Header */}
