@@ -199,7 +199,11 @@ export function buildGroupNodes(
       data: { label: group.name, elementCount: group.elementIds.length },
       zIndex: -1,
       selectable: true,
-      draggable: false,
+      // Draggable: Canvas's onNodeDragStart/onNodeDrag/onNodeDragStop detect
+      // group drags (id starts with `group-`) and translate every member by
+      // the same delta. The group's own position is then re-derived from the
+      // updated members on the next overlay rebuild.
+      draggable: true,
     })
   }
   return groupNodes

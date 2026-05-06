@@ -67,6 +67,7 @@ export default function Canvas() {
   const storeSelectedElementIds = useWorkspaceStore((s) => s.selectedElementIds)
   const storeSelectedRelationshipId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
+  const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const syncAutoLayoutPositions = useWorkspaceStore((s) => s.syncAutoLayoutPositions)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
@@ -536,14 +537,58 @@ export default function Canvas() {
   const isDragging = useRef(false)
   const inspectorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const onNodeDragStart = useCallback(() => { isDragging.current = false }, [])
-  const onNodeDrag = useCallback(() => {
+  // Per-drag context for moving a group as a unit. Captured at drag start
+  // and consumed in onNodeDrag (translate members) and onNodeDragStop
+  // (persist member positions). Null when the user is dragging an element
+  // directly rather than a group.
+  const groupDragRef = useRef<{
+    groupId: string
+    groupStart: { x: number; y: number }
+    memberStart: Map<string, { x: number; y: number }>
+  } | null>(null)
+
+  const onNodeDragStart = useCallback((_event: React.MouseEvent, node: Node) => {
+    isDragging.current = false
+    if (node.id.startsWith('group-')) {
+      const groupId = node.id.slice(6)
+      const ws = workspaceRef.current
+      const group = ws?.model.groups.find((g) => g.id === groupId)
+      if (!group) { groupDragRef.current = null; return }
+      const memberSet = new Set(group.elementIds)
+      const memberStart = new Map<string, { x: number; y: number }>()
+      for (const n of reactFlowInstance.getNodes()) {
+        if (memberSet.has(n.id)) memberStart.set(n.id, { x: n.position.x, y: n.position.y })
+      }
+      groupDragRef.current = {
+        groupId,
+        groupStart: { x: node.position.x, y: node.position.y },
+        memberStart,
+      }
+    } else {
+      groupDragRef.current = null
+    }
+  }, [reactFlowInstance])
+
+  const onNodeDrag = useCallback((_event: React.MouseEvent, node: Node) => {
     isDragging.current = true
     if (inspectorTimer.current) {
       clearTimeout(inspectorTimer.current)
       inspectorTimer.current = null
     }
-  }, [])
+    const ctx = groupDragRef.current
+    if (ctx && node.id === `group-${ctx.groupId}`) {
+      // Translate every member by the same delta the group has been dragged.
+      // Reading from the captured member-start map keeps the deltas exact
+      // even if RF batches multiple drag frames before flushing.
+      const dx = node.position.x - ctx.groupStart.x
+      const dy = node.position.y - ctx.groupStart.y
+      setNodes((prev) => prev.map((n) => {
+        const start = ctx.memberStart.get(n.id)
+        if (!start) return n
+        return { ...n, position: { x: start.x + dx, y: start.y + dy } }
+      }))
+    }
+  }, [setNodes])
 
   useEffect(() => {
     if (inspectorTimer.current) {
@@ -654,7 +699,22 @@ export default function Canvas() {
 
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      updateNodePosition(node.id, node.position.x, node.position.y)
+      const ctx = groupDragRef.current
+      if (ctx && node.id === `group-${ctx.groupId}`) {
+        // Persist every member at its final dragged position, then drop the
+        // drag context. Reading positions from the live RF state guarantees
+        // we capture whatever the last onNodeDrag wrote.
+        const dx = node.position.x - ctx.groupStart.x
+        const dy = node.position.y - ctx.groupStart.y
+        const updates: { id: string; x: number; y: number }[] = []
+        for (const [id, start] of ctx.memberStart) {
+          updates.push({ id, x: start.x + dx, y: start.y + dy })
+        }
+        if (updates.length > 0) updateNodePositions(updates)
+        groupDragRef.current = null
+      } else {
+        updateNodePosition(node.id, node.position.x, node.position.y)
+      }
       // Rebuild overlays immediately so group and scope bounds do not disappear
       // for a frame between the drag stop and the store-driven refresh.
       const ws = workspaceRef.current
@@ -673,7 +733,7 @@ export default function Canvas() {
       // Reset drag flag slightly after stop so any trailing onSelectionChange is still suppressed
       setTimeout(() => { isDragging.current = false }, 50)
     },
-    [updateNodePosition, setNodes],
+    [updateNodePosition, updateNodePositions, setNodes],
   )
 
 
