@@ -320,7 +320,11 @@ export default function BottomHighlighterBar() {
                 padding: '8px 14px',
                 border: 'none',
                 borderRight: isFinal ? 'none' : '1px solid var(--color-border)',
-                background: active ? 'var(--color-accent-active)' : 'transparent',
+                // Inline `background` is only set in the active state. When
+                // inactive, leaving it unset lets the `.hover-subtle:hover`
+                // CSS rule actually take effect — inline styles always win
+                // over class :hover, including in pseudo states.
+                ...(active && { background: 'var(--color-accent-active)' }),
                 color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 fontSize: 11,
                 fontWeight: 700,
@@ -368,7 +372,6 @@ export default function BottomHighlighterBar() {
               padding: '0 12px',
               alignSelf: 'stretch',
               border: 'none',
-              background: 'transparent',
               color: 'var(--color-text-muted)',
               cursor: 'pointer',
               display: 'inline-flex',
