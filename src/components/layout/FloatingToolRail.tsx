@@ -15,6 +15,7 @@ import {
   MousePointerClick,
 } from 'lucide-react'
 import { useArrowNav } from '@/hooks/useArrowNav'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
 import AddElementPanel from '@/components/layout/AddElementPanel'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
@@ -42,6 +43,12 @@ export default function FloatingToolRail() {
 
 
   const reactFlow = useReactFlow()
+  const breakpoint = useBreakpoint()
+  // The tool rail is a vertical column on the left at desktop sizes and a
+  // horizontal row near the bottom on phones. The Zoom-to-fit math needs
+  // this signal so it reserves space on the correct edge — without it,
+  // mobile fits leave the diagram squeezed into the bottom-right.
+  const fitChromeSide = breakpoint === 'mobile' ? 'bottom' : 'left'
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const setMultiSelectMode = useWorkspaceStore((s) => s.setMultiSelectMode)
   const addPanelOpen = useWorkspaceStore((s) => s.addElementPanelOpen)
@@ -116,7 +123,7 @@ export default function FloatingToolRail() {
       className="glass-panel"
       role="toolbar"
       aria-label="Canvas tools"
-      data-canvas-fit-chrome="left"
+      data-canvas-fit-chrome={fitChromeSide}
       data-canvas-chrome="tool-rail"
       style={{
         position: 'fixed',
