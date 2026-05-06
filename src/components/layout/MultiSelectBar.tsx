@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
-import type { Node } from '@xyflow/react'
 import {
   AlignStartVertical,
   AlignCenterVertical,
@@ -83,25 +82,31 @@ export default function MultiSelectBar() {
       case 'bottom':   refVal = maxY; break
       case 'center-y': refVal = (minY + maxY) / 2; break
     }
-    const alignedPositions: { id: string; x: number; y: number }[] = []
-    reactFlow.setNodes(nodes => nodes.map(n => {
-      if (!selectedElementIds.includes(n.id)) return n
-      const p = positions.find(p => p.id === n.id)!
-      let updated: Node
+    // Compute the aligned positions up front. Earlier the array was
+    // populated INSIDE the reactFlow.setNodes(fn) callback, which RF runs
+    // asynchronously / batched — by the time we read `alignedPositions`
+    // for `updateNodePositions(...)`, it was still empty and the persist
+    // step silently no-op'd.
+    const alignedPositions: { id: string; x: number; y: number }[] = positions.map((p) => {
+      let x = p.x, y = p.y
       switch (mode) {
-        case 'left':     updated = { ...n, position: { ...n.position, x: refVal } }; break
-        case 'right':    updated = { ...n, position: { ...n.position, x: refVal - p.w } }; break
-        case 'center-x': updated = { ...n, position: { ...n.position, x: refVal - p.w / 2 } }; break
-        case 'top':      updated = { ...n, position: { ...n.position, y: refVal } }; break
-        case 'bottom':   updated = { ...n, position: { ...n.position, y: refVal - p.h } }; break
-        case 'center-y': updated = { ...n, position: { ...n.position, y: refVal - p.h / 2 } }; break
-        default:         return n
+        case 'left':     x = refVal; break
+        case 'right':    x = refVal - p.w; break
+        case 'center-x': x = refVal - p.w / 2; break
+        case 'top':      y = refVal; break
+        case 'bottom':   y = refVal - p.h; break
+        case 'center-y': y = refVal - p.h / 2; break
       }
-      alignedPositions.push({ id: n.id, x: updated.position.x, y: updated.position.y })
-      return updated
+      return { id: p.id, x, y }
+    })
+    const alignedById = new Map(alignedPositions.map((p) => [p.id, p]))
+    reactFlow.setNodes((nodes) => nodes.map((n) => {
+      const aligned = alignedById.get(n.id)
+      if (!aligned) return n
+      return { ...n, position: { ...n.position, x: aligned.x, y: aligned.y } }
     }))
-    // Persist aligned positions to the store so they survive re-renders
-    if (alignedPositions.length > 0) updateNodePositions(alignedPositions)
+    // Persist aligned positions to the store so they survive re-renders.
+    updateNodePositions(alignedPositions)
     setAlignOpen(false)
   }
 
