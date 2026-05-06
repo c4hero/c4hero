@@ -87,7 +87,7 @@ export default function MultiSelectBar() {
     // asynchronously / batched — by the time we read `alignedPositions`
     // for `updateNodePositions(...)`, it was still empty and the persist
     // step silently no-op'd.
-    const alignedPositions: { id: string; x: number; y: number }[] = positions.map((p) => {
+    const aligned: { id: string; x: number; y: number; w: number; h: number }[] = positions.map((p) => {
       let x = p.x, y = p.y
       switch (mode) {
         case 'left':     x = refVal; break
@@ -97,8 +97,29 @@ export default function MultiSelectBar() {
         case 'bottom':   y = refVal - p.h; break
         case 'center-y': y = refVal - p.h / 2; break
       }
-      return { id: p.id, x, y }
+      return { id: p.id, x, y, w: p.w, h: p.h }
     })
+
+    // Aligning collapses one axis. If two nodes happened to share (or be
+    // close on) the OTHER axis, they now sit on top of each other. Sort
+    // by the preserved axis and push later nodes forward by their own
+    // size + a gap whenever they would overlap a predecessor's bbox.
+    // Order is preserved so this feels like a stable nudge, not a shuffle.
+    const GAP = 24
+    const horizontal = mode === 'top' || mode === 'bottom' || mode === 'center-y'
+    const sorted = [...aligned].sort((a, b) => horizontal ? a.x - b.x : a.y - b.y)
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1]
+      const cur = sorted[i]
+      if (horizontal) {
+        const minX = prev.x + prev.w + GAP
+        if (cur.x < minX) cur.x = minX
+      } else {
+        const minY = prev.y + prev.h + GAP
+        if (cur.y < minY) cur.y = minY
+      }
+    }
+    const alignedPositions = aligned.map(({ id, x, y }) => ({ id, x, y }))
     const alignedById = new Map(alignedPositions.map((p) => [p.id, p]))
     reactFlow.setNodes((nodes) => nodes.map((n) => {
       const aligned = alignedById.get(n.id)
