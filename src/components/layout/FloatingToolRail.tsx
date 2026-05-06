@@ -168,6 +168,7 @@ export default function FloatingToolRail() {
             <div
               ref={arrangeFlyoutRef}
               role="menu"
+              data-flyout="arrange"
               className="glass-flyout"
               style={{
                 position: 'absolute',
