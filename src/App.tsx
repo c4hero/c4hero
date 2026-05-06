@@ -11,7 +11,7 @@ import FloatingToolRail from '@/components/layout/FloatingToolRail'
 import FloatingViewsPanel from '@/components/layout/FloatingViewsPanel'
 import FloatingInspector from '@/components/layout/FloatingInspector'
 import FloatingBottomStrip from '@/components/layout/FloatingBottomStrip'
-import HighlighterPanel from '@/components/layout/highlighter/HighlighterPanel'
+import BottomHighlighterBar from '@/components/layout/highlighter/BottomHighlighterBar'
 import FloatingZoomHud from '@/components/layout/FloatingZoomHud'
 import MultiSelectBar from '@/components/layout/MultiSelectBar'
 import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
@@ -80,7 +80,7 @@ export default function App() {
         <nav aria-label="Tools"><FloatingToolRail /></nav>
         <FloatingViewsPanel />
         <aside aria-label="Element inspector"><FloatingInspector /></aside>
-        <HighlighterPanel />
+        <BottomHighlighterBar />
         <FloatingBottomStrip />
         <FloatingZoomHud />
         <CanvasHints />

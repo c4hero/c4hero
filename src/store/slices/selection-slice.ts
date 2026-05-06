@@ -23,19 +23,19 @@ export const createSelectionSlice: StateCreator<
     s.selectedElementIds = ids
     s.selectedRelationshipId = null
     s.selectedGroupId = null
-    if (ids.length > 0) s.highlighterPanelOpen = false
+    if (ids.length > 0) s.highlighterOpenFacet = null
   }),
   selectRelationship: (id) => set((s) => {
     s.selectedRelationshipId = id
     s.selectedElementIds = []
     s.selectedGroupId = null
-    if (id) s.highlighterPanelOpen = false
+    if (id) s.highlighterOpenFacet = null
   }),
   selectGroup: (id) => set((s) => {
     s.selectedGroupId = id
     s.selectedElementIds = []
     s.selectedRelationshipId = null
-    if (id) s.highlighterPanelOpen = false
+    if (id) s.highlighterOpenFacet = null
   }),
   clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 })

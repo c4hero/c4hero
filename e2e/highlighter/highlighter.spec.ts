@@ -1,16 +1,16 @@
 import { test, expect } from '../fixtures/workspace'
 
-test.describe('highlighter panel', () => {
-  test('opens via the Filter rail button and lets you toggle a Tag', async ({ workspace }) => {
+test.describe('highlighter bar', () => {
+  test('opens the Tag flyout via the segment and lets you toggle a Tag', async ({ workspace }) => {
     await workspace.loadSample()
 
-    // Open the highlighter panel via the rail button. The label varies by state.
-    await workspace.page.getByTestId('highlighter-rail-trigger').getByRole('button').click()
-    const panel = workspace.page.getByRole('complementary', { name: 'Highlighter' })
-    await expect(panel).toBeVisible()
+    // Open the Tag facet flyout via the bottom-bar segment.
+    await workspace.page.getByTestId('highlighter-segment-tags').click()
+    const flyout = workspace.page.getByRole('dialog', { name: /Highlight by Tag/ })
+    await expect(flyout).toBeVisible()
 
     // Toggle the Customer tag.
-    await panel.getByRole('button', { name: /^Customer\b/, exact: false }).click()
+    await flyout.getByRole('button', { name: /^Customer\b/, exact: false }).click()
 
     // After toggling, at least one node should carry the highlighted class.
     const highlighted = workspace.page.locator('.react-flow__node.c4-node-highlighted')
@@ -23,20 +23,18 @@ test.describe('highlighter panel', () => {
     await workspace.clickNode('Personal Banking Customer')
     await expect(workspace.page.getByLabel('Element properties')).toBeVisible()
 
-    await workspace.page.getByTestId('highlighter-rail-trigger').getByRole('button').click()
-    const panel = workspace.page.getByRole('complementary', { name: 'Highlighter' })
-    // Clicking through the inspector overlap: focus the highlighter panel area
-    // first via Force, since the inspector overlaps on top.
-    await panel.getByRole('button', { name: /^Customer\b/, exact: false }).click({ force: true })
+    await workspace.page.getByTestId('highlighter-segment-tags').click()
+    const flyout = workspace.page.getByRole('dialog', { name: /Highlight by Tag/ })
+    await flyout.getByRole('button', { name: /^Customer\b/, exact: false }).click({ force: true })
     await expect(workspace.page.getByLabel('Element properties')).toBeVisible()
   })
 
   test('focus mode: highlighted nodes pop, non-matches fade as ghost context', async ({ workspace }) => {
     await workspace.loadSample()
 
-    await workspace.page.getByTestId('highlighter-rail-trigger').getByRole('button').click()
-    const panel = workspace.page.getByRole('complementary', { name: 'Highlighter' })
-    await panel.getByRole('button', { name: /^Customer\b/, exact: false }).click()
+    await workspace.page.getByTestId('highlighter-segment-tags').click()
+    const flyout = workspace.page.getByRole('dialog', { name: /Highlight by Tag/ })
+    await flyout.getByRole('button', { name: /^Customer\b/, exact: false }).click()
 
     // At least one node should carry the highlighted class — the focused match.
     const highlighted = workspace.page.locator('.react-flow__node.c4-node-highlighted')
@@ -51,5 +49,23 @@ test.describe('highlighter panel', () => {
       async () => Number(await faded.first().evaluate((n) => getComputedStyle(n).opacity)),
       { timeout: 2000 },
     ).toBeLessThan(0.5)
+  })
+
+  test('bar is always visible and the count badge appears on a segment when filters are active', async ({ workspace }) => {
+    await workspace.loadSample()
+
+    // The four segments are visible without any user action.
+    await expect(workspace.page.getByTestId('highlighter-segment-tags')).toBeVisible()
+    await expect(workspace.page.getByTestId('highlighter-segment-status')).toBeVisible()
+    await expect(workspace.page.getByTestId('highlighter-segment-tech')).toBeVisible()
+    await expect(workspace.page.getByTestId('highlighter-segment-teams')).toBeVisible()
+
+    // Apply a filter, close the flyout, and verify the segment shows a count badge.
+    await workspace.page.getByTestId('highlighter-segment-tags').click()
+    const flyout = workspace.page.getByRole('dialog', { name: /Highlight by Tag/ })
+    await flyout.getByRole('button', { name: /^Customer\b/, exact: false }).click()
+    await workspace.page.keyboard.press('Escape')
+    await expect(flyout).not.toBeVisible()
+    await expect(workspace.page.getByTestId('highlighter-segment-tags')).toContainText('1')
   })
 })

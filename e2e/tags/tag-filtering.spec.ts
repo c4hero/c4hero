@@ -1,18 +1,18 @@
 import { test, expect } from '../fixtures/workspace'
 
 async function openHighlighter(workspace: { page: import('@playwright/test').Page }) {
-  await workspace.page.getByTestId('highlighter-rail-trigger').getByRole('button').click()
-  return workspace.page.getByRole('complementary', { name: 'Highlighter' })
+  await workspace.page.getByTestId('highlighter-segment-tags').click()
+  return workspace.page.getByRole('dialog', { name: /Highlight by Tag/ })
 }
 
 test.describe('Tag Filtering', () => {
-  test('Highlighter panel lists custom tags from the view', async ({ workspace }) => {
+  test('Highlighter Tag flyout lists custom tags from the view', async ({ workspace }) => {
     await workspace.loadSample()
     const panel = await openHighlighter(workspace)
     await expect(panel.getByRole('button', { name: /^Customer\b/, exact: false })).toBeVisible()
   })
 
-  test('toggling a tag in the panel marks it pressed', async ({ workspace }) => {
+  test('toggling a tag in the flyout marks it pressed', async ({ workspace }) => {
     await workspace.loadSample()
     const panel = await openHighlighter(workspace)
     const btn = panel.getByRole('button', { name: /^Customer\b/, exact: false })
@@ -40,15 +40,17 @@ test.describe('Tag Filtering', () => {
     await panel.getByRole('button', { name: /^Critical\b/, exact: false }).click()
     await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
-    // Manage tags now lives inside the Highlighter panel's Tags tab.
+    // Open the new modal-style Manage tags dialog from the Highlighter Tag flyout.
     await panel.getByRole('button', { name: 'Edit tag styles' }).click()
-    const tagInput = workspace.page.locator('input[type="text"][value="Critical"]')
+    const dialog = workspace.page.getByRole('dialog', { name: 'Manage tags' })
+    await expect(dialog).toBeVisible()
+
+    const tagInput = dialog.getByRole('textbox', { name: 'Rename tag Critical' })
     await tagInput.click()
     await tagInput.fill('Urgent')
-    await workspace.page.getByRole('button', { name: 'Confirm rename' }).click()
+    await tagInput.press('Enter')
 
-    // Close the TagManagerPanel modal so its overlay doesn't intercept clicks.
-    await workspace.page.getByRole('button', { name: 'Close tag manager' }).click()
+    await dialog.getByRole('button', { name: 'Close tag manager' }).click()
     const urgent = panel.getByRole('button', { name: /^Urgent\b/, exact: false })
     await expect(urgent).toBeVisible()
     await expect(urgent).toHaveAttribute('aria-pressed', 'true')
@@ -70,7 +72,8 @@ test.describe('Tag Filtering', () => {
     await expect(panel.getByRole('button', { name: /^Critical\b/, exact: false })).toHaveAttribute('aria-pressed', 'true')
 
     await panel.getByRole('button', { name: 'Edit tag styles' }).click()
-    await workspace.page.getByRole('button', { name: 'Remove tag "Critical" globally' }).click()
+    const dialog = workspace.page.getByRole('dialog', { name: 'Manage tags' })
+    await dialog.getByRole('button', { name: 'Remove tag Critical' }).click()
 
     await expect(workspace.getVisibleNodeByName('New System')).toBeVisible()
 

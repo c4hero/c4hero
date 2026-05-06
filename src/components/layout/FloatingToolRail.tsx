@@ -13,7 +13,6 @@ import {
   Maximize2,
   Settings,
   MousePointerClick,
-  Highlighter,
 } from 'lucide-react'
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
@@ -51,11 +50,6 @@ export default function FloatingToolRail() {
 
   const canvasSettingsOpen = useWorkspaceStore((s) => s.canvasSettingsOpen)
   const setCanvasSettingsOpen = useWorkspaceStore((s) => s.setCanvasSettingsOpen)
-  const highlighterPanelOpen = useWorkspaceStore((s) => s.highlighterPanelOpen)
-  const setHighlighterPanelOpen = useWorkspaceStore((s) => s.setHighlighterPanelOpen)
-  const activeFilterCount = useWorkspaceStore(
-    (s) => s.activeTagFilter.length + s.activeStatusFilter.length + s.activeTechFilter.length + s.activeTeamFilter.length,
-  )
 
   const arrangeFlyoutRef = useRef<HTMLDivElement>(null)
 
@@ -174,6 +168,7 @@ export default function FloatingToolRail() {
             <div
               ref={arrangeFlyoutRef}
               role="menu"
+              data-flyout="arrange"
               className="glass-flyout"
               style={{
                 position: 'absolute',
@@ -224,47 +219,6 @@ export default function FloatingToolRail() {
         onClick={() => setMultiSelectMode(!multiSelectMode)}
       />
 
-      {/* Highlighter */}
-      <RailSep />
-      <div style={{ position: 'relative' }} data-testid="highlighter-rail-trigger">
-        <RailBtn
-          icon={<Highlighter size={16} />}
-          label={
-            highlighterPanelOpen
-              ? 'Hide highlighter'
-              : activeFilterCount > 0
-                ? `Highlight (${activeFilterCount} active)`
-                : 'Highlight'
-          }
-          active={highlighterPanelOpen || activeFilterCount > 0}
-          onClick={() => setHighlighterPanelOpen(!highlighterPanelOpen)}
-        />
-        {activeFilterCount > 0 && !highlighterPanelOpen && (
-          <span
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              top: 4,
-              right: 4,
-              minWidth: 14,
-              height: 14,
-              padding: '0 3px',
-              borderRadius: 999,
-              background: 'var(--color-accent)',
-              color: 'var(--color-bg-primary)',
-              fontSize: 9,
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none',
-            }}
-          >
-            {activeFilterCount}
-          </span>
-        )}
-      </div>
-
       {/* Zoom to fit */}
       <RailSep />
       <RailBtn
@@ -287,8 +241,13 @@ export default function FloatingToolRail() {
 // ─── Rail primitives ──────────────────────────────────────────────────
 
 function RailSep() {
+  // Inline dimensions are for the default (vertical / column) orientation.
+  // On narrow viewports the rail flips to a horizontal row near the bottom
+  // edge — the mobile media query in index.css swaps these dimensions so
+  // the separator becomes a thin vertical line between row buttons.
   return (
     <div
+      className="rail-sep"
       style={{
         width: 28,
         height: 1,

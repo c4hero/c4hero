@@ -6,7 +6,7 @@ import type { WorkspaceState } from '../workspace-types'
 export type UiSlice = Pick<WorkspaceState,
   | 'leftPanelOpen' | 'rightPanelOpen'
   | 'searchOpen' | 'commandPaletteOpen'
-  | 'canvasSettingsOpen' | 'addElementPanelOpen' | 'highlighterPanelOpen'
+  | 'canvasSettingsOpen' | 'addElementPanelOpen' | 'highlighterOpenFacet'
   | 'viewsPanelOpen' | 'createViewDialogOpen'
   | 'pendingDelete' | 'confirmDelete' | 'cancelDelete'
   | 'presentationMode' | 'setPresentationMode'
@@ -15,7 +15,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'toggleLeftPanel' | 'toggleRightPanel'
   | 'setLeftPanelOpen' | 'setRightPanelOpen'
   | 'setSearchOpen' | 'setCommandPaletteOpen'
-  | 'setCanvasSettingsOpen' | 'setAddElementPanelOpen' | 'setHighlighterPanelOpen'
+  | 'setCanvasSettingsOpen' | 'setAddElementPanelOpen' | 'setHighlighterOpenFacet'
   | 'setViewsPanelOpen' | 'toggleViewsPanel'
   | 'setCreateViewDialogOpen'
 >
@@ -32,7 +32,7 @@ export const createUiSlice: StateCreator<
   commandPaletteOpen: false,
   canvasSettingsOpen: false,
   addElementPanelOpen: false,
-  highlighterPanelOpen: false,
+  highlighterOpenFacet: null,
   viewsPanelOpen: false,
   createViewDialogOpen: false,
   pendingDelete: null,
@@ -51,7 +51,7 @@ export const createUiSlice: StateCreator<
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
   setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
-  setHighlighterPanelOpen: (open) => set({ highlighterPanelOpen: open, commandPaletteOpen: false }),
+  setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),
   setViewsPanelOpen: (open) => set({ viewsPanelOpen: open }),
   toggleViewsPanel: () => set((s) => { s.viewsPanelOpen = !s.viewsPanelOpen }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
