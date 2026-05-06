@@ -118,16 +118,19 @@ export default function MultiSelectBar() {
   const sep = <div style={{ width: 1, height: 18, background: 'var(--color-border)', flexShrink: 0 }} />
 
   return (
-    <div style={{
-      position: 'fixed',
-      left,
-      top,
-      width: BAR_W,
-      height: BAR_H,
-      zIndex: 52,
-      pointerEvents: 'auto',
-      animation: 'fadeIn 0.15s ease both',
-    }}>
+    <div
+      data-canvas-chrome="multi-select-bar"
+      style={{
+        position: 'fixed',
+        left,
+        top,
+        width: BAR_W,
+        height: BAR_H,
+        zIndex: 52,
+        pointerEvents: 'auto',
+        animation: 'fadeIn 0.15s ease both',
+      }}
+    >
       <div
         className="glass-panel-solid"
         style={{
