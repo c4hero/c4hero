@@ -12,7 +12,7 @@ import { getFirstViewKey } from '../workspace-selectors'
  *  layoutVersion epoch. */
 export type ViewSlice = Pick<WorkspaceState,
   | 'addView' | 'deleteView' | 'renameView' | 'duplicateView'
-  | 'toggleElementInView' | 'setLayoutDirection' | 'resetAndRelayout'
+  | 'toggleElementInView' | 'removeElementsFromView' | 'setLayoutDirection' | 'resetAndRelayout'
   | 'updateNodePosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
   | 'layoutVersion'
 >
@@ -170,6 +170,33 @@ export const createViewSlice: StateCreator<
       }
       return
     }
+  }),
+
+  removeElementsFromView: (viewKey, ids) => set((s) => {
+    if (!s.workspace) return
+    if (ids.length === 0) return
+    const ws = s.workspace
+    const view = findViewHelper(ws, viewKey)
+    if (!view) return
+
+    // Defense in depth: never remove the focal scope element from its own view.
+    // The keymap layer should already filter these out, but the helper guards
+    // again so future callers can't accidentally bypass the rule.
+    const focalId: string | undefined =
+      view.type === 'systemContext' || view.type === 'container' ? view.softwareSystemId :
+      view.type === 'component' ? view.containerId :
+      view.type === 'systemLandscape' ? undefined :
+      ((vt: never): undefined => { throw new Error(`unhandled view type: ${String(vt)}`) })(view.type)
+    const removable = new Set(ids.filter((id) => id !== focalId))
+    if (removable.size === 0) return
+
+    pushUndoSnapshot(s)
+    view.elements = view.elements.filter((e) => !removable.has(e.id))
+    view.relationships = view.relationships.filter((r) => {
+      const rel = ws.model.relationships.find((mr) => mr.id === r.id)
+      if (!rel) return false
+      return !removable.has(rel.sourceId) && !removable.has(rel.destinationId)
+    })
   }),
 
   toggleElementInView: (viewKey, elementId) => set((s) => {

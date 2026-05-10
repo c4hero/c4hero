@@ -3,6 +3,26 @@ import type {
   ViewType, ElementStatus,
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
+export interface CascadeImpact {
+  /** Top-level elements explicitly selected for deletion. */
+  elementCount: number
+  /** Names of those top-level elements (for the dialog body). */
+  elementNames: string[]
+  /** Containers that get deleted because their parent system is being removed. */
+  descendantContainers: number
+  /** Components that get deleted because their container (or its parent system) is being removed. */
+  descendantComponents: number
+  /** Relationships that lose at least one endpoint and get pruned. */
+  relationships: number
+  /** Scoped views (systemContext / container / component) that get removed because their scope element is gone. */
+  scopedViews: number
+}
+
+export interface PendingDelete {
+  message: string
+  impact?: CascadeImpact
+  onConfirm: () => void
+}
 
 // ─── Undo History ────────────────────────────────────────────────────
 
@@ -36,8 +56,11 @@ export interface WorkspaceState extends UndoState {
   rightPanelOpen: boolean
   searchOpen: boolean
   commandPaletteOpen: boolean
-  pendingDelete: { message: string; onConfirm: () => void } | null
-  confirmDelete: (message: string, onConfirm: () => void) => void
+  pendingDelete: PendingDelete | null
+  confirmDelete: (
+    payload: string | { message: string; impact?: CascadeImpact },
+    onConfirm: () => void,
+  ) => void
   cancelDelete: () => void
   /** Active zoom-in confirm prompt: shown when the user clicks zoom on an element
    *  that has children but no corresponding child view. */
@@ -151,6 +174,7 @@ export interface WorkspaceState extends UndoState {
 
   // View element management
   toggleElementInView: (viewKey: string, elementId: string) => void
+  removeElementsFromView: (viewKey: string, ids: string[]) => void
   setLayoutDirection: (viewKey: string, direction: 'TB' | 'BT' | 'LR' | 'RL') => void
   /** Reset all node positions and optionally change layout direction in a single undo step */
   resetAndRelayout: (viewKey: string, direction?: 'TB' | 'BT' | 'LR' | 'RL') => void

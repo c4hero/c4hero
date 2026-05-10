@@ -6,7 +6,9 @@ import {
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
   Highlighter, MousePointerClick, RotateCcw,
 } from 'lucide-react'
-import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews } from '@/store/workspace'
+import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
+import { computeCascadeImpact } from '@/store/workspace-helpers'
+import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
@@ -140,10 +142,10 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
     },
     {
       id: 'delete-selected',
-      label: 'Delete Selected',
+      label: 'Delete Selected from model',
       category: 'edit',
       icon: Trash2,
-      shortcut: '⌫',
+      shortcut: '⇧⌫',
       keywords: ['remove', 'delete'],
       when: () => store().selectedElementIds.length > 0 || store().selectedRelationshipId !== null,
       execute: () => {
@@ -152,13 +154,16 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
           s.confirmDelete('Delete this relationship?', () => s.deleteRelationship(s.selectedRelationshipId!))
           return
         }
-        if (s.selectedElementIds.length > 0) {
-          const count = s.selectedElementIds.length
-          s.confirmDelete(
-            count === 1 ? 'Delete this element?' : `Delete ${count} elements?`,
-            () => s.deleteElements(s.selectedElementIds),
-          )
-        }
+        if (!s.workspace || !s.activeViewKey) return
+        const ids = s.selectedElementIds.filter(
+          (id) => !isFocalScopeElement(s.workspace!, s.activeViewKey!, id),
+        )
+        if (ids.length === 0) return
+        const impact = computeCascadeImpact(s.workspace, ids)
+        s.confirmDelete(
+          { message: formatImpactSummary(impact), impact },
+          () => s.deleteElements(ids),
+        )
       },
     },
     {

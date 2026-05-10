@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
-import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
+import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, isFocalScopeElement } from '@/store/workspace'
+import { computeCascadeImpact } from '@/store/workspace-helpers'
+import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
 import { X, Plus, ArrowRight, ExternalLink, Eye, ChevronRight, Trash2 } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
@@ -72,6 +74,11 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const deleteElement = useWorkspaceStore((s) => s.deleteElement)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const workspace = useWorkspaceStore((s) => s.workspace)
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const isFocal = useMemo(
+    () => workspace && activeViewKey ? isFocalScopeElement(workspace, activeViewKey, element.id) : false,
+    [workspace, activeViewKey, element.id],
+  )
   const tech = (element as Container | Component).technology
   const hasTech = element.type === 'container' || element.type === 'component'
   const hasLocation = element.type === 'person' || element.type === 'softwareSystem'
@@ -93,18 +100,49 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
           <div className="text-[11px]" style={{ color: typeColor }}>{getElementTypeLabel(element)}</div>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => confirmDelete(`Delete ${element.name}?`, () => deleteElement(element.id))}
-            className="btn-icon !min-h-7 !min-w-7 !p-1"
-            aria-label="Delete element"
-            title="Delete element"
-            style={{ color: 'var(--color-error-text)' }}
-          >
-            <Trash2 size={14} />
-          </button>
+          {isFocal ? (
+            <button
+              disabled
+              aria-label="Delete from model (disabled — focal scope)"
+              title="This element scopes the current view. Open the parent view to delete it."
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              style={{ color: 'var(--color-text-muted)', opacity: 0.5, cursor: 'not-allowed' }}
+            >
+              <Trash2 size={14} />
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (!workspace) return
+                const impact = computeCascadeImpact(workspace, [element.id])
+                confirmDelete({ message: formatImpactSummary(impact), impact }, () => deleteElement(element.id))
+              }}
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              aria-label="Delete from model"
+              title="Delete from model"
+              style={{ color: 'var(--color-error-text)' }}
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
           <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close panel"><X size={14} /></button>
         </div>
       </div>
+
+      {/* Focal-scope hint banner */}
+      {isFocal && (
+        <div
+          className="px-4 py-2 text-[11px]"
+          style={{
+            background: 'var(--color-surface-2)',
+            color: 'var(--color-text-muted)',
+            borderBottom: '1px solid var(--color-border)',
+            lineHeight: 1.4,
+          }}
+        >
+          Scopes the current view — open the parent view to delete this element.
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b px-1" style={{ borderColor: 'var(--color-border)' }} role="tablist" aria-label="Element details">

@@ -183,4 +183,48 @@ describe('ConfirmDeleteDialog', () => {
     expect(onConfirm).not.toHaveBeenCalled()
     expect(onCancel).not.toHaveBeenCalled()
   })
+
+  it('renders a structured impact list when impact prop is present', () => {
+    render(
+      <ConfirmDeleteDialog
+        message='Delete "Payments API" from the model?'
+        impact={{
+          elementCount: 1, elementNames: ['Payments API'],
+          descendantContainers: 4, descendantComponents: 11,
+          relationships: 7, scopedViews: 2,
+        }}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    )
+    expect(screen.getByRole('list', { name: /cascade impact/i })).toBeTruthy()
+    expect(screen.getByText(/4 containers/)).toBeTruthy()
+    expect(screen.getByText(/11 components/)).toBeTruthy()
+    expect(screen.getByText(/7 relationships/)).toBeTruthy()
+    expect(screen.getByText(/2 dependent views/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /delete from model/i })).toBeTruthy()
+  })
+
+  it('shows "Delete" label when impact prop is absent', () => {
+    render(<ConfirmDeleteDialog message='Delete this view "Foo"?' onConfirm={() => {}} onCancel={() => {}} />)
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeTruthy()
+    expect(screen.queryByRole('list', { name: /cascade impact/i })).toBeNull()
+  })
+
+  it('keeps "Delete" label when impact has all zero counts', () => {
+    render(
+      <ConfirmDeleteDialog
+        message='Delete "Lonely" from the model?'
+        impact={{
+          elementCount: 1, elementNames: ['Lonely'],
+          descendantContainers: 0, descendantComponents: 0,
+          relationships: 0, scopedViews: 0,
+        }}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    )
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeTruthy()
+    expect(screen.queryByRole('list', { name: /cascade impact/i })).toBeNull()
+  })
 })

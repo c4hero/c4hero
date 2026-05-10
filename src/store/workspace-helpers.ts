@@ -3,6 +3,8 @@ import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
   ViewType, ElementInView,
 } from '@/types/model'
+import type { CascadeImpact } from './workspace-types'
+export type { CascadeImpact } from './workspace-types'
 
 /** Deep-clone an object that may be an Immer draft. structuredClone'ing a
  *  draft proxy throws DataCloneError; current() unwraps the draft to a plain
@@ -503,4 +505,88 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
 
   invalidateElementIndex(ws)
   return { allDeletedIds, deletedContainerIds }
+}
+
+/**
+ * Mutation-free dry run of `cascadeDeleteElements`. Returns counts so a confirm
+ * dialog can warn the user about the actual blast radius before they proceed.
+ *
+ * Mirrors the traversal in `cascadeDeleteElements` exactly — keep the two in
+ * sync. If a delete rule changes there, change it here too.
+ */
+export function computeCascadeImpact(ws: Workspace, ids: Iterable<string>): CascadeImpact {
+  const idSet = new Set(ids)
+  const elementNames: string[] = []
+  const deletedContainerIds = new Set<string>()
+  const deletedComponentIds = new Set<string>()
+
+  // Up-front pass: collect names of every explicitly-selected element exactly once.
+  // This is separated from the cascade traversal below so that a selected child
+  // whose parent is also selected still gets its name recorded (the cascade branch
+  // only sweeps IDs, not names, for children of a selected system).
+  for (const p of ws.model.people) {
+    if (idSet.has(p.id)) elementNames.push(p.name)
+  }
+  for (const sys of ws.model.softwareSystems) {
+    if (idSet.has(sys.id)) elementNames.push(sys.name)
+    for (const c of sys.containers) {
+      if (idSet.has(c.id)) elementNames.push(c.name)
+      for (const comp of c.components) {
+        if (idSet.has(comp.id)) elementNames.push(comp.name)
+      }
+    }
+  }
+
+  // SYNC with cascadeDeleteElements traversal — see keep-in-sync note in JSDoc above.
+  // Cascade pass: determine which containers/components get implicitly deleted.
+  for (const sys of ws.model.softwareSystems) {
+    if (idSet.has(sys.id)) {
+      for (const c of sys.containers) {
+        deletedContainerIds.add(c.id)
+        for (const comp of c.components) deletedComponentIds.add(comp.id)
+      }
+    } else {
+      for (const c of sys.containers) {
+        if (idSet.has(c.id)) {
+          deletedContainerIds.add(c.id)
+          for (const comp of c.components) deletedComponentIds.add(comp.id)
+        } else {
+          for (const comp of c.components) {
+            if (idSet.has(comp.id)) deletedComponentIds.add(comp.id)
+          }
+        }
+      }
+    }
+  }
+
+  // Don't double-count: subtract IDs the caller listed explicitly that also turned up via cascade.
+  const descendantContainers = [...deletedContainerIds].filter((id) => !idSet.has(id)).length
+  const descendantComponents = [...deletedComponentIds].filter((id) => !idSet.has(id)).length
+
+  const allDeletedIds = new Set([...idSet, ...deletedContainerIds, ...deletedComponentIds])
+
+  let relationships = 0
+  for (const r of ws.model.relationships) {
+    if (allDeletedIds.has(r.sourceId) || allDeletedIds.has(r.destinationId)) relationships++
+  }
+
+  let scopedViews = 0
+  for (const v of ws.views.systemContextViews) {
+    if (v.softwareSystemId && idSet.has(v.softwareSystemId)) scopedViews++
+  }
+  for (const v of ws.views.containerViews) {
+    if (v.softwareSystemId && idSet.has(v.softwareSystemId)) scopedViews++
+  }
+  for (const v of ws.views.componentViews) {
+    if (v.containerId && (idSet.has(v.containerId) || deletedContainerIds.has(v.containerId))) scopedViews++
+  }
+
+  return {
+    elementCount: elementNames.length,
+    elementNames,
+    descendantContainers,
+    descendantComponents,
+    relationships,
+    scopedViews,
+  }
 }

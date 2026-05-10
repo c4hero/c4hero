@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { useWorkspaceStore } from '@/store/workspace'
+import { useWorkspaceStore, isFocalScopeElement } from '@/store/workspace'
+import { computeCascadeImpact } from '@/store/workspace-helpers'
+import { formatImpactSummary } from '@/lib/impactMessage'
 import {
   AlignStartVertical,
   AlignCenterVertical,
@@ -19,6 +21,8 @@ export default function MultiSelectBar() {
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
   const deleteElements = useWorkspaceStore((s) => s.deleteElements)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const reactFlow = useReactFlow()
   const [alignOpen, setAlignOpen] = useState(false)
@@ -236,13 +240,22 @@ export default function MultiSelectBar() {
 
         {sep}
 
-        {/* Delete */}
+        {/* Delete from model */}
         <button className="hover-lift" style={{ ...btnStyle, color: 'var(--color-error)', paddingRight: 12 }}
-          title={`Delete ${count} elements`}
-          onClick={() => confirmDelete(`Delete ${count} elements?`, () => deleteElements(selectedElementIds))}
+          title={`Delete ${count} elements from the model`}
+          aria-label={`Delete ${count} elements from the model`}
+          onClick={() => {
+            if (!workspace || !activeViewKey) return
+            const ids = selectedElementIds.filter(
+              (id) => !isFocalScopeElement(workspace, activeViewKey, id),
+            )
+            if (ids.length === 0) return
+            const impact = computeCascadeImpact(workspace, ids)
+            confirmDelete({ message: formatImpactSummary(impact), impact }, () => deleteElements(ids))
+          }}
         >
           <Trash2 size={14} />
-          <span>Delete</span>
+          <span>Delete from model</span>
         </button>
       </div>
     </div>

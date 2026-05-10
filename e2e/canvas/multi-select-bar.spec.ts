@@ -78,6 +78,35 @@ test.describe('multi-select bar — align', () => {
   })
 })
 
+test.describe('multi-select bar — delete', () => {
+  test('Delete from model shows impact-aware confirm dialog', async ({ workspace }) => {
+    await workspace.loadSample()
+    const views = await workspace.getViews()
+    const landscape = views.find(v => v.type === 'systemLandscape')
+    test.skip(!landscape, 'sample workspace has no landscape view')
+    await workspace.setView(landscape!.key)
+
+    // Pick two systems with containers (so cascade is visible)
+    const ws = await workspace.getWorkspace()
+    const systems = ws!.model.softwareSystems.filter(s => s.containers.length > 0).slice(0, 2)
+    test.skip(systems.length < 2, 'sample workspace has fewer than 2 systems with containers')
+
+    // Multi-select via shift-click
+    await workspace.clickNode(systems[0].name)
+    await workspace.page.keyboard.down('Shift')
+    await workspace.clickNode(systems[1].name)
+    await workspace.page.keyboard.up('Shift')
+
+    // Click "Delete from model" in the toolbar
+    await workspace.page.locator('[data-canvas-chrome="multi-select-bar"]').getByRole('button', { name: /delete from model/i }).click()
+
+    // Confirm dialog appears with impact list
+    const dialog = workspace.page.getByRole('dialog', { name: /confirm delete/i })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('list', { name: /cascade impact/i })).toBeVisible()
+  })
+})
+
 async function readPositions(page: import('@playwright/test').Page, ids: string[]) {
   return page.evaluate(({ ids }) => {
     type WS = { views: { systemContextViews: Array<{ elements: Array<{ id: string; x?: number; y?: number }> }> } }

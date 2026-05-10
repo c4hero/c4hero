@@ -17,6 +17,7 @@ vi.mock('lucide-react', () => ({
   AlertTriangle: () => null,
   Settings: () => null,
   ChevronDown: () => null,
+  ChevronRight: () => null,
   // elementMeta icons
   UserRound: () => null,
   Globe: () => null,
@@ -163,6 +164,71 @@ describe('RightPanel', () => {
     render(<RightPanel />)
     // Group name appears in an input field
     expect(screen.getByDisplayValue('My Team')).toBeTruthy()
+  })
+
+  it('shows static hint instead of Delete button when selected element is the focal scope of the active view', () => {
+    // Use a custom workspace: 'api' system has a container, plus a container view scoped to 'api'.
+    // When 'api' is selected on its own container view, the trash button must be replaced
+    // with the "scopes the current view" hint.
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [{
+          id: 'api', type: 'softwareSystem', name: 'API', tags: ['Element', 'Software System'], properties: {},
+          containers: [{ id: 'web', type: 'container', name: 'Web', tags: ['Element', 'Container'], properties: {}, components: [] }],
+        }],
+        relationships: [], groups: [],
+      },
+      views: {
+        systemLandscapeViews: [], systemContextViews: [], componentViews: [],
+        containerViews: [{
+          type: 'container', key: 'cont', softwareSystemId: 'api',
+          elements: [{ id: 'web' }], relationships: [],
+        }],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setActiveView('cont')
+    useWorkspaceStore.getState().selectElements(['api'])
+    render(<RightPanel />)
+
+    const btn = screen.getByLabelText(/delete from model.*focal scope/i)
+    expect((btn as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/scopes the current view/i)).toBeTruthy()
+  })
+
+  it('routes Delete from model through impact-aware confirmDelete', () => {
+    // Load a system w/ containers and select on landscape view (where the system is NOT focal).
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [{
+          id: 'api', type: 'softwareSystem', name: 'API', tags: ['Element', 'Software System'], properties: {},
+          containers: [
+            { id: 'web', type: 'container', name: 'Web', tags: [], properties: {}, components: [] },
+            { id: 'db',  type: 'container', name: 'DB',  tags: [], properties: {}, components: [] },
+          ],
+        }],
+        relationships: [], groups: [],
+      },
+      views: {
+        systemLandscapeViews: [{ type: 'systemLandscape', key: 'land', elements: [{ id: 'api' }], relationships: [] }],
+        systemContextViews: [], containerViews: [], componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setActiveView('land')
+    useWorkspaceStore.getState().selectElements(['api'])
+    render(<RightPanel />)
+
+    fireEvent.click(screen.getByLabelText(/delete from model/i))
+    const pd = useWorkspaceStore.getState().pendingDelete
+    expect(pd?.impact?.descendantContainers).toBe(2)
+    expect(pd?.message).toMatch(/Delete "API" from the model/)
   })
 
   it('close button clears selection', async () => {

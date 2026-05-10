@@ -36,13 +36,13 @@ test.describe('Canvas Elements', () => {
     expect(after).toBe(before + 1)
   })
 
-  test('deleting a selected node removes it after confirmation', async ({ workspace }) => {
+  test('Shift+Backspace on a selected node deletes it from the model after confirmation', async ({ workspace }) => {
     await workspace.loadSample()
     const before = await workspace.getNodeCount()
     await workspace.clickNode('ATM')
     await workspace.expectInspectorFor('ATM')
-    await workspace.page.keyboard.press('Backspace')
-    await workspace.page.getByRole('dialog', { name: 'Confirm delete' }).getByRole('button', { name: 'Delete' }).click()
+    await workspace.page.keyboard.press('Shift+Backspace')
+    await workspace.page.getByRole('dialog', { name: 'Confirm delete' }).getByRole('button', { name: /delete from model/i }).click()
     await expect(await workspace.getNodeByName('ATM')).toHaveCount(0)
     const after = await workspace.getNodeCount()
     expect(after).toBe(before - 1)
