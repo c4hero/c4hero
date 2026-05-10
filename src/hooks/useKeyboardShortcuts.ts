@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { useWorkspaceStore, getCreatableTypes, getActiveView } from '@/store/workspace'
+import { useWorkspaceStore, getCreatableTypes, getActiveView, isFocalScopeElement } from '@/store/workspace'
+import { computeCascadeImpact } from '@/store/workspace-helpers'
+import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeDSL } from '@/lib/dsl'
 import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
@@ -20,6 +22,44 @@ const META_SHORTCUTS: Record<string, KeyHandler> = {
   'mod+f': (store) => {
     store.setSearchOpen(!store.searchOpen)
   },
+}
+
+/**
+ * Factory for Backspace/Delete handlers.
+ * destructive=false → remove from view only (no confirm).
+ * destructive=true  → impact-aware confirm, then deleteElements.
+ * Focal-scope IDs are always filtered out; if only focal-scope IDs were
+ * selected, the key is a no-op.
+ */
+function backspaceLikeHandler(destructive: boolean): KeyHandler {
+  return (store) => {
+    if (store.selectedRelationshipId) {
+      // Relationships are not redesigned in this plan — keep current confirm + delete behavior
+      // for both Backspace and Shift+Backspace on a selected relationship.
+      store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
+      return
+    }
+    if (store.selectedElementIds.length === 0) {
+      if (store.viewHistory.length > 0) store.navigateBack()
+      return
+    }
+    if (!store.workspace || !store.activeViewKey) return
+
+    // Filter focal-scope IDs from the operation either way.
+    const ids = store.selectedElementIds.filter(
+      (id) => !isFocalScopeElement(store.workspace!, store.activeViewKey!, id),
+    )
+    if (ids.length === 0) return // selection was *only* focal scope — no-op
+
+    if (!destructive) {
+      store.removeElementsFromView(store.activeViewKey, ids)
+      return
+    }
+
+    const impact = computeCascadeImpact(store.workspace, ids)
+    const message = formatImpactSummary(impact)
+    store.confirmDelete({ message, impact }, () => store.deleteElements(ids))
+  }
 }
 
 /** Shortcuts that only fire when NOT typing in an input */
@@ -66,41 +106,15 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.selectedElementIds.length > 0 || store.selectedRelationshipId || store.selectedGroupId) { store.clearSelection(); return }
     if (store.viewHistory.length > 0) { store.navigateBack() }
   },
-  'Backspace': (store) => {
-    if (store.selectedRelationshipId) {
-      store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
-      return
-    }
-    if (store.selectedElementIds.length > 0) {
-      const count = store.selectedElementIds.length
-      store.confirmDelete(
-        count === 1 ? 'Delete this element?' : `Delete ${count} elements?`,
-        () => store.deleteElements(store.selectedElementIds)
-      )
-      return
-    }
-    if (store.viewHistory.length > 0) {
-      store.navigateBack()
-    }
-  },
+  'Backspace': backspaceLikeHandler(false),
   'Enter': (store) => {
     if (store.selectedElementIds.length === 1) {
       store.drillInto(store.selectedElementIds[0])
     }
   },
-  'Delete': (store) => {
-    if (store.selectedRelationshipId) {
-      store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
-      return
-    }
-    if (store.selectedElementIds.length > 0) {
-      const count = store.selectedElementIds.length
-      store.confirmDelete(
-        count === 1 ? 'Delete this element?' : `Delete ${count} elements?`,
-        () => store.deleteElements(store.selectedElementIds)
-      )
-    }
-  },
+  'Delete': backspaceLikeHandler(false),
+  'shift+Backspace': backspaceLikeHandler(true),
+  'shift+Delete': backspaceLikeHandler(true),
   'shift+G': (store) => {
     if (store.selectedElementIds.length > 0) store.addGroup('New Group', store.selectedElementIds)
   },
