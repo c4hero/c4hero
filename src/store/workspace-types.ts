@@ -151,6 +151,7 @@ export interface WorkspaceState extends UndoState {
 
   // View element management
   toggleElementInView: (viewKey: string, elementId: string) => void
+  removeElementsFromView: (viewKey: string, ids: string[]) => void
   setLayoutDirection: (viewKey: string, direction: 'TB' | 'BT' | 'LR' | 'RL') => void
   /** Reset all node positions and optionally change layout direction in a single undo step */
   resetAndRelayout: (viewKey: string, direction?: 'TB' | 'BT' | 'LR' | 'RL') => void

@@ -4222,3 +4222,104 @@ describe('zoomInto + pendingZoomConfirm', () => {
     expect(state.createViewDefaults).toBeNull()
   })
 })
+
+describe('removeElementsFromView', () => {
+  beforeEach(() => useWorkspaceStore.getState().closeWorkspace())
+
+  it('removes the listed elements from the view but keeps them in the model', () => {
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [
+          { id: 'sysA', type: 'softwareSystem', name: 'A', tags: [], properties: {}, containers: [] },
+          { id: 'sysB', type: 'softwareSystem', name: 'B', tags: [], properties: {}, containers: [] },
+        ],
+        relationships: [{ id: 'r1', sourceId: 'sysA', destinationId: 'sysB', tags: [], properties: {} }],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [{
+          type: 'systemLandscape', key: 'land',
+          elements: [{ id: 'sysA' }, { id: 'sysB' }],
+          relationships: [{ id: 'r1' }],
+        }],
+        systemContextViews: [], containerViews: [], componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setActiveView('land')
+
+    useWorkspaceStore.getState().removeElementsFromView('land', ['sysA'])
+
+    const w = useWorkspaceStore.getState().workspace!
+    // Model intact:
+    expect(w.model.softwareSystems.map(s => s.id)).toEqual(['sysA', 'sysB'])
+    // View shrunk:
+    expect(w.views.systemLandscapeViews[0].elements.map(e => e.id)).toEqual(['sysB'])
+    // Orphaned relationship ref pruned:
+    expect(w.views.systemLandscapeViews[0].relationships).toEqual([])
+  })
+
+  it('skips focal-scope IDs (defense in depth)', () => {
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [{
+          id: 'sys', type: 'softwareSystem', name: 'S', tags: [], properties: {},
+          containers: [{ id: 'c1', type: 'container', name: 'C', tags: [], properties: {}, components: [] }],
+        }],
+        relationships: [], groups: [],
+      },
+      views: {
+        systemLandscapeViews: [], systemContextViews: [], componentViews: [],
+        containerViews: [{
+          type: 'container', key: 'cont', softwareSystemId: 'sys',
+          elements: [{ id: 'c1' }], relationships: [],
+        }],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setActiveView('cont')
+
+    // Try to remove the focal system from its own container view (not normally selectable, but defense matters)
+    useWorkspaceStore.getState().removeElementsFromView('cont', ['sys', 'c1'])
+
+    const view = useWorkspaceStore.getState().workspace!.views.containerViews[0]
+    // c1 removed, sys ignored (it wasn't in elements anyway, but the action must not have thrown or no-op'd both)
+    expect(view.elements).toEqual([])
+    // System still in model:
+    expect(useWorkspaceStore.getState().workspace!.model.softwareSystems[0].id).toBe('sys')
+  })
+
+  it('records a single undo snapshot for the batch', () => {
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [
+          { id: 'a', type: 'softwareSystem', name: 'A', tags: [], properties: {}, containers: [] },
+          { id: 'b', type: 'softwareSystem', name: 'B', tags: [], properties: {}, containers: [] },
+        ],
+        relationships: [], groups: [],
+      },
+      views: {
+        systemLandscapeViews: [{
+          type: 'systemLandscape', key: 'land', elements: [{ id: 'a' }, { id: 'b' }], relationships: [],
+        }],
+        systemContextViews: [], containerViews: [], componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+
+    useWorkspaceStore.getState().removeElementsFromView('land', ['a', 'b'])
+    useWorkspaceStore.getState().undo()
+
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.elements.map(e => e.id).sort()).toEqual(['a', 'b'])
+  })
+})
