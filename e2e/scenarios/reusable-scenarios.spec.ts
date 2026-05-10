@@ -179,13 +179,13 @@ test.describe('Reusable architecture scenarios', () => {
     expect(snapshot?.model.groups).toHaveLength(1)
   })
 
-  test('12. deleting a selected element can be confirmed and undone', async ({ workspace }) => {
+  test('12. Shift+Delete on a selected element can be confirmed and undone', async ({ workspace }) => {
     await workspace.loadBlank()
 
     await workspace.page.keyboard.press('Shift+S')
     await workspace.clickNode('New System')
-    await workspace.page.keyboard.press('Delete')
-    await workspace.page.getByRole('dialog', { name: 'Confirm delete' }).getByRole('button', { name: 'Delete', exact: true }).click()
+    await workspace.page.keyboard.press('Shift+Delete')
+    await workspace.page.getByRole('dialog', { name: 'Confirm delete' }).getByRole('button', { name: /delete/i }).click()
     await workspace.page.waitForTimeout(300)
 
     await expect(workspace.getVisibleNodeByName('New System')).not.toBeVisible()
