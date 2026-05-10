@@ -34,8 +34,10 @@ workspace "Test" {
   })
 
   it('systemContext include * expands to the scoped system plus directly connected elements only', () => {
-    // Structurizr semantics: for a system context view, include * means the scoped system
-    // plus all elements with a direct relationship to it — not the full landscape.
+    // For a system context view, include * means the scoped system plus all
+    // people/systems with a relationship to the scope OR to one of its containers
+    // /components — not the full landscape. (The container-level promotion is the
+    // user-friendly equivalent of Structurizr's "implied relationships".)
     const dsl = `
 workspace "Test" {
   model {
@@ -66,6 +68,56 @@ workspace "Test" {
     // bob and external have no relationship to api — they should NOT appear
     expect(view.elements.some(e => e.id === bobId)).toBe(false)
     expect(view.elements.some(e => e.id === externalId)).toBe(false)
+  })
+
+  it('systemContext include * follows relationships through the scope system\'s containers', () => {
+    // When a DSL author writes relationships at container granularity (the common
+    // pattern), the system context should still summarize the system's collaborators.
+    // Without this, the view would contain only the scope system and look broken.
+    const dsl = `
+workspace "Test" {
+  model {
+    teacher = person "Teacher"
+    author = person "Content Author"
+    ext = softwareSystem "External Service" "External" "External"
+    unrelated = softwareSystem "Unrelated"
+    pubSvc = softwareSystem "Pub Service" {
+      api = container "API"
+      db = container "DB" "Postgres" "Database"
+    }
+    teacher -> api "browses"
+    api -> ext "fetches"
+    api -> db "reads"
+    author -> pubSvc "writes"
+  }
+  views {
+    systemContext pubSvc "ctx" {
+      include *
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = workspace.views.systemContextViews[0]
+    const pubSvcId = workspace.model.softwareSystems.find(s => s.name === 'Pub Service')!.id
+    const teacherId = workspace.model.people.find(p => p.name === 'Teacher')!.id
+    const authorId = workspace.model.people.find(p => p.name === 'Content Author')!.id
+    const extId = workspace.model.softwareSystems.find(s => s.name === 'External Service')!.id
+    const unrelatedId = workspace.model.softwareSystems.find(s => s.name === 'Unrelated')!.id
+    const apiId = workspace.model.softwareSystems.find(s => s.name === 'Pub Service')!.containers.find(c => c.name === 'API')!.id
+    // Scope system itself
+    expect(view.elements.some(e => e.id === pubSvcId)).toBe(true)
+    // Teacher (relates to api container of scope) — promoted to system context
+    expect(view.elements.some(e => e.id === teacherId)).toBe(true)
+    // External service (relates to api container of scope) — promoted
+    expect(view.elements.some(e => e.id === extId)).toBe(true)
+    // Author (relates to scope system directly) — included
+    expect(view.elements.some(e => e.id === authorId)).toBe(true)
+    // Containers of the scope system MUST NOT appear in the system context
+    expect(view.elements.some(e => e.id === apiId)).toBe(false)
+    // Unrelated system has no relationship anywhere — NOT included
+    expect(view.elements.some(e => e.id === unrelatedId)).toBe(false)
   })
 
   it('container include * expands to containers of the scoped system plus related external elements', () => {

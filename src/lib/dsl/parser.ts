@@ -33,15 +33,32 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
         for (const p of model.people) addId(p.id)
         for (const s of model.softwareSystems) addId(s.id)
     } else if (view.type === 'systemContext' && view.softwareSystemId) {
-        // System context: the scoped system + all elements directly connected to it.
-        // Mirrors the Structurizr spec and the store's addView logic for systemContext.
+        // System context: the scoped system + all people/systems connected to it.
+        // We follow relationships at BOTH the system level AND the container/component
+        // level of the scope system, then promote those to the system context. This
+        // matches Structurizr's "implied relationships" behavior and what users
+        // typically intend — DSL authors usually write relationships at container
+        // granularity, then expect the system context to summarize the system's
+        // collaborators rather than appear empty. (Strict spec without implied
+        // relationships would only follow system-level edges.)
         const scopeId = view.softwareSystemId
         addId(scopeId)
+        const scopeSys = model.softwareSystems.find(s => s.id === scopeId)
+        const scopeInternalIds = new Set<string>([scopeId])
+        if (scopeSys) {
+            for (const c of scopeSys.containers) {
+                scopeInternalIds.add(c.id)
+                for (const comp of c.components) scopeInternalIds.add(comp.id)
+            }
+        }
         const connectedIds = new Set<string>()
         for (const rel of model.relationships) {
-            if (rel.sourceId === scopeId) connectedIds.add(rel.destinationId)
-            if (rel.destinationId === scopeId) connectedIds.add(rel.sourceId)
+            if (scopeInternalIds.has(rel.sourceId)) connectedIds.add(rel.destinationId)
+            if (scopeInternalIds.has(rel.destinationId)) connectedIds.add(rel.sourceId)
         }
+        // Filter the connected set down to just people and OTHER software systems —
+        // never the scope's own containers/components, and never elements inside the
+        // scope. The system context is a system-level view.
         for (const p of model.people) { if (connectedIds.has(p.id)) addId(p.id) }
         for (const s of model.softwareSystems) { if (s.id !== scopeId && connectedIds.has(s.id)) addId(s.id) }
     } else if (view.type === 'container' && view.softwareSystemId) {
