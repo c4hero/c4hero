@@ -1,15 +1,26 @@
 import { useEffect, useRef } from 'react'
 import { Trash2 } from 'lucide-react'
+import type { CascadeImpact } from '@/store/workspace-helpers'
 
 interface Props {
   message: string
+  impact?: CascadeImpact
   onConfirm: () => void
   onCancel: () => void
 }
 
-export default function ConfirmDeleteDialog({ message, onConfirm, onCancel }: Props) {
+export default function ConfirmDeleteDialog({ message, impact, onConfirm, onCancel }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
+
+  const impactItems: string[] = []
+  if (impact) {
+    const { descendantContainers: c, descendantComponents: comp, relationships: r, scopedViews: v } = impact
+    if (c > 0) impactItems.push(`${c} ${c === 1 ? 'container' : 'containers'}`)
+    if (comp > 0) impactItems.push(`${comp} ${comp === 1 ? 'component' : 'components'}`)
+    if (r > 0) impactItems.push(`${r} ${r === 1 ? 'relationship' : 'relationships'}`)
+    if (v > 0) impactItems.push(`${v} ${v === 1 ? 'dependent view' : 'dependent views'}`)
+  }
 
   useEffect(() => {
     confirmRef.current?.focus()
@@ -84,6 +95,23 @@ export default function ConfirmDeleteDialog({ message, onConfirm, onCancel }: Pr
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
               {message}
             </div>
+            {impactItems.length > 0 && (
+              <ul
+                aria-label="Cascade impact"
+                style={{
+                  listStyle: 'none', padding: 0, margin: '8px 0 0',
+                  display: 'flex', flexDirection: 'column', gap: 4,
+                  fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)',
+                }}
+              >
+                {impactItems.map((item) => (
+                  <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: 'var(--color-error)', fontSize: 10 }}>●</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
 
@@ -109,7 +137,7 @@ export default function ConfirmDeleteDialog({ message, onConfirm, onCancel }: Pr
               fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
             }}
           >
-            Delete
+            {impact ? 'Delete from model' : 'Delete'}
           </button>
         </div>
       </div>

@@ -61,6 +61,10 @@ export const createUiSlice: StateCreator<
   setMultiSelectMode: (on) => set({ multiSelectMode: on }),
   setPresentationMode: (on) => set({ presentationMode: on }),
 
-  confirmDelete: (message, onConfirm) => set({ pendingDelete: { message, onConfirm } }),
+  confirmDelete: (payload, onConfirm) => set({
+    pendingDelete: typeof payload === 'string'
+      ? { message: payload, onConfirm }
+      : { message: payload.message, impact: payload.impact, onConfirm },
+  }),
   cancelDelete: () => set({ pendingDelete: null }),
 })

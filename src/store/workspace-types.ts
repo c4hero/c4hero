@@ -3,6 +3,13 @@ import type {
   ViewType, ElementStatus,
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
+import type { CascadeImpact } from './workspace-helpers'
+
+export interface PendingDelete {
+  message: string
+  impact?: CascadeImpact
+  onConfirm: () => void
+}
 
 // ─── Undo History ────────────────────────────────────────────────────
 
@@ -36,8 +43,11 @@ export interface WorkspaceState extends UndoState {
   rightPanelOpen: boolean
   searchOpen: boolean
   commandPaletteOpen: boolean
-  pendingDelete: { message: string; onConfirm: () => void } | null
-  confirmDelete: (message: string, onConfirm: () => void) => void
+  pendingDelete: PendingDelete | null
+  confirmDelete: (
+    payload: string | { message: string; impact?: CascadeImpact },
+    onConfirm: () => void,
+  ) => void
   cancelDelete: () => void
   /** Active zoom-in confirm prompt: shown when the user clicks zoom on an element
    *  that has children but no corresponding child view. */

@@ -658,6 +658,20 @@ describe('confirmDelete and pendingDelete', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
     expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
   })
+
+  it('confirmDelete accepts structured payload and stores impact', () => {
+    const fn = vi.fn()
+    useWorkspaceStore.getState().confirmDelete(
+      { message: 'Delete X?', impact: {
+        elementCount: 1, elementNames: ['X'],
+        descendantContainers: 1, descendantComponents: 0, relationships: 0, scopedViews: 0,
+      } },
+      fn,
+    )
+    const pd = useWorkspaceStore.getState().pendingDelete
+    expect(pd?.message).toBe('Delete X?')
+    expect(pd?.impact?.descendantContainers).toBe(1)
+  })
 })
 
 // ─── multiSelectMode ────────────────────────────────────────────────
