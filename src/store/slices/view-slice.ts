@@ -186,7 +186,7 @@ export const createViewSlice: StateCreator<
       view.type === 'systemContext' || view.type === 'container' ? view.softwareSystemId :
       view.type === 'component' ? view.containerId :
       view.type === 'systemLandscape' ? undefined :
-      ((_: never) => undefined)(view.type)
+      ((vt: never): undefined => { throw new Error(`unhandled view type: ${String(vt)}`) })(view.type)
     const removable = new Set(ids.filter((id) => id !== focalId))
     if (removable.size === 0) return
 
