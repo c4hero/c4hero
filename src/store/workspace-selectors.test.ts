@@ -41,6 +41,9 @@ describe('isFocalScopeElement', () => {
   it('does not flag a container on its parent system\'s container view', () => {
     expect(isFocalScopeElement(ws(), 'cont', 'c1')).toBe(false)
   })
+  it('does not flag a non-scope element on a system context view', () => {
+    expect(isFocalScopeElement(ws(), 'ctx', 'c1')).toBe(false)
+  })
   it('flags the focal container on its component view', () => {
     expect(isFocalScopeElement(ws(), 'comp', 'c1')).toBe(true)
   })
