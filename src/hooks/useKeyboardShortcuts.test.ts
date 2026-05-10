@@ -75,6 +75,26 @@ describe('useKeyboardShortcuts — delete semantics', () => {
     expect(pd!.message).toMatch(/Delete "S" from the model/)
   })
 
+  it('Backspace on a mixed selection drops focal-scope IDs and proceeds with the rest', () => {
+    // The user's selection is ['sys', 'c1'] on the container view scoped to 'sys'.
+    // 'sys' is focal — it should be silently filtered out.
+    // 'c1' is not focal — it should be removed from the view.
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().setActiveView('cont')
+    useWorkspaceStore.getState().selectElements(['sys', 'c1'])
+    renderHook(() => useKeyboardShortcuts())
+
+    press('Backspace')
+
+    const w = useWorkspaceStore.getState().workspace!
+    // c1 removed from the container view, c2 still there:
+    expect(w.views.containerViews[0].elements.map(e => e.id)).toEqual(['c2'])
+    // sys still in the model (focal scope is never destroyed by this path):
+    expect(w.model.softwareSystems.find(s => s.id === 'sys')).toBeDefined()
+    // No confirm dialog:
+    expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
+  })
+
   it('Backspace on the focal-scope element of a container view is a no-op', () => {
     // Defense in depth: the canvas shouldn't show the focal system as a node
     // on its own container view, but if a future regression lets it be selected,

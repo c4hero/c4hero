@@ -46,17 +46,19 @@ function backspaceLikeHandler(destructive: boolean): KeyHandler {
     if (!store.workspace || !store.activeViewKey) return
 
     // Filter focal-scope IDs from the operation either way.
+    const ws = store.workspace
+    const viewKey = store.activeViewKey
     const ids = store.selectedElementIds.filter(
-      (id) => !isFocalScopeElement(store.workspace!, store.activeViewKey!, id),
+      (id) => !isFocalScopeElement(ws, viewKey, id),
     )
     if (ids.length === 0) return // selection was *only* focal scope — no-op
 
     if (!destructive) {
-      store.removeElementsFromView(store.activeViewKey, ids)
+      store.removeElementsFromView(viewKey, ids)
       return
     }
 
-    const impact = computeCascadeImpact(store.workspace, ids)
+    const impact = computeCascadeImpact(ws, ids)
     const message = formatImpactSummary(impact)
     store.confirmDelete({ message, impact }, () => store.deleteElements(ids))
   }
