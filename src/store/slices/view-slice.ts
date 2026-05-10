@@ -182,10 +182,11 @@ export const createViewSlice: StateCreator<
     // Defense in depth: never remove the focal scope element from its own view.
     // The keymap layer should already filter these out, but the helper guards
     // again so future callers can't accidentally bypass the rule.
-    const focalId =
+    const focalId: string | undefined =
       view.type === 'systemContext' || view.type === 'container' ? view.softwareSystemId :
       view.type === 'component' ? view.containerId :
-      undefined
+      view.type === 'systemLandscape' ? undefined :
+      ((_: never) => undefined)(view.type)
     const removable = new Set(ids.filter((id) => id !== focalId))
     if (removable.size === 0) return
 

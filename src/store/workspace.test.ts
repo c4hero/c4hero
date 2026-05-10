@@ -4322,4 +4322,37 @@ describe('removeElementsFromView', () => {
     const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
     expect(view.elements.map(e => e.id).sort()).toEqual(['a', 'b'])
   })
+
+  it('does not push an undo snapshot when the selection is only focal-scope IDs', () => {
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [{
+          id: 'sys', type: 'softwareSystem', name: 'S', tags: [], properties: {},
+          containers: [{ id: 'c1', type: 'container', name: 'C', tags: [], properties: {}, components: [] }],
+        }],
+        relationships: [], groups: [],
+      },
+      views: {
+        systemLandscapeViews: [], systemContextViews: [], componentViews: [],
+        containerViews: [{
+          type: 'container', key: 'cont', softwareSystemId: 'sys',
+          elements: [{ id: 'c1' }], relationships: [],
+        }],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setActiveView('cont')
+
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+
+    // Only pass the focal-scope ID — should be a no-op that skips pushUndoSnapshot
+    useWorkspaceStore.getState().removeElementsFromView('cont', ['sys'])
+
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+    // View must be unchanged
+    expect(useWorkspaceStore.getState().workspace!.views.containerViews[0].elements).toEqual([{ id: 'c1' }])
+  })
 })
