@@ -504,3 +504,91 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
   invalidateElementIndex(ws)
   return { allDeletedIds, deletedContainerIds }
 }
+
+export interface CascadeImpact {
+  /** Top-level elements explicitly selected for deletion. */
+  elementCount: number
+  /** Names of those top-level elements (for the dialog body). */
+  elementNames: string[]
+  /** Containers that get deleted because their parent system is being removed. */
+  descendantContainers: number
+  /** Components that get deleted because their container (or its parent system) is being removed. */
+  descendantComponents: number
+  /** Relationships that lose at least one endpoint and get pruned. */
+  relationships: number
+  /** Scoped views (systemContext / container / component) that get removed because their scope element is gone. */
+  scopedViews: number
+}
+
+/**
+ * Mutation-free dry run of `cascadeDeleteElements`. Returns counts so a confirm
+ * dialog can warn the user about the actual blast radius before they proceed.
+ *
+ * Mirrors the traversal in `cascadeDeleteElements` exactly — keep the two in
+ * sync. If a delete rule changes there, change it here too.
+ */
+export function computeCascadeImpact(ws: Workspace, ids: Iterable<string>): CascadeImpact {
+  const idSet = new Set(ids)
+  const elementNames: string[] = []
+  const deletedContainerIds = new Set<string>()
+  const deletedComponentIds = new Set<string>()
+
+  for (const p of ws.model.people) {
+    if (idSet.has(p.id)) elementNames.push(p.name)
+  }
+  for (const sys of ws.model.softwareSystems) {
+    if (idSet.has(sys.id)) {
+      elementNames.push(sys.name)
+      for (const c of sys.containers) {
+        deletedContainerIds.add(c.id)
+        for (const comp of c.components) deletedComponentIds.add(comp.id)
+      }
+    } else {
+      for (const c of sys.containers) {
+        if (idSet.has(c.id)) {
+          elementNames.push(c.name)
+          deletedContainerIds.add(c.id)
+          for (const comp of c.components) deletedComponentIds.add(comp.id)
+        } else {
+          for (const comp of c.components) {
+            if (idSet.has(comp.id)) {
+              elementNames.push(comp.name)
+              deletedComponentIds.add(comp.id)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Don't double-count: subtract IDs the caller listed explicitly that also turned up via cascade.
+  const descendantContainers = [...deletedContainerIds].filter((id) => !idSet.has(id)).length
+  const descendantComponents = [...deletedComponentIds].filter((id) => !idSet.has(id)).length
+
+  const allDeletedIds = new Set([...idSet, ...deletedContainerIds, ...deletedComponentIds])
+
+  let relationships = 0
+  for (const r of ws.model.relationships) {
+    if (allDeletedIds.has(r.sourceId) || allDeletedIds.has(r.destinationId)) relationships++
+  }
+
+  let scopedViews = 0
+  for (const v of ws.views.systemContextViews) {
+    if (v.softwareSystemId && idSet.has(v.softwareSystemId)) scopedViews++
+  }
+  for (const v of ws.views.containerViews) {
+    if (v.softwareSystemId && idSet.has(v.softwareSystemId)) scopedViews++
+  }
+  for (const v of ws.views.componentViews) {
+    if (v.containerId && (idSet.has(v.containerId) || deletedContainerIds.has(v.containerId))) scopedViews++
+  }
+
+  return {
+    elementCount: idSet.size,
+    elementNames,
+    descendantContainers,
+    descendantComponents,
+    relationships,
+    scopedViews,
+  }
+}
