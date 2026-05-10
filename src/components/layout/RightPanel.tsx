@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
-import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews } from '@/store/workspace'
+import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, isFocalScopeElement } from '@/store/workspace'
+import { computeCascadeImpact } from '@/store/workspace-helpers'
+import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
 import { X, Plus, ArrowRight, ExternalLink, Eye, ChevronRight, Trash2 } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
@@ -72,6 +74,10 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const deleteElement = useWorkspaceStore((s) => s.deleteElement)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const workspace = useWorkspaceStore((s) => s.workspace)
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const isFocal = workspace && activeViewKey
+    ? isFocalScopeElement(workspace, activeViewKey, element.id)
+    : false
   const tech = (element as Container | Component).technology
   const hasTech = element.type === 'container' || element.type === 'component'
   const hasLocation = element.type === 'person' || element.type === 'softwareSystem'
@@ -93,15 +99,29 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
           <div className="text-[11px]" style={{ color: typeColor }}>{getElementTypeLabel(element)}</div>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => confirmDelete(`Delete ${element.name}?`, () => deleteElement(element.id))}
-            className="btn-icon !min-h-7 !min-w-7 !p-1"
-            aria-label="Delete element"
-            title="Delete element"
-            style={{ color: 'var(--color-error-text)' }}
-          >
-            <Trash2 size={14} />
-          </button>
+          {isFocal ? (
+            <span
+              className="text-[11px]"
+              style={{ color: 'var(--color-text-muted)', maxWidth: 220, lineHeight: 1.3 }}
+              title="Open the parent view to delete this element"
+            >
+              Scopes the current view — open parent view to delete
+            </span>
+          ) : (
+            <button
+              onClick={() => {
+                if (!workspace) return
+                const impact = computeCascadeImpact(workspace, [element.id])
+                confirmDelete({ message: formatImpactSummary(impact), impact }, () => deleteElement(element.id))
+              }}
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              aria-label="Delete from model"
+              title="Delete from model"
+              style={{ color: 'var(--color-error-text)' }}
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
           <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close panel"><X size={14} /></button>
         </div>
       </div>
