@@ -194,8 +194,8 @@ describe('RightPanel', () => {
     useWorkspaceStore.getState().selectElements(['api'])
     render(<RightPanel />)
 
-    expect(screen.queryByLabelText(/delete element/i)).toBeNull()
-    expect(screen.queryByLabelText(/delete from model/i)).toBeNull()
+    const btn = screen.getByLabelText(/delete from model.*focal scope/i)
+    expect((btn as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/scopes the current view/i)).toBeTruthy()
   })
 

@@ -75,9 +75,10 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const isFocal = workspace && activeViewKey
-    ? isFocalScopeElement(workspace, activeViewKey, element.id)
-    : false
+  const isFocal = useMemo(
+    () => workspace && activeViewKey ? isFocalScopeElement(workspace, activeViewKey, element.id) : false,
+    [workspace, activeViewKey, element.id],
+  )
   const tech = (element as Container | Component).technology
   const hasTech = element.type === 'container' || element.type === 'component'
   const hasLocation = element.type === 'person' || element.type === 'softwareSystem'
@@ -100,13 +101,15 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
         </div>
         <div className="flex items-center gap-1">
           {isFocal ? (
-            <span
-              className="text-[11px]"
-              style={{ color: 'var(--color-text-muted)', maxWidth: 220, lineHeight: 1.3 }}
-              title="Open the parent view to delete this element"
+            <button
+              disabled
+              aria-label="Delete from model (disabled — focal scope)"
+              title="This element scopes the current view. Open the parent view to delete it."
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              style={{ color: 'var(--color-text-muted)', opacity: 0.5, cursor: 'not-allowed' }}
             >
-              Scopes the current view — open parent view to delete
-            </span>
+              <Trash2 size={14} />
+            </button>
           ) : (
             <button
               onClick={() => {
@@ -125,6 +128,21 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
           <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close panel"><X size={14} /></button>
         </div>
       </div>
+
+      {/* Focal-scope hint banner */}
+      {isFocal && (
+        <div
+          className="px-4 py-2 text-[11px]"
+          style={{
+            background: 'var(--color-surface-2)',
+            color: 'var(--color-text-muted)',
+            borderBottom: '1px solid var(--color-border)',
+            lineHeight: 1.4,
+          }}
+        >
+          Scopes the current view — open the parent view to delete this element.
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b px-1" style={{ borderColor: 'var(--color-border)' }} role="tablist" aria-label="Element details">
