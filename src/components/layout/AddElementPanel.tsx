@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, buildElementMap } from '@/store/workspace'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
@@ -36,6 +36,31 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [createExpanded, setCreateExpanded] = useState(true)
   const isMobile = useBreakpoint() === 'mobile'
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // ArrowUp/ArrowDown cycle through every focusable control in the panel
+  // (search input + chips + element-list buttons). Tab/Shift+Tab still work
+  // natively; ArrowLeft/Right and Home/End are left alone so they keep doing
+  // text-cursor moves inside the search input.
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+      const items = Array.from(
+        panel!.querySelectorAll<HTMLElement>('button:not([disabled]), input[type="text"]'),
+      )
+      if (items.length === 0) return
+      const idx = items.indexOf(document.activeElement as HTMLElement)
+      let next: number
+      if (e.key === 'ArrowDown') next = idx === -1 ? 0 : (idx + 1) % items.length
+      else next = idx <= 0 ? items.length - 1 : idx - 1
+      e.preventDefault()
+      items[next]?.focus()
+    }
+    panel.addEventListener('keydown', handleKeyDown)
+    return () => panel.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // On mobile, clear selection after adding so the inspector doesn't auto-open
   const afterAdd = useCallback(() => {
@@ -76,11 +101,20 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   if (creatableTypes.canCreateContainer !== null) allowedTypes.add('container')
   if (creatableTypes.canCreateComponent !== null) allowedTypes.add('component')
 
-  // Filter existing elements: must be an allowed type AND not already in view.
+  // A scoped view's focal element decomposes *into* the view; it must never
+  // appear as a sibling. Adding it would let the user delete the system from
+  // its own L2 view, which cascades through every container, component,
+  // relationship, and scoped view underneath it.
+  const focalScopeId =
+    view?.type === 'container' ? view.softwareSystemId :
+    view?.type === 'component' ? view.containerId :
+    undefined
+
+  // Filter existing elements: must be an allowed type AND not already in view AND not the focal scope.
   // Sort alphabetically so the list is predictable regardless of creation order.
   const allElements = Array.from(elementMap.values())
   const notInView = allElements
-    .filter((el) => allowedTypes.has(el.type) && !viewElementIds.has(el.id))
+    .filter((el) => allowedTypes.has(el.type) && !viewElementIds.has(el.id) && el.id !== focalScopeId)
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const query = search.toLowerCase().trim()
@@ -161,6 +195,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      ref={panelRef}
       className="glass-flyout"
       style={{
         position: 'absolute',
