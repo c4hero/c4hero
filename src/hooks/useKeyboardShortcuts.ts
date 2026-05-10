@@ -167,6 +167,29 @@ function getKeyCombo(e: KeyboardEvent): string {
   return parts.join('+')
 }
 
+const TEXT_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number', ''])
+
+/** True when Backspace on this target would NOT actually delete text — i.e.
+ *  an empty text input, a non-text input (button/checkbox/radio), or anything
+ *  else where Backspace is a no-op for the user but might still cause the
+ *  browser to navigate back in history (Safari, legacy Firefox). */
+export function shouldSuppressBackspaceNavigation(target: HTMLElement): boolean {
+  if (target.tagName === 'TEXTAREA') return (target as HTMLTextAreaElement).value === ''
+  // contentEditable check: prefer the standard isContentEditable property, but
+  // also fall back to the attribute (jsdom and detached elements report false
+  // for isContentEditable even when contentEditable="true").
+  if (target.isContentEditable || target.contentEditable === 'true') {
+    return (target.textContent ?? '') === ''
+  }
+  if (target.tagName === 'INPUT') {
+    const input = target as HTMLInputElement
+    if (!TEXT_INPUT_TYPES.has(input.type)) return true
+    return input.value === ''
+  }
+  // SELECT or anything else routed here by isInput — Backspace can't edit it.
+  return true
+}
+
 export function useKeyboardShortcuts() {
   let reactFlow: ReturnType<typeof useReactFlow> | null = null
   try {
@@ -192,8 +215,17 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      // Don't handle remaining shortcuts when typing in inputs
-      if (isInput) return
+      // Don't handle remaining shortcuts when typing in inputs.
+      // BUT: Backspace in input contexts can still trigger browser-history-back
+      // on Safari (and legacy Firefox builds) when the input is empty or not a
+      // text-editable type. Suppress that — the app should never get unmounted
+      // by a stray Backspace.
+      if (isInput) {
+        if (e.key === 'Backspace' && shouldSuppressBackspaceNavigation(target)) {
+          e.preventDefault()
+        }
+        return
+      }
 
       // Global shortcuts
       const handler = GLOBAL_SHORTCUTS[combo]
