@@ -98,7 +98,7 @@ test.describe('multi-select bar — delete', () => {
     await workspace.page.keyboard.up('Shift')
 
     // Click "Delete from model" in the toolbar
-    await workspace.page.getByRole('button', { name: /delete from model/i }).first().click()
+    await workspace.page.locator('[data-canvas-chrome="multi-select-bar"]').getByRole('button', { name: /delete from model/i }).click()
 
     // Confirm dialog appears with impact list
     const dialog = workspace.page.getByRole('dialog', { name: /confirm delete/i })

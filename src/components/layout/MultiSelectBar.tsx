@@ -243,6 +243,7 @@ export default function MultiSelectBar() {
         {/* Delete from model */}
         <button className="hover-lift" style={{ ...btnStyle, color: 'var(--color-error)', paddingRight: 12 }}
           title={`Delete ${count} elements from the model`}
+          aria-label={`Delete ${count} elements from the model`}
           onClick={() => {
             if (!workspace || !activeViewKey) return
             const ids = selectedElementIds.filter(
