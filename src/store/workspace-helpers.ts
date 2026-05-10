@@ -533,12 +533,27 @@ export function computeCascadeImpact(ws: Workspace, ids: Iterable<string>): Casc
   const deletedContainerIds = new Set<string>()
   const deletedComponentIds = new Set<string>()
 
+  // Up-front pass: collect names of every explicitly-selected element exactly once.
+  // This is separated from the cascade traversal below so that a selected child
+  // whose parent is also selected still gets its name recorded (the cascade branch
+  // only sweeps IDs, not names, for children of a selected system).
   for (const p of ws.model.people) {
     if (idSet.has(p.id)) elementNames.push(p.name)
   }
   for (const sys of ws.model.softwareSystems) {
+    if (idSet.has(sys.id)) elementNames.push(sys.name)
+    for (const c of sys.containers) {
+      if (idSet.has(c.id)) elementNames.push(c.name)
+      for (const comp of c.components) {
+        if (idSet.has(comp.id)) elementNames.push(comp.name)
+      }
+    }
+  }
+
+  // SYNC with cascadeDeleteElements traversal — see keep-in-sync note in JSDoc above.
+  // Cascade pass: determine which containers/components get implicitly deleted.
+  for (const sys of ws.model.softwareSystems) {
     if (idSet.has(sys.id)) {
-      elementNames.push(sys.name)
       for (const c of sys.containers) {
         deletedContainerIds.add(c.id)
         for (const comp of c.components) deletedComponentIds.add(comp.id)
@@ -546,15 +561,11 @@ export function computeCascadeImpact(ws: Workspace, ids: Iterable<string>): Casc
     } else {
       for (const c of sys.containers) {
         if (idSet.has(c.id)) {
-          elementNames.push(c.name)
           deletedContainerIds.add(c.id)
           for (const comp of c.components) deletedComponentIds.add(comp.id)
         } else {
           for (const comp of c.components) {
-            if (idSet.has(comp.id)) {
-              elementNames.push(comp.name)
-              deletedComponentIds.add(comp.id)
-            }
+            if (idSet.has(comp.id)) deletedComponentIds.add(comp.id)
           }
         }
       }
@@ -584,7 +595,7 @@ export function computeCascadeImpact(ws: Workspace, ids: Iterable<string>): Casc
   }
 
   return {
-    elementCount: idSet.size,
+    elementCount: elementNames.length,
     elementNames,
     descendantContainers,
     descendantComponents,

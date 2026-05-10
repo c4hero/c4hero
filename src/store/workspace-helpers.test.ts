@@ -38,6 +38,7 @@ describe('computeCascadeImpact', () => {
   it('returns zero impact for empty input', () => {
     const impact = computeCascadeImpact(ws(), [])
     expect(impact.elementCount).toBe(0)
+    expect(impact.elementNames).toHaveLength(0)
     expect(impact.descendantContainers).toBe(0)
     expect(impact.descendantComponents).toBe(0)
     expect(impact.relationships).toBe(0)
@@ -75,5 +76,24 @@ describe('computeCascadeImpact', () => {
     const before = JSON.stringify(w)
     computeCascadeImpact(w, ['sysA'])
     expect(JSON.stringify(w)).toBe(before)
+  })
+
+  it('does not double-count a container whose parent system is also selected', () => {
+    // c1 is a child of sysA. Selecting both should count c1 as user-selected (in
+    // elementNames/elementCount), NOT as a cascade descendant — otherwise the
+    // dialog would tell the user the same container is being removed twice.
+    const impact = computeCascadeImpact(ws(), ['sysA', 'c1'])
+    expect(impact.elementCount).toBe(2)
+    expect(impact.elementNames.sort()).toEqual(['A', 'C1'])
+    expect(impact.descendantContainers).toBe(1) // only c2 is cascade-only
+    expect(impact.descendantComponents).toBe(1) // cmp1 still counted once
+  })
+
+  it('ignores IDs that do not exist in the workspace', () => {
+    const impact = computeCascadeImpact(ws(), ['nonexistent'])
+    expect(impact.elementCount).toBe(0)
+    expect(impact.elementNames).toHaveLength(0)
+    expect(impact.relationships).toBe(0)
+    expect(impact.scopedViews).toBe(0)
   })
 })
