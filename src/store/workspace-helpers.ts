@@ -3,6 +3,8 @@ import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
   ViewType, ElementInView,
 } from '@/types/model'
+import type { CascadeImpact } from './workspace-types'
+export type { CascadeImpact } from './workspace-types'
 
 /** Deep-clone an object that may be an Immer draft. structuredClone'ing a
  *  draft proxy throws DataCloneError; current() unwraps the draft to a plain
@@ -503,21 +505,6 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
 
   invalidateElementIndex(ws)
   return { allDeletedIds, deletedContainerIds }
-}
-
-export interface CascadeImpact {
-  /** Top-level elements explicitly selected for deletion. */
-  elementCount: number
-  /** Names of those top-level elements (for the dialog body). */
-  elementNames: string[]
-  /** Containers that get deleted because their parent system is being removed. */
-  descendantContainers: number
-  /** Components that get deleted because their container (or its parent system) is being removed. */
-  descendantComponents: number
-  /** Relationships that lose at least one endpoint and get pruned. */
-  relationships: number
-  /** Scoped views (systemContext / container / component) that get removed because their scope element is gone. */
-  scopedViews: number
 }
 
 /**

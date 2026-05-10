@@ -3,7 +3,20 @@ import type {
   ViewType, ElementStatus,
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
-import type { CascadeImpact } from './workspace-helpers'
+export interface CascadeImpact {
+  /** Top-level elements explicitly selected for deletion. */
+  elementCount: number
+  /** Names of those top-level elements (for the dialog body). */
+  elementNames: string[]
+  /** Containers that get deleted because their parent system is being removed. */
+  descendantContainers: number
+  /** Components that get deleted because their container (or its parent system) is being removed. */
+  descendantComponents: number
+  /** Relationships that lose at least one endpoint and get pruned. */
+  relationships: number
+  /** Scoped views (systemContext / container / component) that get removed because their scope element is gone. */
+  scopedViews: number
+}
 
 export interface PendingDelete {
   message: string

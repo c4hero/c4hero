@@ -210,4 +210,21 @@ describe('ConfirmDeleteDialog', () => {
     expect(screen.getByRole('button', { name: /^delete$/i })).toBeTruthy()
     expect(screen.queryByRole('list', { name: /cascade impact/i })).toBeNull()
   })
+
+  it('keeps "Delete" label when impact has all zero counts', () => {
+    render(
+      <ConfirmDeleteDialog
+        message='Delete "Lonely" from the model?'
+        impact={{
+          elementCount: 1, elementNames: ['Lonely'],
+          descendantContainers: 0, descendantComponents: 0,
+          relationships: 0, scopedViews: 0,
+        }}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    )
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeTruthy()
+    expect(screen.queryByRole('list', { name: /cascade impact/i })).toBeNull()
+  })
 })

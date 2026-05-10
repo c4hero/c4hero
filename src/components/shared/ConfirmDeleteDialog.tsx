@@ -137,7 +137,7 @@ export default function ConfirmDeleteDialog({ message, impact, onConfirm, onCanc
               fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
             }}
           >
-            {impact ? 'Delete from model' : 'Delete'}
+            {impactItems.length > 0 ? 'Delete from model' : 'Delete'}
           </button>
         </div>
       </div>
