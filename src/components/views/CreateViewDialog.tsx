@@ -37,10 +37,24 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
 
   const needsScope = type === 'systemContext' || type === 'container' || type === 'component'
 
+  // In a softwareSystem-scoped workspace, only one system is allowed to have
+  // containers/components (see scopeValidation.ts) — that system IS the
+  // workspace's focal system. Letting the user create a Context or Container
+  // view scoped to a *different* system silently widens the workspace's
+  // documentation surface beyond the single-system contract. Restrict the
+  // scope picker to the focal system when we can identify it.
+  const focalSystemId = workspace.scope === 'softwaresystem'
+    ? (() => {
+        const withContainers = workspace.model.softwareSystems.filter(s => s.containers.length > 0)
+        return withContainers.length === 1 ? withContainers[0].id : undefined
+      })()
+    : undefined
+
   // Build scope options based on type
   const scopeOptions: { id: string; name: string }[] = []
   if (type === 'systemContext' || type === 'container') {
     for (const sys of workspace.model.softwareSystems) {
+      if (focalSystemId && sys.id !== focalSystemId) continue
       scopeOptions.push({ id: sys.id, name: sys.name })
     }
   } else if (type === 'component') {
