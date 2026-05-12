@@ -65,8 +65,17 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // A view that needs a scope can't be created without one. The dialog must
+  // refuse to dispatch `addView` with an undefined scope — otherwise we'd end
+  // up with a Context/Container/Component view that has no anchor, which is
+  // invalid data the rest of the app has to defend against forever.
+  const scopeMissing = needsScope && !scopeId
+  const noScopeChoicesAvailable = needsScope && scopeOptions.length === 0
+  const missingScopeKind = type === 'component' ? 'container' : 'system'
+
   const handleCreate = () => {
-    addView(type, needsScope ? scopeId || undefined : undefined, title || undefined)
+    if (scopeMissing) return
+    addView(type, needsScope ? scopeId : undefined, title || undefined)
     setCreateViewDefaults(null) // consume the zoom defaults so the next open starts fresh
     onClose()
   }
@@ -135,9 +144,24 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
                   className="mt-1 text-[11px]"
                   style={{ color: 'var(--color-error-text)' }}
                 >
-                  Pick a {type === 'component' ? 'container' : 'system'} for this view.
+                  Pick a {missingScopeKind} for this view.
                 </div>
               )}
+            </div>
+          )}
+
+          {noScopeChoicesAvailable && (
+            <div
+              role="alert"
+              className="rounded-lg px-3 py-2 text-[11px]"
+              style={{
+                background: 'var(--color-tint-error)',
+                color: 'var(--color-error-text)',
+                border: '1px solid var(--color-border-error)',
+              }}
+            >
+              Can't create this view — no {missingScopeKind} exists yet to scope it to.
+              {' '}Create a {missingScopeKind} first, then come back.
             </div>
           )}
 
@@ -159,8 +183,8 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
 
           <button
             onClick={handleCreate}
-            disabled={needsScope && !scopeId && scopeOptions.length > 0}
-            className="w-full rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-40"
+            disabled={scopeMissing}
+            className="w-full rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: 'var(--color-accent)', color: 'var(--color-bg-primary)' }}
           >
             Create View
