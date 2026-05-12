@@ -168,7 +168,7 @@ export function buildGroupNodes(
   // Build position+size map from the already-laid-out element nodes
   const nodeMap = new Map<string, { x: number; y: number; w: number; h: number }>()
   for (const n of laidOutNodes) {
-    if (!n.id.startsWith('group-') && n.id !== '__scope_boundary__') {
+    if (!n.id.startsWith('group-') && !n.id.startsWith('__scope_boundary__')) {
       nodeMap.set(n.id, {
         x: n.position.x,
         y: n.position.y,
@@ -217,11 +217,25 @@ export function buildGroupNodes(
 }
 
 /** Build the implicit scope boundary node for container/component views using post-layout positions. */
-export function buildBoundaryNode(
+/**
+ * Build the C4 boundary boxes that wrap members of a parent (system or
+ * container) on the active view. On a Container view we draw one boundary
+ * per software system whose containers appear in the view (the focal system
+ * AND any foreign systems whose containers were added via picker or via the
+ * Structurizr `include element.parent==X` recipe). On a Component view we
+ * do the same per container. Each boundary becomes a non-interactive node
+ * with id `__scope_boundary__<parentId>` and is rendered at z-index -2 so
+ * its members sit on top.
+ *
+ * Foreign-system boundaries are essential for the multi-system container
+ * view recipe — without them, foreign containers float in the view with no
+ * visual indication of which system they belong to.
+ */
+export function buildBoundaryNodes(
   workspace: Workspace,
   view: View,
   laidOutNodes: Node[],
-): Node | null {
+): Node[] {
   const BOUNDARY_PADDING = 32
   // Header has 2 lines (name + type label) + internal padding; needs more
   // headroom than the side/bottom padding so the subtitle isn't covered by the
@@ -229,9 +243,10 @@ export function buildBoundaryNode(
   const BOUNDARY_PADDING_TOP = 64
 
   // Build position+size map from laid-out element nodes only
-  const nodeMap = new Map<string, { x: number; y: number; w: number; h: number }>()
+  type Rect = { x: number; y: number; w: number; h: number }
+  const nodeMap = new Map<string, Rect>()
   for (const n of laidOutNodes) {
-    if (!n.id.startsWith('group-') && n.id !== '__scope_boundary__') {
+    if (!n.id.startsWith('group-') && !n.id.startsWith('__scope_boundary__')) {
       nodeMap.set(n.id, {
         x: n.position.x,
         y: n.position.y,
@@ -241,71 +256,98 @@ export function buildBoundaryNode(
     }
   }
 
-  if (view.type === 'container' && view.softwareSystemId) {
-    const scopeSystem = workspace.model.softwareSystems.find(s => s.id === view.softwareSystemId)
-    if (scopeSystem) {
-      const containerIds = new Set(scopeSystem.containers.map(c => c.id))
-      const internalPositions = Array.from(nodeMap.entries())
-        .filter(([id]) => containerIds.has(id))
-        .map(([, pos]) => pos)
+  // Empty-boundary defaults: when the focal scope has no members in the view
+  // (a fresh L2/L3 the user just created), still draw a labeled boundary so
+  // the user sees what the view is about. The first node added will land
+  // inside the boundary and trigger an auto-resize on the next rebuild.
+  const EMPTY_BOUNDARY_W = 400
+  const EMPTY_BOUNDARY_H = 200
 
-      if (internalPositions.length > 0) {
-        const minX = Math.min(...internalPositions.map(p => p.x))
-        const minY = Math.min(...internalPositions.map(p => p.y))
-        const maxX = Math.max(...internalPositions.map(p => p.x + p.w))
-        const maxY = Math.max(...internalPositions.map(p => p.y + p.h))
-        return {
-          id: '__scope_boundary__',
-          type: 'boundary',
-          position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING_TOP },
-          style: {
-            width: (maxX - minX) + BOUNDARY_PADDING * 2,
-            height: (maxY - minY) + BOUNDARY_PADDING_TOP + BOUNDARY_PADDING,
-          },
-          data: { name: scopeSystem.name, typeLabel: 'Software System' },
-          zIndex: -2,
-          selectable: false,
-          draggable: false,
-          focusable: false,
+  function makeBoundary(parentId: string, name: string, typeLabel: string, members: Rect[]): Node {
+    if (members.length === 0) {
+      return {
+        id: `__scope_boundary__${parentId}`,
+        type: 'boundary',
+        position: { x: 0, y: 0 },
+        style: { width: EMPTY_BOUNDARY_W, height: EMPTY_BOUNDARY_H },
+        data: { name, typeLabel },
+        zIndex: -2,
+        selectable: false,
+        draggable: false,
+        focusable: false,
+      }
+    }
+    const minX = Math.min(...members.map(p => p.x))
+    const minY = Math.min(...members.map(p => p.y))
+    const maxX = Math.max(...members.map(p => p.x + p.w))
+    const maxY = Math.max(...members.map(p => p.y + p.h))
+    return {
+      id: `__scope_boundary__${parentId}`,
+      type: 'boundary',
+      position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING_TOP },
+      style: {
+        width: (maxX - minX) + BOUNDARY_PADDING * 2,
+        height: (maxY - minY) + BOUNDARY_PADDING_TOP + BOUNDARY_PADDING,
+      },
+      data: { name, typeLabel },
+      zIndex: -2,
+      selectable: false,
+      draggable: false,
+      focusable: false,
+    }
+  }
+
+  const boundaries: Node[] = []
+
+  if (view.type === 'container') {
+    // Track which systems already got a boundary (because they have members)
+    // so we don't double-emit when the focal system is also in the loop.
+    const drawnSystemIds = new Set<string>()
+    for (const sys of workspace.model.softwareSystems) {
+      const members: Rect[] = []
+      for (const c of sys.containers) {
+        const pos = nodeMap.get(c.id)
+        if (pos) members.push(pos)
+      }
+      if (members.length > 0) {
+        boundaries.push(makeBoundary(sys.id, sys.name, 'Software System', members))
+        drawnSystemIds.add(sys.id)
+      }
+    }
+    // Always show the focal-system boundary, even when empty — the user just
+    // created this Container view and needs to see what scope they're filling.
+    if (view.softwareSystemId && !drawnSystemIds.has(view.softwareSystemId)) {
+      const focal = workspace.model.softwareSystems.find(s => s.id === view.softwareSystemId)
+      if (focal) {
+        boundaries.push(makeBoundary(focal.id, focal.name, 'Software System', []))
+      }
+    }
+  } else if (view.type === 'component') {
+    const drawnContainerIds = new Set<string>()
+    for (const sys of workspace.model.softwareSystems) {
+      for (const c of sys.containers) {
+        const members: Rect[] = []
+        for (const comp of c.components) {
+          const pos = nodeMap.get(comp.id)
+          if (pos) members.push(pos)
         }
+        if (members.length > 0) {
+          boundaries.push(makeBoundary(c.id, c.name, 'Container', members))
+          drawnContainerIds.add(c.id)
+        }
+      }
+    }
+    if (view.containerId && !drawnContainerIds.has(view.containerId)) {
+      const focal = workspace.model.softwareSystems
+        .flatMap(s => s.containers)
+        .find(c => c.id === view.containerId)
+      if (focal) {
+        boundaries.push(makeBoundary(focal.id, focal.name, 'Container', []))
       }
     }
   }
 
-  if (view.type === 'component' && view.containerId) {
-    const scopeContainer = workspace.model.softwareSystems
-      .flatMap(s => s.containers)
-      .find(c => c.id === view.containerId)
-    if (scopeContainer) {
-      const componentIds = new Set(scopeContainer.components.map(c => c.id))
-      const internalPositions = Array.from(nodeMap.entries())
-        .filter(([id]) => componentIds.has(id))
-        .map(([, pos]) => pos)
-
-      if (internalPositions.length > 0) {
-        const minX = Math.min(...internalPositions.map(p => p.x))
-        const minY = Math.min(...internalPositions.map(p => p.y))
-        const maxX = Math.max(...internalPositions.map(p => p.x + p.w))
-        const maxY = Math.max(...internalPositions.map(p => p.y + p.h))
-        return {
-          id: '__scope_boundary__',
-          type: 'boundary',
-          position: { x: minX - BOUNDARY_PADDING, y: minY - BOUNDARY_PADDING_TOP },
-          style: {
-            width: (maxX - minX) + BOUNDARY_PADDING * 2,
-            height: (maxY - minY) + BOUNDARY_PADDING_TOP + BOUNDARY_PADDING,
-          },
-          data: { name: scopeContainer.name, typeLabel: 'Container' },
-          zIndex: -2,
-          selectable: false,
-          draggable: false,
-          focusable: false,
-        }
-      }
-    }
-  }
-
-  return null
+  return boundaries
 }
 
 /** Distribute multiple edges on the same side across 3 slots (a–c) */
