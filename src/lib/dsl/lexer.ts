@@ -10,6 +10,7 @@ export type TokenType =
     | 'RBRACE'
     | 'EQUALS'
     | 'STAR'
+    | 'DOT'
     | 'NEWLINE'
     | 'COMMENT'
     | 'NUMBER'
@@ -318,6 +319,17 @@ export function lex(input: string): LexResult {
         if (ch === '*') {
             advance()
             tokens.push({ type: 'STAR', value: '*', line: startLine, column: startCol })
+            continue
+        }
+
+        if (ch === '.') {
+            // The dot only ever appears in `element.type==X` / `element.parent==X`
+            // expressions inside `include` / `exclude` statements. Bare dots
+            // elsewhere were a lexer error before and still are after parsing
+            // (the parser will report "unexpected DOT" if it sees one outside
+            // an expression).
+            advance()
+            tokens.push({ type: 'DOT', value: '.', line: startLine, column: startCol })
             continue
         }
 

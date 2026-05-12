@@ -378,7 +378,7 @@ export class ContextAwareParser {
                     this.advance()
                     this.skipNewlines()
                     if (this.match('LBRACE')) {
-                        parseViewsBody(this, workspace.views)
+                        parseViewsBody(this, workspace.views, workspace.model)
                         this.skipNewlines()
                         this.expect('RBRACE')
                     }

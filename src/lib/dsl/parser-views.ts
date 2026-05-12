@@ -5,7 +5,7 @@
 // access viewExcludedIds / the resolveRef map without inheriting the full
 // parser class.
 
-import type { Workspace, View, ViewType, AutoLayout, LayoutDirection } from '@/types/model'
+import type { Workspace, View, ViewType, AutoLayout, LayoutDirection, Model } from '@/types/model'
 import type { ContextAwareParser } from './parser'
 import { parseStylesBody } from './parser-styles'
 
@@ -43,7 +43,7 @@ function ensureViewKey(view: View, viewsContainer: ViewsContainer, elementRef: s
     view.autoKey = true
 }
 
-export function parseViewsBody(p: ContextAwareParser, views: Workspace['views']): void {
+export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'], model: Model): void {
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
         p.skipNewlines()
         if (p.check('RBRACE') || p.peekType() === 'EOF') break
@@ -56,7 +56,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'])
             const kw = token.value.toLowerCase()
 
             if (kw === 'systemlandscape') {
-                const view = parseSystemLandscapeView(p)
+                const view = parseSystemLandscapeView(p, model)
                 if (view) {
                     ensureViewKey(view, views, undefined)
                     views.systemLandscapeViews.push(view)
@@ -64,7 +64,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'])
                 continue
             }
             if (kw === 'systemcontext') {
-                const view = parseElementView(p, 'systemContext')
+                const view = parseElementView(p, 'systemContext', model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId)
                     views.systemContextViews.push(view)
@@ -72,7 +72,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'])
                 continue
             }
             if (kw === 'container') {
-                const view = parseElementView(p, 'container')
+                const view = parseElementView(p, 'container', model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId)
                     views.containerViews.push(view)
@@ -80,7 +80,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'])
                 continue
             }
             if (kw === 'component') {
-                const view = parseElementView(p, 'component')
+                const view = parseElementView(p, 'component', model)
                 if (view) {
                     ensureViewKey(view, views, view.containerId)
                     views.componentViews.push(view)
@@ -134,7 +134,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'])
     }
 }
 
-function parseSystemLandscapeView(p: ContextAwareParser): View | null {
+function parseSystemLandscapeView(p: ContextAwareParser, model: Model): View | null {
     p.advance() // consume 'systemLandscape'
     const key = p.readOptionalStringOrIdentifier() ?? ''
     const positionalDescription = p.readOptionalString()
@@ -153,7 +153,7 @@ function parseSystemLandscapeView(p: ContextAwareParser): View | null {
 
     p.skipNewlines()
     if (p.match('LBRACE')) {
-        parseViewBody(p, view)
+        parseViewBody(p, view, model)
         p.skipNewlines()
         p.expect('RBRACE')
     }
@@ -161,7 +161,7 @@ function parseSystemLandscapeView(p: ContextAwareParser): View | null {
     return view
 }
 
-function parseElementView(p: ContextAwareParser, type: ViewType): View | null {
+function parseElementView(p: ContextAwareParser, type: ViewType, model: Model): View | null {
     p.advance() // consume keyword
 
     const elementRef = p.readOptionalStringOrIdentifier()
@@ -188,7 +188,7 @@ function parseElementView(p: ContextAwareParser, type: ViewType): View | null {
 
     p.skipNewlines()
     if (p.match('LBRACE')) {
-        parseViewBody(p, view)
+        parseViewBody(p, view, model)
         p.skipNewlines()
         p.expect('RBRACE')
     }
@@ -196,7 +196,7 @@ function parseElementView(p: ContextAwareParser, type: ViewType): View | null {
     return view
 }
 
-function parseViewBody(p: ContextAwareParser, view: View): void {
+function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
         p.skipNewlines()
         if (p.check('RBRACE') || p.peekType() === 'EOF') break
@@ -213,7 +213,16 @@ function parseViewBody(p: ContextAwareParser, view: View): void {
                 if (p.match('STAR')) {
                     view.elements.push({ id: '*' })
                 } else {
+                    // Each arg is either:
+                    //   - an element ref (IDENTIFIER/STRING/KEYWORD)
+                    //   - an expression: `element.type==X` or `element.parent==X`
+                    //     (Structurizr cookbook: container-view-multiple-software-systems)
                     while (p.check('IDENTIFIER') || p.check('STRING') || p.check('KEYWORD')) {
+                        const expansion = tryParseElementExpression(p, model)
+                        if (expansion) {
+                            for (const id of expansion) view.elements.push({ id })
+                            continue
+                        }
                         const ref = p.advance().value
                         const resolvedId = p.resolveRef(ref)
                         view.elements.push({ id: resolvedId ?? ref })
@@ -302,4 +311,81 @@ function parseViewBody(p: ContextAwareParser, view: View): void {
 
         p.advance()
     }
+}
+
+/**
+ * Attempts to parse a Structurizr expression of the form
+ * `element.<field>==<value>` from the current parser position. Returns the
+ * list of element IDs the expression resolves to, or null if no expression
+ * was found (in which case the caller falls through to the normal element-ref
+ * path and the parser position is unchanged).
+ *
+ * Supported fields:
+ *   - `element.type==<typename>` — every element of that type. Accepts the
+ *     C4 type names: person, softwareSystem, container, component.
+ *   - `element.parent==<ref>`    — every direct child of `<ref>` (containers
+ *     of a system, or components of a container).
+ *
+ * Recognised at parse time inside `include` statements; the cookbook recipe
+ * for "container view for multiple software systems" demonstrates the usage.
+ * https://docs.structurizr.com/dsl/cookbook/container-view-multiple-software-systems/
+ */
+function tryParseElementExpression(p: ContextAwareParser, model: Model): string[] | null {
+    // Lookahead must be: IDENTIFIER('element') DOT IDENTIFIER EQUALS EQUALS <value>
+    if (p.peekValue() !== 'element' || p.tokens[p.pos + 1]?.type !== 'DOT') return null
+    if (p.tokens[p.pos + 2]?.type !== 'IDENTIFIER' && p.tokens[p.pos + 2]?.type !== 'KEYWORD') return null
+    if (p.tokens[p.pos + 3]?.type !== 'EQUALS' || p.tokens[p.pos + 4]?.type !== 'EQUALS') return null
+    const valueTok = p.tokens[p.pos + 5]
+    if (valueTok?.type !== 'IDENTIFIER' && valueTok?.type !== 'STRING' && valueTok?.type !== 'KEYWORD') return null
+
+    const fieldName = p.tokens[p.pos + 2].value
+    const value = valueTok.value
+
+    // Commit: consume all 6 tokens
+    p.advance(); p.advance(); p.advance(); p.advance(); p.advance(); p.advance()
+
+    return resolveExpression(fieldName, value, model, p)
+}
+
+function resolveExpression(field: string, value: string, model: Model, p: ContextAwareParser): string[] {
+    if (field === 'type') {
+        return resolveTypeExpression(value, model)
+    }
+    if (field === 'parent') {
+        return resolveParentExpression(value, model, p)
+    }
+    return []
+}
+
+function resolveTypeExpression(typeName: string, model: Model): string[] {
+    const out: string[] = []
+    const t = typeName.toLowerCase()
+    if (t === 'person' || t === 'people') {
+        for (const person of model.people) out.push(person.id)
+    } else if (t === 'softwaresystem' || t === 'softwaresystems') {
+        for (const sys of model.softwareSystems) out.push(sys.id)
+    } else if (t === 'container' || t === 'containers') {
+        for (const sys of model.softwareSystems) for (const c of sys.containers) out.push(c.id)
+    } else if (t === 'component' || t === 'components') {
+        for (const sys of model.softwareSystems) for (const c of sys.containers) for (const cmp of c.components) out.push(cmp.id)
+    }
+    return out
+}
+
+function resolveParentExpression(parentRef: string, model: Model, p: ContextAwareParser): string[] {
+    const parentId = p.resolveRef(parentRef) ?? parentRef
+    const out: string[] = []
+    for (const sys of model.softwareSystems) {
+        if (sys.id === parentId) {
+            for (const c of sys.containers) out.push(c.id)
+            return out
+        }
+        for (const c of sys.containers) {
+            if (c.id === parentId) {
+                for (const cmp of c.components) out.push(cmp.id)
+                return out
+            }
+        }
+    }
+    return out
 }
