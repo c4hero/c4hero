@@ -39,7 +39,7 @@ interface FitOptions {
 export const CANVAS_FIT_CHROME_ATTRIBUTE = 'data-canvas-fit-chrome'
 
 export function isContentFitNode(node: Pick<Node, 'id'>): boolean {
-  return node.id !== '__scope_boundary__' && !node.id.startsWith('group-')
+  return !node.id.startsWith('__scope_boundary__') && !node.id.startsWith('group-')
 }
 
 export function fitContentNodesToViewport(

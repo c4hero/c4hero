@@ -31,7 +31,7 @@ import {
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
-import { buildNodes, buildEdges, buildGroupNodes, buildBoundaryNode, buildDrillableSet } from './canvasBuilders'
+import { buildNodes, buildEdges, buildGroupNodes, buildBoundaryNodes, buildDrillableSet } from './canvasBuilders'
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
@@ -227,8 +227,8 @@ export default function Canvas() {
 
     // 4. Build group background nodes and scope boundary using post-layout positions
     const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut)
-    const boundaryNode = buildBoundaryNode(workspace, view, laidOut)
-    const overlayNodes = [...(boundaryNode ? [boundaryNode] : []), ...groupNodes]
+    const boundaryNodes = buildBoundaryNodes(workspace, view, laidOut)
+    const overlayNodes = [...boundaryNodes, ...groupNodes]
     const allNodes = [...overlayNodes, ...laidOut]
 
     // 5. Build final edges using post-layout positions for handle routing
@@ -308,12 +308,12 @@ export default function Canvas() {
     }
     setNodes((prev) => {
       const contentOnly = prev
-        .filter(n => !n.id.startsWith('group-') && n.id !== '__scope_boundary__')
+        .filter(n => !n.id.startsWith('group-') && !n.id.startsWith('__scope_boundary__'))
         .map(n => ({ ...n, measured: measuredById.get(n.id) ?? n.measured }))
       const updatedGroups = buildGroupNodes(ws, ws.model.groups, contentOnly)
-      const updatedBoundary = v ? buildBoundaryNode(ws, v, contentOnly) : null
+      const updatedBoundaries = v ? buildBoundaryNodes(ws, v, contentOnly) : []
       const overlays: typeof prev = []
-      if (updatedBoundary) overlays.push(updatedBoundary as typeof prev[0])
+      overlays.push(...updatedBoundaries as typeof prev)
       overlays.push(...updatedGroups as typeof prev)
       return [...contentOnly, ...overlays]
     })
@@ -507,7 +507,7 @@ export default function Canvas() {
     }
     // When content nodes get measured/resized, rebuild group/boundary overlays
     // so they wrap the actual rendered sizes, not the 200×100 dagre defaults.
-    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && c.id !== '__scope_boundary__')) {
+    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && !(c.id as string).startsWith('__scope_boundary__'))) {
       requestAnimationFrame(rebuildOverlays)
     }
   }, [onNodesChange, fitContentNodes, rebuildOverlays])
@@ -677,7 +677,7 @@ export default function Canvas() {
       // Let shift+click go through onSelectionChange (RF handles multi-select natively)
       if (event.shiftKey) return
       if (!multiSelectModeRef.current) return
-      if (node.id.startsWith('group-') || node.id === '__scope_boundary__') return
+      if (node.id.startsWith('group-') || node.id.startsWith('__scope_boundary__')) return
       event.stopPropagation()
       // Toggle this node in both RF state and store
       setNodes((prev) =>
@@ -733,9 +733,9 @@ export default function Canvas() {
         setNodes(prev => {
           const contentOnly = prev.filter(n => n.type !== 'group' && n.type !== 'boundary')
           const updatedGroups = buildGroupNodes(ws, ws.model.groups, contentOnly)
-          const updatedBoundary = v ? buildBoundaryNode(ws, v, contentOnly) : null
+          const updatedBoundaries = v ? buildBoundaryNodes(ws, v, contentOnly) : []
           const overlays: typeof prev = []
-          if (updatedBoundary) overlays.push(updatedBoundary as typeof prev[0])
+          overlays.push(...updatedBoundaries as typeof prev)
           overlays.push(...updatedGroups as typeof prev)
           return [...contentOnly, ...overlays]
         })
