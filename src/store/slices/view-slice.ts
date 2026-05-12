@@ -4,7 +4,7 @@ import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
 import { findViewHelper, VIEW_ARRAY_KEYS, buildInitialViewContent } from '../workspace-helpers'
-import { getFirstViewKey } from '../workspace-selectors'
+import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 
 /** View management: create / delete / rename / duplicate views, plus the
  *  per-view body actions (toggle element membership, layout direction,
@@ -182,11 +182,7 @@ export const createViewSlice: StateCreator<
     // Defense in depth: never remove the focal scope element from its own view.
     // The keymap layer should already filter these out, but the helper guards
     // again so future callers can't accidentally bypass the rule.
-    const focalId: string | undefined =
-      view.type === 'systemContext' || view.type === 'container' ? view.softwareSystemId :
-      view.type === 'component' ? view.containerId :
-      view.type === 'systemLandscape' ? undefined :
-      ((vt: never): undefined => { throw new Error(`unhandled view type: ${String(vt)}`) })(view.type)
+    const focalId = getFocalScopeId(view)
     const removable = new Set(ids.filter((id) => id !== focalId))
     if (removable.size === 0) return
 

@@ -28,6 +28,7 @@ export {
   getBreadcrumb,
   getCreatableTypes,
   isFocalScopeElement,
+  getFocalScopeId,
 } from './workspace-selectors'
 
 /**
