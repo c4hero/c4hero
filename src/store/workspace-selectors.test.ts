@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isFocalScopeElement } from './workspace-selectors'
+import { isFocalScopeElement, getFocalScopeId, getActiveView } from './workspace-selectors'
 import type { Workspace } from '@/types/model'
 
 function ws(): Workspace {
@@ -49,5 +49,23 @@ describe('isFocalScopeElement', () => {
   })
   it('returns false for unknown view key', () => {
     expect(isFocalScopeElement(ws(), 'nope', 'sys')).toBe(false)
+  })
+})
+
+describe('getFocalScopeId', () => {
+  it('returns undefined for landscape views (no focal element)', () => {
+    expect(getFocalScopeId(getActiveView(ws(), 'land'))).toBeUndefined()
+  })
+  it('returns the system id for system context views', () => {
+    expect(getFocalScopeId(getActiveView(ws(), 'ctx'))).toBe('sys')
+  })
+  it('returns the system id for container views', () => {
+    expect(getFocalScopeId(getActiveView(ws(), 'cont'))).toBe('sys')
+  })
+  it('returns the container id for component views', () => {
+    expect(getFocalScopeId(getActiveView(ws(), 'comp'))).toBe('c1')
+  })
+  it('returns undefined when given undefined (no view)', () => {
+    expect(getFocalScopeId(undefined)).toBeUndefined()
   })
 })

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { useWorkspaceStore, getCreatableTypes, getActiveView, buildElementMap } from '@/store/workspace'
+import { useWorkspaceStore, getCreatableTypes, getActiveView, getFocalScopeId, buildElementMap } from '@/store/workspace'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
@@ -105,10 +105,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   // appear as a sibling. Adding it would let the user delete the system from
   // its own L2 view, which cascades through every container, component,
   // relationship, and scoped view underneath it.
-  const focalScopeId =
-    view?.type === 'container' ? view.softwareSystemId :
-    view?.type === 'component' ? view.containerId :
-    undefined
+  const focalScopeId = getFocalScopeId(view)
 
   // Filter existing elements: must be an allowed type AND not already in view AND not the focal scope.
   // Sort alphabetically so the list is predictable regardless of creation order.

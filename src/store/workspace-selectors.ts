@@ -135,26 +135,37 @@ export function getCreatableTypes(workspace: Workspace, activeViewKey: string | 
 export { getFirstViewKey, findChildView as findChildViewHelper }
 
 /**
- * True when `elementId` is the scope element of the view identified by
- * `viewKey` — i.e. the system whose context/containers a view shows, or the
- * container whose components a view shows. Removing the focal scope from
- * inside its own view is a category error: the view is *defined by* that
- * element. Use this to gate Backspace/Trash behavior in scoped views.
+ * The focal-scope element ID for `view` — the element the view is *about*:
+ * the system whose context/containers a view shows, or the container whose
+ * components a view shows. Returns undefined for landscape views (no focal
+ * element) and for unknown view shapes.
+ *
+ * Single source of truth — every focal-scope check (Backspace guard, Trash
+ * guard, AddElementPanel filter, removeElementsFromView guard, deleteElements
+ * defense-in-depth) routes through here so the rule can never quietly drift.
+ */
+export function getFocalScopeId(view: View | undefined): string | undefined {
+  if (!view) return undefined
+  switch (view.type) {
+    case 'systemContext':
+    case 'container':
+      return view.softwareSystemId
+    case 'component':
+      return view.containerId
+    default:
+      return undefined
+  }
+}
+
+/**
+ * True when `elementId` is the focal scope of the view identified by
+ * `viewKey`. Thin wrapper over `getFocalScopeId` — kept for the call sites
+ * that already have workspace + viewKey + elementId at hand.
  */
 export function isFocalScopeElement(
   workspace: Workspace,
   viewKey: string,
   elementId: string,
 ): boolean {
-  const view = getActiveView(workspace, viewKey)
-  if (!view) return false
-  switch (view.type) {
-    case 'systemContext':
-    case 'container':
-      return view.softwareSystemId === elementId
-    case 'component':
-      return view.containerId === elementId
-    default:
-      return false
-  }
+  return getFocalScopeId(getActiveView(workspace, viewKey)) === elementId
 }
