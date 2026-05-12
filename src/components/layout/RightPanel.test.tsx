@@ -12,6 +12,7 @@ vi.mock('lucide-react', () => ({
   Sparkles: () => null,
   Loader2: () => null,
   Eye: () => null,
+  EyeOff: () => null,
   Layers: () => null,
   Trash2: () => null,
   AlertTriangle: () => null,
@@ -260,5 +261,106 @@ describe('RightPanel', () => {
       }
     })
     expect(useWorkspaceStore.getState().selectedElementIds).toHaveLength(0)
+  })
+})
+
+describe('RightPanel — Remove from view button (touch parity)', () => {
+  function makeWsWithLandscape(): Workspace {
+    return {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [
+          { id: 'a', type: 'softwareSystem', name: 'A', tags: [], properties: {}, containers: [] },
+          { id: 'b', type: 'softwareSystem', name: 'B', tags: [], properties: {}, containers: [] },
+        ],
+        relationships: [], groups: [],
+      },
+      views: {
+        systemLandscapeViews: [{
+          type: 'systemLandscape', key: 'land',
+          elements: [{ id: 'a' }, { id: 'b' }], relationships: [],
+        }],
+        systemContextViews: [], containerViews: [], componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+  }
+
+  it('removes the element from the active view without touching the model', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWsWithLandscape())
+    useWorkspaceStore.getState().setActiveView('land')
+    useWorkspaceStore.getState().selectElements(['a'])
+    render(<RightPanel />)
+
+    fireEvent.click(screen.getByLabelText(/remove from view/i))
+
+    const w = useWorkspaceStore.getState().workspace!
+    // View shrunk to just b
+    expect(w.views.systemLandscapeViews[0].elements.map(e => e.id)).toEqual(['b'])
+    // Model still has both
+    expect(w.model.softwareSystems.map(s => s.id).sort()).toEqual(['a', 'b'])
+    // No confirm dialog
+    expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
+  })
+
+  it('does not render the button when the selected element is the focal scope', () => {
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [{
+          id: 'sys', type: 'softwareSystem', name: 'Sys', tags: [], properties: {},
+          containers: [{ id: 'c1', type: 'container', name: 'C1', tags: [], properties: {}, components: [] }],
+        }],
+        relationships: [], groups: [],
+      },
+      views: {
+        systemLandscapeViews: [], systemContextViews: [], componentViews: [],
+        containerViews: [{
+          type: 'container', key: 'cont', softwareSystemId: 'sys',
+          elements: [{ id: 'c1' }], relationships: [],
+        }],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setActiveView('cont')
+    useWorkspaceStore.getState().selectElements(['sys'])
+    render(<RightPanel />)
+
+    expect(screen.queryByLabelText(/remove from view/i)).toBeNull()
+  })
+
+  it('does not render the button when the element is not in the active view', () => {
+    // Element exists in the model and is selected, but the active view doesn't
+    // include it (rare cross-view selection state). Nothing to remove from this
+    // view, so the button should be hidden.
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [
+          { id: 'a', type: 'softwareSystem', name: 'A', tags: [], properties: {}, containers: [] },
+          { id: 'b', type: 'softwareSystem', name: 'B', tags: [], properties: {}, containers: [] },
+        ],
+        relationships: [], groups: [],
+      },
+      views: {
+        systemLandscapeViews: [{
+          type: 'systemLandscape', key: 'land',
+          elements: [{ id: 'a' }],  // b is NOT here
+          relationships: [],
+        }],
+        systemContextViews: [], containerViews: [], componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setActiveView('land')
+    useWorkspaceStore.getState().selectElements(['b'])
+    render(<RightPanel />)
+
+    expect(screen.queryByLabelText(/remove from view/i)).toBeNull()
   })
 })

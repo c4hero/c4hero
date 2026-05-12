@@ -3,7 +3,7 @@ import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElemen
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
-import { X, Plus, ArrowRight, ExternalLink, Eye, ChevronRight, Trash2 } from 'lucide-react'
+import { X, Plus, ArrowRight, ExternalLink, Eye, EyeOff, ChevronRight, Trash2 } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
@@ -72,6 +72,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const updateElementLive = useWorkspaceStore((s) => s.updateElementLive)
   const updateTech = useWorkspaceStore((s) => s.updateElementTechnology)
   const deleteElement = useWorkspaceStore((s) => s.deleteElement)
+  const removeElementsFromView = useWorkspaceStore((s) => s.removeElementsFromView)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
@@ -90,6 +91,9 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const appearsInViews = workspace ? getAllViews(workspace).filter(v =>
     v.elements.some(e => e.id === element.id)
   ) : []
+  const appearsInActiveView = activeViewKey
+    ? appearsInViews.some(v => v.key === activeViewKey)
+    : false
 
   return (
     <div className="flex flex-1 flex-col">
@@ -100,6 +104,23 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
           <div className="text-[11px]" style={{ color: typeColor }}>{getElementTypeLabel(element)}</div>
         </div>
         <div className="flex items-center gap-1">
+          {/* Remove from view — touch-friendly parity with Backspace; hidden on the
+             focal-scope element (can't unproject the element a view is defined by)
+             and when the element isn't actually in the active view. */}
+          {!isFocal && activeViewKey && appearsInActiveView && (
+            <button
+              onClick={() => {
+                if (!activeViewKey) return
+                removeElementsFromView(activeViewKey, [element.id])
+              }}
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              aria-label="Remove from view"
+              title="Remove from this view (model unchanged)"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              <EyeOff size={14} />
+            </button>
+          )}
           {isFocal ? (
             <button
               disabled
