@@ -1171,11 +1171,18 @@ body {
   /* Flyouts opened from the bottom-row tool rail must open UPWARD; the
      desktop default places them to the right of a vertical-rail button,
      which would push them off the bottom of the viewport here. */
-  [data-canvas-chrome="tool-rail"] [data-flyout="arrange"] {
+  [data-canvas-chrome="tool-rail"] [data-flyout="arrange"],
+  [data-canvas-chrome="tool-rail"] [data-flyout="add-element"] {
     top: auto !important;
     bottom: calc(100% + 8px) !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
+  }
+  /* AddElementPanel is wider (280px) and taller (up to 420px) than the
+     arrange flyout — cap its height against the viewport so it never
+     extends above the address bar / status notch when it pops upward. */
+  [data-canvas-chrome="tool-rail"] [data-flyout="add-element"] {
+    max-height: calc(100vh - 120px) !important;
   }
   /* Right-side panels (Inspector, Highlighter): full-width below the
      diagram instead of a 280-300px column that would squish the canvas. */

@@ -194,6 +194,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
     <div
       ref={panelRef}
       className="glass-flyout"
+      data-flyout="add-element"
       style={{
         position: 'absolute',
         left: 56,
