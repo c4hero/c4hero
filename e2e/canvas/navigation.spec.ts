@@ -28,13 +28,20 @@ test.describe('Canvas Navigation', () => {
     expect(containersView).toBeTruthy()
     await workspace.setView(containersView!.key)
 
-    const beforeBoundary = await workspace.getCanvasNodeBoxById('__scope_boundary__')
+    // Boundary IDs are now prefix-based (`__scope_boundary__<parentId>`) to
+    // support per-system boundaries on multi-system Container views — match
+    // the focal-system boundary (the only one in this single-system test) by
+    // prefix instead of exact ID.
+    const beforeBoundary = await workspace.page.evaluate(() => {
+      const node = document.querySelector('.react-flow__node[data-id^="__scope_boundary__"]') as HTMLElement | null
+      return node ? node.getBoundingClientRect() : null
+    })
     expect(beforeBoundary).toBeTruthy()
 
     await workspace.dragNodeBy('Web Application', { x: 80, y: 40 })
 
     const boundaryState = await workspace.page.evaluate(() => {
-      const boundary = document.querySelector('.react-flow__node[data-id="__scope_boundary__"]') as HTMLElement | null
+      const boundary = document.querySelector('.react-flow__node[data-id^="__scope_boundary__"]') as HTMLElement | null
       const webApp = Array.from(document.querySelectorAll('.react-flow__node')).find((node) =>
         node.textContent?.includes('Web Application'),
       ) as HTMLElement | null
