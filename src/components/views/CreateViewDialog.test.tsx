@@ -130,3 +130,59 @@ describe('CreateViewDialog — softwareSystem-scope focal restriction', () => {
     expect(optionTexts).toContain('B')
   })
 })
+
+describe('CreateViewDialog — zero-systems guard', () => {
+  it('disables Create View and surfaces a hint when a scope is required but none exist', () => {
+    // Softwaresystem-scoped workspace with no systems at all. Default type is
+    // systemContext (first allowed type when scope is softwaresystem), which
+    // requires a system scope — but there are none. The Create button must be
+    // disabled and an explanatory alert must be visible.
+    const ws = makeWs({ scope: 'softwaresystem' })
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    render(<CreateViewDialog onClose={() => {}} />)
+
+    const createBtn = screen.getByRole('button', { name: /^create view$/i }) as HTMLButtonElement
+    expect(createBtn.disabled).toBe(true)
+
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toMatch(/no system exists yet/i)
+  })
+
+  it('disables Create View for a Component view when no containers exist', () => {
+    // Unscoped workspace with one system but no containers. Switch type to
+    // component — there's nothing to scope it to.
+    const ws = makeWs({
+      model: {
+        people: [],
+        softwareSystems: [
+          { id: 'sys', type: 'softwareSystem', name: 'Sys', tags: [], properties: {}, containers: [] },
+        ],
+        relationships: [], groups: [],
+      },
+    })
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    render(<CreateViewDialog onClose={() => {}} />)
+
+    const typeSelect = screen.getByLabelText(/type/i) as HTMLSelectElement
+    typeSelect.value = 'component'
+    typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+
+    const createBtn = screen.getByRole('button', { name: /^create view$/i }) as HTMLButtonElement
+    expect(createBtn.disabled).toBe(true)
+
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toMatch(/no container exists yet/i)
+  })
+
+  it('does NOT raise the alert for a Landscape view (no scope needed)', () => {
+    const ws = makeWs() // unscoped, no systems
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    render(<CreateViewDialog onClose={() => {}} />)
+
+    // Default first type is systemLandscape (unscoped workspace) — no scope picker,
+    // no alert, button enabled.
+    expect(screen.queryByRole('alert')).toBeNull()
+    const createBtn = screen.getByRole('button', { name: /^create view$/i }) as HTMLButtonElement
+    expect(createBtn.disabled).toBe(false)
+  })
+})
