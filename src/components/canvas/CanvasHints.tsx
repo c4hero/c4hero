@@ -31,6 +31,7 @@ export default function CanvasHints() {
   const relationshipCount = useWorkspaceStore((s) =>
     s.workspace && activeViewKey ? (getActiveView(s.workspace, activeViewKey)?.relationships.length ?? 0) : 0,
   )
+  const selectionCount = useWorkspaceStore((s) => s.selectedElementIds.length)
   const [dismissed, setDismissed] = useState(getDismissed)
 
   function handleDismiss(id: string) {
@@ -45,6 +46,18 @@ export default function CanvasHints() {
     return (
       <Hint id="connect-hint" onDismiss={handleDismiss}>
         Drag from a node edge to another node to create a connection
+      </Hint>
+    )
+  }
+
+  // Delete-semantics hint — shown on first selection so the user discovers
+  // the Backspace/Shift+Backspace split before they instinctively press
+  // Backspace and quietly remove a node from the view (vs. the old behavior
+  // of confirm-and-destroy).
+  if (selectionCount > 0 && !dismissed.has('backspace-semantics-v2')) {
+    return (
+      <Hint id="backspace-semantics-v2" onDismiss={handleDismiss}>
+        Backspace removes from this view · Shift+Backspace deletes from the model
       </Hint>
     )
   }
