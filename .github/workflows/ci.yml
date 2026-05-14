@@ -25,7 +25,7 @@ jobs:
       # dependency-review requires GitHub Advanced Security on private repos.
       # Until GHAS is enabled, let the action run but don't fail CI on the
       # "Dependency review is not supported on this repository" error.
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/dependency-review-action@v5
         continue-on-error: true
 
   lint-and-typecheck:
