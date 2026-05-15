@@ -232,7 +232,7 @@ export default function FloatingTopPill() {
             flexShrink: 0,
           }}
         >
-          <img src="/c4-logo.svg" alt="c4hero" style={{ width: 24, height: 24 }} />
+          <img src="/c4-logo.png" alt="c4hero" style={{ width: 24, height: 24 }} />
         </button>
 
         {/* Workspace name — click to open switcher */}

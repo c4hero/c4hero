@@ -11,6 +11,7 @@ Structurizr-compatible DSL editing.
 - Node.js 22 or newer
 - npm 10 or newer
 - Git
+- Playwright's Chromium browser for end-to-end tests
 
 ### Local Setup
 
@@ -18,6 +19,7 @@ Structurizr-compatible DSL editing.
 git clone https://github.com/c4hero/c4hero.git
 cd c4hero
 npm install
+npx playwright install chromium
 npm run dev
 ```
 
@@ -36,6 +38,12 @@ Optional variables are documented in `.env.example`:
   add that origin to the deployment CSP `connect-src`
 
 Keep local overrides out of git.
+
+## Package Distribution
+
+c4hero is not currently published as an npm package. The npm metadata exists for
+local development, CI, and static app builds, and `package.json` stays marked
+`private` to avoid accidental publishing.
 
 ## Tech Stack
 

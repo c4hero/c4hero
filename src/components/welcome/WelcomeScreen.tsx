@@ -641,7 +641,7 @@ function CollectionLoadingOverlay({ name, kind = 'collection' }: { name: string;
               <line className="diag-edge"
                     x1="68" y1="60" x2="124" y2="60" strokeWidth="1.6" />
             </g>
-            <image className="diag-author" href="/c4-logo.svg" x="84" y="14" width="32" height="32" />
+            <image className="diag-author" href="/c4-logo.png" x="84" y="14" width="32" height="32" />
           </svg>
         </div>
 

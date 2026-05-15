@@ -8,7 +8,7 @@ export function C4Mark({ compact }: { compact?: boolean }) {
   return (
     <img
       className={compact ? 'welcome-mark compact' : 'welcome-mark'}
-      src="/c4-logo.svg"
+      src="/c4-logo.png"
       alt=""
       aria-hidden="true"
     />

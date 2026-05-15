@@ -33,7 +33,7 @@ export default defineConfig({
     },
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'c4-logo.svg', 'apple-touch-icon.png'],
+      includeAssets: ['c4-logo.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'c4hero',
         short_name: 'c4hero',
@@ -51,6 +51,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
+        globIgnores: ['**/c4-logo.svg', '**/favicon.svg'],
       },
       devOptions: { enabled: false },
     }),

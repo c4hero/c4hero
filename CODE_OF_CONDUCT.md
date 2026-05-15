@@ -52,7 +52,7 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the maintainers via `security@c4hero.dev`. Reports will be reviewed
+reported to the maintainers via `security@c4hero.com`. Reports will be reviewed
 promptly and handled as confidentially as practical.
 
 Maintainers will follow up with reporters about the status of significant

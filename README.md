@@ -63,6 +63,7 @@ In Firefox and Safari you can still open and edit a single `.dsl` file at a time
 
 - Node.js 22+
 - npm 10+
+- Playwright browsers for E2E tests: `npx playwright install chromium`
 
 ### Run locally
 
@@ -81,13 +82,17 @@ npm run build        # production bundle in dist/
 npm run preview      # serve the production bundle
 npm run typecheck    # tsc -b
 npm run lint         # eslint
-npm test             # unit (vitest) + e2e (playwright)
+npm test             # unit tests with Vitest
 npm run test:unit    # vitest only
 npm run test:watch   # vitest in watch mode
 npm run test:e2e     # playwright only
 npm run audit        # npm audit (production)
-npm run check        # typecheck + lint + audit
+npm run check        # lint + typecheck + unit tests + build
 ```
+
+### Package distribution
+
+c4hero is distributed as a source-available static app, not as an npm package. `package.json` is marked `private` to prevent accidental `npm publish` while still using npm for local development, CI, and builds.
 
 ## Deployment
 
