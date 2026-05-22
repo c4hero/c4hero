@@ -46,11 +46,11 @@
     "@xyflow/react": "^12.10.2",
     "html-to-image": "^1.11.13",
     "immer": "^11.1.7",
-    "lucide-react": "^1.14.0",
+    "lucide-react": "^1.16.0",
     "nanoid": "^5.1.11",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.15.0",
+    "react-router-dom": "^7.15.1",
     "web-vitals": "^5.2.0",
     "zustand": "^5.0.13"
   },
