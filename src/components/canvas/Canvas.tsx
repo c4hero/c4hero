@@ -698,7 +698,7 @@ export default function Canvas() {
     persistedMemberIds: Set<string>
   } | null>(null)
 
-  const onNodeDragStart = useCallback((_event: React.MouseEvent, node: Node) => {
+  const onNodeDragStart = useCallback((_event: MouseEvent | TouchEvent, node: Node) => {
     isDragging.current = false
     let memberSet: Set<string> | null = null
 
@@ -733,7 +733,7 @@ export default function Canvas() {
     }
   }, [reactFlowInstance])
 
-  const onNodeDrag = useCallback((_event: React.MouseEvent, node: Node) => {
+  const onNodeDrag = useCallback((_event: MouseEvent | TouchEvent, node: Node) => {
     isDragging.current = true
     if (inspectorTimer.current) {
       clearTimeout(inspectorTimer.current)
@@ -943,7 +943,7 @@ export default function Canvas() {
   )
 
   const onNodeDragStop = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+    (_event: MouseEvent | TouchEvent, node: Node) => {
       let shouldRebuildOverlays = true
       const ctx = overlayDragRef.current
       if (ctx && node.id === ctx.nodeId) {
