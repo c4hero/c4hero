@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsSVG } from './exportUtils'
+import { toBlob } from 'html-to-image'
+import { exportAsJSON, downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from './exportUtils'
 import type { Workspace } from '@/types/model'
+
+vi.mock('html-to-image', () => ({
+  toBlob: vi.fn(),
+}))
 
 function makeWorkspace(): Workspace {
   return {
@@ -159,6 +164,31 @@ describe('downloadFile / downloadBlob', () => {
   })
 })
 
+describe('exportCanvasAsPNG', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    vi.mocked(toBlob).mockReset()
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+    vi.restoreAllMocks()
+  })
+
+  it('returns the html-to-image blob without fetching a data URL', async () => {
+    document.body.innerHTML = '<div class="react-flow__renderer"></div>'
+    const expected = new Blob(['png'], { type: 'image/png' })
+    vi.mocked(toBlob).mockResolvedValue(expected)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+    const blob = await exportCanvasAsPNG()
+
+    expect(blob).toBe(expected)
+    expect(toBlob).toHaveBeenCalledOnce()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
 describe('exportCanvasAsSVG', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
@@ -196,5 +226,19 @@ describe('exportCanvasAsSVG', () => {
     const svg = exportCanvasAsSVG()
 
     expect(svg).toContain('url(#c4-arrow)')
+  })
+
+  it('inlines computed styles when cssText is empty', () => {
+    document.body.innerHTML = `
+      <div class="react-flow__viewport">
+        <div style="color: rgb(255, 0, 0); transform: translate(1px, 2px)">Styled node</div>
+      </div>
+    `
+
+    const svg = exportCanvasAsSVG()
+
+    expect(svg).toContain('Styled node')
+    expect(svg).toContain('color: rgb(255, 0, 0)')
+    expect(svg).toContain('transform: translate(1px, 2px)')
   })
 })

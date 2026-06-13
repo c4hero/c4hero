@@ -61,9 +61,9 @@ export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Bl
   if (!renderer) return null
 
   try {
-    const { toPng } = await import('html-to-image')
+    const { toBlob } = await import('html-to-image')
     const bg = bgForTheme(theme)
-    const dataUrl = await toPng(renderer, {
+    return await toBlob(renderer, {
       pixelRatio: 2,
       backgroundColor: bg,
       style: {
@@ -71,8 +71,6 @@ export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Bl
         ...(theme === 'light' ? LIGHT_STYLE : {}),
       },
     })
-    const res = await fetch(dataUrl)
-    return await res.blob()
   } catch {
     return null
   }
@@ -80,12 +78,12 @@ export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Bl
 
 /** Export the canvas viewport as SVG string */
 export function exportCanvasAsSVG(theme: ExportTheme = 'dark'): string | null {
-  const viewport = document.querySelector('.react-flow__viewport') as HTMLElement | null
-  if (!viewport) return null
+  const exportRoot = document.querySelector('.react-flow__renderer, .react-flow__viewport') as HTMLElement | null
+  if (!exportRoot) return null
 
-  const cloned = viewport.cloneNode(true) as HTMLElement
+  const cloned = exportRoot.cloneNode(true) as HTMLElement
   sanitizeExportTree(cloned)
-  inlineStyles(viewport, cloned)
+  inlineStyles(exportRoot, cloned)
   sanitizeExportTree(cloned)
 
   // For light theme, override CSS custom property values on the cloned root
@@ -95,7 +93,7 @@ export function exportCanvasAsSVG(theme: ExportTheme = 'dark'): string | null {
     })
   }
 
-  const rect = viewport.getBoundingClientRect()
+  const rect = exportRoot.getBoundingClientRect()
   const bg = bgForTheme(theme)
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}" style="background:${bg}">
@@ -132,13 +130,23 @@ function inlineStyles(source: Element, target: Element) {
   const computed = window.getComputedStyle(source)
   const targetEl = target as HTMLElement
   if (targetEl.style) {
-    targetEl.style.cssText = computed.cssText
+    copyComputedStyle(computed, targetEl.style)
   }
   for (let i = 0; i < source.children.length; i++) {
     if (target.children[i]) {
       inlineStyles(source.children[i], target.children[i])
     }
   }
+}
+
+function copyComputedStyle(computed: CSSStyleDeclaration, target: CSSStyleDeclaration) {
+  target.cssText = computed.cssText
+  for (const prop of Array.from(computed)) {
+    const value = computed.getPropertyValue(prop)
+    if (!value) continue
+    target.setProperty(prop, value, computed.getPropertyPriority(prop))
+  }
+  target.transformOrigin = computed.transformOrigin
 }
 
 const URL_ATTRS = new Set(['href', 'xlink:href', 'src', 'action', 'formaction'])
