@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle } from 'lucide-react'
+import { X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle, Pencil } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { useAiSettingsStore, isAiReady, activeAiConfig } from '@/store/ai-settings'
@@ -8,7 +8,7 @@ import { downloadFile } from '@/lib/exportUtils'
 import type { View, Workspace } from '@/types/model'
 import {
   createProvider, aiErrorMessage,
-  generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr,
+  generateDiagram, planEdit, autoDescribe, reviewArchitecture, applyReview, draftAdr,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
   applyEditPlan, describeOps, elementIdSet, viewLabel,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
@@ -112,7 +112,7 @@ function FeatureBody({ feature, provider, onClose }: { feature: AiFeatureId; pro
     case 'interview': return <InterviewBody provider={provider} onClose={onClose} />
     case 'edit': return <EditBody provider={provider} onClose={onClose} />
     case 'describe': return <DescribeBody provider={provider} onClose={onClose} />
-    case 'review': return <ReviewBody provider={provider} />
+    case 'review': return <ReviewBody provider={provider} onClose={onClose} />
     case 'adr': return <AdrBody provider={provider} />
   }
 }
@@ -404,20 +404,67 @@ function DescribeBody({ provider, onClose }: { provider: AiProvider; onClose: ()
   )
 }
 
-function ReviewBody({ provider }: { provider: AiProvider }) {
+function ReviewBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
-  const run = useAiRun<string>()
+  const reviewRun = useAiRun<string>()
+  const planRun = useAiRun<EditPlan>()
   const [markdown, setMarkdown] = useState<string | null>(null)
+  const [plan, setPlan] = useState<EditPlan | null>(null)
+  const planLines = plan && workspace ? describeOps(plan, workspace) : []
+
+  function applyPlan() {
+    if (!plan || !workspace) return
+    applyPlanToStore(plan, workspace)
+    onClose()
+  }
 
   return (
     <>
       <RunButton
         label="Review architecture"
-        loading={run.loading}
-        onClick={() => run.run(() => reviewArchitecture(provider, workspace!), setMarkdown)}
+        loading={reviewRun.loading}
+        onClick={() => reviewRun.run(() => reviewArchitecture(provider, workspace!), (md) => { setMarkdown(md); setPlan(null) })}
       />
-      <ErrorLine error={run.error} />
-      {markdown && <MarkdownResult title="Review" text={markdown} />}
+      <ErrorLine error={reviewRun.error} />
+
+      {markdown && (
+        <>
+          <MarkdownResult title="Review" text={markdown} />
+
+          {!plan && (
+            <div style={{ marginTop: 12 }}>
+              <button
+                className="btn-primary"
+                disabled={planRun.loading}
+                onClick={() => planRun.run(() => applyReview(provider, workspace!, markdown), setPlan)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                {planRun.loading ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}
+                {planRun.loading ? 'Preparing changes…' : 'Turn suggestions into changes'}
+              </button>
+              <p style={{ ...mutedSmall, marginTop: 6 }}>
+                Converts the concrete, structural suggestions above into model edits you review before applying.
+              </p>
+            </div>
+          )}
+          <ErrorLine error={planRun.error} />
+
+          {plan && (
+            <div style={resultBox}>
+              <div style={resultTitle}>{planLines.length} proposed change(s) from the review</div>
+              {planLines.length === 0 ? (
+                <div style={mutedSmall}>The review had no suggestions that map to concrete model edits.</div>
+              ) : (
+                <ul style={listStyle}>{planLines.map((l, i) => <li key={i} style={listItem}>{l}</li>)}</ul>
+              )}
+              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                <button className="btn-primary" disabled={planLines.length === 0} onClick={applyPlan}>Apply changes</button>
+                <button className="btn-secondary" onClick={() => setPlan(null)}>Discard</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </>
   )
 }

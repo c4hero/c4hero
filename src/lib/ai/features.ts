@@ -1,7 +1,7 @@
 import type { Workspace, View } from '@/types/model'
 import type { AiProvider, DescribeResult, EditPlan, AiChatTurn } from './types'
 import {
-  generateSystem, generateUser, reviewSystem, reviewUser,
+  generateSystem, generateUser, reviewSystem, reviewUser, reviewApplySystem, reviewApplyUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
   interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
 } from './prompts'
@@ -30,6 +30,17 @@ export async function reviewArchitecture(provider: AiProvider, ws: Workspace): P
   return provider.complete({
     system: reviewSystem(),
     user: reviewUser(ws),
+    maxTokens: 4000,
+  })
+}
+
+/** Turn a finished review's concrete suggestions into an EditPlan to apply. */
+export async function applyReview(provider: AiProvider, ws: Workspace, reviewMarkdown: string): Promise<EditPlan> {
+  return provider.completeJson<EditPlan>({
+    system: reviewApplySystem(ws),
+    user: reviewApplyUser(reviewMarkdown),
+    schema: editSchema,
+    validate: isEditPlan,
     maxTokens: 4000,
   })
 }

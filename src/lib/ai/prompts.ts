@@ -59,6 +59,34 @@ export function reviewUser(ws: Workspace): string {
   return `Review this architecture model:\n\n${serializeContext(ws)}`
 }
 
+/** Convert a finished review into concrete model operations. */
+export function reviewApplySystem(ws: Workspace): string {
+  return [
+    'You convert an architecture review into concrete edits to a C4 model.',
+    'Read the review and emit operations ONLY for its actionable, structural recommendations —',
+    'adding elements or relationships the review says are missing, labeling unlabeled',
+    'relationships, correcting names, and setting technologies or descriptions it recommends.',
+    'Ignore anything that is not a concrete model change (process advice, open questions, future',
+    'considerations, security practices that do not alter the diagram). Do not invent changes the',
+    'review did not call for. If nothing maps to a model edit, return an empty operations list.',
+    '',
+    editSystem(),
+    '',
+    'Current model (id-tagged):',
+    serializeContext(ws),
+  ].join('\n')
+}
+
+export function reviewApplyUser(reviewMarkdown: string): string {
+  return [
+    'Architecture review to act on:',
+    '',
+    reviewMarkdown.trim(),
+    '',
+    'Produce the operations that implement its concrete, structural suggestions.',
+  ].join('\n')
+}
+
 // ─── Auto-describe ──────────────────────────────────────────────────
 
 export function describeSystem(): string {
