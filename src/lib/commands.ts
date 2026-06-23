@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick, RotateCcw, CircleHelp,
+  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -22,7 +22,7 @@ const mod = isMac ? '⌘' : 'Ctrl+'
 export interface Command {
   id: string
   label: string
-  category: 'create' | 'edit' | 'view' | 'export' | 'navigation'
+  category: 'create' | 'edit' | 'view' | 'export' | 'navigation' | 'ai'
   icon: LucideIcon
   shortcut?: string
   keywords?: string[]
@@ -420,6 +420,61 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
     },
   ]
 
+  // ─── AI assistant (BYOK) ───────────────────────────────
+  commands.push(
+    {
+      id: 'ai-generate',
+      label: 'AI: Generate diagram…',
+      category: 'ai',
+      icon: Sparkles,
+      keywords: ['ai', 'generate', 'create', 'describe', 'prompt'],
+      execute: () => store().setAiPanelOpen(true, 'generate'),
+    },
+    {
+      id: 'ai-edit',
+      label: 'AI: Edit with a prompt…',
+      category: 'ai',
+      icon: Sparkles,
+      keywords: ['ai', 'edit', 'change', 'modify', 'prompt'],
+      when: () => !!store().workspace,
+      execute: () => store().setAiPanelOpen(true, 'edit'),
+    },
+    {
+      id: 'ai-describe',
+      label: 'AI: Auto-describe elements',
+      category: 'ai',
+      icon: Sparkles,
+      keywords: ['ai', 'describe', 'documentation', 'fill'],
+      when: () => !!store().workspace,
+      execute: () => store().setAiPanelOpen(true, 'describe'),
+    },
+    {
+      id: 'ai-review',
+      label: 'AI: Review architecture',
+      category: 'ai',
+      icon: Sparkles,
+      keywords: ['ai', 'review', 'critique', 'feedback', 'audit'],
+      when: () => !!store().workspace,
+      execute: () => store().setAiPanelOpen(true, 'review'),
+    },
+    {
+      id: 'ai-adr',
+      label: 'AI: Draft ADR…',
+      category: 'ai',
+      icon: Sparkles,
+      keywords: ['ai', 'adr', 'decision', 'record', 'document'],
+      execute: () => store().setAiPanelOpen(true, 'adr'),
+    },
+    {
+      id: 'ai-settings',
+      label: 'AI: Settings…',
+      category: 'ai',
+      icon: Settings,
+      keywords: ['ai', 'settings', 'api key', 'byok', 'anthropic', 'model'],
+      execute: () => store().setAiSettingsOpen(true),
+    },
+  )
+
   // ─── Dynamic view navigation commands ──────────────────
   const s = store()
   if (s.workspace) {
@@ -439,8 +494,9 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
   return commands
 }
 
-const CATEGORY_ORDER: Command['category'][] = ['create', 'edit', 'view', 'navigation', 'export']
+const CATEGORY_ORDER: Command['category'][] = ['ai', 'create', 'edit', 'view', 'navigation', 'export']
 const CATEGORY_LABELS: Record<Command['category'], string> = {
+  ai: 'AI',
   create: 'Create',
   edit: 'Edit',
   view: 'View',

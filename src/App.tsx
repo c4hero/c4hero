@@ -25,6 +25,8 @@ import { restoreDirHandle, getCurrentDirHandle } from '@/lib/folderIO'
 
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
+const AiPanel = lazy(() => import('@/components/ai/AiPanel'))
+const AiSettingsDialog = lazy(() => import('@/components/ai/AiSettingsDialog'))
 
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -32,6 +34,10 @@ export default function App() {
   const pendingDelete = useWorkspaceStore((s) => s.pendingDelete)
   const cancelDelete = useWorkspaceStore((s) => s.cancelDelete)
   const presentationMode = useWorkspaceStore((s) => s.presentationMode)
+  const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
+  const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
+  const aiSettingsOpen = useWorkspaceStore((s) => s.aiSettingsOpen)
+  const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const navigate = useNavigate()
   const location = useLocation()
@@ -155,6 +161,20 @@ export default function App() {
       {/* Zoom-in confirm — shown when a user clicks zoom on an element with
           no existing child view. Offers fast create or "Customize…" for full control. */}
       <ZoomConfirmDialog />
+
+      {/* BYOK AI assistant — available on every route, including the welcome
+          screen (Generate from scratch). Rendered after the panel so the
+          settings dialog stacks above it when both are open. */}
+      {aiPanelOpen && (
+        <Suspense fallback={<LoadingDot />}>
+          <AiPanel onClose={() => setAiPanelOpen(false)} />
+        </Suspense>
+      )}
+      {aiSettingsOpen && (
+        <Suspense fallback={<LoadingDot />}>
+          <AiSettingsDialog onClose={() => setAiSettingsOpen(false)} />
+        </Suspense>
+      )}
     </>
   )
 }

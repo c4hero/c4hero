@@ -1,0 +1,34 @@
+// Public API for the BYOK AI engine.
+//
+//   import { createAnthropicProvider, generateDiagram } from '@/lib/ai'
+//
+// The provider is the only network-touching piece; everything else is pure
+// orchestration over an injected AiProvider, so features stay testable.
+
+export type {
+  AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest,
+  EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind,
+} from './types'
+export { AiError, aiErrorMessage } from './types'
+
+export { createAnthropicProvider } from './provider'
+
+export {
+  generateDiagram, reviewArchitecture, autoDescribe, planEdit, draftAdr,
+} from './features'
+
+export {
+  serializeContext, flattenElements, elementIdSet, elementNameMap,
+  elementsMissingDescription, relationshipsMissingDescription,
+} from './context'
+
+export { extractDsl, stripCodeFence } from './dsl'
+
+export {
+  applyEditPlan, describeOps, type EditActions, type ApplyResult,
+} from './operations'
+
+export {
+  countMissingDescriptions, buildDescribePreview, applyDescribePreview,
+  type DescribeActions, type DescribePreview, type DescribePreviewItem,
+} from './describe'

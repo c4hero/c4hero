@@ -3,6 +3,7 @@ import type {
   ViewType, ElementStatus,
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
+import type { AiFeatureId } from '@/lib/ai/types'
 export interface CascadeImpact {
   /** Top-level elements explicitly selected for deletion. */
   elementCount: number
@@ -217,6 +218,12 @@ export interface WorkspaceState extends UndoState {
   setCommandPaletteOpen: (open: boolean) => void
   canvasSettingsOpen: boolean
   setCanvasSettingsOpen: (open: boolean) => void
+  /** BYOK AI assistant panel. `aiPanelFeature` selects which feature tab opens. */
+  aiPanelOpen: boolean
+  aiPanelFeature: AiFeatureId | null
+  setAiPanelOpen: (open: boolean, feature?: AiFeatureId | null) => void
+  aiSettingsOpen: boolean
+  setAiSettingsOpen: (open: boolean) => void
   canvasGuideOpen: boolean
   setCanvasGuideOpen: (open: boolean) => void
   addElementPanelOpen: boolean

@@ -18,6 +18,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'setCanvasSettingsOpen' | 'setCanvasGuideOpen' | 'setAddElementPanelOpen' | 'setHighlighterOpenFacet'
   | 'setViewsPanelOpen' | 'toggleViewsPanel'
   | 'setCreateViewDialogOpen'
+  | 'aiPanelOpen' | 'aiPanelFeature' | 'setAiPanelOpen' | 'aiSettingsOpen' | 'setAiSettingsOpen'
 >
 
 export const createUiSlice: StateCreator<
@@ -31,6 +32,9 @@ export const createUiSlice: StateCreator<
   searchOpen: false,
   commandPaletteOpen: false,
   canvasSettingsOpen: false,
+  aiPanelOpen: false,
+  aiPanelFeature: null,
+  aiSettingsOpen: false,
   canvasGuideOpen: false,
   addElementPanelOpen: false,
   highlighterOpenFacet: null,
@@ -51,6 +55,12 @@ export const createUiSlice: StateCreator<
   setSearchOpen: (open) => set({ searchOpen: open, commandPaletteOpen: false }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
   setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
+  setAiPanelOpen: (open, feature) => set({
+    aiPanelOpen: open,
+    aiPanelFeature: open ? (feature ?? null) : null,
+    commandPaletteOpen: false,
+  }),
+  setAiSettingsOpen: (open) => set({ aiSettingsOpen: open, commandPaletteOpen: false }),
   setCanvasGuideOpen: (open) => set({ canvasGuideOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
   setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),

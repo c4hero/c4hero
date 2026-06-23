@@ -53,6 +53,23 @@ data the app handles, where it lives, and what is sent over the network.
   to your CSP `connect-src` policy and document the destination for your
   users.
 
+## AI features (bring-your-own-key)
+
+- The optional AI assistant is **opt-in** and **bring-your-own-key (BYOK)**. It
+  is inert until you enter your own Anthropic API key in AI settings.
+- Your API key is stored only in this browser's `localStorage` (key
+  `c4hero.ai.json`) and is never sent to any c4hero server — there isn't one.
+- When you run an AI feature, requests go **directly from your browser to
+  Anthropic** (`https://api.anthropic.com`). The contents of those requests
+  include the parts of your model needed for the feature (for example, your
+  prompt plus a text summary of elements and relationships for Review, Edit,
+  Auto-describe, and ADR drafting). Review Anthropic's privacy terms to
+  understand how they handle that data.
+- No AI request is made unless you explicitly trigger a feature. Disabling AI in
+  settings hides the assistant; clearing site data removes the stored key.
+- Anyone with access to this browser profile can read the stored key, the same
+  as any other site credential kept in `localStorage`. Use a scoped key.
+
 ## Cookies
 
 c4hero does not set cookies.
@@ -64,6 +81,7 @@ c4hero does not set cookies.
 | Active workspace (crash recovery) | `localStorage` | Clearing site data; loading a different workspace |
 | Recent file/folder handles | `IndexedDB` | Clearing site data; revoking handle in the browser |
 | Settings (theme, panel state) | `localStorage` | Clearing site data |
+| AI settings + API key (BYOK) | `localStorage` (`c4hero.ai.json`) | Clearing site data; clearing the key in AI settings |
 | Workspace files (`.dsl`, `.c4hero.json` sidecar) | Filesystem (your machine) | Deleting the files |
 
 ## Reporting
