@@ -28,7 +28,13 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
       body: JSON.stringify({ model: config.model, ...body }),
     })
   } catch {
-    throw new AiError('network', "Couldn't reach OpenAI.")
+    throw new AiError(
+      'connection',
+      'The browser blocked or failed the request to api.openai.com before it left. This is '
+      + 'usually a privacy/ad-block extension, a stale cached page (try a hard refresh or an '
+      + 'incognito window), or a network firewall — not your API key. Check the browser console '
+      + 'for the exact reason.',
+    )
   }
 
   if (!res.ok) {

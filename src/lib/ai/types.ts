@@ -43,7 +43,7 @@ export interface AiProviderConfig {
 
 // ─── Errors ─────────────────────────────────────────────────────────
 
-export type AiErrorKind = 'auth' | 'rate-limit' | 'network' | 'invalid-response' | 'unknown'
+export type AiErrorKind = 'auth' | 'rate-limit' | 'connection' | 'network' | 'invalid-response' | 'unknown'
 
 export class AiError extends Error {
   readonly kind: AiErrorKind
@@ -61,9 +61,14 @@ export function aiErrorMessage(err: unknown): string {
       case 'auth':
         return 'Invalid API key. Check your Anthropic key in AI settings.'
       case 'rate-limit':
-        return 'Rate limited by Anthropic. Wait a moment and try again.'
+        return 'Rate limited by the AI provider. Wait a moment and try again.'
+      case 'connection':
+        return err.message
+          || 'The browser blocked or failed the request before it left. This is usually a '
+          + 'privacy/ad-block extension, a stale cached page (try a hard refresh or an incognito '
+          + 'window), or a network firewall. Open the browser console for the exact reason.'
       case 'network':
-        return "Couldn't reach Anthropic. Check your connection and try again."
+        return 'The AI provider had a server error. Try again in a moment.'
       case 'invalid-response':
         return 'The model returned an unexpected response. Try again.'
       default:
