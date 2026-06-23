@@ -1,14 +1,14 @@
 import type { Workspace, View } from '@/types/model'
-import type { AiProvider, DescribeResult, EditPlan, AiChatTurn } from './types'
+import type { AiProvider, DescribeResult, EditPlan, ReviewResult, AiChatTurn } from './types'
 import {
-  generateSystem, generateUser, reviewSystem, reviewUser, reviewApplySystem, reviewApplyUser,
+  generateSystem, generateUser, reviewSystem, reviewUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
   interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
 } from './prompts'
 import {
   elementsMissingDescription, relationshipsMissingDescription,
 } from './context'
-import { describeSchema, isDescribeResult, editSchema, isEditPlan } from './schema'
+import { describeSchema, isDescribeResult, editSchema, isEditPlan, reviewSchema, isReviewResult } from './schema'
 import { extractDsl } from './dsl'
 
 // Feature orchestration. Each function takes a provider (injected, so tests use a
@@ -25,23 +25,18 @@ export async function generateDiagram(provider: AiProvider, description: string)
   return extractDsl(text)
 }
 
-/** Review architecture → returns markdown critique. */
-export async function reviewArchitecture(provider: AiProvider, ws: Workspace): Promise<string> {
-  return provider.complete({
+/** Review architecture → structured, triageable findings (each actionable one
+ *  carries the operations that fix it). Pass `view` to scope the review to the
+ *  current screen; omit/null to review the whole model. */
+export async function reviewArchitecture(
+  provider: AiProvider, ws: Workspace, view?: View | null,
+): Promise<ReviewResult> {
+  return provider.completeJson<ReviewResult>({
     system: reviewSystem(),
-    user: reviewUser(ws),
-    maxTokens: 4000,
-  })
-}
-
-/** Turn a finished review's concrete suggestions into an EditPlan to apply. */
-export async function applyReview(provider: AiProvider, ws: Workspace, reviewMarkdown: string): Promise<EditPlan> {
-  return provider.completeJson<EditPlan>({
-    system: reviewApplySystem(ws),
-    user: reviewApplyUser(reviewMarkdown),
-    schema: editSchema,
-    validate: isEditPlan,
-    maxTokens: 4000,
+    user: reviewUser(ws, view),
+    schema: reviewSchema,
+    validate: isReviewResult,
+    maxTokens: 6000,
   })
 }
 

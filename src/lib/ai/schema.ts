@@ -1,5 +1,5 @@
-import type { DescribeResult, EditPlan, EditOp } from './types'
-import { isRecord } from '@/lib/guards'
+import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding } from './types'
+import { isRecord, isStringArray } from '@/lib/guards'
 
 // JSON Schemas (for Anthropic structured outputs) plus runtime validators for the
 // two features that need machine-readable results. Validators are exported and
@@ -102,4 +102,50 @@ function isEditOp(value: unknown): value is EditOp {
 
 export function isEditPlan(value: unknown): value is EditPlan {
   return isRecord(value) && Array.isArray(value.operations) && value.operations.every(isEditOp)
+}
+
+// ─── Review ─────────────────────────────────────────────────────────
+
+const REVIEW_CATEGORIES = [
+  'missing-element', 'missing-relationship', 'naming', 'description',
+  'technology', 'boundary', 'security', 'scalability', 'other',
+]
+
+const findingSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    title: { type: 'string' },
+    detail: { type: 'string' },
+    category: { type: 'string', enum: REVIEW_CATEGORIES },
+    severity: { type: 'string', enum: ['high', 'medium', 'low'] },
+    elementIds: { type: 'array', items: { type: 'string' } },
+    suggestion: { type: 'string' },
+    // Present only when the finding maps to a concrete model edit.
+    operations: { type: 'array', items: opSchema },
+  },
+  required: ['title', 'detail', 'category', 'severity', 'elementIds', 'suggestion'],
+}
+
+export const reviewSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    findings: { type: 'array', items: findingSchema },
+  },
+  required: ['findings'],
+}
+
+function isReviewFinding(value: unknown): value is ReviewFinding {
+  if (!isRecord(value)) return false
+  if (typeof value.title !== 'string' || typeof value.detail !== 'string') return false
+  if (typeof value.category !== 'string' || typeof value.suggestion !== 'string') return false
+  if (value.severity !== 'high' && value.severity !== 'medium' && value.severity !== 'low') return false
+  if (!isStringArray(value.elementIds)) return false
+  if (value.operations !== undefined && !(Array.isArray(value.operations) && value.operations.every(isEditOp))) return false
+  return true
+}
+
+export function isReviewResult(value: unknown): value is ReviewResult {
+  return isRecord(value) && Array.isArray(value.findings) && value.findings.every(isReviewFinding)
 }

@@ -15,6 +15,6 @@ export const AI_FEATURES: ReadonlyArray<AiFeatureMeta> = [
   { id: 'interview', label: 'Interview', blurb: 'Answer questions about this view to fill it in', icon: MessagesSquare, needsWorkspace: true },
   { id: 'edit', label: 'Edit', blurb: 'Change the model in plain English', icon: Pencil, needsWorkspace: true },
   { id: 'describe', label: 'Auto-describe', blurb: 'Fill in missing descriptions', icon: Wand2, needsWorkspace: true },
-  { id: 'review', label: 'Review', blurb: 'Get an architecture critique', icon: Stethoscope, needsWorkspace: true },
+  { id: 'review', label: 'Review', blurb: 'Triage issues in this view or the whole model', icon: Stethoscope, needsWorkspace: true },
   { id: 'adr', label: 'Draft ADR', blurb: 'Write a decision record', icon: FileText, needsWorkspace: false },
 ]

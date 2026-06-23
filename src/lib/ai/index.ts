@@ -8,8 +8,11 @@
 export type {
   AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn,
   EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind, AiFeatureId,
+  ReviewResult, ReviewFinding, ReviewSeverity,
 } from './types'
 export { AiError, aiErrorMessage } from './types'
+
+export { findingsToMarkdown, sortedFindings, isActionable } from './review'
 
 export type { AiProviderId, AiProviderMeta, AiModelOption } from './providerMeta'
 export { AI_PROVIDER_META, AI_PROVIDER_IDS, getProviderMeta, isAiProviderId } from './providerMeta'
@@ -17,7 +20,7 @@ export { AI_PROVIDER_META, AI_PROVIDER_IDS, getProviderMeta, isAiProviderId } fr
 export { createProvider } from './providers'
 
 export {
-  generateDiagram, reviewArchitecture, applyReview, autoDescribe, planEdit, draftAdr,
+  generateDiagram, reviewArchitecture, autoDescribe, planEdit, draftAdr,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
 } from './features'
 

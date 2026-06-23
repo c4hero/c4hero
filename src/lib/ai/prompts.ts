@@ -46,45 +46,38 @@ export function generateUser(description: string): string {
 
 export function reviewSystem(): string {
   return [
-    'You are a senior software architect reviewing a C4 architecture model.',
-    'Give a concise, actionable critique. Focus on: missing actors or systems, missing or',
-    'unlabeled relationships, vague naming, unclear boundaries/scoping, and notable',
-    'security, reliability, or scalability gaps. Be specific and reference element names.',
-    'Respond in GitHub-flavored Markdown with short sections and bullet points.',
-    'Do not restate the whole model back; lead with the most important findings.',
-  ].join('\n')
-}
-
-export function reviewUser(ws: Workspace): string {
-  return `Review this architecture model:\n\n${serializeContext(ws)}`
-}
-
-/** Convert a finished review into concrete model operations. */
-export function reviewApplySystem(ws: Workspace): string {
-  return [
-    'You convert an architecture review into concrete edits to a C4 model.',
-    'Read the review and emit operations ONLY for its actionable, structural recommendations —',
-    'adding elements or relationships the review says are missing, labeling unlabeled',
-    'relationships, correcting names, and setting technologies or descriptions it recommends.',
-    'Ignore anything that is not a concrete model change (process advice, open questions, future',
-    'considerations, security practices that do not alter the diagram). Do not invent changes the',
-    'review did not call for. If nothing maps to a model edit, return an empty operations list.',
+    'You are a senior software architect reviewing a C4 architecture model. Return a structured',
+    'list of findings — not prose. For each issue, provide:',
+    '- title: a short summary',
+    '- detail: one or two sentences explaining it',
+    '- category: one of missing-element, missing-relationship, naming, description, technology,',
+    '  boundary, security, scalability, other',
+    '- severity: high, medium, or low',
+    '- elementIds: the ids of affected existing elements (may be empty)',
+    '- suggestion: a concrete recommended fix',
+    '- operations: when (and only when) the finding can be fixed by a direct edit to the model,',
+    '  include the operations that implement the fix (format below). For advisory findings',
+    '  (process, open questions, practices that do not change the diagram), omit operations.',
+    'Order findings by severity (high first). Be specific and reference real element ids. If the',
+    'model looks complete, return an empty findings list.',
     '',
+    'Operation format (used only inside a finding\'s `operations`):',
     editSystem(),
-    '',
-    'Current model (id-tagged):',
-    serializeContext(ws),
   ].join('\n')
 }
 
-export function reviewApplyUser(reviewMarkdown: string): string {
-  return [
-    'Architecture review to act on:',
-    '',
-    reviewMarkdown.trim(),
-    '',
-    'Produce the operations that implement its concrete, structural suggestions.',
-  ].join('\n')
+/** Build the review user message. When `view` is provided, the review is scoped
+ *  to what's on that screen; otherwise it covers the whole model. */
+export function reviewUser(ws: Workspace, view?: View | null): string {
+  if (view) {
+    return [
+      `Review only the ${viewLabel(view)} — the elements and relationships shown on this screen.`,
+      'Findings and operations should concern this view; do not critique unrelated parts of the model.',
+      '',
+      serializeViewContext(ws, view),
+    ].join('\n')
+  }
+  return `Review this entire architecture model:\n\n${serializeContext(ws)}`
 }
 
 // ─── Auto-describe ──────────────────────────────────────────────────

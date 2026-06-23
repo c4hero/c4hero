@@ -176,3 +176,29 @@ export interface DescribeResult {
   elements: DescribePatch[]
   relationships: DescribePatch[]
 }
+
+// ─── Review findings ────────────────────────────────────────────────
+
+export type ReviewSeverity = 'high' | 'medium' | 'low'
+
+export interface ReviewFinding {
+  /** Short summary of the issue. */
+  title: string
+  /** One or two sentences explaining it. */
+  detail: string
+  /** e.g. missing-element, missing-relationship, naming, description, technology,
+   *  boundary, security, scalability, other. */
+  category: string
+  severity: ReviewSeverity
+  /** Affected existing element ids (may be empty for advisory findings). */
+  elementIds: string[]
+  /** Human-readable suggested fix. */
+  suggestion: string
+  /** Concrete operations that fix this finding, present only when it maps to a
+   *  direct model edit. Empty/absent for advisory findings. */
+  operations?: EditOp[]
+}
+
+export interface ReviewResult {
+  findings: ReviewFinding[]
+}

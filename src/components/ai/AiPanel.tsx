@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle, Pencil } from 'lucide-react'
+import { X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { useAiSettingsStore, isAiReady, activeAiConfig } from '@/store/ai-settings'
@@ -8,12 +8,14 @@ import { downloadFile } from '@/lib/exportUtils'
 import type { View, Workspace } from '@/types/model'
 import {
   createProvider, aiErrorMessage,
-  generateDiagram, planEdit, autoDescribe, reviewArchitecture, applyReview, draftAdr,
+  generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
-  applyEditPlan, describeOps, elementIdSet, viewLabel,
+  applyEditPlan, describeOps, elementIdSet, elementNameMap, viewLabel,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
+  findingsToMarkdown, sortedFindings, isActionable,
   type AiProvider, type EditActions, type DescribeActions,
   type EditPlan, type DescribePreview, type AiFeatureId, type AiChatTurn,
+  type ReviewResult, type ReviewFinding,
 } from '@/lib/ai'
 import { AI_FEATURES } from './aiFeatureMeta'
 import { MicButton } from './dictation'
@@ -112,7 +114,7 @@ function FeatureBody({ feature, provider, onClose }: { feature: AiFeatureId; pro
     case 'interview': return <InterviewBody provider={provider} onClose={onClose} />
     case 'edit': return <EditBody provider={provider} onClose={onClose} />
     case 'describe': return <DescribeBody provider={provider} onClose={onClose} />
-    case 'review': return <ReviewBody provider={provider} onClose={onClose} />
+    case 'review': return <ReviewBody provider={provider} />
     case 'adr': return <AdrBody provider={provider} />
   }
 }
@@ -404,68 +406,178 @@ function DescribeBody({ provider, onClose }: { provider: AiProvider; onClose: ()
   )
 }
 
-function ReviewBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
-  const workspace = useWorkspaceStore((s) => s.workspace)
-  const reviewRun = useAiRun<string>()
-  const planRun = useAiRun<EditPlan>()
-  const [markdown, setMarkdown] = useState<string | null>(null)
-  const [plan, setPlan] = useState<EditPlan | null>(null)
-  const planLines = plan && workspace ? describeOps(plan, workspace) : []
+type ReviewScope = 'view' | 'workspace'
+type FindingStatus = 'applied' | 'dismissed'
 
-  function applyPlan() {
-    if (!plan || !workspace) return
-    applyPlanToStore(plan, workspace)
-    onClose()
+function ReviewBody({ provider }: { provider: AiProvider }) {
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
+
+  const [scope, setScope] = useState<ReviewScope>('view')
+  const run = useAiRun<ReviewResult>()
+  const [result, setResult] = useState<ReviewResult | null>(null)
+  const [status, setStatus] = useState<Record<number, FindingStatus>>({})
+  const [copied, setCopied] = useState(false)
+
+  const canScopeToView = !!activeView
+  const effectiveScope: ReviewScope = canScopeToView ? scope : 'workspace'
+
+  function runReview() {
+    const view = effectiveScope === 'view' ? activeView : null
+    run.run(() => reviewArchitecture(provider, workspace!, view), (r) => { setResult(r); setStatus({}) })
+  }
+
+  const findings = result ? sortedFindings(result) : []
+  const names = workspace ? elementNameMap(workspace) : new Map<string, string>()
+
+  function applyFinding(finding: ReviewFinding, key: number) {
+    if (!workspace || !isActionable(finding)) return
+    applyPlanToStore({ operations: finding.operations ?? [] }, workspace)
+    setStatus((s) => ({ ...s, [key]: 'applied' }))
+  }
+
+  function applyAll() {
+    if (!workspace) return
+    const next: Record<number, FindingStatus> = { ...status }
+    findings.forEach((f, i) => {
+      if (isActionable(f) && !status[i]) {
+        applyPlanToStore({ operations: f.operations ?? [] }, workspace)
+        next[i] = 'applied'
+      }
+    })
+    setStatus(next)
+  }
+
+  const pendingActionable = findings.filter((f, i) => isActionable(f) && !status[i]).length
+
+  function copyMarkdown() {
+    if (!result) return
+    navigator.clipboard?.writeText(findingsToMarkdown(result)).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
   }
 
   return (
     <>
+      {/* Scope picker */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Review:</span>
+        <div style={segmentWrap} role="radiogroup" aria-label="Review scope">
+          <button
+            role="radio" aria-checked={effectiveScope === 'view'}
+            disabled={!canScopeToView}
+            onClick={() => setScope('view')}
+            style={segmentBtn(effectiveScope === 'view')}
+            title={canScopeToView ? undefined : 'Open a view to scope the review to it'}
+          >
+            This view{activeView ? ` (${viewLabel(activeView).replace(/^.*view\s*/, '') || activeView.key})` : ''}
+          </button>
+          <button
+            role="radio" aria-checked={effectiveScope === 'workspace'}
+            onClick={() => setScope('workspace')}
+            style={segmentBtn(effectiveScope === 'workspace')}
+          >
+            Whole model
+          </button>
+        </div>
+      </div>
+
       <RunButton
-        label="Review architecture"
-        loading={reviewRun.loading}
-        onClick={() => reviewRun.run(() => reviewArchitecture(provider, workspace!), (md) => { setMarkdown(md); setPlan(null) })}
+        label={result ? 'Re-run review' : 'Review architecture'}
+        loading={run.loading}
+        onClick={runReview}
       />
-      <ErrorLine error={reviewRun.error} />
+      <ErrorLine error={run.error} />
 
-      {markdown && (
-        <>
-          <MarkdownResult title="Review" text={markdown} />
-
-          {!plan && (
-            <div style={{ marginTop: 12 }}>
-              <button
-                className="btn-primary"
-                disabled={planRun.loading}
-                onClick={() => planRun.run(() => applyReview(provider, workspace!, markdown), setPlan)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-              >
-                {planRun.loading ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}
-                {planRun.loading ? 'Preparing changes…' : 'Turn suggestions into changes'}
-              </button>
-              <p style={{ ...mutedSmall, marginTop: 6 }}>
-                Converts the concrete, structural suggestions above into model edits you review before applying.
-              </p>
+      {result && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={resultTitle}>
+              {findings.length === 0 ? 'No issues found' : `${findings.length} finding${findings.length === 1 ? '' : 's'}`}
             </div>
-          )}
-          <ErrorLine error={planRun.error} />
-
-          {plan && (
-            <div style={resultBox}>
-              <div style={resultTitle}>{planLines.length} proposed change(s) from the review</div>
-              {planLines.length === 0 ? (
-                <div style={mutedSmall}>The review had no suggestions that map to concrete model edits.</div>
-              ) : (
-                <ul style={listStyle}>{planLines.map((l, i) => <li key={i} style={listItem}>{l}</li>)}</ul>
-              )}
-              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                <button className="btn-primary" disabled={planLines.length === 0} onClick={applyPlan}>Apply changes</button>
-                <button className="btn-secondary" onClick={() => setPlan(null)}>Discard</button>
+            {findings.length > 0 && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn-secondary" onClick={copyMarkdown} style={smallBtn}>
+                  {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
+                </button>
+                {pendingActionable > 0 && (
+                  <button className="btn-primary" onClick={applyAll} style={smallBtn}>
+                    Apply all ({pendingActionable})
+                  </button>
+                )}
               </div>
+            )}
+          </div>
+
+          {findings.length === 0 ? (
+            <div style={mutedSmall}>This {effectiveScope === 'view' ? 'view' : 'model'} looks complete — nothing to flag.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {findings.map((f, i) => (
+                <FindingCard
+                  key={i}
+                  finding={f}
+                  names={names}
+                  status={status[i]}
+                  onApply={() => applyFinding(f, i)}
+                  onDismiss={() => setStatus((s) => ({ ...s, [i]: 'dismissed' }))}
+                />
+              ))}
             </div>
           )}
-        </>
+        </div>
       )}
     </>
+  )
+}
+
+const SEVERITY_COLOR: Record<string, string> = {
+  high: 'var(--color-danger, #dc2626)',
+  medium: 'var(--color-warning, #d97706)',
+  low: 'var(--color-text-muted)',
+}
+
+function FindingCard({
+  finding, names, status, onApply, onDismiss,
+}: {
+  finding: ReviewFinding
+  names: Map<string, string>
+  status?: FindingStatus
+  onApply: () => void
+  onDismiss: () => void
+}) {
+  const actionable = isActionable(finding)
+  const affected = finding.elementIds.map((id) => names.get(id) ?? id).filter(Boolean)
+  const dismissed = status === 'dismissed'
+
+  return (
+    <div style={{ ...resultBox, marginTop: 0, opacity: dismissed ? 0.55 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', color: SEVERITY_COLOR[finding.severity] ?? 'var(--color-text-muted)' }}>
+          {finding.severity}
+        </span>
+        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>{finding.title}</span>
+        <span style={chip}>{finding.category}</span>
+        {status === 'applied' && <span style={{ ...chip, color: 'var(--color-success, #16a34a)' }}>✓ applied</span>}
+      </div>
+
+      <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', marginTop: 6, lineHeight: 1.45 }}>{finding.detail}</div>
+      {affected.length > 0 && (
+        <div style={{ ...mutedSmall, marginTop: 4 }}>Affects: {affected.join(', ')}</div>
+      )}
+      <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 6 }}>
+        <strong style={{ color: 'var(--color-text-primary)' }}>Suggestion:</strong> {finding.suggestion}
+      </div>
+
+      {!dismissed && status !== 'applied' && (
+        <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+          {actionable && <button className="btn-primary" onClick={onApply} style={smallBtn}>Apply fix</button>}
+          <button className="btn-secondary" onClick={onDismiss} style={smallBtn}>Dismiss</button>
+          {!actionable && <span style={{ ...mutedSmall, alignSelf: 'center' }}>Advisory — no automatic fix</span>}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -687,3 +799,18 @@ const mutedSmall: React.CSSProperties = { fontSize: 'var(--text-xs)', color: 'va
 const listStyle: React.CSSProperties = { margin: '8px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }
 const listItem: React.CSSProperties = { fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', lineHeight: 1.45 }
 const smallBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-xs)', padding: '4px 8px' }
+const chip: React.CSSProperties = {
+  fontSize: 'var(--text-xs)', padding: '1px 7px', borderRadius: 999,
+  background: 'color-mix(in srgb, var(--color-text-muted) 16%, transparent)',
+  color: 'var(--color-text-muted)',
+}
+const segmentWrap: React.CSSProperties = {
+  display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden',
+}
+function segmentBtn(active: boolean): React.CSSProperties {
+  return {
+    fontSize: 'var(--text-xs)', fontWeight: 600, padding: '4px 10px', border: 'none', cursor: 'pointer',
+    background: active ? 'var(--color-accent)' : 'transparent',
+    color: active ? 'var(--color-accent-contrast, #fff)' : 'var(--color-text-muted)',
+  }
+}
