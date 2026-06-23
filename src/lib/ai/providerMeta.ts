@@ -4,7 +4,7 @@
 // with the AI panel. Adding a provider = add an entry here, an impl in
 // ./providers, and a case in ./providers/index.ts.
 
-export type AiProviderId = 'anthropic' | 'openai'
+export type AiProviderId = 'anthropic' | 'openai' | 'gemini'
 
 export interface AiModelOption {
   id: string
@@ -58,14 +58,29 @@ export const AI_PROVIDER_META: Record<AiProviderId, AiProviderMeta> = {
     keyHelpLabel: 'Get a key from the OpenAI dashboard',
     endpointHost: 'api.openai.com',
   },
+  gemini: {
+    id: 'gemini',
+    label: 'Google Gemini',
+    models: [
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro — most capable' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — faster, cheaper' },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    ],
+    defaultModel: 'gemini-2.5-pro',
+    keyLabel: 'Google AI API key',
+    keyPlaceholder: 'AIza…',
+    keyHelpUrl: 'https://aistudio.google.com/app/apikey',
+    keyHelpLabel: 'Get a key from Google AI Studio',
+    endpointHost: 'generativelanguage.googleapis.com',
+  },
 }
 
-export const AI_PROVIDER_IDS: AiProviderId[] = ['anthropic', 'openai']
+export const AI_PROVIDER_IDS: AiProviderId[] = ['anthropic', 'openai', 'gemini']
 
 export function getProviderMeta(id: AiProviderId): AiProviderMeta {
   return AI_PROVIDER_META[id]
 }
 
 export function isAiProviderId(value: unknown): value is AiProviderId {
-  return value === 'anthropic' || value === 'openai'
+  return value === 'anthropic' || value === 'openai' || value === 'gemini'
 }

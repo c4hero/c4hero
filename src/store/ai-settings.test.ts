@@ -6,22 +6,23 @@ describe('normalizeAiSettings', () => {
     const s = normalizeAiSettings(undefined)
     expect(s.enabled).toBe(true)
     expect(s.provider).toBe('anthropic')
-    expect(s.apiKeys).toEqual({ anthropic: '', openai: '' })
+    expect(s.apiKeys).toEqual({ anthropic: '', openai: '', gemini: '' })
     expect(s.models.anthropic).toBe('claude-opus-4-8')
     expect(s.models.openai).toBe('gpt-5')
+    expect(s.models.gemini).toBe('gemini-2.5-pro')
   })
 
   it('preserves valid per-provider values', () => {
     const s = normalizeAiSettings({
       enabled: false,
       provider: 'openai',
-      apiKeys: { anthropic: 'sk-ant', openai: 'sk-oai' },
-      models: { anthropic: 'claude-haiku-4-5', openai: 'gpt-4o' },
+      apiKeys: { anthropic: 'sk-ant', openai: 'sk-oai', gemini: 'AIzaX' },
+      models: { anthropic: 'claude-haiku-4-5', openai: 'gpt-4o', gemini: 'gemini-2.0-flash' },
     })
     expect(s.enabled).toBe(false)
     expect(s.provider).toBe('openai')
-    expect(s.apiKeys).toEqual({ anthropic: 'sk-ant', openai: 'sk-oai' })
-    expect(s.models).toEqual({ anthropic: 'claude-haiku-4-5', openai: 'gpt-4o' })
+    expect(s.apiKeys).toEqual({ anthropic: 'sk-ant', openai: 'sk-oai', gemini: 'AIzaX' })
+    expect(s.models).toEqual({ anthropic: 'claude-haiku-4-5', openai: 'gpt-4o', gemini: 'gemini-2.0-flash' })
   })
 
   it('rejects an unknown provider', () => {

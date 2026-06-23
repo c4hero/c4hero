@@ -1,8 +1,12 @@
-import { useMemo, useState } from 'react'
-import { X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  X, Settings, Home, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
+  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink, User,
+} from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { useAiSettingsStore, isAiReady, activeAiConfig } from '@/store/ai-settings'
+import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
 import { parseDSL } from '@/lib/dsl'
 import { downloadFile } from '@/lib/exportUtils'
 import type { View, Workspace } from '@/types/model'
@@ -10,164 +14,250 @@ import {
   createProvider, aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
-  applyEditPlan, describeOps, elementIdSet, elementNameMap, viewLabel,
+  applyEditPlan, describeOps, elementIdSet, elementNameMap, flattenElements, viewLabel,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
   findingsToMarkdown, sortedFindings, isActionable,
   type AiProvider, type EditActions, type DescribeActions,
   type EditPlan, type DescribePreview, type AiFeatureId, type AiChatTurn,
-  type ReviewResult, type ReviewFinding,
+  type ReviewResult, type ReviewFinding, type ReviewSeverity,
 } from '@/lib/ai'
 import { AI_FEATURES } from './aiFeatureMeta'
 import { MicButton } from './dictation'
 
+// ─── Palette (the "AI Assistant Hybrid" design) ─────────────────────
+
+const C = {
+  accent: '#58a6ff', accentHover: '#79b8ff', ink: '#0d1117',
+  text: '#e6edf3', text2: '#c9d1d9', muted: '#8b949e', muted2: '#848d97', muted3: '#6e7681',
+  panel: 'rgba(26,34,46,0.99)', card: '#161b22',
+  border: 'rgba(88,166,255,0.16)', borderStrong: 'rgba(88,166,255,0.45)',
+  green: '#22c55e', greenText: '#86efac',
+  danger: '#ef4444', dangerText: '#fca5a5',
+  warn: '#f97316', warnText: '#fdba74',
+}
+
+type TabId = 'home' | AiFeatureId
+
+const STYLE = `
+.c4ai [data-scroll]{scrollbar-width:thin;scrollbar-color:rgba(88,166,255,0.28) transparent}
+.c4ai [data-scroll]::-webkit-scrollbar{width:10px;height:10px}
+.c4ai [data-scroll]::-webkit-scrollbar-thumb{background:rgba(88,166,255,0.22);border-radius:999px;border:3px solid transparent;background-clip:padding-box}
+.c4ai-pri:hover{background:${C.accentHover}!important}
+.c4ai-ghost:hover{background:rgba(255,255,255,0.06)!important;color:${C.text}!important}
+.c4ai-sec:hover{background:rgba(255,255,255,0.05)!important}
+.c4ai-card:hover{border-color:${C.borderStrong}!important;background:#1c2128!important}
+@keyframes c4ai-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+`
+
 export default function AiPanel({ onClose }: { onClose: () => void }) {
-  const initialFeature = useWorkspaceStore((s) => s.aiPanelFeature)
-  const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const settings = useAiSettingsStore()
+  const setStoreSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
 
-  const [active, setActive] = useState<AiFeatureId>(initialFeature ?? 'generate')
-  const ready = isAiReady(settings)
+  const [tab, setTab] = useState<TabId>(() => useWorkspaceStore.getState().aiPanelFeature ?? 'home')
+  const [settingsOpen, setSettingsOpen] = useState(() => useWorkspaceStore.getState().aiSettingsOpen)
+
   const { provider: providerId, apiKey, model } = activeAiConfig(settings)
-
+  const hasKey = apiKey.trim().length > 0
+  const ready = isAiReady(settings)
   const provider = useMemo(
     () => (ready ? createProvider(providerId, { apiKey, model }) : null),
     [ready, providerId, apiKey, model],
   )
 
-  const activeMeta = AI_FEATURES.find((f) => f.id === active)!
+  function openSettings() { setSettingsOpen(true); setStoreSettingsOpen(false) }
+  function closeSettings() { setSettingsOpen(false); setStoreSettingsOpen(false) }
+
+  // View routing: no key → BYOK welcome; disabled or settings open → settings; else app.
+  const mode: 'byok' | 'settings' | 'app' = !hasKey ? 'byok' : (settingsOpen || !settings.enabled) ? 'settings' : 'app'
 
   return (
     <DialogShell
       onClose={onClose}
       ariaLabel="AI assistant"
+      className="c4ai"
       style={{
-        width: 'min(760px, 94vw)',
-        maxHeight: '88dvh',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRadius: 'var(--radius-xl)',
-        border: '1px solid var(--color-border)',
-        background: 'var(--glass-bg-heavy)',
-        boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
+        width: 'min(800px, 95vw)', height: 'min(86vh, 600px)', maxHeight: '92dvh',
+        display: 'flex', flexDirection: 'column',
+        background: C.panel, border: `1px solid ${C.border}`, borderRadius: 14,
+        boxShadow: '0 16px 64px rgba(0,0,0,0.6)', overflow: 'hidden',
+        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
       }}
     >
-      <div style={headerStyle}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-          <Sparkles size={16} /> AI assistant
+      <style>{STYLE}</style>
+
+      {mode === 'byok' && <ByokWelcome onClose={onClose} />}
+      {mode === 'settings' && <SettingsView onClose={onClose} onDone={hasKey ? closeSettings : undefined} />}
+      {mode === 'app' && provider && (
+        <AppView
+          provider={provider} workspace={workspace} model={model}
+          tab={tab} setTab={setTab} onOpenSettings={openSettings} onClose={onClose}
+        />
+      )}
+    </DialogShell>
+  )
+}
+
+// ─── App (header + tabs + body) ─────────────────────────────────────
+
+function AppView({
+  provider, workspace, model, tab, setTab, onOpenSettings, onClose,
+}: {
+  provider: AiProvider
+  workspace: Workspace | null
+  model: string
+  tab: TabId
+  setTab: (t: TabId) => void
+  onOpenSettings: () => void
+  onClose: () => void
+}) {
+  const tabs: { id: TabId; label: string; icon: typeof Home }[] = [
+    { id: 'home', label: 'Home', icon: Home },
+    ...AI_FEATURES.map((f) => ({ id: f.id as TabId, label: f.label, icon: f.icon })),
+  ]
+  const meta = AI_FEATURES.find((f) => f.id === tab)
+
+  return (
+    <>
+      {/* header */}
+      <div style={headerRow}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 15, fontWeight: 700, color: C.text }}>
+          <Sparkles size={17} color={C.accent} /> AI assistant
         </span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button onClick={() => setAiSettingsOpen(true)} className="btn-icon" aria-label="AI settings" title="AI settings" style={iconBtn}>
-            <Settings size={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={onOpenSettings} title="Connected — open AI settings"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 9px', borderRadius: 999, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 11, fontWeight: 500, color: C.greenText, cursor: 'pointer' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green }} />{model}
           </button>
-          <button onClick={onClose} className="btn-icon" aria-label="Close dialog" style={iconBtn}>
-            <X size={14} />
+          <button onClick={onOpenSettings} className="c4ai-ghost" aria-label="AI settings"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+            <Settings size={13} /> Settings
           </button>
+          <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={tabsStyle} role="tablist" aria-label="AI features">
-        {AI_FEATURES.map((f) => {
-          const Icon = f.icon
-          const selected = f.id === active
+      {/* tabs */}
+      <div data-scroll role="tablist" style={{ display: 'flex', gap: 3, padding: '8px 12px 0', borderBottom: `1px solid ${C.border}`, overflowX: 'auto', flexShrink: 0 }}>
+        {tabs.map((t) => {
+          const on = t.id === tab
+          const Icon = t.icon
           return (
-            <button
-              key={f.id}
-              role="tab"
-              aria-selected={selected}
-              onClick={() => setActive(f.id)}
-              style={{
-                ...tabBtn,
-                color: selected ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-                borderBottomColor: selected ? 'var(--color-accent)' : 'transparent',
-                background: selected ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
-              }}
-            >
-              <Icon size={14} /> {f.label}
+            <button key={t.id} role="tab" aria-selected={on} onClick={() => setTab(t.id)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 12px 11px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer', flex: 'none', whiteSpace: 'nowrap', background: on ? 'rgba(88,166,255,0.08)' : 'transparent', borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, color: on ? C.text : C.muted }}>
+              <Icon size={14} color={on ? C.accent : C.muted} /> {t.label}
             </button>
           )
         })}
       </div>
 
-      {/* Body */}
-      <div style={{ padding: '16px 20px 20px', overflowY: 'auto' }}>
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: '0 0 12px' }}>{activeMeta.blurb}</p>
-
-        {!ready ? (
-          <SetupNotice onOpenSettings={() => setAiSettingsOpen(true)} />
-        ) : activeMeta.needsWorkspace && !workspace ? (
-          <Empty>Open or create a workspace to use this feature.</Empty>
+      {/* body */}
+      <div data-scroll style={{ padding: '18px 20px 22px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {tab === 'home' ? (
+          <HomeLauncher onPick={setTab} />
         ) : (
-          <FeatureBody key={active} feature={active} provider={provider!} onClose={onClose} />
+          <>
+            <button onClick={() => setTab('home')} className="c4ai-ghost"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start', marginBottom: 14, padding: '4px 8px 4px 4px', borderRadius: 7, border: 'none', background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+              <ArrowLeft size={14} /> All tools
+            </button>
+            {meta?.needsWorkspace && !workspace
+              ? <Empty>Open or create a workspace to use this feature.</Empty>
+              : <FeatureBody feature={tab as AiFeatureId} provider={provider} workspace={workspace} onClose={onClose} />}
+          </>
         )}
       </div>
-    </DialogShell>
+    </>
   )
 }
 
-// ─── Per-feature bodies ─────────────────────────────────────────────
+function HomeLauncher({ onPick }: { onPick: (t: TabId) => void }) {
+  return (
+    <>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2, marginBottom: 13 }}>What do you want to do?</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+        {AI_FEATURES.map((f) => {
+          const Icon = f.icon
+          return (
+            <button key={f.id} onClick={() => onPick(f.id)} className="c4ai-card"
+              style={{ display: 'flex', gap: 13, alignItems: 'flex-start', textAlign: 'left', padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }}>
+              <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 10, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Icon size={19} /></span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>{f.label}</span>
+                <span style={{ display: 'block', fontSize: 12, color: C.muted2, lineHeight: 1.45, marginTop: 2 }}>{f.blurb}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+}
 
-function FeatureBody({ feature, provider, onClose }: { feature: AiFeatureId; provider: AiProvider; onClose: () => void }) {
+function FeatureBody({ feature, provider, workspace, onClose }: { feature: AiFeatureId; provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
   switch (feature) {
     case 'generate': return <GenerateBody provider={provider} onClose={onClose} />
     case 'interview': return <InterviewBody provider={provider} onClose={onClose} />
-    case 'edit': return <EditBody provider={provider} onClose={onClose} />
-    case 'describe': return <DescribeBody provider={provider} onClose={onClose} />
-    case 'review': return <ReviewBody provider={provider} />
-    case 'adr': return <AdrBody provider={provider} />
+    case 'edit': return <EditBody provider={provider} workspace={workspace} onClose={onClose} />
+    case 'describe': return <DescribeBody provider={provider} workspace={workspace} onClose={onClose} />
+    case 'review': return <ReviewBody provider={provider} workspace={workspace} />
+    case 'adr': return <AdrBody provider={provider} workspace={workspace} />
   }
 }
+
+// ─── Generate ───────────────────────────────────────────────────────
 
 function GenerateBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const [text, setText] = useState('')
-  const run = useAiRun<string>()
+  const run = useAiRun()
   const [dsl, setDsl] = useState<string | null>(null)
   const parsed = useMemo(() => (dsl ? parseDSL(dsl) : null), [dsl])
 
   return (
     <>
-      <Prompt
-        value={text}
-        onChange={setText}
-        placeholder="e.g. A food-delivery platform with a customer mobile app, a restaurant web portal, an API gateway, an orders service using Kafka, a payments service using Stripe, and a Postgres database."
-        rows={5}
-      />
-      <RunButton
-        label="Generate diagram"
-        loading={run.loading}
-        disabled={!text.trim()}
-        onClick={() => run.run(() => generateDiagram(provider, text), setDsl)}
-      />
+      <p style={blurb}>Describe a system in plain English — c4hero builds a fresh C4 model from it.</p>
+      <Field value={text} onChange={setText} grow={!parsed}
+        placeholder="e.g. A food-delivery platform with a customer mobile app, a restaurant web portal, an API gateway, an orders service using Kafka, a payments service using Stripe, and a Postgres database." />
+      <RunButton label="Generate diagram" loading={run.loading} disabled={!text.trim()}
+        onClick={() => run.go(() => generateDiagram(provider, text), setDsl)} />
       <ErrorLine error={run.error} />
 
       {parsed && (
-        <div style={resultBox}>
-          <div style={resultTitle}>Preview</div>
-          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
-            {summarize(parsed.workspace)}
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <span style={kicker}>Preview</span>
+            <span style={{ fontSize: 12, color: C.muted }}>{summarize(parsed.workspace)}</span>
+          </div>
+          <div style={{ ...kicker, marginTop: 14 }}>Elements</div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 8 }}>
+            {flattenElements(parsed.workspace).slice(0, 6).map((el) => (
+              <span key={el.id} style={chipBlue}>{el.name}</span>
+            ))}
+            {flattenElements(parsed.workspace).length > 6 && (
+              <span style={{ ...chipBlue, color: C.muted, borderColor: C.border, background: 'rgba(255,255,255,0.04)' }}>
+                +{flattenElements(parsed.workspace).length - 6} more
+              </span>
+            )}
           </div>
           {parsed.errors.length > 0 && (
-            <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--color-warning, #d97706)' }}>
-              {parsed.errors.length} parser warning(s) — the diagram may be partial.
-            </div>
+            <div style={{ marginTop: 10, fontSize: 12, color: C.warnText }}>{parsed.errors.length} parser warning(s) — the diagram may be partial.</div>
           )}
-          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <button
-              className="btn-primary"
-              disabled={!hasContent(parsed.workspace)}
-              onClick={() => { loadWorkspace(parsed.workspace); onClose() }}
-            >
-              Load diagram
-            </button>
-            <button className="btn-secondary" onClick={() => setDsl(null)}>Discard</button>
+          <div style={{ marginTop: 14, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.3)' }}>
+            <AlertCircle size={14} color={C.warn} style={{ flex: 'none', marginTop: 1 }} />
+            <span style={{ fontSize: 12, lineHeight: 1.45, color: C.warnText }}>Loading <strong style={{ color: '#fed7aa' }}>replaces your current model</strong> — it doesn’t merge into the open workspace.</span>
           </div>
-        </div>
+          <Actions>
+            <button className="c4ai-pri" style={primaryBtn} disabled={!hasContent(parsed.workspace)} onClick={() => { loadWorkspace(parsed.workspace); onClose() }}>Load diagram</button>
+            <button className="c4ai-sec" style={secondaryBtn} onClick={() => setDsl(null)}>Discard</button>
+          </Actions>
+        </Card>
       )}
     </>
   )
 }
+
+// ─── Interview ──────────────────────────────────────────────────────
 
 function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -179,94 +269,72 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
   const [question, setQuestion] = useState<string | null>(null)
   const [answer, setAnswer] = useState('')
   const [plan, setPlan] = useState<EditPlan | null>(null)
-  const run = useAiRun<void>()
+  const run = useAiRun()
+  const endRef = useRef<HTMLDivElement>(null)
   const started = history.length > 0
+
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [qa.length, question, plan, run.loading])
 
   if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
   const ws = workspace
   const v: View = view
 
-  async function start() {
-    await run.run(async () => {
+  function start() {
+    run.go(async () => {
       const kickoff = interviewKickoffMessage(v)
       const q = await interviewAsk(provider, ws, v, [], kickoff)
       setHistory([{ role: 'user', content: kickoff }, { role: 'assistant', content: q }])
-      setQuestion(q)
-    }, () => {})
+      return q
+    }, setQuestion)
   }
-
-  async function answerAndNext() {
+  function answerNext() {
     if (!question || !answer.trim()) return
     const a = answer.trim()
-    const baseHistory: AiChatTurn[] = [...history, { role: 'user', content: a }]
-    setQa((prev) => [...prev, { q: question, a }])
+    setQa((p) => [...p, { q: question, a }])
     setAnswer('')
-    await run.run(async () => {
+    run.go(async () => {
       const q = await interviewAsk(provider, ws, v, history, a)
-      setHistory([...baseHistory, { role: 'assistant', content: q }])
-      setQuestion(q)
-    }, () => {})
+      setHistory([...history, { role: 'user', content: a }, { role: 'assistant', content: q }])
+      return q
+    }, setQuestion)
   }
-
-  async function finish() {
-    // Fold in a pending answer, if any, before building the plan.
+  function finish() {
     let finalHistory = history
     if (question && answer.trim()) {
       const a = answer.trim()
       finalHistory = [...history, { role: 'user', content: a }]
-      setQa((prev) => [...prev, { q: question, a }])
-      setAnswer('')
-      setQuestion(null)
+      setQa((p) => [...p, { q: question, a }]); setAnswer(''); setQuestion(null)
     }
-    await run.run(async () => {
-      const built = await interviewBuildPlan(provider, ws, v, finalHistory)
-      setPlan(built)
-    }, () => {})
-  }
-
-  function apply() {
-    if (!plan) return
-    applyPlanToStore(plan, ws)
-    onClose()
+    run.go(() => interviewBuildPlan(provider, ws, v, finalHistory), setPlan)
   }
 
   const planLines = plan ? describeOps(plan, ws) : []
 
   return (
     <>
-      <p style={mutedSmall}>
-        Interviewing about the <strong>{viewLabel(v)}</strong>. Answer the questions (type or use
-        the mic); when you’re done, c4hero turns your answers into model updates.
-      </p>
+      <p style={blurb}>Filling in <span style={{ color: '#7dd3fc' }}>{viewLabel(v)}</span>. Answer the questions; c4hero turns them into model updates.</p>
 
-      {/* Completed exchanges */}
-      {qa.length > 0 && (
-        <div style={{ ...resultBox, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {!started && !plan && <RunButton label="Start interview" loading={run.loading} onClick={start} />}
+
+      {(started || plan) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {qa.map((x, i) => (
-            <div key={i}>
-              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)' }}>Q: {x.q}</div>
-              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 2 }}>A: {x.a}</div>
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Bubble who="ai">{x.q}</Bubble>
+              <Bubble who="user">{x.a}</Bubble>
             </div>
           ))}
+          {!plan && question && <Bubble who="ai">{question}</Bubble>}
         </div>
       )}
 
-      {!started ? (
-        <RunButton label="Start interview" loading={run.loading} onClick={start} />
-      ) : plan ? null : (
+      {started && !plan && (
         <div style={{ marginTop: 14 }}>
-          {question && (
-            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 8 }}>
-              {question}
-            </div>
-          )}
-          <Prompt value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} />
-          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn-secondary" disabled={run.loading || !answer.trim()} onClick={answerAndNext}>
-              {run.loading ? 'Thinking…' : 'Answer & next question'}
-            </button>
-            <button className="btn-primary" disabled={run.loading || qa.length === 0 && !answer.trim()} onClick={finish}>
-              Finish & update model
+          <Field value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} />
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="c4ai-sec" style={{ ...secondaryBtn, color: C.muted }} onClick={finish} disabled={run.loading}>Finish &amp; update model</button>
+            <button className="c4ai-pri" style={{ ...primaryBtn, height: 32 }} onClick={answerNext} disabled={run.loading || !answer.trim()}>
+              {run.loading ? 'Thinking…' : 'Answer'} <ArrowRight size={13} />
             </button>
           </div>
         </div>
@@ -275,83 +343,69 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
       <ErrorLine error={run.error} />
 
       {plan && (
-        <div style={resultBox}>
-          <div style={resultTitle}>{planLines.length} proposed change(s) from your answers</div>
-          {planLines.length === 0 ? (
-            <div style={mutedSmall}>No changes proposed — your answers matched the current model.</div>
-          ) : (
-            <ul style={listStyle}>{planLines.map((l, i) => <li key={i} style={listItem}>{l}</li>)}</ul>
-          )}
-          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <button className="btn-primary" disabled={planLines.length === 0} onClick={apply}>Apply changes</button>
-            <button className="btn-secondary" onClick={() => setPlan(null)}>Back</button>
-          </div>
-        </div>
+        <Card>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{planLines.length} proposed change(s) from your answers</div>
+          <PlanList lines={planLines} />
+          <Actions>
+            <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length} onClick={() => { applyPlanToStore(plan, ws); onClose() }}>Apply changes</button>
+            <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Back</button>
+          </Actions>
+        </Card>
       )}
+      <div ref={endRef} />
     </>
   )
 }
 
-function EditBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
-  const workspace = useWorkspaceStore((s) => s.workspace)
-  const [text, setText] = useState('')
-  const run = useAiRun<EditPlan>()
-  const [plan, setPlan] = useState<EditPlan | null>(null)
-  const lines = useMemo(() => (plan ? describeOps(plan, workspace) : []), [plan, workspace])
+function Bubble({ who, children }: { who: 'ai' | 'user'; children: React.ReactNode }) {
+  const ai = who === 'ai'
+  return (
+    <div style={{ display: 'flex', gap: 10, flexDirection: ai ? 'row' : 'row-reverse' }}>
+      <span style={{ width: 26, height: 26, flex: 'none', borderRadius: 8, background: ai ? 'rgba(88,166,255,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ai ? C.accent : C.muted }}>
+        {ai ? <Sparkles size={14} /> : <User size={13} />}
+      </span>
+      <span style={{ background: ai ? C.card : 'rgba(88,166,255,0.1)', border: `1px solid ${ai ? C.border : 'rgba(88,166,255,0.2)'}`, borderRadius: ai ? '4px 12px 12px 12px' : '12px 4px 12px 12px', padding: '10px 13px', fontSize: 13, lineHeight: 1.5, color: C.text, maxWidth: '80%' }}>{children}</span>
+    </div>
+  )
+}
 
-  function apply() {
-    if (!plan || !workspace) return
-    applyPlanToStore(plan, workspace)
-    onClose()
-  }
+// ─── Edit ───────────────────────────────────────────────────────────
+
+function EditBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
+  const [text, setText] = useState('')
+  const run = useAiRun()
+  const [plan, setPlan] = useState<EditPlan | null>(null)
+  const lines = plan && workspace ? describeOps(plan, workspace) : []
 
   return (
     <>
-      <Prompt
-        value={text}
-        onChange={setText}
-        placeholder="e.g. Add a Redis cache between the Web App and the Database, and connect the Admin to the Web App."
-        rows={4}
-      />
-      <RunButton
-        label="Plan changes"
-        loading={run.loading}
-        disabled={!text.trim()}
-        onClick={() => run.run(() => planEdit(provider, workspace!, text), setPlan)}
-      />
+      <p style={blurb}>Change the current model in plain English — c4hero proposes a diff you can review before applying.</p>
+      <Field value={text} onChange={setText} grow={!plan}
+        placeholder="e.g. Add a Redis cache between the Web App and the Database, and connect the Admin to the Web App." />
+      <RunButton label="Plan changes" loading={run.loading} disabled={!text.trim()}
+        onClick={() => run.go(() => planEdit(provider, workspace!, text), setPlan)} />
       <ErrorLine error={run.error} />
-
       {plan && (
-        <div style={resultBox}>
-          <div style={resultTitle}>{lines.length} proposed change(s)</div>
-          {lines.length === 0 ? (
-            <div style={mutedSmall}>No changes proposed.</div>
-          ) : (
-            <ul style={listStyle}>{lines.map((l, i) => <li key={i} style={listItem}>{l}</li>)}</ul>
-          )}
-          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <button className="btn-primary" disabled={lines.length === 0} onClick={apply}>Apply changes</button>
-            <button className="btn-secondary" onClick={() => setPlan(null)}>Discard</button>
-          </div>
-        </div>
+        <Card>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{lines.length} proposed change(s)</div>
+          <PlanList lines={lines} />
+          <Actions>
+            <button className="c4ai-pri" style={primaryBtn} disabled={!lines.length} onClick={() => { if (workspace) { applyPlanToStore(plan, workspace); onClose() } }}>Apply changes</button>
+            <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Discard</button>
+          </Actions>
+        </Card>
       )}
     </>
   )
 }
 
-function DescribeBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
-  const workspace = useWorkspaceStore((s) => s.workspace)
-  const missing = workspace ? countMissingDescriptions(workspace) : 0
-  const run = useAiRun<DescribePreview>()
-  const [preview, setPreview] = useState<DescribePreview | null>(null)
+// ─── Auto-describe ──────────────────────────────────────────────────
 
-  async function generate() {
-    if (!workspace) return
-    await run.run(async () => {
-      const result = await autoDescribe(provider, workspace)
-      return buildDescribePreview(result, workspace)
-    }, setPreview)
-  }
+function DescribeBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
+  const missing = workspace ? countMissingDescriptions(workspace) : 0
+  const run = useAiRun()
+  const [preview, setPreview] = useState<DescribePreview | null>(null)
+  const count = preview ? preview.elements.length + preview.relationships.length : 0
 
   function apply() {
     if (!preview) return
@@ -364,307 +418,353 @@ function DescribeBody({ provider, onClose }: { provider: AiProvider; onClose: ()
     onClose()
   }
 
-  const count = preview ? preview.elements.length + preview.relationships.length : 0
-
   return (
     <>
-      <p style={mutedSmall}>
-        {missing === 0
-          ? 'Every element and relationship already has a description.'
-          : `${missing} element(s)/relationship(s) are missing a description.`}
-      </p>
-      <RunButton
-        label="Suggest descriptions"
-        loading={run.loading}
-        disabled={missing === 0}
-        onClick={generate}
-      />
+      <p style={blurb}>{missing === 0 ? 'Every element and relationship already has a description.' : `${missing} element(s)/relationship(s) are missing a description.`}</p>
+      <RunButton label="Suggest descriptions" loading={run.loading} disabled={missing === 0}
+        onClick={() => run.go(async () => buildDescribePreview(await autoDescribe(provider, workspace!), workspace!), setPreview)} />
       <ErrorLine error={run.error} />
-
       {preview && (
-        <div style={resultBox}>
-          <div style={resultTitle}>{count} suggested description(s)</div>
-          {count === 0 ? (
-            <div style={mutedSmall}>No applicable suggestions.</div>
-          ) : (
-            <ul style={listStyle}>
-              {preview.elements.map((p) => (
-                <li key={`e-${p.id}`} style={listItem}><strong>{p.label}</strong>: {p.description}</li>
-              ))}
-              {preview.relationships.map((p) => (
-                <li key={`r-${p.id}`} style={listItem}><strong>{p.label}</strong>: {p.description}</li>
-              ))}
+        <Card>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{count} suggested description(s)</div>
+          {count === 0 ? <div style={{ ...blurb, margin: '8px 0 0' }}>No applicable suggestions.</div> : (
+            <ul style={{ margin: '10px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {preview.elements.map((p) => <li key={`e-${p.id}`} style={liStyle}><strong>{p.label}:</strong> {p.description}</li>)}
+              {preview.relationships.map((p) => <li key={`r-${p.id}`} style={liStyle}><strong>{p.label}:</strong> {p.description}</li>)}
             </ul>
           )}
-          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <button className="btn-primary" disabled={count === 0} onClick={apply}>Apply descriptions</button>
-            <button className="btn-secondary" onClick={() => setPreview(null)}>Discard</button>
-          </div>
-        </div>
+          <Actions>
+            <button className="c4ai-pri" style={primaryBtn} disabled={count === 0} onClick={apply}>Apply descriptions</button>
+            <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPreview(null)}>Discard</button>
+          </Actions>
+        </Card>
       )}
     </>
   )
 }
+
+// ─── Review ─────────────────────────────────────────────────────────
 
 type ReviewScope = 'view' | 'workspace'
 type FindingStatus = 'applied' | 'dismissed'
 
-function ReviewBody({ provider }: { provider: AiProvider }) {
-  const workspace = useWorkspaceStore((s) => s.workspace)
+const SEV: Record<ReviewSeverity, { dot: string; text: string; line: string; label: string }> = {
+  high: { dot: C.danger, text: C.dangerText, line: 'rgba(239,68,68,0.18)', label: 'High' },
+  medium: { dot: C.warn, text: C.warnText, line: 'rgba(249,115,22,0.18)', label: 'Medium' },
+  low: { dot: C.muted2, text: C.muted, line: 'rgba(132,141,151,0.18)', label: 'Low' },
+}
+
+function ReviewBody({ provider, workspace }: { provider: AiProvider; workspace: Workspace | null }) {
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
   const [scope, setScope] = useState<ReviewScope>('view')
-  const run = useAiRun<ReviewResult>()
+  const run = useAiRun()
   const [result, setResult] = useState<ReviewResult | null>(null)
   const [status, setStatus] = useState<Record<number, FindingStatus>>({})
   const [copied, setCopied] = useState(false)
 
-  const canScopeToView = !!activeView
-  const effectiveScope: ReviewScope = canScopeToView ? scope : 'workspace'
-
-  function runReview() {
-    const view = effectiveScope === 'view' ? activeView : null
-    run.run(() => reviewArchitecture(provider, workspace!, view), (r) => { setResult(r); setStatus({}) })
-  }
-
+  const canView = !!activeView
+  const effScope: ReviewScope = canView ? scope : 'workspace'
   const findings = result ? sortedFindings(result) : []
   const names = workspace ? elementNameMap(workspace) : new Map<string, string>()
+  const indexOf = (f: ReviewFinding) => findings.indexOf(f)
 
-  function applyFinding(finding: ReviewFinding, key: number) {
-    if (!workspace || !isActionable(finding)) return
-    applyPlanToStore({ operations: finding.operations ?? [] }, workspace)
-    setStatus((s) => ({ ...s, [key]: 'applied' }))
+  function runReview() {
+    run.go(() => reviewArchitecture(provider, workspace!, effScope === 'view' ? activeView : null), (r) => { setResult(r); setStatus({}) })
   }
-
+  function applyOne(f: ReviewFinding) {
+    const i = indexOf(f)
+    if (!workspace || !isActionable(f)) return
+    applyPlanToStore({ operations: f.operations ?? [] }, workspace)
+    setStatus((s) => ({ ...s, [i]: 'applied' }))
+  }
   function applyAll() {
     if (!workspace) return
-    const next: Record<number, FindingStatus> = { ...status }
-    findings.forEach((f, i) => {
-      if (isActionable(f) && !status[i]) {
-        applyPlanToStore({ operations: f.operations ?? [] }, workspace)
-        next[i] = 'applied'
-      }
-    })
+    const next = { ...status }
+    findings.forEach((f, i) => { if (isActionable(f) && !status[i]) { applyPlanToStore({ operations: f.operations ?? [] }, workspace); next[i] = 'applied' } })
     setStatus(next)
   }
-
-  const pendingActionable = findings.filter((f, i) => isActionable(f) && !status[i]).length
-
-  function copyMarkdown() {
+  function copyMd() {
     if (!result) return
-    navigator.clipboard?.writeText(findingsToMarkdown(result)).then(() => {
-      setCopied(true); setTimeout(() => setCopied(false), 1500)
-    }).catch(() => {})
+    navigator.clipboard?.writeText(findingsToMarkdown(result)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }).catch(() => {})
   }
+
+  const pending = findings.filter((f, i) => isActionable(f) && !status[i]).length
+  const fixable = findings.filter(isActionable).length
+  const groups = (['high', 'medium', 'low'] as ReviewSeverity[])
+    .map((sev) => ({ sev, items: findings.filter((f) => f.severity === sev) }))
+    .filter((g) => g.items.length > 0)
 
   return (
     <>
-      {/* Scope picker */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Review:</span>
-        <div style={segmentWrap} role="radiogroup" aria-label="Review scope">
-          <button
-            role="radio" aria-checked={effectiveScope === 'view'}
-            disabled={!canScopeToView}
-            onClick={() => setScope('view')}
-            style={segmentBtn(effectiveScope === 'view')}
-            title={canScopeToView ? undefined : 'Open a view to scope the review to it'}
-          >
-            This view{activeView ? ` (${viewLabel(activeView).replace(/^.*view\s*/, '') || activeView.key})` : ''}
-          </button>
-          <button
-            role="radio" aria-checked={effectiveScope === 'workspace'}
-            onClick={() => setScope('workspace')}
-            style={segmentBtn(effectiveScope === 'workspace')}
-          >
-            Whole model
-          </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: C.muted2 }}>Scope:</span>
+          <div style={segWrap}>
+            <button onClick={() => setScope('view')} disabled={!canView} style={segBtn(effScope === 'view')} title={canView ? undefined : 'Open a view to scope to it'}>This view</button>
+            <button onClick={() => setScope('workspace')} style={segBtn(effScope === 'workspace')}>Whole model</button>
+          </div>
         </div>
+        {result && findings.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <button className="c4ai-sec" onClick={copyMd} style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.text }}>{copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}</button>
+            {pending > 0 && <button className="c4ai-pri" onClick={applyAll} style={{ ...miniBtn, border: 'none', background: C.accent, color: C.ink, fontWeight: 600 }}>Apply all ({pending})</button>}
+          </div>
+        )}
       </div>
 
-      <RunButton
-        label={result ? 'Re-run review' : 'Review architecture'}
-        loading={run.loading}
-        onClick={runReview}
-      />
+      <div style={{ marginTop: 12 }}>
+        <RunButton label={result ? 'Re-run review' : 'Review architecture'} loading={run.loading} onClick={runReview} />
+      </div>
       <ErrorLine error={run.error} />
 
       {result && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={resultTitle}>
-              {findings.length === 0 ? 'No issues found' : `${findings.length} finding${findings.length === 1 ? '' : 's'}`}
-            </div>
-            {findings.length > 0 && (
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn-secondary" onClick={copyMarkdown} style={smallBtn}>
-                  {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
-                </button>
-                {pendingActionable > 0 && (
-                  <button className="btn-primary" onClick={applyAll} style={smallBtn}>
-                    Apply all ({pendingActionable})
-                  </button>
-                )}
+        findings.length === 0 ? (
+          <div style={{ ...blurb, marginTop: 14 }}>This {effScope === 'view' ? 'view' : 'model'} looks complete — nothing to flag.</div>
+        ) : (
+          <>
+            <div style={{ marginTop: 12, fontSize: 13, color: C.muted }}><span style={{ color: C.text, fontWeight: 600 }}>{findings.length} finding{findings.length === 1 ? '' : 's'}</span> · {fixable} fixable</div>
+            {groups.map((g) => (
+              <div key={g.sev}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 18 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: SEV[g.sev].dot }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: SEV[g.sev].text }}>{SEV[g.sev].label}</span>
+                  <span style={{ fontSize: 11, color: C.muted2 }}>{g.items.length}</span>
+                  <span style={{ flex: 1, height: 1, background: SEV[g.sev].line }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                  {g.items.map((f) => <FindingCard key={indexOf(f)} finding={f} names={names} status={status[indexOf(f)]} onApply={() => applyOne(f)} onDismiss={() => setStatus((s) => ({ ...s, [indexOf(f)]: 'dismissed' }))} />)}
+                </div>
               </div>
-            )}
-          </div>
-
-          {findings.length === 0 ? (
-            <div style={mutedSmall}>This {effectiveScope === 'view' ? 'view' : 'model'} looks complete — nothing to flag.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {findings.map((f, i) => (
-                <FindingCard
-                  key={i}
-                  finding={f}
-                  names={names}
-                  status={status[i]}
-                  onApply={() => applyFinding(f, i)}
-                  onDismiss={() => setStatus((s) => ({ ...s, [i]: 'dismissed' }))}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+            ))}
+          </>
+        )
       )}
     </>
   )
 }
 
-const SEVERITY_COLOR: Record<string, string> = {
-  high: 'var(--color-danger, #dc2626)',
-  medium: 'var(--color-warning, #d97706)',
-  low: 'var(--color-text-muted)',
-}
-
-function FindingCard({
-  finding, names, status, onApply, onDismiss,
-}: {
-  finding: ReviewFinding
-  names: Map<string, string>
-  status?: FindingStatus
-  onApply: () => void
-  onDismiss: () => void
-}) {
+function FindingCard({ finding, names, status, onApply, onDismiss }: { finding: ReviewFinding; names: Map<string, string>; status?: FindingStatus; onApply: () => void; onDismiss: () => void }) {
   const actionable = isActionable(finding)
+  const done = status === 'applied' || status === 'dismissed'
   const affected = finding.elementIds.map((id) => names.get(id) ?? id).filter(Boolean)
-  const dismissed = status === 'dismissed'
-
   return (
-    <div style={{ ...resultBox, marginTop: 0, opacity: dismissed ? 0.55 : 1 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', color: SEVERITY_COLOR[finding.severity] ?? 'var(--color-text-muted)' }}>
-          {finding.severity}
-        </span>
-        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>{finding.title}</span>
-        <span style={chip}>{finding.category}</span>
-        {status === 'applied' && <span style={{ ...chip, color: 'var(--color-success, #16a34a)' }}>✓ applied</span>}
-      </div>
-
-      <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', marginTop: 6, lineHeight: 1.45 }}>{finding.detail}</div>
-      {affected.length > 0 && (
-        <div style={{ ...mutedSmall, marginTop: 4 }}>Affects: {affected.join(', ')}</div>
-      )}
-      <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 6 }}>
-        <strong style={{ color: 'var(--color-text-primary)' }}>Suggestion:</strong> {finding.suggestion}
-      </div>
-
-      {!dismissed && status !== 'applied' && (
-        <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-          {actionable && <button className="btn-primary" onClick={onApply} style={smallBtn}>Apply fix</button>}
-          <button className="btn-secondary" onClick={onDismiss} style={smallBtn}>Dismiss</button>
-          {!actionable && <span style={{ ...mutedSmall, alignSelf: 'center' }}>Advisory — no automatic fix</span>}
+    <div style={{ display: 'flex', borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden', opacity: done ? 0.6 : 1 }}>
+      <span style={{ width: 3, flex: 'none', background: SEV[finding.severity].dot }} />
+      <div style={{ padding: '13px 15px', flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{finding.title}</span>
+          <span style={pillGrey}>{finding.category}</span>
+          {status === 'applied' && <span style={{ ...pillGrey, background: 'rgba(34,197,94,0.14)', color: C.greenText }}>✓ applied</span>}
+          {status === 'dismissed' && <span style={pillGrey}>dismissed</span>}
         </div>
-      )}
+        <div style={{ fontSize: 13, color: C.text2, lineHeight: 1.5, marginTop: 6 }}>{finding.detail}</div>
+        {affected.length > 0 && !done && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            <span style={{ fontSize: 11, color: C.muted2 }}>Affects:</span>
+            {affected.map((name, i) => <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: '#142540', border: '1px solid rgba(37,99,235,0.4)', fontSize: 11, color: '#7dd3fc' }}>{name}</span>)}
+          </div>
+        )}
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginTop: 8 }}><strong style={{ color: C.text }}>Suggestion:</strong> {finding.suggestion}</div>
+        {!done && (
+          <div style={{ marginTop: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
+            {actionable && <button className="c4ai-pri" style={{ ...miniBtn, height: 30, border: 'none', background: C.accent, color: C.ink, fontWeight: 600 }} onClick={onApply}>Apply fix</button>}
+            <button className="c4ai-sec" style={{ ...miniBtn, height: 30, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted }} onClick={onDismiss}>Dismiss</button>
+            {!actionable && <span style={{ fontSize: 11, color: C.muted2 }}>Advisory — no automatic fix</span>}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-function AdrBody({ provider }: { provider: AiProvider }) {
-  const workspace = useWorkspaceStore((s) => s.workspace)
+// ─── ADR ────────────────────────────────────────────────────────────
+
+function AdrBody({ provider, workspace }: { provider: AiProvider; workspace: Workspace | null }) {
   const [topic, setTopic] = useState('')
-  const run = useAiRun<string>()
-  const [markdown, setMarkdown] = useState<string | null>(null)
+  const run = useAiRun()
+  const [md, setMd] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  function copy() { if (md) navigator.clipboard?.writeText(md).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }).catch(() => {}) }
 
   return (
     <>
-      <Prompt
-        value={topic}
-        onChange={setTopic}
-        placeholder="e.g. Adopt event-driven messaging between the Orders and Payments services"
-        rows={3}
-      />
-      <RunButton
-        label="Draft ADR"
-        loading={run.loading}
-        disabled={!topic.trim()}
-        onClick={() => run.run(() => draftAdr(provider, workspace, topic), setMarkdown)}
-      />
+      <p style={blurb}>Capture an architecture decision as a Markdown record, grounded in the current model.</p>
+      <Field value={topic} onChange={setTopic} grow={!md} placeholder="e.g. Adopt event-driven messaging between the Orders and Payments services" />
+      <RunButton label="Draft ADR" loading={run.loading} disabled={!topic.trim()}
+        onClick={() => run.go(() => draftAdr(provider, workspace, topic), setMd)} />
       <ErrorLine error={run.error} />
-      {markdown && (
-        <MarkdownResult
-          title="ADR"
-          text={markdown}
-          download={{ filename: adrFilename(topic), content: markdown }}
-        />
+      {md && (
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>ADR</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="c4ai-sec" style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.text }} onClick={copy}>{copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}</button>
+              <button className="c4ai-sec" style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.text }} onClick={() => downloadFile(md, adrFilename(topic), 'text/markdown')}><Download size={12} /> .md</button>
+            </div>
+          </div>
+          <pre data-scroll style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '10px 0 0', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.55, color: C.text2, maxHeight: 280, overflowY: 'auto' }}>{md}</pre>
+        </Card>
       )}
     </>
   )
 }
 
-// ─── Shared building blocks ─────────────────────────────────────────
+// ─── BYOK welcome + Settings ────────────────────────────────────────
 
-interface RunState<T> {
+function ProviderPicker({ value, onPick }: { value: AiProviderId; onPick: (id: AiProviderId) => void }) {
+  return (
+    <div style={{ display: 'flex', gap: 7 }}>
+      {AI_PROVIDER_IDS.map((id) => {
+        const on = id === value
+        return (
+          <button key={id} onClick={() => onPick(id)}
+            style={{ flex: 1, height: 36, borderRadius: 10, fontSize: 13, cursor: 'pointer', background: on ? 'rgba(88,166,255,0.1)' : 'transparent', border: `1px solid ${on ? C.borderStrong : C.border}`, color: on ? C.text : C.muted, fontWeight: on ? 600 : 500 }}>
+            {AI_PROVIDER_META[id].label.replace(/^Google /, '').replace(/ \(Claude\)$/, '')}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ByokWelcome({ onClose }: { onClose: () => void }) {
+  const provider = useAiSettingsStore((s) => s.provider)
+  const update = useAiSettingsStore((s) => s.update)
+  const setApiKey = useAiSettingsStore((s) => s.setApiKey)
+  const meta = AI_PROVIDER_META[provider]
+  const [draft, setDraft] = useState('')
+
+  return (
+    <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '13px 14px 0' }}>
+        <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
+      </div>
+      <div style={{ padding: '6px 32px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', flex: 1, justifyContent: 'center' }}>
+        <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ position: 'absolute', inset: 0, borderRadius: 18, background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.2)' }} />
+          <KeyRound size={34} color={C.accent} style={{ position: 'relative' }} />
+        </div>
+        <h2 style={{ margin: '14px 0 0', fontSize: 20, fontWeight: 700, letterSpacing: '-.01em', color: C.text }}>Bring your own key</h2>
+        <p style={{ margin: '9px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 400 }}>AI features run on your own provider key. It stays in this browser and is sent only to the provider — c4hero has no server and never sees it.</p>
+        <div style={{ width: '100%', maxWidth: 420, marginTop: 22, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={fieldLabel}>Provider</div>
+            <ProviderPicker value={provider} onPick={(id) => update({ provider: id })} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={fieldLabel}>{meta.keyLabel}</div>
+              <a href={meta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent }}>Get a key <ExternalLink size={11} /></a>
+            </div>
+            <input type="text" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={meta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
+          </div>
+        </div>
+        <button className="c4ai-pri" onClick={() => { if (draft.trim()) setApiKey(draft.trim()) }} disabled={!draft.trim()}
+          style={{ width: '100%', maxWidth: 420, marginTop: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 40, borderRadius: 10, border: 'none', background: C.accent, color: C.ink, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          Save &amp; start <ArrowRight size={15} />
+        </button>
+        <SecurityNote style={{ maxWidth: 420, marginTop: 14 }} />
+      </div>
+    </div>
+  )
+}
+
+function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () => void }) {
+  const { enabled, provider, apiKeys, models, update, setApiKey, setModel } = useAiSettingsStore()
+  const meta = AI_PROVIDER_META[provider]
+  const [reveal, setReveal] = useState(false)
+  const modelListId = `c4ai-models-${provider}`
+
+  return (
+    <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+      <div style={headerRow}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 15, fontWeight: 700, color: C.text }}><KeyRound size={16} color={C.accent} /> AI settings</span>
+        <button onClick={onDone ?? onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
+      </div>
+      <div style={{ padding: '18px 20px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div><div style={fieldLabel}>Enable AI features</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>Show the AI assistant and its commands.</div></div>
+          <button role="switch" aria-checked={enabled} onClick={() => update({ enabled: !enabled })} style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? C.accent : 'rgba(255,255,255,0.16)', position: 'relative', flex: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <span style={{ position: 'absolute', top: 2, [enabled ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: enabled ? C.ink : C.text } as React.CSSProperties} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={fieldLabel}>Provider</div>
+          <ProviderPicker value={provider} onPick={(id) => update({ provider: id })} />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={fieldLabel}>{meta.keyLabel}</div>
+            <a href={meta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent }}>{meta.keyHelpLabel} <ExternalLink size={11} /></a>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input type={reveal ? 'text' : 'password'} value={apiKeys[provider] ?? ''} onChange={(e) => setApiKey(e.target.value)} placeholder={meta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
+            <button className="c4ai-sec" onClick={() => setReveal((r) => !r)} style={{ ...secondaryBtn, height: 38, padding: '0 12px' }}>{reveal ? 'Hide' : 'Show'}</button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={fieldLabel}>Model</div>
+          <input list={modelListId} value={models[provider] ?? ''} onChange={(e) => setModel(e.target.value)} placeholder={meta.defaultModel} autoComplete="off" spellCheck={false} style={keyInput} />
+          <datalist id={modelListId}>{meta.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</datalist>
+        </div>
+
+        <SecurityNote />
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+          <button onClick={() => { setApiKey(''); onClose() }} style={{ height: 34, padding: '0 14px', borderRadius: 10, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: C.dangerText, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Disconnect key</button>
+          <button className="c4ai-pri" onClick={onDone ?? onClose} style={{ ...primaryBtn, height: 34 }}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SecurityNote({ style }: { style?: React.CSSProperties }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)', ...style }}>
+      <ShieldCheck size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
+      <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Your key is stored only in this browser and sent only to the provider, directly from your device. Anyone with access to this profile can read it.</span>
+    </div>
+  )
+}
+
+// ─── Shared primitives ──────────────────────────────────────────────
+
+interface RunState {
   loading: boolean
   error: string | null
-  run: (fn: () => Promise<T>, onResult: (value: T) => void) => Promise<void>
+  go: <T>(fn: () => Promise<T>, onResult: (v: T) => void) => Promise<void>
 }
-
-function useAiRun<T>(): RunState<T> {
+function useAiRun(): RunState {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const run = async (fn: () => Promise<T>, onResult: (value: T) => void) => {
-    setLoading(true)
-    setError(null)
-    try {
-      onResult(await fn())
-    } catch (err) {
-      setError(aiErrorMessage(err))
-    } finally {
-      setLoading(false)
-    }
+  async function go<T>(fn: () => Promise<T>, onResult: (v: T) => void) {
+    setLoading(true); setError(null)
+    try { onResult(await fn()) } catch (err) { setError(aiErrorMessage(err)) } finally { setLoading(false) }
   }
-  return { loading, error, run }
+  return { loading, error, go }
 }
 
-function Prompt({ value, onChange, placeholder, rows }: { value: string; onChange: (v: string) => void; placeholder: string; rows: number }) {
+function Field({ value, onChange, placeholder, rows, grow }: { value: string; onChange: (v: string) => void; placeholder: string; rows?: number; grow?: boolean }) {
   return (
-    <div style={{ position: 'relative' }}>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        rows={rows}
-        style={{
-          width: '100%', resize: 'vertical', padding: '10px 40px 10px 12px', borderRadius: 'var(--radius-sm)',
-          border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)',
-          color: 'var(--color-text-primary)', fontSize: 'var(--text-sm)', lineHeight: 1.5,
-        }}
-      />
-      <MicButton value={value} onChange={onChange} style={{ position: 'absolute', top: 6, right: 6 }} />
+    <div style={{ position: 'relative', display: 'flex', ...(grow ? { flex: 1, minHeight: 130 } : {}) }}>
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={grow ? undefined : (rows ?? 3)}
+        style={{ width: '100%', resize: grow ? 'none' : 'vertical', height: grow ? '100%' : undefined, minHeight: grow ? undefined : 60, padding: '11px 42px 11px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, lineHeight: 1.5, fontFamily: 'inherit' }} />
+      <MicButton value={value} onChange={onChange} style={{ position: 'absolute', top: 8, right: 8, color: C.muted2 }} />
     </div>
   )
 }
 
 function RunButton({ label, loading, disabled, onClick }: { label: string; loading: boolean; disabled?: boolean; onClick: () => void }) {
   return (
-    <button
-      className="btn-primary"
-      disabled={loading || disabled}
-      onClick={onClick}
-      style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-    >
+    <button className="c4ai-pri" onClick={onClick} disabled={loading || disabled}
+      style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 7, alignSelf: 'flex-start', height: 36, padding: '0 16px', borderRadius: 10, border: 'none', background: C.accent, color: C.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (loading || disabled) ? 0.55 : 1 }}>
       {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
       {loading ? 'Thinking…' : label}
     </button>
@@ -673,66 +773,25 @@ function RunButton({ label, loading, disabled, onClick }: { label: string; loadi
 
 function ErrorLine({ error }: { error: string | null }) {
   if (!error) return null
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--color-danger, #dc2626)' }}>
-      <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} /> {error}
-    </div>
-  )
+  return <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 12, color: C.dangerText }}><AlertCircle size={13} style={{ flex: 'none', marginTop: 1 }} /> {error}</div>
 }
 
-function MarkdownResult({ title, text, download }: { title: string; text: string; download?: { filename: string; content: string } }) {
-  const [copied, setCopied] = useState(false)
-  function copy() {
-    navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    }).catch(() => {})
-  }
-  return (
-    <div style={resultBox}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={resultTitle}>{title}</div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn-secondary" onClick={copy} style={smallBtn}>
-            {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
-          </button>
-          {download && (
-            <button className="btn-secondary" onClick={() => downloadFile(download.content, download.filename, 'text/markdown')} style={smallBtn}>
-              <Download size={12} /> .md
-            </button>
-          )}
-        </div>
-      </div>
-      <pre style={{
-        whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '10px 0 0',
-        fontFamily: 'inherit', fontSize: 'var(--text-sm)', lineHeight: 1.55,
-        color: 'var(--color-text-primary)', maxHeight: '46dvh', overflowY: 'auto',
-      }}>{text}</pre>
-    </div>
-  )
+function Card({ children }: { children: React.ReactNode }) {
+  return <div style={{ marginTop: 16, padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-fade .25s ease' }}>{children}</div>
 }
-
-function SetupNotice({ onOpenSettings }: { onOpenSettings: () => void }) {
-  return (
-    <div style={resultBox}>
-      <div style={resultTitle}>Set up your API key</div>
-      <p style={{ ...mutedSmall, marginTop: 6 }}>
-        AI features are bring-your-own-key. Add your Anthropic API key to get started — it stays
-        in this browser and is sent only to Anthropic.
-      </p>
-      <button className="btn-primary" onClick={onOpenSettings} style={{ marginTop: 10 }}>Open AI settings</button>
-    </div>
-  )
+function Actions({ children }: { children: React.ReactNode }) {
+  return <div style={{ marginTop: 15, display: 'flex', gap: 8 }}>{children}</div>
 }
-
+function PlanList({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return <div style={{ ...blurb, margin: '8px 0 0' }}>No changes proposed.</div>
+  return <ul style={{ margin: '10px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>{lines.map((l, i) => <li key={i} style={liStyle}>{l}</li>)}</ul>
+}
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ ...mutedSmall, padding: '8px 0' }}>{children}</div>
+  return <div style={{ ...blurb, padding: '8px 0' }}>{children}</div>
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────
+// ─── apply / format helpers ─────────────────────────────────────────
 
-/** Apply an EditPlan through the workspace store actions (shared by Edit and
- *  Interview). Each add/update is an undoable store step. */
 function applyPlanToStore(plan: EditPlan, ws: Workspace) {
   const s = useWorkspaceStore.getState()
   const actions: EditActions = {
@@ -752,65 +811,33 @@ function summarize(ws: Workspace): string {
   const systems = ws.model.softwareSystems.length
   const containers = ws.model.softwareSystems.reduce((n, s) => n + s.containers.length, 0)
   const components = ws.model.softwareSystems.reduce((n, s) => n + s.containers.reduce((m, c) => m + c.components.length, 0), 0)
-  const parts = [
-    plural(ws.model.people.length, 'person', 'people'),
-    plural(systems, 'system', 'systems'),
-    plural(containers, 'container', 'containers'),
-  ]
+  const parts = [plural(ws.model.people.length, 'person', 'people'), plural(systems, 'system', 'systems'), plural(containers, 'container', 'containers')]
   if (components > 0) parts.push(plural(components, 'component', 'components'))
   parts.push(plural(ws.model.relationships.length, 'relationship', 'relationships'))
-  return parts.join(', ')
+  return parts.join(' · ')
 }
-
-function hasContent(ws: Workspace): boolean {
-  return ws.model.people.length > 0 || ws.model.softwareSystems.length > 0
-}
-
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
+function hasContent(ws: Workspace): boolean { return ws.model.people.length > 0 || ws.model.softwareSystems.length > 0 }
+function plural(n: number, one: string, many: string): string { return `${n} ${n === 1 ? one : many}` }
 function adrFilename(topic: string): string {
   const slug = topic.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'decision'
   return `adr-${slug}.md`
 }
 
-// ─── Styles ─────────────────────────────────────────────────────────
+// ─── style objects ──────────────────────────────────────────────────
 
-const headerStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  padding: '16px 20px 12px', borderBottom: '1px solid var(--color-border)',
-}
-const iconBtn: React.CSSProperties = { minWidth: 28, minHeight: 28, padding: 4 }
-const tabsStyle: React.CSSProperties = {
-  display: 'flex', gap: 2, padding: '0 12px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap',
-}
-const tabBtn: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 12px',
-  fontSize: 'var(--text-sm)', fontWeight: 600, border: 'none', borderBottom: '2px solid transparent',
-  background: 'transparent', cursor: 'pointer',
-}
-const resultBox: React.CSSProperties = {
-  marginTop: 14, padding: '12px 14px', borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)',
-}
-const resultTitle: React.CSSProperties = { fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }
-const mutedSmall: React.CSSProperties = { fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: 0 }
-const listStyle: React.CSSProperties = { margin: '8px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }
-const listItem: React.CSSProperties = { fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', lineHeight: 1.45 }
-const smallBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-xs)', padding: '4px 8px' }
-const chip: React.CSSProperties = {
-  fontSize: 'var(--text-xs)', padding: '1px 7px', borderRadius: 999,
-  background: 'color-mix(in srgb, var(--color-text-muted) 16%, transparent)',
-  color: 'var(--color-text-muted)',
-}
-const segmentWrap: React.CSSProperties = {
-  display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden',
-}
-function segmentBtn(active: boolean): React.CSSProperties {
-  return {
-    fontSize: 'var(--text-xs)', fontWeight: 600, padding: '4px 10px', border: 'none', cursor: 'pointer',
-    background: active ? 'var(--color-accent)' : 'transparent',
-    color: active ? 'var(--color-accent-contrast, #fff)' : 'var(--color-text-muted)',
-  }
+const headerRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 13px', borderBottom: `1px solid ${C.border}`, flex: 'none' }
+const iconBtn: React.CSSProperties = { width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer' }
+const blurb: React.CSSProperties = { fontSize: 12, color: C.muted2, margin: '0 0 12px' }
+const kicker: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2 }
+const fieldLabel: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: C.text }
+const liStyle: React.CSSProperties = { fontSize: 13, color: C.text, lineHeight: 1.45 }
+const primaryBtn: React.CSSProperties = { height: 32, padding: '0 14px', borderRadius: 10, border: 'none', background: C.accent, color: C.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }
+const secondaryBtn: React.CSSProperties = { height: 32, padding: '0 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.text, fontSize: 13, fontWeight: 500, cursor: 'pointer' }
+const miniBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }
+const keyInput: React.CSSProperties = { flex: 1, minWidth: 0, width: '100%', height: 38, padding: '0 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontFamily: 'ui-monospace, monospace', fontSize: 13 }
+const chipBlue: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500, background: '#142540', border: '1px solid rgba(37,99,235,0.4)', color: '#7dd3fc' }
+const pillGrey: React.CSSProperties = { fontSize: 10.5, padding: '1px 8px', borderRadius: 999, background: 'rgba(132,141,151,0.16)', color: C.muted }
+const segWrap: React.CSSProperties = { display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }
+function segBtn(active: boolean): React.CSSProperties {
+  return { height: 28, padding: '0 12px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: active ? C.accent : 'transparent', color: active ? C.ink : C.muted }
 }

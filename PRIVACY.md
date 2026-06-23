@@ -57,11 +57,11 @@ data the app handles, where it lives, and what is sent over the network.
 
 - The optional AI assistant is **opt-in** and **bring-your-own-key (BYOK)**. It
   is inert until you enter your own API key in AI settings. You choose the
-  provider — currently **Anthropic** or **OpenAI**.
+  provider — currently **Anthropic**, **OpenAI**, or **Google Gemini**.
 - Your API key(s) are stored only in this browser's `localStorage` (key
   `c4hero.ai.json`) and are never sent to any c4hero server — there isn't one.
 - When you run an AI feature, requests go **directly from your browser to your
-  chosen provider** (`https://api.anthropic.com` or `https://api.openai.com`).
+  chosen provider** (`api.anthropic.com`, `api.openai.com`, or `generativelanguage.googleapis.com`).
   The contents of those requests include the parts of your model needed for the
   feature (for example, your prompt plus a text summary of elements and
   relationships for Review, Edit, Auto-describe, and ADR drafting). Review your

@@ -26,7 +26,6 @@ import { restoreDirHandle, getCurrentDirHandle } from '@/lib/folderIO'
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
 const AiPanel = lazy(() => import('@/components/ai/AiPanel'))
-const AiSettingsDialog = lazy(() => import('@/components/ai/AiSettingsDialog'))
 
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -165,14 +164,9 @@ export default function App() {
       {/* BYOK AI assistant — available on every route, including the welcome
           screen (Generate from scratch). Rendered after the panel so the
           settings dialog stacks above it when both are open. */}
-      {aiPanelOpen && (
+      {(aiPanelOpen || aiSettingsOpen) && (
         <Suspense fallback={<LoadingDot />}>
-          <AiPanel onClose={() => setAiPanelOpen(false)} />
-        </Suspense>
-      )}
-      {aiSettingsOpen && (
-        <Suspense fallback={<LoadingDot />}>
-          <AiSettingsDialog onClose={() => setAiSettingsOpen(false)} />
+          <AiPanel onClose={() => { setAiPanelOpen(false); setAiSettingsOpen(false) }} />
         </Suspense>
       )}
     </>

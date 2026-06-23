@@ -2,6 +2,7 @@ import type { AiProvider, AiProviderConfig } from '../types'
 import type { AiProviderId } from '../providerMeta'
 import { createAnthropicProvider } from './anthropic'
 import { createOpenAiProvider } from './openai'
+import { createGeminiProvider } from './gemini'
 
 // The one place that maps a provider id to its implementation. To add a provider:
 // 1. add an entry to AI_PROVIDER_META (../providerMeta.ts),
@@ -13,6 +14,8 @@ export function createProvider(id: AiProviderId, config: AiProviderConfig): AiPr
       return createAnthropicProvider(config)
     case 'openai':
       return createOpenAiProvider(config)
+    case 'gemini':
+      return createGeminiProvider(config)
     default: {
       // Exhaustiveness guard — a new AiProviderId must be handled above.
       const _exhaustive: never = id
@@ -21,4 +24,4 @@ export function createProvider(id: AiProviderId, config: AiProviderConfig): AiPr
   }
 }
 
-export { createAnthropicProvider, createOpenAiProvider }
+export { createAnthropicProvider, createOpenAiProvider, createGeminiProvider }
