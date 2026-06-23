@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   flattenElements, elementIdSet, elementNameMap, serializeContext,
   elementsMissingDescription, relationshipsMissingDescription,
+  serializeViewContext, viewLabel,
 } from './context'
 import { makeWorkspace } from './testFixture'
+import type { View } from '@/types/model'
 
 describe('flattenElements', () => {
   it('walks people, systems, containers, and components in order', () => {
@@ -55,5 +57,34 @@ describe('serializeContext', () => {
     const text = serializeContext(ws)
     expect(text).toContain('RELATIONSHIPS')
     expect(text).toContain('(none)')
+  })
+})
+
+describe('viewLabel / serializeViewContext', () => {
+  const view: View = {
+    type: 'container', key: 'cont-shop', title: 'Containers', softwareSystemId: 'shop',
+    elements: [{ id: 'web' }, { id: 'db' }],
+    relationships: [{ id: 'r2' }],
+  }
+
+  it('labels the view by type and title', () => {
+    expect(viewLabel(view)).toBe('Container view “Containers”')
+  })
+
+  it('includes only on-screen elements and their relationships', () => {
+    const text = serializeViewContext(makeWorkspace(), view)
+    expect(text).toContain('Container view “Containers”')
+    expect(text).toContain('Scope element: Shop (shop)')
+    expect(text).toContain('web | container | Web App')
+    expect(text).toContain('db | container | Database')
+    // 'cust' is not in the view, so it must not appear in the on-screen list.
+    expect(text).not.toContain('cust | person')
+    // r2 connects web -> db, both on screen.
+    expect(text).toContain('r2 | Web App -> Database')
+  })
+
+  it('reports an empty view', () => {
+    const empty: View = { type: 'systemLandscape', key: 'l', elements: [], relationships: [] }
+    expect(serializeViewContext(makeWorkspace(), empty)).toContain('the view is empty')
   })
 })

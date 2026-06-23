@@ -1,4 +1,4 @@
-import { Sparkles, Wand2, Pencil, FileText, Stethoscope, type LucideIcon } from 'lucide-react'
+import { Sparkles, Wand2, Pencil, FileText, Stethoscope, MessagesSquare, type LucideIcon } from 'lucide-react'
 import type { AiFeatureId } from '@/lib/ai/types'
 
 export interface AiFeatureMeta {
@@ -12,6 +12,7 @@ export interface AiFeatureMeta {
 
 export const AI_FEATURES: ReadonlyArray<AiFeatureMeta> = [
   { id: 'generate', label: 'Generate', blurb: 'Describe a system → a new C4 diagram', icon: Sparkles, needsWorkspace: false },
+  { id: 'interview', label: 'Interview', blurb: 'Answer questions about this view to fill it in', icon: MessagesSquare, needsWorkspace: true },
   { id: 'edit', label: 'Edit', blurb: 'Change the model in plain English', icon: Pencil, needsWorkspace: true },
   { id: 'describe', label: 'Auto-describe', blurb: 'Fill in missing descriptions', icon: Wand2, needsWorkspace: true },
   { id: 'review', label: 'Review', blurb: 'Get an architecture critique', icon: Stethoscope, needsWorkspace: true },

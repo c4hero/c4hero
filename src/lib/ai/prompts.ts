@@ -1,5 +1,5 @@
-import type { Workspace } from '@/types/model'
-import { serializeContext } from './context'
+import type { Workspace, View } from '@/types/model'
+import { serializeContext, serializeViewContext, viewLabel } from './context'
 
 // System/user prompt builders. Pure string assembly — kept out of the provider
 // and feature orchestration so prompt wording is reviewable and testable.
@@ -130,4 +130,48 @@ export function adrUser(ws: Workspace | null, topic: string): string {
   }
   parts.push(`Draft an ADR for the following decision: ${topic.trim()}`)
   return parts.join('\n')
+}
+
+// ─── Interview ──────────────────────────────────────────────────────
+
+export function interviewSystem(ws: Workspace, view: View): string {
+  return [
+    'You are interviewing a software architect about the diagram they are currently looking at,',
+    'to fill gaps and improve the model. Ask ONE focused, specific question per turn —',
+    'about missing elements, unclear responsibilities, undocumented relationships, technologies,',
+    'data stores, external actors, or anything ambiguous on the current screen.',
+    'Prefer concrete questions grounded in what is on screen over generic ones. Keep each',
+    'question to one or two sentences. Do not answer for the user, do not summarize, and do not',
+    'emit any operations — just ask the next question. If the model already seems complete, ask',
+    'a question that would still add useful detail.',
+    '',
+    serializeViewContext(ws, view),
+  ].join('\n')
+}
+
+/** First user turn that kicks off the interview. */
+export function interviewKickoff(view: View): string {
+  return `Begin interviewing me about this ${viewLabel(view)}. Ask your first question.`
+}
+
+/** System prompt for turning the interview transcript into model operations. */
+export function interviewPlanSystem(ws: Workspace, view: View): string {
+  return [
+    'You turn an interview transcript into concrete edits to a C4 architecture model.',
+    'Using ONLY information the user provided in the conversation, emit the operations needed to',
+    'reflect it: add missing elements/relationships, set descriptions and technologies, rename or',
+    'correct elements. Do not invent facts the user did not state. Do not delete anything unless',
+    'the user explicitly said it does not exist.',
+    '',
+    editSystem(),
+    '',
+    'Current model (id-tagged):',
+    serializeContext(ws),
+    '',
+    serializeViewContext(ws, view),
+  ].join('\n')
+}
+
+export function interviewPlanUser(): string {
+  return 'Based on everything I told you in this interview, produce the operations to update the model.'
 }

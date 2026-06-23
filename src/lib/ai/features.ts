@@ -1,8 +1,9 @@
-import type { Workspace } from '@/types/model'
-import type { AiProvider, DescribeResult, EditPlan } from './types'
+import type { Workspace, View } from '@/types/model'
+import type { AiProvider, DescribeResult, EditPlan, AiChatTurn } from './types'
 import {
   generateSystem, generateUser, reviewSystem, reviewUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
+  interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
 } from './prompts'
 import {
   elementsMissingDescription, relationshipsMissingDescription,
@@ -62,6 +63,39 @@ export async function draftAdr(provider: AiProvider, ws: Workspace | null, topic
   return provider.complete({
     system: adrSystem(),
     user: adrUser(ws, topic),
+    maxTokens: 4000,
+  })
+}
+
+/** Interview: ask the next question given the prior turns. `history` is the full
+ *  alternating message log; `userMessage` is the kickoff (first turn) or the
+ *  user's latest answer. Returns the next question text. */
+export async function interviewAsk(
+  provider: AiProvider, ws: Workspace, view: View, history: AiChatTurn[], userMessage: string,
+): Promise<string> {
+  return provider.complete({
+    system: interviewSystem(ws, view),
+    history,
+    user: userMessage,
+    maxTokens: 600,
+  })
+}
+
+/** Convenience for the very first question. */
+export function interviewKickoffMessage(view: View): string {
+  return interviewKickoff(view)
+}
+
+/** Turn the interview transcript into an EditPlan to update the model. */
+export async function interviewBuildPlan(
+  provider: AiProvider, ws: Workspace, view: View, history: AiChatTurn[],
+): Promise<EditPlan> {
+  return provider.completeJson<EditPlan>({
+    system: interviewPlanSystem(ws, view),
+    history,
+    user: interviewPlanUser(),
+    schema: editSchema,
+    validate: isEditPlan,
     maxTokens: 4000,
   })
 }

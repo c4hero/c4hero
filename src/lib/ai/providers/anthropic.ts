@@ -59,7 +59,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
       return call(config, {
         max_tokens: req.maxTokens ?? 8000,
         system: req.system,
-        messages: [{ role: 'user', content: req.user }],
+        messages: [...(req.history ?? []), { role: 'user', content: req.user }],
       })
     },
 
@@ -67,7 +67,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
       const text = await call(config, {
         max_tokens: req.maxTokens ?? 4000,
         system: req.system,
-        messages: [{ role: 'user', content: req.user }],
+        messages: [...(req.history ?? []), { role: 'user', content: req.user }],
         output_config: { format: { type: 'json_schema', schema: req.schema } },
       })
       const parsed = parseJsonOrThrow(text)

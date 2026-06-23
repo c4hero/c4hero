@@ -51,9 +51,10 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
   return text
 }
 
-function messages(system: string, user: string) {
+function messages(system: string, user: string, history?: { role: 'user' | 'assistant'; content: string }[]) {
   return [
     { role: 'system', content: system },
+    ...(history ?? []),
     { role: 'user', content: user },
   ]
 }
@@ -63,7 +64,7 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
     async complete(req: AiTextRequest): Promise<string> {
       return call(config, {
         max_completion_tokens: req.maxTokens ?? 8000,
-        messages: messages(req.system, req.user),
+        messages: messages(req.system, req.user, req.history),
       })
     },
 
@@ -72,7 +73,7 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
       const system = `${req.system}\n\nReturn ONLY a JSON object that conforms to this JSON Schema:\n${JSON.stringify(req.schema)}`
       const text = await call(config, {
         max_completion_tokens: req.maxTokens ?? 4000,
-        messages: messages(system, req.user),
+        messages: messages(system, req.user, req.history),
         response_format: { type: 'json_object' },
       })
       const parsed = parseJsonOrThrow(text)

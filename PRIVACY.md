@@ -68,6 +68,13 @@ data the app handles, where it lives, and what is sent over the network.
   provider's privacy terms to understand how they handle that data.
 - No AI request is made unless you explicitly trigger a feature. Disabling AI in
   settings hides the assistant; clearing site data removes the stored key.
+- **Voice-to-text** dictation (the mic button on AI text boxes) uses your
+  browser's built-in Web Speech API. The audio is handled by the browser, not by
+  c4hero — and in some browsers (e.g. Chrome) the browser sends that audio to the
+  browser vendor's speech-recognition service for transcription. This only
+  happens while you are actively dictating, and the recognized text stays in the
+  text box until you choose to run an AI feature with it. If you prefer not to
+  use it, simply type instead; the button does nothing unless you press it.
 - Anyone with access to this browser profile can read the stored key, the same
   as any other site credential kept in `localStorage`. Use a scoped key.
 

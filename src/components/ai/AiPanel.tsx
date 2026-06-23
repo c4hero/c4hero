@@ -1,19 +1,22 @@
 import { useMemo, useState } from 'react'
 import { X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
-import { useWorkspaceStore } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { useAiSettingsStore, isAiReady, activeAiConfig } from '@/store/ai-settings'
 import { parseDSL } from '@/lib/dsl'
 import { downloadFile } from '@/lib/exportUtils'
+import type { View, Workspace } from '@/types/model'
 import {
   createProvider, aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr,
-  applyEditPlan, describeOps, elementIdSet,
+  interviewAsk, interviewKickoffMessage, interviewBuildPlan,
+  applyEditPlan, describeOps, elementIdSet, viewLabel,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
   type AiProvider, type EditActions, type DescribeActions,
-  type EditPlan, type DescribePreview, type AiFeatureId,
+  type EditPlan, type DescribePreview, type AiFeatureId, type AiChatTurn,
 } from '@/lib/ai'
 import { AI_FEATURES } from './aiFeatureMeta'
+import { MicButton } from './dictation'
 
 export default function AiPanel({ onClose }: { onClose: () => void }) {
   const initialFeature = useWorkspaceStore((s) => s.aiPanelFeature)
@@ -106,6 +109,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
 function FeatureBody({ feature, provider, onClose }: { feature: AiFeatureId; provider: AiProvider; onClose: () => void }) {
   switch (feature) {
     case 'generate': return <GenerateBody provider={provider} onClose={onClose} />
+    case 'interview': return <InterviewBody provider={provider} onClose={onClose} />
     case 'edit': return <EditBody provider={provider} onClose={onClose} />
     case 'describe': return <DescribeBody provider={provider} onClose={onClose} />
     case 'review': return <ReviewBody provider={provider} />
@@ -163,6 +167,129 @@ function GenerateBody({ provider, onClose }: { provider: AiProvider; onClose: ()
   )
 }
 
+function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
+
+  const [history, setHistory] = useState<AiChatTurn[]>([])
+  const [qa, setQa] = useState<{ q: string; a: string }[]>([])
+  const [question, setQuestion] = useState<string | null>(null)
+  const [answer, setAnswer] = useState('')
+  const [plan, setPlan] = useState<EditPlan | null>(null)
+  const run = useAiRun<void>()
+  const started = history.length > 0
+
+  if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
+  const ws = workspace
+  const v: View = view
+
+  async function start() {
+    await run.run(async () => {
+      const kickoff = interviewKickoffMessage(v)
+      const q = await interviewAsk(provider, ws, v, [], kickoff)
+      setHistory([{ role: 'user', content: kickoff }, { role: 'assistant', content: q }])
+      setQuestion(q)
+    }, () => {})
+  }
+
+  async function answerAndNext() {
+    if (!question || !answer.trim()) return
+    const a = answer.trim()
+    const baseHistory: AiChatTurn[] = [...history, { role: 'user', content: a }]
+    setQa((prev) => [...prev, { q: question, a }])
+    setAnswer('')
+    await run.run(async () => {
+      const q = await interviewAsk(provider, ws, v, history, a)
+      setHistory([...baseHistory, { role: 'assistant', content: q }])
+      setQuestion(q)
+    }, () => {})
+  }
+
+  async function finish() {
+    // Fold in a pending answer, if any, before building the plan.
+    let finalHistory = history
+    if (question && answer.trim()) {
+      const a = answer.trim()
+      finalHistory = [...history, { role: 'user', content: a }]
+      setQa((prev) => [...prev, { q: question, a }])
+      setAnswer('')
+      setQuestion(null)
+    }
+    await run.run(async () => {
+      const built = await interviewBuildPlan(provider, ws, v, finalHistory)
+      setPlan(built)
+    }, () => {})
+  }
+
+  function apply() {
+    if (!plan) return
+    applyPlanToStore(plan, ws)
+    onClose()
+  }
+
+  const planLines = plan ? describeOps(plan, ws) : []
+
+  return (
+    <>
+      <p style={mutedSmall}>
+        Interviewing about the <strong>{viewLabel(v)}</strong>. Answer the questions (type or use
+        the mic); when you’re done, c4hero turns your answers into model updates.
+      </p>
+
+      {/* Completed exchanges */}
+      {qa.length > 0 && (
+        <div style={{ ...resultBox, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {qa.map((x, i) => (
+            <div key={i}>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)' }}>Q: {x.q}</div>
+              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 2 }}>A: {x.a}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!started ? (
+        <RunButton label="Start interview" loading={run.loading} onClick={start} />
+      ) : plan ? null : (
+        <div style={{ marginTop: 14 }}>
+          {question && (
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 8 }}>
+              {question}
+            </div>
+          )}
+          <Prompt value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} />
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn-secondary" disabled={run.loading || !answer.trim()} onClick={answerAndNext}>
+              {run.loading ? 'Thinking…' : 'Answer & next question'}
+            </button>
+            <button className="btn-primary" disabled={run.loading || qa.length === 0 && !answer.trim()} onClick={finish}>
+              Finish & update model
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ErrorLine error={run.error} />
+
+      {plan && (
+        <div style={resultBox}>
+          <div style={resultTitle}>{planLines.length} proposed change(s) from your answers</div>
+          {planLines.length === 0 ? (
+            <div style={mutedSmall}>No changes proposed — your answers matched the current model.</div>
+          ) : (
+            <ul style={listStyle}>{planLines.map((l, i) => <li key={i} style={listItem}>{l}</li>)}</ul>
+          )}
+          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+            <button className="btn-primary" disabled={planLines.length === 0} onClick={apply}>Apply changes</button>
+            <button className="btn-secondary" onClick={() => setPlan(null)}>Back</button>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 function EditBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const [text, setText] = useState('')
@@ -172,18 +299,7 @@ function EditBody({ provider, onClose }: { provider: AiProvider; onClose: () => 
 
   function apply() {
     if (!plan || !workspace) return
-    const s = useWorkspaceStore.getState()
-    const actions: EditActions = {
-      addPerson: (name) => s.addPerson(name),
-      addSoftwareSystem: (name) => s.addSoftwareSystem(name),
-      addContainer: (systemId, name) => s.addContainer(systemId, name),
-      addComponent: (containerId, name) => s.addComponent(containerId, name),
-      addRelationship: (src, dst, desc, tech) => s.addRelationship(src, dst, desc, tech),
-      updateElement: (id, patch) => s.updateElement(id, patch),
-      updateRelationship: (id, patch) => s.updateRelationship(id, patch),
-      deleteElement: (id) => s.deleteElement(id),
-    }
-    applyEditPlan(plan, actions, elementIdSet(workspace))
+    applyPlanToStore(plan, workspace)
     onClose()
   }
 
@@ -365,17 +481,20 @@ function useAiRun<T>(): RunState<T> {
 
 function Prompt({ value, onChange, placeholder, rows }: { value: string; onChange: (v: string) => void; placeholder: string; rows: number }) {
   return (
-    <textarea
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={rows}
-      style={{
-        width: '100%', resize: 'vertical', padding: '10px 12px', borderRadius: 'var(--radius-sm)',
-        border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)',
-        color: 'var(--color-text-primary)', fontSize: 'var(--text-sm)', lineHeight: 1.5,
-      }}
-    />
+    <div style={{ position: 'relative' }}>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        style={{
+          width: '100%', resize: 'vertical', padding: '10px 40px 10px 12px', borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)',
+          color: 'var(--color-text-primary)', fontSize: 'var(--text-sm)', lineHeight: 1.5,
+        }}
+      />
+      <MicButton value={value} onChange={onChange} style={{ position: 'absolute', top: 6, right: 6 }} />
+    </div>
   )
 }
 
@@ -453,7 +572,24 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function summarize(ws: import('@/types/model').Workspace): string {
+/** Apply an EditPlan through the workspace store actions (shared by Edit and
+ *  Interview). Each add/update is an undoable store step. */
+function applyPlanToStore(plan: EditPlan, ws: Workspace) {
+  const s = useWorkspaceStore.getState()
+  const actions: EditActions = {
+    addPerson: (name) => s.addPerson(name),
+    addSoftwareSystem: (name) => s.addSoftwareSystem(name),
+    addContainer: (systemId, name) => s.addContainer(systemId, name),
+    addComponent: (containerId, name) => s.addComponent(containerId, name),
+    addRelationship: (src, dst, desc, tech) => s.addRelationship(src, dst, desc, tech),
+    updateElement: (id, patch) => s.updateElement(id, patch),
+    updateRelationship: (id, patch) => s.updateRelationship(id, patch),
+    deleteElement: (id) => s.deleteElement(id),
+  }
+  applyEditPlan(plan, actions, elementIdSet(ws))
+}
+
+function summarize(ws: Workspace): string {
   const systems = ws.model.softwareSystems.length
   const containers = ws.model.softwareSystems.reduce((n, s) => n + s.containers.length, 0)
   const components = ws.model.softwareSystems.reduce((n, s) => n + s.containers.reduce((m, c) => m + c.components.length, 0), 0)
@@ -467,7 +603,7 @@ function summarize(ws: import('@/types/model').Workspace): string {
   return parts.join(', ')
 }
 
-function hasContent(ws: import('@/types/model').Workspace): boolean {
+function hasContent(ws: Workspace): boolean {
   return ws.model.people.length > 0 || ws.model.softwareSystems.length > 0
 }
 

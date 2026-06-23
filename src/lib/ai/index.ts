@@ -6,7 +6,7 @@
 // orchestration over an injected AiProvider, so features stay testable.
 
 export type {
-  AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest,
+  AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn,
   EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind, AiFeatureId,
 } from './types'
 export { AiError, aiErrorMessage } from './types'
@@ -18,10 +18,12 @@ export { createProvider } from './providers'
 
 export {
   generateDiagram, reviewArchitecture, autoDescribe, planEdit, draftAdr,
+  interviewAsk, interviewKickoffMessage, interviewBuildPlan,
 } from './features'
 
 export {
-  serializeContext, flattenElements, elementIdSet, elementNameMap,
+  serializeContext, serializeViewContext, viewLabel,
+  flattenElements, elementIdSet, elementNameMap,
   elementsMissingDescription, relationshipsMissingDescription,
 } from './context'
 

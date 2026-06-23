@@ -1,5 +1,5 @@
 import type {
-  Workspace, ModelElement, Person, SoftwareSystem, Container, Component, Relationship,
+  Workspace, ModelElement, Person, SoftwareSystem, Container, Component, Relationship, View,
 } from '@/types/model'
 
 // Pure helpers that flatten a Workspace into compact, id-tagged context for
@@ -119,4 +119,56 @@ function formatElementLine(el: Person | SoftwareSystem | Container | Component):
   const technology = 'technology' in el && el.technology ? el.technology : '-'
   const description = el.description?.trim() || '(no description)'
   return `${el.id} | ${el.type} | ${el.name} | ${technology} | ${description}`
+}
+
+const VIEW_TYPE_LABELS: Record<View['type'], string> = {
+  systemLandscape: 'System Landscape',
+  systemContext: 'System Context',
+  container: 'Container',
+  component: 'Component',
+}
+
+/** Short human label for a view, e.g. "Container view "Containers"". */
+export function viewLabel(view: View): string {
+  const kind = VIEW_TYPE_LABELS[view.type]
+  return view.title ? `${kind} view “${view.title}”` : `${kind} view`
+}
+
+/** Focused context for one view: the view itself plus only the elements and
+ *  relationships actually shown in it. Used to ground the interview on the
+ *  current screen rather than the whole workspace. */
+export function serializeViewContext(ws: Workspace, view: View): string {
+  const names = elementNameMap(ws)
+  const flat = new Map(flattenElements(ws).map((e) => [e.id, e]))
+  const viewElementIds = new Set(view.elements.map((e) => e.id))
+
+  const lines: string[] = []
+  lines.push(`The user is viewing the ${viewLabel(view)} (key: ${view.key}).`)
+  const scopeId = view.softwareSystemId ?? view.containerId
+  if (scopeId) lines.push(`Scope element: ${names.get(scopeId) ?? scopeId} (${scopeId}).`)
+  lines.push('')
+  lines.push('ELEMENTS ON SCREEN (id | type | name | technology | description):')
+  if (viewElementIds.size === 0) {
+    lines.push('  (the view is empty)')
+  } else {
+    for (const id of viewElementIds) {
+      const el = flat.get(id)
+      if (el) lines.push(`  ${el.id} | ${el.type} | ${el.name} | ${el.technology ?? '-'} | ${el.description?.trim() || '(no description)'}`)
+    }
+  }
+
+  lines.push('')
+  lines.push('RELATIONSHIPS ON SCREEN (id | source -> destination | description):')
+  const onScreenRels = ws.model.relationships.filter(
+    (r) => viewElementIds.has(r.sourceId) && viewElementIds.has(r.destinationId),
+  )
+  if (onScreenRels.length === 0) {
+    lines.push('  (none)')
+  } else {
+    for (const r of onScreenRels) {
+      lines.push(`  ${r.id} | ${names.get(r.sourceId) ?? r.sourceId} -> ${names.get(r.destinationId) ?? r.destinationId} | ${r.description?.trim() || '(no description)'}`)
+    }
+  }
+
+  return lines.join('\n')
 }

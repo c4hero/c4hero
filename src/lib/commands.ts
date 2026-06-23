@@ -431,6 +431,15 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       execute: () => store().setAiPanelOpen(true, 'generate'),
     },
     {
+      id: 'ai-interview',
+      label: 'AI: Interview me about this view…',
+      category: 'ai',
+      icon: Sparkles,
+      keywords: ['ai', 'interview', 'questions', 'voice', 'fill', 'gather'],
+      when: () => !!store().workspace,
+      execute: () => store().setAiPanelOpen(true, 'interview'),
+    },
+    {
       id: 'ai-edit',
       label: 'AI: Edit with a prompt…',
       category: 'ai',

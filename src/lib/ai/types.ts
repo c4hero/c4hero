@@ -1,5 +1,5 @@
-/** The five BYOK AI features, used as panel tab ids. */
-export type AiFeatureId = 'generate' | 'edit' | 'describe' | 'review' | 'adr'
+/** The BYOK AI features, used as panel tab ids. */
+export type AiFeatureId = 'generate' | 'interview' | 'edit' | 'describe' | 'review' | 'adr'
 
 // ─── Provider abstraction ───────────────────────────────────────────
 //
@@ -7,8 +7,16 @@ export type AiFeatureId = 'generate' | 'edit' | 'describe' | 'review' | 'adr'
 // network/SDK layer out of the testable feature logic and leaves room for a
 // future OpenAI-compatible provider without touching feature code.
 
+export interface AiChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface AiTextRequest {
   system: string
+  /** Prior turns for multi-turn features (e.g. the interview). The final `user`
+   *  field is appended after these. Omit for single-shot requests. */
+  history?: AiChatTurn[]
   user: string
   /** Hard cap on output tokens. */
   maxTokens?: number
