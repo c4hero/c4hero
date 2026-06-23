@@ -56,15 +56,16 @@ data the app handles, where it lives, and what is sent over the network.
 ## AI features (bring-your-own-key)
 
 - The optional AI assistant is **opt-in** and **bring-your-own-key (BYOK)**. It
-  is inert until you enter your own Anthropic API key in AI settings.
-- Your API key is stored only in this browser's `localStorage` (key
-  `c4hero.ai.json`) and is never sent to any c4hero server — there isn't one.
-- When you run an AI feature, requests go **directly from your browser to
-  Anthropic** (`https://api.anthropic.com`). The contents of those requests
-  include the parts of your model needed for the feature (for example, your
-  prompt plus a text summary of elements and relationships for Review, Edit,
-  Auto-describe, and ADR drafting). Review Anthropic's privacy terms to
-  understand how they handle that data.
+  is inert until you enter your own API key in AI settings. You choose the
+  provider — currently **Anthropic** or **OpenAI**.
+- Your API key(s) are stored only in this browser's `localStorage` (key
+  `c4hero.ai.json`) and are never sent to any c4hero server — there isn't one.
+- When you run an AI feature, requests go **directly from your browser to your
+  chosen provider** (`https://api.anthropic.com` or `https://api.openai.com`).
+  The contents of those requests include the parts of your model needed for the
+  feature (for example, your prompt plus a text summary of elements and
+  relationships for Review, Edit, Auto-describe, and ADR drafting). Review your
+  provider's privacy terms to understand how they handle that data.
 - No AI request is made unless you explicitly trigger a feature. Disabling AI in
   settings hides the assistant; clearing site data removes the stored key.
 - Anyone with access to this browser profile can read the stored key, the same

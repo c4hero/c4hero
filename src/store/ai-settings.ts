@@ -1,55 +1,80 @@
 import { create } from 'zustand'
 import { isRecord } from '@/lib/guards'
 import { readJSON, writeJSON } from '@/lib/safeStorage'
+import {
+  AI_PROVIDER_IDS, AI_PROVIDER_META, isAiProviderId, type AiProviderId,
+} from '@/lib/ai/providerMeta'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-/** Anthropic models offered for BYOK use. Defaults to the most capable. */
-export type AiModel = 'claude-opus-4-8' | 'claude-sonnet-4-6' | 'claude-haiku-4-5'
-
-export const AI_MODELS: ReadonlyArray<{ id: AiModel; label: string; blurb: string }> = [
-  { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', blurb: 'Most capable — best diagrams' },
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', blurb: 'Faster, cheaper, very capable' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', blurb: 'Fastest, lowest cost' },
-]
-
 export interface AiSettings {
-  /** User's Anthropic API key. Stored only in this browser's localStorage and
-   *  used solely for direct browser→api.anthropic.com calls. Never sent elsewhere. */
-  apiKey: string
-  model: AiModel
   /** Master toggle. When false, all AI UI is hidden. */
   enabled: boolean
+  /** Currently selected provider. */
+  provider: AiProviderId
+  /** API key per provider — keeping both lets users switch without re-entering.
+   *  Stored only in this browser; sent only to the matching provider's host. */
+  apiKeys: Record<AiProviderId, string>
+  /** Model id per provider (free text; suggestions come from provider metadata). */
+  models: Record<AiProviderId, string>
+}
+
+function emptyKeys(): Record<AiProviderId, string> {
+  return AI_PROVIDER_IDS.reduce((acc, id) => { acc[id] = ''; return acc }, {} as Record<AiProviderId, string>)
+}
+
+function defaultModels(): Record<AiProviderId, string> {
+  return AI_PROVIDER_IDS.reduce((acc, id) => { acc[id] = AI_PROVIDER_META[id].defaultModel; return acc }, {} as Record<AiProviderId, string>)
 }
 
 const DEFAULTS: AiSettings = {
-  apiKey: '',
-  model: 'claude-opus-4-8',
   enabled: true,
+  provider: 'anthropic',
+  apiKeys: emptyKeys(),
+  models: defaultModels(),
 }
 
-// Stored separately from the main settings file so the key never rides along
-// with workspace/theme settings that might be shared or exported.
 const STORAGE_KEY = 'c4hero.ai.json'
 
-const MODEL_IDS: ReadonlySet<string> = new Set<AiModel>(AI_MODELS.map((m) => m.id))
-
-function isAiModel(value: unknown): value is AiModel {
-  return typeof value === 'string' && MODEL_IDS.has(value)
+function readStringMap(source: Record<string, unknown>, key: string, fallback: Record<AiProviderId, string>): Record<AiProviderId, string> {
+  const raw = isRecord(source[key]) ? (source[key] as Record<string, unknown>) : {}
+  return AI_PROVIDER_IDS.reduce((acc, id) => {
+    acc[id] = typeof raw[id] === 'string' ? (raw[id] as string) : fallback[id]
+    return acc
+  }, {} as Record<AiProviderId, string>)
 }
 
 export function normalizeAiSettings(value: unknown): AiSettings {
   const source = isRecord(value) ? value : {}
+
+  const apiKeys = readStringMap(source, 'apiKeys', emptyKeys())
+  const models = readStringMap(source, 'models', defaultModels())
+
+  // Back-compat: migrate the original single-provider (Anthropic-only) shape
+  // where the key/model lived at the top level as `apiKey` / `model`.
+  if (typeof source.apiKey === 'string' && !apiKeys.anthropic) apiKeys.anthropic = source.apiKey
+  if (typeof source.model === 'string' && source.models === undefined) models.anthropic = source.model
+
   return {
-    apiKey: typeof source.apiKey === 'string' ? source.apiKey : DEFAULTS.apiKey,
-    model: isAiModel(source.model) ? source.model : DEFAULTS.model,
     enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULTS.enabled,
+    provider: isAiProviderId(source.provider) ? source.provider : DEFAULTS.provider,
+    apiKeys,
+    models,
   }
 }
 
-/** True when the settings are sufficient to make AI calls. */
-export function isAiReady(settings: Pick<AiSettings, 'apiKey' | 'enabled'>): boolean {
-  return settings.enabled && settings.apiKey.trim().length > 0
+/** Resolved config for the active provider: its id, key, and model. */
+export function activeAiConfig(settings: AiSettings): { provider: AiProviderId; apiKey: string; model: string } {
+  return {
+    provider: settings.provider,
+    apiKey: settings.apiKeys[settings.provider] ?? '',
+    model: settings.models[settings.provider] || AI_PROVIDER_META[settings.provider].defaultModel,
+  }
+}
+
+/** True when AI is enabled and the active provider has a non-empty key. */
+export function isAiReady(settings: AiSettings): boolean {
+  return settings.enabled && (settings.apiKeys[settings.provider]?.trim().length ?? 0) > 0
 }
 
 // ─── Persistence ────────────────────────────────────────────────────
@@ -67,6 +92,10 @@ function persist(settings: AiSettings) {
 
 interface AiSettingsState extends AiSettings {
   update: (patch: Partial<AiSettings>) => void
+  /** Set the active provider's API key. */
+  setApiKey: (key: string) => void
+  /** Set the active provider's model. */
+  setModel: (model: string) => void
 }
 
 export const useAiSettingsStore = create<AiSettingsState>((set, get) => ({
@@ -74,8 +103,24 @@ export const useAiSettingsStore = create<AiSettingsState>((set, get) => ({
 
   update: (patch) => {
     set(patch)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- exclude `update` from persisted settings
-    const { update: _, ...rest } = get()
-    persist(rest as AiSettings)
+    persistFrom(get)
+  },
+
+  setApiKey: (key) => {
+    const s = get()
+    set({ apiKeys: { ...s.apiKeys, [s.provider]: key } })
+    persistFrom(get)
+  },
+
+  setModel: (model) => {
+    const s = get()
+    set({ models: { ...s.models, [s.provider]: model } })
+    persistFrom(get)
   },
 }))
+
+function persistFrom(get: () => AiSettingsState) {
+  const { update: _u, setApiKey: _k, setModel: _m, ...rest } = get()
+  void _u; void _k; void _m
+  persist(rest as AiSettings)
+}

@@ -1,22 +1,28 @@
 import { useState } from 'react'
 import { X, KeyRound, ExternalLink, ShieldCheck } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
-import { useAiSettingsStore, AI_MODELS, type AiModel } from '@/store/ai-settings'
+import { useAiSettingsStore } from '@/store/ai-settings'
+import { AI_PROVIDER_IDS, AI_PROVIDER_META, type AiProviderId } from '@/lib/ai'
 
 export default function AiSettingsDialog({ onClose }: { onClose: () => void }) {
-  const apiKey = useAiSettingsStore((s) => s.apiKey)
-  const model = useAiSettingsStore((s) => s.model)
   const enabled = useAiSettingsStore((s) => s.enabled)
+  const provider = useAiSettingsStore((s) => s.provider)
+  const apiKeys = useAiSettingsStore((s) => s.apiKeys)
+  const models = useAiSettingsStore((s) => s.models)
   const update = useAiSettingsStore((s) => s.update)
+  const setApiKey = useAiSettingsStore((s) => s.setApiKey)
+  const setModel = useAiSettingsStore((s) => s.setModel)
 
   const [reveal, setReveal] = useState(false)
+  const meta = AI_PROVIDER_META[provider]
+  const modelListId = `ai-models-${provider}`
 
   return (
     <DialogShell
       onClose={onClose}
       ariaLabel="AI Settings"
       style={{
-        width: 440,
+        width: 460,
         maxHeight: '85dvh',
         overflowY: 'auto',
         borderRadius: 'var(--radius-xl)',
@@ -49,15 +55,29 @@ export default function AiSettingsDialog({ onClose }: { onClose: () => void }) {
           />
         </label>
 
-        {/* API key */}
+        {/* Provider */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={labelStyle}>Anthropic API key</div>
+          <div style={labelStyle}>Provider</div>
+          <select
+            value={provider}
+            onChange={(e) => update({ provider: e.target.value as AiProviderId })}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          >
+            {AI_PROVIDER_IDS.map((id) => (
+              <option key={id} value={id}>{AI_PROVIDER_META[id].label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* API key (per provider) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={labelStyle}>{meta.keyLabel}</div>
           <div style={{ display: 'flex', gap: 6 }}>
             <input
               type={reveal ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => update({ apiKey: e.target.value })}
-              placeholder="sk-ant-…"
+              value={apiKeys[provider] ?? ''}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={meta.keyPlaceholder}
               autoComplete="off"
               spellCheck={false}
               style={inputStyle}
@@ -67,35 +87,41 @@ export default function AiSettingsDialog({ onClose }: { onClose: () => void }) {
             </button>
           </div>
           <a
-            href="https://console.anthropic.com/settings/keys"
+            href={meta.keyHelpUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--color-accent)' }}
           >
-            Get a key from the Anthropic Console <ExternalLink size={11} />
+            {meta.keyHelpLabel} <ExternalLink size={11} />
           </a>
         </div>
 
-        {/* Model */}
+        {/* Model (free text + suggestions) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={labelStyle}>Model</div>
-          <select
-            value={model}
-            onChange={(e) => update({ model: e.target.value as AiModel })}
-            style={{ ...inputStyle, cursor: 'pointer' }}
-          >
-            {AI_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>{m.label} — {m.blurb}</option>
+          <input
+            list={modelListId}
+            value={models[provider] ?? ''}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={meta.defaultModel}
+            autoComplete="off"
+            spellCheck={false}
+            style={inputStyle}
+          />
+          <datalist id={modelListId}>
+            {meta.models.map((m) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
             ))}
-          </select>
+          </datalist>
+          <div style={descStyle}>Pick a suggestion or type any model id this provider supports.</div>
         </div>
 
         {/* Privacy note */}
         <div style={noteStyle}>
           <ShieldCheck size={14} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>
-            Your key is stored only in this browser and is sent only to Anthropic
-            (<code>api.anthropic.com</code>), directly from your device. c4hero has no
+            Your key is stored only in this browser and is sent only to {meta.label}
+            {' '}(<code>{meta.endpointHost}</code>), directly from your device. c4hero has no
             server and never sees it. Anyone with access to this browser profile can read it.
           </span>
         </div>

@@ -1,40 +1,18 @@
-import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest } from './types'
-import { AiError } from './types'
+import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest } from '../types'
+import { AiError } from '../types'
+import { mapHttpError, readErrorMessage, parseJsonOrThrow } from './http'
 
-// BYOK provider: calls the Anthropic Messages REST API directly from the browser
-// with the user's own key. We deliberately avoid the official SDK — it bundles
-// Node-oriented transitive dependencies (undici, etc.) that bloat a local-first
-// browser app and add attack surface. A small fetch wrapper is all the browser
-// path needs.
-//
+// Anthropic Messages API, called directly from the browser with the user's key.
 // Direct browser calls require the `anthropic-dangerous-direct-browser-access`
-// header. The key lives only in this browser and is sent only to Anthropic. This
-// is the standard, documented BYOK tradeoff for a no-backend tool.
+// header. Native structured outputs (`output_config.format`) are used for JSON.
 
 const API_URL = 'https://api.anthropic.com/v1/messages'
 const API_VERSION = '2023-06-01'
 
-interface AnthropicTextBlock {
-  type: string
-  text?: string
-}
+interface AnthropicBlock { type: string; text?: string }
+interface AnthropicResponse { content?: AnthropicBlock[]; stop_reason?: string }
 
-interface AnthropicResponse {
-  content?: AnthropicTextBlock[]
-  stop_reason?: string
-}
-
-function mapError(status: number, message: string): AiError {
-  if (status === 401 || status === 403) return new AiError('auth', message)
-  if (status === 429) return new AiError('rate-limit', message)
-  if (status >= 500) return new AiError('network', message)
-  return new AiError('unknown', message)
-}
-
-async function postMessage(
-  config: AiProviderConfig,
-  body: Record<string, unknown>,
-): Promise<string> {
+async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
   let res: Response
   try {
     res = await fetch(API_URL, {
@@ -52,14 +30,7 @@ async function postMessage(
   }
 
   if (!res.ok) {
-    let detail = `Request failed (${res.status})`
-    try {
-      const errBody = (await res.json()) as { error?: { message?: string } }
-      if (errBody?.error?.message) detail = errBody.error.message
-    } catch {
-      // non-JSON error body — keep the generic detail
-    }
-    throw mapError(res.status, detail)
+    throw mapHttpError(res.status, await readErrorMessage(res, `Request failed (${res.status})`))
   }
 
   let data: AnthropicResponse
@@ -85,7 +56,7 @@ async function postMessage(
 export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
   return {
     async complete(req: AiTextRequest): Promise<string> {
-      return postMessage(config, {
+      return call(config, {
         max_tokens: req.maxTokens ?? 8000,
         system: req.system,
         messages: [{ role: 'user', content: req.user }],
@@ -93,18 +64,13 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
     },
 
     async completeJson<T>(req: AiJsonRequest<T>): Promise<T> {
-      const text = await postMessage(config, {
+      const text = await call(config, {
         max_tokens: req.maxTokens ?? 4000,
         system: req.system,
         messages: [{ role: 'user', content: req.user }],
         output_config: { format: { type: 'json_schema', schema: req.schema } },
       })
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(text)
-      } catch {
-        throw new AiError('invalid-response', 'The model did not return valid JSON.')
-      }
+      const parsed = parseJsonOrThrow(text)
       if (!req.validate(parsed)) {
         throw new AiError('invalid-response', 'The model response did not match the expected shape.')
       }

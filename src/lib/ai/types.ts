@@ -1,5 +1,3 @@
-import type { AiModel } from '@/store/ai-settings'
-
 /** The five BYOK AI features, used as panel tab ids. */
 export type AiFeatureId = 'generate' | 'edit' | 'describe' | 'review' | 'adr'
 
@@ -32,7 +30,7 @@ export interface AiProvider {
 
 export interface AiProviderConfig {
   apiKey: string
-  model: AiModel
+  model: string
 }
 
 // ─── Errors ─────────────────────────────────────────────────────────

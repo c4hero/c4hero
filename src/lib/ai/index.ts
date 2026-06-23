@@ -7,11 +7,14 @@
 
 export type {
   AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest,
-  EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind,
+  EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind, AiFeatureId,
 } from './types'
 export { AiError, aiErrorMessage } from './types'
 
-export { createAnthropicProvider } from './provider'
+export type { AiProviderId, AiProviderMeta, AiModelOption } from './providerMeta'
+export { AI_PROVIDER_META, AI_PROVIDER_IDS, getProviderMeta, isAiProviderId } from './providerMeta'
+
+export { createProvider } from './providers'
 
 export {
   generateDiagram, reviewArchitecture, autoDescribe, planEdit, draftAdr,

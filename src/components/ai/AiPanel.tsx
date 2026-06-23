@@ -2,34 +2,32 @@ import { useMemo, useState } from 'react'
 import { X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore } from '@/store/workspace'
-import { useAiSettingsStore, isAiReady } from '@/store/ai-settings'
+import { useAiSettingsStore, isAiReady, activeAiConfig } from '@/store/ai-settings'
 import { parseDSL } from '@/lib/dsl'
 import { downloadFile } from '@/lib/exportUtils'
 import {
-  createAnthropicProvider, aiErrorMessage,
+  createProvider, aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr,
   applyEditPlan, describeOps, elementIdSet,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
   type AiProvider, type EditActions, type DescribeActions,
-  type EditPlan, type DescribePreview,
+  type EditPlan, type DescribePreview, type AiFeatureId,
 } from '@/lib/ai'
-import type { AiFeatureId } from '@/lib/ai/types'
 import { AI_FEATURES } from './aiFeatureMeta'
 
 export default function AiPanel({ onClose }: { onClose: () => void }) {
   const initialFeature = useWorkspaceStore((s) => s.aiPanelFeature)
   const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
   const workspace = useWorkspaceStore((s) => s.workspace)
-  const apiKey = useAiSettingsStore((s) => s.apiKey)
-  const model = useAiSettingsStore((s) => s.model)
-  const enabled = useAiSettingsStore((s) => s.enabled)
+  const settings = useAiSettingsStore()
 
   const [active, setActive] = useState<AiFeatureId>(initialFeature ?? 'generate')
-  const ready = isAiReady({ apiKey, enabled })
+  const ready = isAiReady(settings)
+  const { provider: providerId, apiKey, model } = activeAiConfig(settings)
 
   const provider = useMemo(
-    () => (ready ? createAnthropicProvider({ apiKey, model }) : null),
-    [ready, apiKey, model],
+    () => (ready ? createProvider(providerId, { apiKey, model }) : null),
+    [ready, providerId, apiKey, model],
   )
 
   const activeMeta = AI_FEATURES.find((f) => f.id === active)!

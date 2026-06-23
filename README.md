@@ -48,7 +48,7 @@ You never have to write that by hand — but you can. Already have a `.dsl` file
 - **Structurizr-compatible.** Read and write the same DSL the official Structurizr tools use — c4hero is one option in an interoperable ecosystem, not a fork.
 - **Fast.** Code-split bundle, idle-scheduled autosave, dagre auto-layout, no network round-trips during editing.
 - **Accessible.** Focus-trap dialogs, ARIA-labeled canvas, keyboard shortcuts for every common action, `prefers-reduced-motion` support.
-- **Optional AI, bring-your-own-key.** An opt-in assistant can generate a diagram from a plain-English description, edit the model with a prompt, auto-fill missing descriptions, review your architecture, and draft an ADR. It uses *your* Anthropic API key, stored only in your browser and sent only to Anthropic — c4hero never sees it, and nothing runs until you opt in. Open it from the menu or the command palette ("AI: …").
+- **Optional AI, bring-your-own-key.** An opt-in assistant can generate a diagram from a plain-English description, edit the model with a prompt, auto-fill missing descriptions, review your architecture, and draft an ADR. Bring your own **Anthropic or OpenAI** API key (the provider layer is pluggable for adding more). Your key is stored only in your browser and sent only to that provider — c4hero never sees it, and nothing runs until you opt in. Open it from the menu or the command palette ("AI: …").
 
 A more detailed feature catalogue lives in [`docs/FEATURES.md`](docs/FEATURES.md).
 
