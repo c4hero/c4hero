@@ -7,6 +7,9 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────
 
+/** Where the assistant panel sits: docked as a right-side rail, or centered modal. */
+export type PanelPlacement = 'docked' | 'center'
+
 export interface AiSettings {
   /** Master toggle. When false, all AI UI is hidden. */
   enabled: boolean
@@ -17,6 +20,8 @@ export interface AiSettings {
   apiKeys: Record<AiProviderId, string>
   /** Model id per provider (free text; suggestions come from provider metadata). */
   models: Record<AiProviderId, string>
+  /** Assistant panel placement. */
+  placement: PanelPlacement
 }
 
 function emptyKeys(): Record<AiProviderId, string> {
@@ -32,6 +37,11 @@ const DEFAULTS: AiSettings = {
   provider: 'anthropic',
   apiKeys: emptyKeys(),
   models: defaultModels(),
+  placement: 'docked',
+}
+
+function isPlacement(value: unknown): value is PanelPlacement {
+  return value === 'docked' || value === 'center'
 }
 
 const STORAGE_KEY = 'c4hero.ai.json'
@@ -60,6 +70,7 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     provider: isAiProviderId(source.provider) ? source.provider : DEFAULTS.provider,
     apiKeys,
     models,
+    placement: isPlacement(source.placement) ? source.placement : DEFAULTS.placement,
   }
 }
 

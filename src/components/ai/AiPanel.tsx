@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Settings, Home, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
-  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink, User,
+  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink, User, PanelRight, Square,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -68,21 +68,29 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   function openSettings() { setSettingsOpen(true); setStoreSettingsOpen(false) }
   function closeSettings() { setSettingsOpen(false); setStoreSettingsOpen(false) }
 
+  const docked = settings.placement === 'docked'
+  function togglePlacement() { settings.update({ placement: docked ? 'center' : 'docked' }) }
+
   // View routing: no key → BYOK welcome; disabled or settings open → settings; else app.
   const mode: 'byok' | 'settings' | 'app' = !hasKey ? 'byok' : (settingsOpen || !settings.enabled) ? 'settings' : 'app'
+
+  const baseStyle: React.CSSProperties = {
+    display: 'flex', flexDirection: 'column',
+    background: C.panel, border: `1px solid ${C.border}`,
+    boxShadow: '0 16px 64px rgba(0,0,0,0.6)', overflow: 'hidden',
+    fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+  }
+  const placementStyle: React.CSSProperties = docked
+    ? { top: 14, right: 14, bottom: 14, width: 'min(360px, calc(100vw - 28px))', borderRadius: 12 }
+    : { width: 'min(800px, 95vw)', height: 'min(86vh, 600px)', maxHeight: '92dvh', borderRadius: 14 }
 
   return (
     <DialogShell
       onClose={onClose}
       ariaLabel="AI assistant"
       className="c4ai"
-      style={{
-        width: 'min(800px, 95vw)', height: 'min(86vh, 600px)', maxHeight: '92dvh',
-        display: 'flex', flexDirection: 'column',
-        background: C.panel, border: `1px solid ${C.border}`, borderRadius: 14,
-        boxShadow: '0 16px 64px rgba(0,0,0,0.6)', overflow: 'hidden',
-        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-      }}
+      position={docked ? 'docked' : 'center'}
+      style={{ ...baseStyle, ...placementStyle }}
     >
       <style>{STYLE}</style>
 
@@ -90,8 +98,8 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
       {mode === 'settings' && <SettingsView onClose={onClose} onDone={hasKey ? closeSettings : undefined} />}
       {mode === 'app' && provider && (
         <AppView
-          provider={provider} workspace={workspace} model={model}
-          tab={tab} setTab={setTab} onOpenSettings={openSettings} onClose={onClose}
+          provider={provider} workspace={workspace} model={model} docked={docked}
+          tab={tab} setTab={setTab} onOpenSettings={openSettings} onTogglePlacement={togglePlacement} onClose={onClose}
         />
       )}
     </DialogShell>
@@ -101,14 +109,16 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
 // ─── App (header + tabs + body) ─────────────────────────────────────
 
 function AppView({
-  provider, workspace, model, tab, setTab, onOpenSettings, onClose,
+  provider, workspace, model, docked, tab, setTab, onOpenSettings, onTogglePlacement, onClose,
 }: {
   provider: AiProvider
   workspace: Workspace | null
   model: string
+  docked: boolean
   tab: TabId
   setTab: (t: TabId) => void
   onOpenSettings: () => void
+  onTogglePlacement: () => void
   onClose: () => void
 }) {
   const tabs: { id: TabId; label: string; icon: typeof Home }[] = [
@@ -125,13 +135,20 @@ function AppView({
           <Sparkles size={17} color={C.accent} /> AI assistant
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={onOpenSettings} title="Connected — open AI settings"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 9px', borderRadius: 999, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 11, fontWeight: 500, color: C.greenText, cursor: 'pointer' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green }} />{model}
+          {docked ? (
+            <span title={`Connected — ${model}`} style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, boxShadow: '0 0 6px rgba(34,197,94,0.6)' }} />
+          ) : (
+            <button onClick={onOpenSettings} title="Connected — open AI settings"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 9px', borderRadius: 999, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 11, fontWeight: 500, color: C.greenText, cursor: 'pointer' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green }} />{model}
+            </button>
+          )}
+          <button onClick={onTogglePlacement} className="c4ai-ghost" aria-label={docked ? 'Center the panel' : 'Dock to the side'} title={docked ? 'Center the panel' : 'Dock to the side'} style={iconBtn}>
+            {docked ? <Square size={13} /> : <PanelRight size={14} />}
           </button>
-          <button onClick={onOpenSettings} className="c4ai-ghost" aria-label="AI settings"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
-            <Settings size={13} /> Settings
+          <button onClick={onOpenSettings} className="c4ai-ghost" aria-label="AI settings" title="AI settings"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: docked ? 0 : '0 10px', width: docked ? 28 : undefined, justifyContent: 'center', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+            <Settings size={13} /> {!docked && 'Settings'}
           </button>
           <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
         </div>
@@ -142,10 +159,11 @@ function AppView({
         {tabs.map((t) => {
           const on = t.id === tab
           const Icon = t.icon
+          const showLabel = docked ? on : true
           return (
-            <button key={t.id} role="tab" aria-selected={on} onClick={() => setTab(t.id)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 12px 11px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer', flex: 'none', whiteSpace: 'nowrap', background: on ? 'rgba(88,166,255,0.08)' : 'transparent', borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, color: on ? C.text : C.muted }}>
-              <Icon size={14} color={on ? C.accent : C.muted} /> {t.label}
+            <button key={t.id} role="tab" aria-selected={on} onClick={() => setTab(t.id)} title={t.label}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: (docked && !on) ? '9px 9px 11px' : '9px 12px 11px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer', flex: 'none', whiteSpace: 'nowrap', background: on ? 'rgba(88,166,255,0.08)' : 'transparent', borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, color: on ? C.text : C.muted }}>
+              <Icon size={14} color={on ? C.accent : C.muted} /> {showLabel && t.label}
             </button>
           )
         })}
@@ -213,14 +231,14 @@ function GenerateBody({ provider, onClose }: { provider: AiProvider; onClose: ()
   const run = useAiRun()
   const [dsl, setDsl] = useState<string | null>(null)
   const parsed = useMemo(() => (dsl ? parseDSL(dsl) : null), [dsl])
+  const submit = () => { if (text.trim() && !run.loading) run.go(() => generateDiagram(provider, text), setDsl) }
 
   return (
     <>
       <p style={blurb}>Describe a system in plain English — c4hero builds a fresh C4 model from it.</p>
-      <Field value={text} onChange={setText} grow={!parsed}
+      <Field value={text} onChange={setText} grow={!parsed} onSubmit={submit}
         placeholder="e.g. A food-delivery platform with a customer mobile app, a restaurant web portal, an API gateway, an orders service using Kafka, a payments service using Stripe, and a Postgres database." />
-      <RunButton label="Generate diagram" loading={run.loading} disabled={!text.trim()}
-        onClick={() => run.go(() => generateDiagram(provider, text), setDsl)} />
+      <RunButton label="Generate diagram" loading={run.loading} disabled={!text.trim()} onClick={submit} />
       <ErrorLine error={run.error} />
 
       {parsed && (
@@ -330,7 +348,7 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
 
       {started && !plan && (
         <div style={{ marginTop: 14 }}>
-          <Field value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} />
+          <Field value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} onSubmit={answerNext} />
           <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
             <button className="c4ai-sec" style={{ ...secondaryBtn, color: C.muted }} onClick={finish} disabled={run.loading}>Finish &amp; update model</button>
             <button className="c4ai-pri" style={{ ...primaryBtn, height: 32 }} onClick={answerNext} disabled={run.loading || !answer.trim()}>
@@ -376,14 +394,14 @@ function EditBody({ provider, workspace, onClose }: { provider: AiProvider; work
   const run = useAiRun()
   const [plan, setPlan] = useState<EditPlan | null>(null)
   const lines = plan && workspace ? describeOps(plan, workspace) : []
+  const submit = () => { if (text.trim() && !run.loading) run.go(() => planEdit(provider, workspace!, text), setPlan) }
 
   return (
     <>
       <p style={blurb}>Change the current model in plain English — c4hero proposes a diff you can review before applying.</p>
-      <Field value={text} onChange={setText} grow={!plan}
+      <Field value={text} onChange={setText} grow={!plan} onSubmit={submit}
         placeholder="e.g. Add a Redis cache between the Web App and the Database, and connect the Admin to the Web App." />
-      <RunButton label="Plan changes" loading={run.loading} disabled={!text.trim()}
-        onClick={() => run.go(() => planEdit(provider, workspace!, text), setPlan)} />
+      <RunButton label="Plan changes" loading={run.loading} disabled={!text.trim()} onClick={submit} />
       <ErrorLine error={run.error} />
       {plan && (
         <Card>
@@ -586,15 +604,15 @@ function AdrBody({ provider, workspace }: { provider: AiProvider; workspace: Wor
   const run = useAiRun()
   const [md, setMd] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const submit = () => { if (topic.trim() && !run.loading) run.go(() => draftAdr(provider, workspace, topic), setMd) }
 
   function copy() { if (md) navigator.clipboard?.writeText(md).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }).catch(() => {}) }
 
   return (
     <>
       <p style={blurb}>Capture an architecture decision as a Markdown record, grounded in the current model.</p>
-      <Field value={topic} onChange={setTopic} grow={!md} placeholder="e.g. Adopt event-driven messaging between the Orders and Payments services" />
-      <RunButton label="Draft ADR" loading={run.loading} disabled={!topic.trim()}
-        onClick={() => run.go(() => draftAdr(provider, workspace, topic), setMd)} />
+      <Field value={topic} onChange={setTopic} grow={!md} onSubmit={submit} placeholder="e.g. Adopt event-driven messaging between the Orders and Payments services" />
+      <RunButton label="Draft ADR" loading={run.loading} disabled={!topic.trim()} onClick={submit} />
       <ErrorLine error={run.error} />
       {md && (
         <Card>
@@ -636,6 +654,7 @@ function ByokWelcome({ onClose }: { onClose: () => void }) {
   const setApiKey = useAiSettingsStore((s) => s.setApiKey)
   const meta = AI_PROVIDER_META[provider]
   const [draft, setDraft] = useState('')
+  const save = () => { if (draft.trim()) setApiKey(draft.trim()) }
 
   return (
     <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
@@ -659,10 +678,10 @@ function ByokWelcome({ onClose }: { onClose: () => void }) {
               <div style={fieldLabel}>{meta.keyLabel}</div>
               <a href={meta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent }}>Get a key <ExternalLink size={11} /></a>
             </div>
-            <input type="text" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={meta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
+            <input type="text" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save() } }} placeholder={meta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
           </div>
         </div>
-        <button className="c4ai-pri" onClick={() => { if (draft.trim()) setApiKey(draft.trim()) }} disabled={!draft.trim()}
+        <button className="c4ai-pri" onClick={save} disabled={!draft.trim()}
           style={{ width: '100%', maxWidth: 420, marginTop: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 40, borderRadius: 10, border: 'none', background: C.accent, color: C.ink, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
           Save &amp; start <ArrowRight size={15} />
         </button>
@@ -751,10 +770,11 @@ function useAiRun(): RunState {
   return { loading, error, go }
 }
 
-function Field({ value, onChange, placeholder, rows, grow }: { value: string; onChange: (v: string) => void; placeholder: string; rows?: number; grow?: boolean }) {
+function Field({ value, onChange, placeholder, rows, grow, onSubmit }: { value: string; onChange: (v: string) => void; placeholder: string; rows?: number; grow?: boolean; onSubmit?: () => void }) {
   return (
     <div style={{ position: 'relative', display: 'flex', ...(grow ? { flex: 1, minHeight: 130 } : {}) }}>
       <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={grow ? undefined : (rows ?? 3)}
+        onKeyDown={(e) => { if (onSubmit && (e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); onSubmit() } }}
         style={{ width: '100%', resize: grow ? 'none' : 'vertical', height: grow ? '100%' : undefined, minHeight: grow ? undefined : 60, padding: '11px 42px 11px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, lineHeight: 1.5, fontFamily: 'inherit' }} />
       <MicButton value={value} onChange={onChange} style={{ position: 'absolute', top: 8, right: 8, color: C.muted2 }} />
     </div>

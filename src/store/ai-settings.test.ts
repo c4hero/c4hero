@@ -10,6 +10,12 @@ describe('normalizeAiSettings', () => {
     expect(s.models.anthropic).toBe('claude-opus-4-8')
     expect(s.models.openai).toBe('gpt-5')
     expect(s.models.gemini).toBe('gemini-2.5-pro')
+    expect(s.placement).toBe('docked')
+  })
+
+  it('preserves a valid placement and rejects an invalid one', () => {
+    expect(normalizeAiSettings({ placement: 'center' }).placement).toBe('center')
+    expect(normalizeAiSettings({ placement: 'sideways' }).placement).toBe('docked')
   })
 
   it('preserves valid per-provider values', () => {

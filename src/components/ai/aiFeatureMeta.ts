@@ -10,11 +10,16 @@ export interface AiFeatureMeta {
   needsWorkspace: boolean
 }
 
+// Features shown in the launcher and tab bar. ADR is intentionally not here
+// (per the design) — it stays reachable via the command palette ("AI: Draft
+// ADR…"), which routes to ADR_FEATURE / AdrBody.
 export const AI_FEATURES: ReadonlyArray<AiFeatureMeta> = [
   { id: 'generate', label: 'Generate', blurb: 'Describe a system → a new C4 diagram', icon: Sparkles, needsWorkspace: false },
   { id: 'interview', label: 'Interview', blurb: 'Answer questions about this view to fill it in', icon: MessagesSquare, needsWorkspace: true },
   { id: 'edit', label: 'Edit', blurb: 'Change the model in plain English', icon: Pencil, needsWorkspace: true },
   { id: 'describe', label: 'Auto-describe', blurb: 'Fill in missing descriptions', icon: Wand2, needsWorkspace: true },
   { id: 'review', label: 'Review', blurb: 'Triage issues in this view or the whole model', icon: Stethoscope, needsWorkspace: true },
-  { id: 'adr', label: 'Draft ADR', blurb: 'Write a decision record', icon: FileText, needsWorkspace: false },
 ]
+
+/** ADR — reachable from the command palette, not the launcher/tabs. */
+export const ADR_FEATURE: AiFeatureMeta = { id: 'adr', label: 'Draft ADR', blurb: 'Write a decision record', icon: FileText, needsWorkspace: false }
