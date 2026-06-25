@@ -1,6 +1,6 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest } from '../types'
 import { AiError } from '../types'
-import { mapHttpError, readErrorMessage, parseJsonOrThrow } from './http'
+import { httpFail, readErrorMessage, parseAndValidate } from './http'
 
 // Anthropic Messages API, called directly from the browser with the user's key.
 // Direct browser calls require the `anthropic-dangerous-direct-browser-access`
@@ -36,7 +36,7 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
   }
 
   if (!res.ok) {
-    throw mapHttpError(res.status, await readErrorMessage(res, `Request failed (${res.status})`))
+    httpFail(`Anthropic (${config.model})`, res.status, await readErrorMessage(res, `Request failed (${res.status})`))
   }
 
   let data: AnthropicResponse
@@ -76,11 +76,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
         messages: [...(req.history ?? []), { role: 'user', content: req.user }],
         output_config: { format: { type: 'json_schema', schema: req.schema } },
       })
-      const parsed = parseJsonOrThrow(text)
-      if (!req.validate(parsed)) {
-        throw new AiError('invalid-response', 'The model response did not match the expected shape.')
-      }
-      return parsed
+      return parseAndValidate(text, req.validate, `Anthropic (${config.model})`)
     },
   }
 }

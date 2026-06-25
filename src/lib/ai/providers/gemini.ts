@@ -1,6 +1,6 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn } from '../types'
 import { AiError } from '../types'
-import { mapHttpError, readErrorMessage, parseJsonOrThrow } from './http'
+import { httpFail, readErrorMessage, parseAndValidate } from './http'
 
 // Google Gemini (Generative Language API), called directly from the browser with
 // the user's key. For structured output we request a JSON response MIME type and
@@ -45,7 +45,7 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
   }
 
   if (!res.ok) {
-    throw mapHttpError(res.status, await readErrorMessage(res, `Request failed (${res.status})`))
+    httpFail(`Gemini (${config.model})`, res.status, await readErrorMessage(res, `Request failed (${res.status})`))
   }
 
   let data: GeminiResponse
@@ -81,11 +81,7 @@ export function createGeminiProvider(config: AiProviderConfig): AiProvider {
         contents: toContents(req.history, req.user),
         generationConfig: { maxOutputTokens: req.maxTokens ?? 4000, responseMimeType: 'application/json' },
       })
-      const parsed = parseJsonOrThrow(text)
-      if (!req.validate(parsed)) {
-        throw new AiError('invalid-response', 'The model response did not match the expected shape.')
-      }
-      return parsed
+      return parseAndValidate(text, req.validate, `Gemini (${config.model})`)
     },
   }
 }

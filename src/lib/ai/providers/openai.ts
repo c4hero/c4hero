@@ -1,6 +1,6 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest } from '../types'
 import { AiError } from '../types'
-import { mapHttpError, readErrorMessage, parseJsonOrThrow } from './http'
+import { httpFail, readErrorMessage, parseAndValidate } from './http'
 
 // OpenAI Chat Completions API, called directly from the browser with the user's
 // key. For structured output we use JSON mode (`response_format: json_object`)
@@ -38,7 +38,7 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
   }
 
   if (!res.ok) {
-    throw mapHttpError(res.status, await readErrorMessage(res, `Request failed (${res.status})`))
+    httpFail(`OpenAI (${config.model})`, res.status, await readErrorMessage(res, `Request failed (${res.status})`))
   }
 
   let data: OpenAiResponse
@@ -82,11 +82,7 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
         messages: messages(system, req.user, req.history),
         response_format: { type: 'json_object' },
       })
-      const parsed = parseJsonOrThrow(text)
-      if (!req.validate(parsed)) {
-        throw new AiError('invalid-response', 'The model response did not match the expected shape.')
-      }
-      return parsed
+      return parseAndValidate(text, req.validate, `OpenAI (${config.model})`)
     },
   }
 }

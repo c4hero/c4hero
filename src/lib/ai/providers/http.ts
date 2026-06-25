@@ -1,18 +1,31 @@
 import { AiError } from '../types'
+import { stripCodeFence } from '../dsl'
+import { createLogger } from '@/lib/logger'
 
-// Shared HTTP error mapping for BYOK provider implementations. Each provider
-// owns its own request/response shape (Anthropic and OpenAI differ), but maps
-// failures to the same AiError kinds so the UI handles them uniformly.
+// Shared HTTP + parsing helpers for BYOK provider implementations. Each provider
+// owns its own request/response shape, but they map failures to the same AiError
+// kinds, and — critically for debugging — log the provider, status, and raw
+// model output to the console when something goes wrong.
+
+const log = createLogger('ai/provider')
 
 export function mapHttpError(status: number, message: string): AiError {
+  // 408 (Request Timeout) and 504 (Gateway Timeout) read as connectivity issues.
+  if (status === 408 || status === 504) return new AiError('connection', message)
   if (status === 401 || status === 403) return new AiError('auth', message)
   if (status === 429) return new AiError('rate-limit', message)
   if (status >= 500) return new AiError('network', message)
   return new AiError('unknown', message)
 }
 
-/** Parse a JSON error body's message from either the Anthropic (`error.message`)
- *  or OpenAI (`error.message`) envelope, falling back to a status string. */
+/** Throw a mapped error for a non-OK HTTP response, logging the details first. */
+export function httpFail(provider: string, status: number, message: string): never {
+  log.error('AI provider HTTP error', { provider, status, message })
+  throw mapHttpError(status, message)
+}
+
+/** Parse a JSON error body's `error.message` (Anthropic / OpenAI / Gemini all
+ *  use this shape), falling back to a status string. */
 export async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = (await res.json()) as { error?: { message?: string } }
@@ -23,10 +36,35 @@ export async function readErrorMessage(res: Response, fallback: string): Promise
   return fallback
 }
 
-export function parseJsonOrThrow<T = unknown>(text: string): T {
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    throw new AiError('invalid-response', 'The model did not return valid JSON.')
+// Try the raw text, then a fence-stripped version, then the outermost {...}
+// block — models occasionally wrap JSON in markdown or add a sentence of prose.
+function tryParseJson(text: string): { ok: true; value: unknown } | { ok: false } {
+  const candidates = [text, stripCodeFence(text)]
+  const open = text.indexOf('{')
+  const close = text.lastIndexOf('}')
+  if (open !== -1 && close > open) candidates.push(text.slice(open, close + 1))
+  for (const c of candidates) {
+    try {
+      return { ok: true, value: JSON.parse(c) }
+    } catch {
+      // try the next candidate
+    }
   }
+  return { ok: false }
+}
+
+/** Parse structured-output text and validate it, logging the raw output to the
+ *  console on any failure so the user can see exactly what the model returned. */
+export function parseAndValidate<T>(text: string, validate: (v: unknown) => v is T, provider: string): T {
+  const parsed = tryParseJson(text)
+  if (!parsed.ok) {
+    log.error('AI provider returned non-JSON output', { provider, output: text.slice(0, 4000) })
+    throw new AiError('invalid-response', 'The model did not return valid JSON. The raw output is in the browser console.')
+  }
+  const value = parsed.value
+  if (!validate(value)) {
+    log.error('AI provider output failed schema validation', { provider, output: value })
+    throw new AiError('invalid-response', 'The model response did not match the expected shape. The raw output is in the browser console.')
+  }
+  return value
 }
