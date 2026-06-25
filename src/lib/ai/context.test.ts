@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   flattenElements, elementIdSet, elementNameMap, serializeContext,
   elementsMissingDescription, relationshipsMissingDescription,
-  serializeViewContext, viewLabel,
+  serializeViewContext, viewLabel, describeAllowedTypes,
 } from './context'
 import { makeWorkspace } from './testFixture'
 import type { View } from '@/types/model'
@@ -86,5 +86,36 @@ describe('viewLabel / serializeViewContext', () => {
   it('reports an empty view', () => {
     const empty: View = { type: 'systemLandscape', key: 'l', elements: [], relationships: [] }
     expect(serializeViewContext(makeWorkspace(), empty)).toContain('the view is empty')
+  })
+})
+
+describe('describeAllowedTypes', () => {
+  const ws = makeWorkspace()
+
+  it('allows people + systems but not containers/components in a context view', () => {
+    const text = describeAllowedTypes(ws, { type: 'systemContext', key: 'ctx', softwareSystemId: 'shop', elements: [], relationships: [] })
+    expect(text).toContain('System Context view')
+    expect(text).toContain('“Shop”')
+    expect(text).toMatch(/NOT allowed: containers or components/)
+  })
+
+  it('allows containers (scoped to the system) in a container view', () => {
+    const text = describeAllowedTypes(ws, { type: 'container', key: 'cont', softwareSystemId: 'shop', elements: [], relationships: [] })
+    expect(text).toContain('Container view')
+    expect(text).toContain('id shop')
+    expect(text).toMatch(/NOT allowed: components/)
+  })
+
+  it('allows only components (scoped to the container) in a component view', () => {
+    const text = describeAllowedTypes(ws, { type: 'component', key: 'cmp', containerId: 'web', elements: [], relationships: [] })
+    expect(text).toContain('Component view')
+    expect(text).toContain('id web')
+    expect(text).toMatch(/NOT allowed: people, software systems, or containers/)
+  })
+
+  it('allows people + systems in a landscape view', () => {
+    const text = describeAllowedTypes(ws, { type: 'systemLandscape', key: 'land', elements: [], relationships: [] })
+    expect(text).toContain('System Landscape view')
+    expect(text).toMatch(/NOT allowed: containers or components/)
   })
 })

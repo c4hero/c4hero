@@ -134,6 +134,39 @@ export function viewLabel(view: View): string {
   return view.title ? `${kind} view “${view.title}”` : `${kind} view`
 }
 
+/** Prompt-ready description of which element types may be added in a view, and
+ *  what is out of scope — mirrors the C4 rules in `getCreatableTypes`. Keeps the
+ *  interview focused on nodes/connections the current view can actually hold. */
+export function describeAllowedTypes(ws: Workspace, view: View): string {
+  const names = elementNameMap(ws)
+  const system = view.softwareSystemId ? names.get(view.softwareSystemId) ?? view.softwareSystemId : undefined
+  const container = view.containerId ? names.get(view.containerId) ?? view.containerId : undefined
+
+  switch (view.type) {
+    case 'systemLandscape':
+      return 'ALLOWED here (System Landscape view): people (actors) and software systems, plus relationships between them. '
+        + 'NOT allowed: containers or components — those live in the container/component views of a specific system. '
+        + 'Keep questions and edits to people and software systems.'
+    case 'systemContext':
+      return `ALLOWED here (System Context view${system ? ` of “${system}”` : ''}): people (actors) and software systems, plus their relationships`
+        + `${system ? ` to “${system}”` : ' to the system in focus'}. `
+        + 'NOT allowed: containers or components — drill into a container view to add containers. '
+        + 'Keep questions and edits to external people and systems and how they relate to the system in focus.'
+    case 'container':
+      return `ALLOWED here (Container view${system ? ` of “${system}”` : ''}): containers (apps, services, datastores) that belong to `
+        + `${system ? `“${system}” (id ${view.softwareSystemId})` : 'the system in focus'} — set each new container's parent to that system; `
+        + 'also people and other software systems as external actors; and relationships among any of these. '
+        + 'NOT allowed: components — those belong to a component view of a specific container. '
+        + 'Keep questions and edits to the containers inside the system and how they connect.'
+    case 'component':
+      return `ALLOWED here (Component view${container ? ` of “${container}”` : ''}): components that belong to `
+        + `${container ? `“${container}” (id ${view.containerId})` : 'the container in focus'} — set each new component's parent to that container; `
+        + 'and relationships between them and elements already shown. '
+        + 'NOT allowed: people, software systems, or containers. '
+        + 'Keep questions and edits to the components inside the container and how they connect.'
+  }
+}
+
 /** Focused context for one view: the view itself plus only the elements and
  *  relationships actually shown in it. Used to ground the interview on the
  *  current screen rather than the whole workspace. */
