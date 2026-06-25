@@ -7,8 +7,9 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-/** Where the assistant panel sits: docked as a right-side rail, or centered modal. */
-export type PanelPlacement = 'docked' | 'center'
+/** Persisted top-left position of the (draggable) assistant panel, in viewport
+ *  pixels. `null` means "not yet moved" — the panel sits at its default anchor. */
+export interface PanelPos { x: number; y: number }
 
 export interface AiSettings {
   /** Master toggle. When false, all AI UI is hidden. */
@@ -20,8 +21,8 @@ export interface AiSettings {
   apiKeys: Record<AiProviderId, string>
   /** Model id per provider (free text; suggestions come from provider metadata). */
   models: Record<AiProviderId, string>
-  /** Assistant panel placement. */
-  placement: PanelPlacement
+  /** Where the user dragged the assistant panel; null until first moved. */
+  panelPos: PanelPos | null
   /** Show the AI button in the top bar. When false, the assistant is still
    *  reachable from the command palette. */
   showInTopBar: boolean
@@ -40,12 +41,12 @@ const DEFAULTS: AiSettings = {
   provider: 'anthropic',
   apiKeys: emptyKeys(),
   models: defaultModels(),
-  placement: 'docked',
+  panelPos: null,
   showInTopBar: true,
 }
 
-function isPlacement(value: unknown): value is PanelPlacement {
-  return value === 'docked' || value === 'center'
+function isPanelPos(value: unknown): value is PanelPos {
+  return isRecord(value) && typeof value.x === 'number' && typeof value.y === 'number'
 }
 
 const STORAGE_KEY = 'c4hero.ai.json'
@@ -74,7 +75,7 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     provider: isAiProviderId(source.provider) ? source.provider : DEFAULTS.provider,
     apiKeys,
     models,
-    placement: isPlacement(source.placement) ? source.placement : DEFAULTS.placement,
+    panelPos: isPanelPos(source.panelPos) ? source.panelPos : DEFAULTS.panelPos,
     showInTopBar: typeof source.showInTopBar === 'boolean' ? source.showInTopBar : DEFAULTS.showInTopBar,
   }
 }

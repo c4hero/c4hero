@@ -114,6 +114,10 @@ export default function App() {
     )
   }
 
+  // True only when a workspace is open on a canvas route (matches canvasElement's
+  // routes) — used to keep the AI assistant off the welcome/collection screens.
+  const onCanvas = !!workspace && /\/collection\/[^/]+\/[^/]+/.test(location.pathname)
+
   return (
     <>
       <Routes>
@@ -161,10 +165,9 @@ export default function App() {
           no existing child view. Offers fast create or "Customize…" for full control. */}
       <ZoomConfirmDialog />
 
-      {/* BYOK AI assistant — available on every route, including the welcome
-          screen (Generate from scratch). Rendered after the panel so the
-          settings dialog stacks above it when both are open. */}
-      {(aiPanelOpen || aiSettingsOpen) && (
+      {/* BYOK AI assistant — only on the canvas (a workspace open on a canvas
+          route), never on the welcome/collection screens. */}
+      {onCanvas && (aiPanelOpen || aiSettingsOpen) && (
         <Suspense fallback={<LoadingDot />}>
           <AiPanel onClose={() => { setAiPanelOpen(false); setAiSettingsOpen(false) }} />
         </Suspense>

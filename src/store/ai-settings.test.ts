@@ -10,13 +10,14 @@ describe('normalizeAiSettings', () => {
     expect(s.models.anthropic).toBe('claude-opus-4-8')
     expect(s.models.openai).toBe('gpt-5')
     expect(s.models.gemini).toBe('gemini-2.5-pro')
-    expect(s.placement).toBe('docked')
+    expect(s.panelPos).toBeNull()
     expect(s.showInTopBar).toBe(true)
   })
 
-  it('preserves a valid placement and rejects an invalid one', () => {
-    expect(normalizeAiSettings({ placement: 'center' }).placement).toBe('center')
-    expect(normalizeAiSettings({ placement: 'sideways' }).placement).toBe('docked')
+  it('preserves a valid panel position and rejects a malformed one', () => {
+    expect(normalizeAiSettings({ panelPos: { x: 100, y: 40 } }).panelPos).toEqual({ x: 100, y: 40 })
+    expect(normalizeAiSettings({ panelPos: { x: 'a' } }).panelPos).toBeNull()
+    expect(normalizeAiSettings({ panelPos: 'nope' }).panelPos).toBeNull()
   })
 
   it('preserves showInTopBar when set to false', () => {

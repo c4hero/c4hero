@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
-  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink, PanelRight, Square,
+  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
-import { useAiSettingsStore, isAiReady, activeAiConfig } from '@/store/ai-settings'
+import { useAiSettingsStore, isAiReady, activeAiConfig, type PanelPos } from '@/store/ai-settings'
 import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
 import { parseDSL } from '@/lib/dsl'
 import { downloadFile } from '@/lib/exportUtils'
@@ -81,57 +81,93 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   function openSettings() { setSettingsOpen(true); setStoreSettingsOpen(false) }
   function closeSettings() { setSettingsOpen(false); setStoreSettingsOpen(false) }
 
-  const docked = settings.placement === 'docked'
-  function togglePlacement() { settings.update({ placement: docked ? 'center' : 'docked' }) }
-
   // View routing: no key → BYOK welcome; disabled or settings open → settings; else app.
   const mode: 'byok' | 'settings' | 'app' = !hasKey ? 'byok' : (settingsOpen || !settings.enabled) ? 'settings' : 'app'
+
+  // Draggable floating panel. `pos` is the persisted top-left; null = default
+  // top-right anchor. Dragging starts on any element marked [data-drag-handle].
+  const [pos, setPos] = useState<PanelPos | null>(settings.panelPos)
+
+  function startDrag(e: React.PointerEvent) {
+    const t = e.target as HTMLElement
+    if (t.closest('button, input, textarea, a, select, [role="switch"]')) return
+    if (!t.closest('[data-drag-handle]')) return
+    const base = pos ?? { x: Math.max(8, window.innerWidth - PANEL_WIDTH - 14), y: 14 }
+    const startX = e.clientX
+    const startY = e.clientY
+    let latest = base
+    const move = (ev: PointerEvent) => {
+      latest = {
+        x: clampPx(base.x + ev.clientX - startX, 8, window.innerWidth - PANEL_WIDTH - 8),
+        y: clampPx(base.y + ev.clientY - startY, 8, window.innerHeight - 44),
+      }
+      setPos(latest)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      useAiSettingsStore.getState().update({ panelPos: latest })
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    e.preventDefault()
+  }
 
   const baseStyle: React.CSSProperties = {
     display: 'flex', flexDirection: 'column',
     background: C.panel, border: `1px solid ${C.border}`,
     boxShadow: '0 16px 64px rgba(0,0,0,0.6)', overflow: 'hidden',
     fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+    width: `min(${PANEL_WIDTH}px, calc(100vw - 28px))`,
+    height: 'min(620px, calc(100dvh - 28px))',
+    borderRadius: 12,
+    // null → anchor top-right; once dragged → explicit left/top. `bottom: auto`
+    // overrides DialogShell's docked full-height rail so our height applies.
+    top: pos ? pos.y : 14,
+    bottom: 'auto',
+    ...(pos ? { left: pos.x, right: 'auto' } : { right: 14 }),
   }
-  const placementStyle: React.CSSProperties = docked
-    ? { top: 14, right: 14, bottom: 14, width: 'min(360px, calc(100vw - 28px))', borderRadius: 12 }
-    : { width: 'min(800px, 95vw)', height: 'min(86vh, 600px)', maxHeight: '92dvh', borderRadius: 14 }
 
   return (
     <DialogShell
       onClose={onClose}
       ariaLabel="AI assistant"
       className="c4ai"
-      position={docked ? 'docked' : 'center'}
-      style={{ ...baseStyle, ...placementStyle }}
+      position="docked"
+      style={baseStyle}
     >
-      <style>{STYLE}</style>
+      <div onPointerDown={startDrag} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <style>{STYLE}</style>
 
-      {mode === 'byok' && <ByokWelcome onClose={onClose} />}
-      {mode === 'settings' && <SettingsView onClose={onClose} onDone={hasKey ? closeSettings : undefined} />}
-      {mode === 'app' && provider && (
-        <AppView
-          provider={provider} workspace={workspace} model={model} docked={docked}
-          tab={tab} setTab={setTab} onOpenSettings={openSettings} onTogglePlacement={togglePlacement} onClose={onClose}
-        />
-      )}
+        {mode === 'byok' && <ByokWelcome onClose={onClose} />}
+        {mode === 'settings' && <SettingsView onClose={onClose} onDone={hasKey ? closeSettings : undefined} />}
+        {mode === 'app' && provider && (
+          <AppView
+            provider={provider} workspace={workspace} model={model}
+            tab={tab} setTab={setTab} onOpenSettings={openSettings} onClose={onClose}
+          />
+        )}
+      </div>
     </DialogShell>
   )
+}
+
+const PANEL_WIDTH = 360
+function clampPx(v: number, min: number, max: number): number {
+  return Math.min(Math.max(v, min), Math.max(min, max))
 }
 
 // ─── App (header + tabs + body) ─────────────────────────────────────
 
 function AppView({
-  provider, workspace, model, docked, tab, setTab, onOpenSettings, onTogglePlacement, onClose,
+  provider, workspace, model, tab, setTab, onOpenSettings, onClose,
 }: {
   provider: AiProvider
   workspace: Workspace | null
   model: string
-  docked: boolean
   tab: TabId
   setTab: (t: TabId) => void
   onOpenSettings: () => void
-  onTogglePlacement: () => void
   onClose: () => void
 }) {
   const section = AI_FEATURES.find((f) => f.id === tab) ?? (tab === 'adr' ? ADR_FEATURE : undefined)
@@ -139,26 +175,16 @@ function AppView({
 
   return (
     <>
-      {/* header */}
-      <div style={headerRow}>
+      {/* header (drag handle) */}
+      <div data-drag-handle style={{ ...headerRow, cursor: 'move' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 15, fontWeight: 700, color: C.text }}>
           <Sparkles size={17} color={C.accent} /> AI assistant
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {docked ? (
-            <span title={`Connected — ${model}`} style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, boxShadow: '0 0 6px rgba(34,197,94,0.6)' }} />
-          ) : (
-            <button onClick={onOpenSettings} title="Connected — open AI settings"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 9px', borderRadius: 999, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 11, fontWeight: 500, color: C.greenText, cursor: 'pointer' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green }} />{model}
-            </button>
-          )}
-          <button onClick={onTogglePlacement} className="c4ai-ghost" aria-label={docked ? 'Center the panel' : 'Dock to the side'} title={docked ? 'Center the panel' : 'Dock to the side'} style={iconBtn}>
-            {docked ? <Square size={13} /> : <PanelRight size={14} />}
-          </button>
+          <span title={`Connected — ${model}`} style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, boxShadow: '0 0 6px rgba(34,197,94,0.6)' }} />
           <button onClick={onOpenSettings} className="c4ai-ghost" aria-label="AI settings" title="AI settings"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: docked ? 0 : '0 10px', width: docked ? 28 : undefined, justifyContent: 'center', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
-            <Settings size={13} /> {!docked && 'Settings'}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer' }}>
+            <Settings size={13} />
           </button>
           <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
         </div>
@@ -1023,7 +1049,7 @@ function ByokWelcome({ onClose }: { onClose: () => void }) {
 
   return (
     <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '13px 14px 0' }}>
+      <div data-drag-handle style={{ display: 'flex', justifyContent: 'flex-end', padding: '13px 14px 0', cursor: 'move' }}>
         <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
       </div>
       <div style={{ padding: '6px 32px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', flex: 1, justifyContent: 'center' }}>
@@ -1064,7 +1090,7 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
 
   return (
     <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-      <div style={headerRow}>
+      <div data-drag-handle style={{ ...headerRow, cursor: 'move' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 15, fontWeight: 700, color: C.text }}><KeyRound size={16} color={C.accent} /> AI settings</span>
         <button onClick={onDone ?? onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
       </div>
