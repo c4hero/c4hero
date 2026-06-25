@@ -51,9 +51,15 @@ const STYLE = `
 @keyframes c4ai-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes c4ai-node{0%,100%{opacity:.35}50%{opacity:1}}
 @keyframes c4ai-flow{to{stroke-dashoffset:-14}}
-@keyframes c4ai-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+@keyframes c4ai-radar{to{transform:rotate(360deg)}}
+@keyframes c4ai-ping{0%,72%,100%{opacity:.4;transform:scale(.78)}82%{opacity:1;transform:scale(1.22)}}
+@keyframes c4ai-pop{0%{opacity:0;transform:scale(0)}65%{opacity:1;transform:scale(1.2)}100%{opacity:1;transform:scale(1)}}
+@keyframes c4ai-ringpulse{0%{opacity:.5;transform:scale(.7)}100%{opacity:0;transform:scale(1.25)}}
+@keyframes c4ai-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
 .c4ai-node{transform-box:fill-box;transform-origin:center;animation:c4ai-node 1.7s ease-in-out infinite}
 .c4ai-edge{stroke-dasharray:3 5;animation:c4ai-flow .9s linear infinite}
+.c4ai-ping{transform-box:fill-box;transform-origin:center;animation:c4ai-ping 2.8s cubic-bezier(.4,0,.2,1) infinite}
+.c4ai-pop{transform-box:fill-box;transform-origin:center;animation:c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both}
 `
 
 export default function AiPanel({ onClose }: { onClose: () => void }) {
@@ -926,33 +932,65 @@ function ScanningView({ phase, repoName, counts, found }: {
   )
 }
 
-// An architecture graph "assembling itself": nodes pulse, edges stream — a
-// thematic stand-in for the model being inferred from the code.
+// A radar sweeping over an architecture graph that assembles itself: the hub
+// and its nodes pop in and "ping" as the beam crosses them, edges stream data,
+// concentric rings breathe — a thematic stand-in for the model being inferred.
+const SWEEP_PERIOD = 3.2 // seconds per revolution; node pings are synced to it
+const CX = 100
+const CY = 100
+const RADAR_R = 78
+
 function ScanGraph() {
-  const nodes = [
-    { x: 110, y: 62, r: 9 },  // center
-    { x: 36, y: 30, r: 6 },
-    { x: 184, y: 34, r: 6 },
-    { x: 30, y: 96, r: 6 },
-    { x: 190, y: 98, r: 6 },
-    { x: 110, y: 16, r: 5 },
-  ]
-  const edges: [number, number][] = [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 3], [2, 4]]
+  // Six satellites evenly around the hub, plus the hub itself.
+  const sats = [0, 1, 2, 3, 4, 5].map((i) => {
+    const deg = i * 60 - 90 // start at 12 o'clock, clockwise
+    const a = (deg * Math.PI) / 180
+    const r = 58
+    return { x: CX + r * Math.cos(a), y: CY + r * Math.sin(a), deg: (deg + 360) % 360 }
+  })
+  const ringEdges: [number, number][] = [[0, 2], [2, 4], [4, 0]] // a faint triangle between satellites
+
   return (
-    <div style={{ position: 'relative', width: 220, height: 124, overflow: 'hidden' }}>
-      <svg viewBox="0 0 220 124" width="220" height="124" style={{ display: 'block' }}>
-        {edges.map(([a, b], i) => (
-          <line key={i} x1={nodes[a].x} y1={nodes[a].y} x2={nodes[b].x} y2={nodes[b].y}
-            stroke="rgba(88,166,255,0.5)" strokeWidth="1.5" className="c4ai-edge" style={{ animationDelay: `${i * 0.12}s` }} />
+    <div style={{ position: 'relative', width: 200, height: 200, animation: 'c4ai-float 4s ease-in-out infinite' }}>
+      {/* rotating radar beam (conic wedge) */}
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%', width: RADAR_R * 2, height: RADAR_R * 2,
+        marginLeft: -RADAR_R, marginTop: -RADAR_R, borderRadius: '50%',
+        background: 'conic-gradient(from -90deg, rgba(88,166,255,0) 0deg, rgba(88,166,255,0) 290deg, rgba(88,166,255,0.18) 340deg, rgba(125,211,252,0.55) 360deg)',
+        animation: `c4ai-radar ${SWEEP_PERIOD}s linear infinite`,
+      }} />
+      <svg viewBox="0 0 200 200" width="200" height="200" style={{ position: 'absolute', inset: 0 }}>
+        {/* concentric range rings + crosshairs */}
+        {[28, 52, RADAR_R].map((r) => (
+          <circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke="rgba(88,166,255,0.14)" strokeWidth="1" />
         ))}
-        {nodes.map((n, i) => (
-          <g key={i}>
-            <circle cx={n.x} cy={n.y} r={n.r + 4} fill="rgba(88,166,255,0.12)" className="c4ai-node" style={{ animationDelay: `${i * 0.2}s` }} />
-            <circle cx={n.x} cy={n.y} r={n.r} fill={i === 0 ? C.accent : '#7dd3fc'} className="c4ai-node" style={{ animationDelay: `${i * 0.2}s` }} />
-          </g>
+        <line x1={CX - RADAR_R} y1={CY} x2={CX + RADAR_R} y2={CY} stroke="rgba(88,166,255,0.1)" strokeWidth="1" />
+        <line x1={CX} y1={CY - RADAR_R} x2={CX} y2={CY + RADAR_R} stroke="rgba(88,166,255,0.1)" strokeWidth="1" />
+
+        {/* edges: hub → each satellite, plus a faint triangle */}
+        {sats.map((s, i) => (
+          <line key={`h${i}`} x1={CX} y1={CY} x2={s.x} y2={s.y} stroke="rgba(88,166,255,0.45)" strokeWidth="1.5" className="c4ai-edge" style={{ animationDelay: `${i * 0.14}s` }} />
         ))}
+        {ringEdges.map(([a, b], i) => (
+          <line key={`r${i}`} x1={sats[a].x} y1={sats[a].y} x2={sats[b].x} y2={sats[b].y} stroke="rgba(88,166,255,0.18)" strokeWidth="1" />
+        ))}
+
+        {/* satellites: halo + dot, popping in then pinging in time with the beam */}
+        {sats.map((s, i) => {
+          const pingDelay = (s.deg / 360) * SWEEP_PERIOD
+          return (
+            <g key={i} className="c4ai-pop" style={{ animationDelay: `${0.15 + i * 0.09}s` }}>
+              <circle cx={s.x} cy={s.y} r={11} fill="rgba(125,211,252,0.12)" className="c4ai-ping" style={{ animationDelay: `${pingDelay}s` }} />
+              <circle cx={s.x} cy={s.y} r={5.5} fill="#7dd3fc" className="c4ai-ping" style={{ animationDelay: `${pingDelay}s` }} />
+            </g>
+          )
+        })}
+
+        {/* hub: steady glowing core with an expanding pulse ring */}
+        <circle cx={CX} cy={CY} r={13} fill="none" stroke="rgba(88,166,255,0.5)" strokeWidth="1.5" style={{ transformBox: 'fill-box', transformOrigin: 'center', animation: 'c4ai-ringpulse 2.2s ease-out infinite' }} />
+        <circle cx={CX} cy={CY} r={9} fill="rgba(88,166,255,0.18)" />
+        <circle cx={CX} cy={CY} r={5.5} fill={C.accent} />
       </svg>
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, transparent, rgba(88,166,255,0.14), transparent)', width: '40%', animation: 'c4ai-sweep 1.8s ease-in-out infinite' }} />
     </div>
   )
 }
