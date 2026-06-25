@@ -27,6 +27,7 @@ export {
   getZoomTarget,
   getBreadcrumb,
   getCreatableTypes,
+  getScopeMemberIds,
   isFocalScopeElement,
   getFocalScopeId,
 } from './workspace-selectors'

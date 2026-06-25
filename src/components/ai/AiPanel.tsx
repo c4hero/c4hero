@@ -5,7 +5,7 @@ import {
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
-import { useWorkspaceStore, getActiveView } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
 import { useAiSettingsStore, isAiReady, activeAiConfig } from '@/store/ai-settings'
 import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
 import { parseDSL } from '@/lib/dsl'
@@ -760,7 +760,43 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
   function apply() {
     if (!result || !workspace) return
     const ops = result.proposals.filter((_, i) => !removed.has(i)).map((p) => p.op)
-    if (ops.length) applyPlanToStore({ operations: ops }, workspace)
+    if (!ops.length) { onClose(); return }
+
+    const before = useWorkspaceStore.getState()
+    const activeKey = before.activeViewKey
+    const activeView = activeKey ? getActiveView(before.workspace!, activeKey) : undefined
+    // On an L2/L3 we'll later strip out imported elements that don't belong here.
+    const cleanScope = activeView && (activeView.type === 'container' || activeView.type === 'component') ? activeView : undefined
+    const beforeViewIds = new Set(cleanScope ? cleanScope.elements.map((e) => e.id) : [])
+    const beforeSystemIds = new Set(before.workspace!.model.softwareSystems.map((s) => s.id))
+
+    applyPlanToStore({ operations: ops }, workspace)
+
+    const after = useWorkspaceStore.getState()
+    const ws1 = after.workspace!
+
+    // Keep the scan from polluting the view you were on: drop newly-added
+    // elements that don't belong to this view's own scope (a new system's
+    // containers, external boxes, …), while keeping additions to *this* system.
+    if (cleanScope && activeKey) {
+      const view = getActiveView(ws1, activeKey)
+      const added = view ? view.elements.map((e) => e.id).filter((id) => !beforeViewIds.has(id)) : []
+      const belongs = getScopeMemberIds(ws1, cleanScope)
+      const foreign = added.filter((id) => !belongs.has(id))
+      if (foreign.length) after.removeElementsFromView(activeKey, foreign)
+    }
+
+    // Give each newly-imported system its own container (L2) view, and open the
+    // largest one so the import lands in its own diagram.
+    const newSystems = ws1.model.softwareSystems
+      .filter((s) => !beforeSystemIds.has(s.id))
+      .sort((a, b) => b.containers.length - a.containers.length)
+    let primaryKey: string | null = null
+    for (const sys of newSystems) {
+      const key = after.addView('container', sys.id, `${sys.name} — Containers`)
+      if (!primaryKey) primaryKey = key
+    }
+    if (primaryKey) after.setActiveView(primaryKey)
     onClose()
   }
 
