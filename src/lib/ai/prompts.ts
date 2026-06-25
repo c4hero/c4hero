@@ -1,5 +1,5 @@
 import type { Workspace, View } from '@/types/model'
-import { serializeContext, serializeViewContext, viewLabel, describeAllowedTypes } from './context'
+import { serializeContext, serializeViewContext, viewLabel } from './context'
 
 // System/user prompt builders. Pure string assembly — kept out of the provider
 // and feature orchestration so prompt wording is reviewable and testable.
@@ -166,11 +166,6 @@ export function interviewSystem(ws: Workspace, view: View): string {
     'emit any operations — just ask the next question. If the model already seems complete, ask',
     'a question that would still add useful detail.',
     '',
-    'Stay within what this view can hold — ask only about element and connection types this view',
-    'allows; if the user mentions something that belongs in a different view (e.g. components while',
-    'on a container view), note it briefly but keep your questions on the in-scope types.',
-    describeAllowedTypes(ws, view),
-    '',
     serializeViewContext(ws, view),
   ].join('\n')
 }
@@ -195,11 +190,6 @@ export function interviewPlanSystem(ws: Workspace, view: View): string {
     'unconnected if the conversation implies a connection. For addRelationship.source and',
     '.destination, use the element id, a ref defined earlier in this batch, or the element\'s',
     'exact name.',
-    '',
-    'Only add element types this view can hold, and set the correct parent. If the user mentioned',
-    'something out of scope for this view, skip adding it (don\'t force it in) — surface it as a',
-    'description or relationship on an in-scope element instead where it makes sense.',
-    describeAllowedTypes(ws, view),
     '',
     editSystem(),
     '',
