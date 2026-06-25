@@ -64,16 +64,17 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
     async complete(req: AiTextRequest): Promise<string> {
       return call(config, {
         max_tokens: req.maxTokens ?? 8000,
-        temperature: req.temperature,
         system: req.system,
         messages: [...(req.history ?? []), { role: 'user', content: req.user }],
       })
     },
 
     async completeJson<T>(req: AiJsonRequest<T>): Promise<T> {
+      // Note: `temperature` is deprecated on current Claude models (Opus 4.6+),
+      // so it's intentionally not sent. Consistency comes from the deterministic
+      // repo snapshot and the prompt instead.
       const text = await call(config, {
         max_tokens: req.maxTokens ?? 4000,
-        temperature: req.temperature ?? 0,
         system: req.system,
         messages: [...(req.history ?? []), { role: 'user', content: req.user }],
         output_config: { format: { type: 'json_schema', schema: req.schema } },
