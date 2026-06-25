@@ -22,6 +22,9 @@ export interface AiSettings {
   models: Record<AiProviderId, string>
   /** Assistant panel placement. */
   placement: PanelPlacement
+  /** Show the AI button in the top bar. When false, the assistant is still
+   *  reachable from the command palette. */
+  showInTopBar: boolean
 }
 
 function emptyKeys(): Record<AiProviderId, string> {
@@ -38,6 +41,7 @@ const DEFAULTS: AiSettings = {
   apiKeys: emptyKeys(),
   models: defaultModels(),
   placement: 'docked',
+  showInTopBar: true,
 }
 
 function isPlacement(value: unknown): value is PanelPlacement {
@@ -71,6 +75,7 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     apiKeys,
     models,
     placement: isPlacement(source.placement) ? source.placement : DEFAULTS.placement,
+    showInTopBar: typeof source.showInTopBar === 'boolean' ? source.showInTopBar : DEFAULTS.showInTopBar,
   }
 }
 

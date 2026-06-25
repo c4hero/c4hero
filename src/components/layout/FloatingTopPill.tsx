@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState, useCallback } from 'react'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import LoadingDot from '@/components/shared/LoadingDot'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
+import { useAiSettingsStore } from '@/store/ai-settings'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
 import { serializeDSL } from '@/lib/dsl'
 import { createBlankWorkspace } from '@/lib/templates'
@@ -52,6 +53,7 @@ export default function FloatingTopPill() {
 
   const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
   const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
+  const showAiInTopBar = useAiSettingsStore((s) => s.showInTopBar)
   const showUndoRedo = useSettingsStore((s) => s.showUndoRedo)
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -341,17 +343,19 @@ export default function FloatingTopPill() {
               </>
             )}
 
-            {/* AI assistant */}
-            <button
-              onClick={() => { const open = !useWorkspaceStore.getState().aiPanelOpen; useWorkspaceStore.getState().setAiPanelOpen(open); if (open) { setExportDialogOpen(false); setViewDropdownOpen(false); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) } }}
-              className="btn-icon"
-              data-active={aiPanelOpen ? 'true' : undefined}
-              style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40, minHeight: 44 }}
-              title="AI assistant"
-              aria-label="AI assistant"
-            >
-              <Sparkles size={15} />
-            </button>
+            {/* AI assistant — hidden via AI settings; still reachable from the command palette */}
+            {showAiInTopBar && (
+              <button
+                onClick={() => { const open = !useWorkspaceStore.getState().aiPanelOpen; useWorkspaceStore.getState().setAiPanelOpen(open); if (open) { setExportDialogOpen(false); setViewDropdownOpen(false); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) } }}
+                className="btn-icon"
+                data-active={aiPanelOpen ? 'true' : undefined}
+                style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40, minHeight: 44 }}
+                title="AI assistant"
+                aria-label="AI assistant"
+              >
+                <Sparkles size={15} />
+              </button>
+            )}
 
             {/* Export */}
             <button

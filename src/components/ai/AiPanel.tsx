@@ -1057,7 +1057,7 @@ function ByokWelcome({ onClose }: { onClose: () => void }) {
 }
 
 function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () => void }) {
-  const { enabled, provider, apiKeys, models, update, setApiKey, setModel } = useAiSettingsStore()
+  const { enabled, showInTopBar, provider, apiKeys, models, update, setApiKey, setModel } = useAiSettingsStore()
   const meta = AI_PROVIDER_META[provider]
   const [reveal, setReveal] = useState(false)
   const modelListId = `c4ai-models-${provider}`
@@ -1073,6 +1073,13 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
           <div><div style={fieldLabel}>Enable AI features</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>Show the AI assistant and its commands.</div></div>
           <button role="switch" aria-checked={enabled} onClick={() => update({ enabled: !enabled })} style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? C.accent : 'rgba(255,255,255,0.16)', position: 'relative', flex: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             <span style={{ position: 'absolute', top: 2, [enabled ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: enabled ? C.ink : C.text } as React.CSSProperties} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div><div style={fieldLabel}>Show AI button in top bar</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>When off, open the assistant from the command palette (⌘K).</div></div>
+          <button role="switch" aria-checked={showInTopBar} onClick={() => update({ showInTopBar: !showInTopBar })} style={{ width: 36, height: 20, borderRadius: 999, background: showInTopBar ? C.accent : 'rgba(255,255,255,0.16)', position: 'relative', flex: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <span style={{ position: 'absolute', top: 2, [showInTopBar ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: showInTopBar ? C.ink : C.text } as React.CSSProperties} />
           </button>
         </div>
 

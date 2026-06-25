@@ -11,11 +11,17 @@ describe('normalizeAiSettings', () => {
     expect(s.models.openai).toBe('gpt-5')
     expect(s.models.gemini).toBe('gemini-2.5-pro')
     expect(s.placement).toBe('docked')
+    expect(s.showInTopBar).toBe(true)
   })
 
   it('preserves a valid placement and rejects an invalid one', () => {
     expect(normalizeAiSettings({ placement: 'center' }).placement).toBe('center')
     expect(normalizeAiSettings({ placement: 'sideways' }).placement).toBe('docked')
+  })
+
+  it('preserves showInTopBar when set to false', () => {
+    expect(normalizeAiSettings({ showInTopBar: false }).showInTopBar).toBe(false)
+    expect(normalizeAiSettings({ showInTopBar: 'nope' }).showInTopBar).toBe(true)
   })
 
   it('preserves valid per-provider values', () => {
