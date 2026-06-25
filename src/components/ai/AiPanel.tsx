@@ -15,7 +15,7 @@ import {
   createProvider, aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
-  applyEditPlan, describeOps, elementIdSet, elementNameMap, flattenElements, viewLabel,
+  applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
   findingsToMarkdown, sortedFindings, isActionable,
   type AiProvider, type EditActions, type DescribeActions,
@@ -851,7 +851,7 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
     updateRelationship: (id, patch) => s.updateRelationship(id, patch),
     deleteElement: (id) => s.deleteElement(id),
   }
-  applyEditPlan(plan, actions, elementIdSet(ws))
+  applyEditPlan(plan, actions, ws)
 }
 
 function summarize(ws: Workspace): string {

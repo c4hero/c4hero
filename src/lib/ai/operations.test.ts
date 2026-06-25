@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { applyEditPlan, describeOps, type EditActions } from './operations'
 import type { EditPlan } from './types'
-import { elementIdSet } from './context'
 import { makeWorkspace } from './testFixture'
 
 function fakeActions() {
@@ -30,7 +29,7 @@ describe('applyEditPlan', () => {
         { op: 'addRelationship', source: 'web', destination: 'cache', description: 'Caches sessions' },
       ],
     }
-    const result = applyEditPlan(plan, actions, elementIdSet(ws))
+    const result = applyEditPlan(plan, actions, ws)
 
     expect(actions.addContainer).toHaveBeenCalledWith('shop', 'Redis Cache')
     // The relationship resolves the ref to the id the store returned ('gen1').
@@ -48,7 +47,7 @@ describe('applyEditPlan', () => {
         { op: 'addRelationship', source: 'web', destination: 'ghost' },
       ],
     }
-    const result = applyEditPlan(plan, actions, elementIdSet(ws))
+    const result = applyEditPlan(plan, actions, ws)
     expect(actions.addContainer).not.toHaveBeenCalled()
     expect(actions.addRelationship).not.toHaveBeenCalled()
     expect(result.appliedCount).toBe(0)
@@ -65,7 +64,7 @@ describe('applyEditPlan', () => {
         { op: 'deleteElement', id: 'cust' },
       ],
     }
-    const result = applyEditPlan(plan, actions, elementIdSet(ws))
+    const result = applyEditPlan(plan, actions, ws)
     expect(actions.updateElement).not.toHaveBeenCalled()
     expect(actions.deleteElement).toHaveBeenCalledWith('cust')
     expect(result.appliedCount).toBe(1)
@@ -75,7 +74,7 @@ describe('applyEditPlan', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()
     const plan: EditPlan = { operations: [{ op: 'addRelationship', source: 'web', destination: 'web' }] }
-    const result = applyEditPlan(plan, actions, elementIdSet(ws))
+    const result = applyEditPlan(plan, actions, ws)
     expect(result.skippedCount).toBe(1)
     expect(result.applied[0].reason).toBe('self-relationship')
   })
@@ -86,8 +85,26 @@ describe('applyEditPlan', () => {
     const plan: EditPlan = {
       operations: [{ op: 'addPerson', ref: 'p', name: 'Auditor', description: 'Reviews logs' }],
     }
-    applyEditPlan(plan, actions, elementIdSet(ws))
+    applyEditPlan(plan, actions, ws)
     expect(actions.updateElement).toHaveBeenCalledWith('gen1', { description: 'Reviews logs' })
+  })
+
+  it('resolves parents and relationship endpoints by element name, not just id/ref', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const plan: EditPlan = {
+      operations: [
+        // parent given by name ("Shop") rather than id ("shop")
+        { op: 'addContainer', ref: 'c1', parent: 'Shop', name: 'Redis Cache' },
+        // both endpoints by name: existing ("Web App") + the just-added ("Redis Cache")
+        { op: 'addRelationship', source: 'Web App', destination: 'Redis Cache', description: 'Caches' },
+      ],
+    }
+    const result = applyEditPlan(plan, actions, ws)
+    expect(actions.addContainer).toHaveBeenCalledWith('shop', 'Redis Cache')
+    expect(actions.addRelationship).toHaveBeenCalledWith('web', 'gen1', 'Caches', undefined)
+    expect(result.appliedCount).toBe(2)
+    expect(result.skippedCount).toBe(0)
   })
 })
 

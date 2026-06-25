@@ -1,6 +1,6 @@
 import type { Workspace } from '@/types/model'
 import type { EditOp, EditPlan } from './types'
-import { elementNameMap } from './context'
+import { elementNameMap, elementIdSet, flattenElements } from './context'
 
 // Apply an AI-produced EditPlan against the workspace store. The applier is
 // decoupled from zustand via the EditActions interface so it can be unit-tested
@@ -36,18 +36,35 @@ export interface ApplyResult {
 export function applyEditPlan(
   plan: EditPlan,
   actions: EditActions,
-  validIds: ReadonlySet<string>,
+  ws: Workspace,
 ): ApplyResult {
   const refMap = new Map<string, string>()
+  const validIds = new Set(elementIdSet(ws))
+  // Name → id, so a relationship that references an element by its display name
+  // (a common model behaviour, especially from the interview) still resolves.
+  // First occurrence wins for duplicate names.
+  const nameToId = new Map<string, string>()
+  for (const el of flattenElements(ws)) {
+    const key = el.name.trim().toLowerCase()
+    if (key && !nameToId.has(key)) nameToId.set(key, el.id)
+  }
   const applied: AppliedOp[] = []
 
+  // Register a newly-created element so later ops can target it by ref, id, or name.
+  const register = (ref: string, id: string, name: string) => {
+    refMap.set(ref, id)
+    validIds.add(id)
+    const key = name.trim().toLowerCase()
+    if (key) nameToId.set(key, id)
+  }
+
   // Resolve a token to a concrete id: a ref defined earlier, an existing id,
-  // or null when it can't be resolved.
+  // an element name, or null when it can't be resolved.
   const resolve = (token: string | undefined): string | null => {
     if (!token) return null
     if (refMap.has(token)) return refMap.get(token)!
     if (validIds.has(token)) return token
-    return null
+    return nameToId.get(token.trim().toLowerCase()) ?? null
   }
 
   const skip = (op: EditOp, reason: string) => applied.push({ op, ok: false, reason })
@@ -58,8 +75,7 @@ export function applyEditPlan(
       case 'addPerson': {
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addPerson(op.name.trim())
-        refMap.set(op.ref, id)
-        validIds = new Set(validIds).add(id)
+        register(op.ref, id, op.name)
         if (op.description?.trim()) actions.updateElement(id, { description: op.description.trim() })
         ok(op)
         break
@@ -67,8 +83,7 @@ export function applyEditPlan(
       case 'addSoftwareSystem': {
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addSoftwareSystem(op.name.trim())
-        refMap.set(op.ref, id)
-        validIds = new Set(validIds).add(id)
+        register(op.ref, id, op.name)
         if (op.description?.trim()) actions.updateElement(id, { description: op.description.trim() })
         ok(op)
         break
@@ -79,8 +94,7 @@ export function applyEditPlan(
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addContainer(parentId, op.name.trim())
         if (!id) { skip(op, 'parent is not a software system'); break }
-        refMap.set(op.ref, id)
-        validIds = new Set(validIds).add(id)
+        register(op.ref, id, op.name)
         if (op.description?.trim() || op.technology?.trim()) {
           actions.updateElement(id, { description: op.description?.trim(), technology: op.technology?.trim() })
         }
@@ -93,8 +107,7 @@ export function applyEditPlan(
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addComponent(parentId, op.name.trim())
         if (!id) { skip(op, 'parent is not a container'); break }
-        refMap.set(op.ref, id)
-        validIds = new Set(validIds).add(id)
+        register(op.ref, id, op.name)
         if (op.description?.trim() || op.technology?.trim()) {
           actions.updateElement(id, { description: op.description?.trim(), technology: op.technology?.trim() })
         }
