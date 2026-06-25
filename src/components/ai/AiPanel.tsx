@@ -49,6 +49,11 @@ const STYLE = `
 .c4ai-sec:hover{background:rgba(255,255,255,0.05)!important}
 .c4ai-card:hover{border-color:${C.borderStrong}!important;background:#1c2128!important}
 @keyframes c4ai-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes c4ai-node{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes c4ai-flow{to{stroke-dashoffset:-14}}
+@keyframes c4ai-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+.c4ai-node{transform-box:fill-box;transform-origin:center;animation:c4ai-node 1.7s ease-in-out infinite}
+.c4ai-edge{stroke-dasharray:3 5;animation:c4ai-flow .9s linear infinite}
 `
 
 export default function AiPanel({ onClose }: { onClose: () => void }) {
@@ -720,7 +725,9 @@ type RepoStage = 'idle' | 'scanning' | 'done'
 
 function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
   const [stage, setStage] = useState<RepoStage>('idle')
-  const [status, setStatus] = useState('')
+  const [phase, setPhase] = useState<'reading' | 'analyzing'>('reading')
+  const [counts, setCounts] = useState({ files: 0, keyFiles: 0 })
+  const [found, setFound] = useState<string[]>([])
   const [repoName, setRepoName] = useState('')
   const [result, setResult] = useState<RepoScanResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -735,11 +742,14 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
     } catch {
       return // user cancelled the picker
     }
-    setStage('scanning'); setRepoName(dir.name); setResult(null); setRemoved(new Set())
+    setStage('scanning'); setPhase('reading'); setRepoName(dir.name)
+    setResult(null); setRemoved(new Set()); setCounts({ files: 0, keyFiles: 0 }); setFound([])
     try {
-      setStatus(`Reading ${dir.name}…`)
-      const snapshot = await readRepoFiles(dir)
-      setStatus(`Analyzing ${snapshot.files.length} key file(s) from ${snapshot.tree.length} paths…`)
+      const snapshot = await readRepoFiles(dir, {}, (p) => {
+        setCounts({ files: p.files, keyFiles: p.keyFiles })
+        if (p.keyFile) setFound((prev) => [p.keyFile!.split('/').pop() ?? p.keyFile!, ...prev].slice(0, 6))
+      })
+      setPhase('analyzing')
       const res = await scanRepo(provider, workspace, buildRepoBundle(snapshot))
       setResult(res); setStage('done')
     } catch (err) {
@@ -759,15 +769,7 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
   }
 
   if (stage === 'scanning') {
-    return (
-      <>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Loader2 size={16} color={C.accent} className="animate-spin" />
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Scanning {repoName}…</span>
-        </div>
-        <p style={{ ...blurb, marginTop: 10 }}>{status}</p>
-      </>
-    )
+    return <ScanningView phase={phase} repoName={repoName} counts={counts} found={found} />
   }
 
   if (stage === 'done' && result) {
@@ -839,6 +841,83 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
         <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Files are read in your browser. Only the file tree and key manifest/config files are sent to your AI provider with your key — c4hero has no server.</span>
       </div>
     </>
+  )
+}
+
+const ANALYZE_MESSAGES = [
+  'Inferring systems and services…',
+  'Detecting technologies and frameworks…',
+  'Mapping relationships between components…',
+  'Spotting external systems and integrations…',
+  'Drafting model proposals…',
+]
+
+function ScanningView({ phase, repoName, counts, found }: {
+  phase: 'reading' | 'analyzing'
+  repoName: string
+  counts: { files: number; keyFiles: number }
+  found: string[]
+}) {
+  const [msg, setMsg] = useState(0)
+  useEffect(() => {
+    if (phase !== 'analyzing') return
+    const t = setInterval(() => setMsg((m) => (m + 1) % ANALYZE_MESSAGES.length), 1900)
+    return () => clearInterval(t)
+  }, [phase])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '8px 0' }}>
+      <ScanGraph />
+      <div style={{ marginTop: 16, fontSize: 13, fontWeight: 600, color: C.text }}>
+        {phase === 'reading' ? `Reading ${repoName}…` : ANALYZE_MESSAGES[msg]}
+      </div>
+      <div style={{ marginTop: 6, fontSize: 12, color: C.muted }}>
+        {phase === 'reading'
+          ? `${counts.files} file${counts.files === 1 ? '' : 's'} · ${counts.keyFiles} key file${counts.keyFiles === 1 ? '' : 's'} found`
+          : 'Analyzing with your model — this can take a moment'}
+      </div>
+      {found.length > 0 && (
+        <div style={{ marginTop: 16, width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {found.map((f, i) => (
+            <div key={`${f}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: C.muted2, animation: 'c4ai-fade .25s ease' }}>
+              <FileCode size={12} color="#7dd3fc" style={{ flex: 'none' }} />
+              <span style={{ fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// An architecture graph "assembling itself": nodes pulse, edges stream — a
+// thematic stand-in for the model being inferred from the code.
+function ScanGraph() {
+  const nodes = [
+    { x: 110, y: 62, r: 9 },  // center
+    { x: 36, y: 30, r: 6 },
+    { x: 184, y: 34, r: 6 },
+    { x: 30, y: 96, r: 6 },
+    { x: 190, y: 98, r: 6 },
+    { x: 110, y: 16, r: 5 },
+  ]
+  const edges: [number, number][] = [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 3], [2, 4]]
+  return (
+    <div style={{ position: 'relative', width: 220, height: 124, overflow: 'hidden' }}>
+      <svg viewBox="0 0 220 124" width="220" height="124" style={{ display: 'block' }}>
+        {edges.map(([a, b], i) => (
+          <line key={i} x1={nodes[a].x} y1={nodes[a].y} x2={nodes[b].x} y2={nodes[b].y}
+            stroke="rgba(88,166,255,0.5)" strokeWidth="1.5" className="c4ai-edge" style={{ animationDelay: `${i * 0.12}s` }} />
+        ))}
+        {nodes.map((n, i) => (
+          <g key={i}>
+            <circle cx={n.x} cy={n.y} r={n.r + 4} fill="rgba(88,166,255,0.12)" className="c4ai-node" style={{ animationDelay: `${i * 0.2}s` }} />
+            <circle cx={n.x} cy={n.y} r={n.r} fill={i === 0 ? C.accent : '#7dd3fc'} className="c4ai-node" style={{ animationDelay: `${i * 0.2}s` }} />
+          </g>
+        ))}
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, transparent, rgba(88,166,255,0.14), transparent)', width: '40%', animation: 'c4ai-sweep 1.8s ease-in-out infinite' }} />
+    </div>
   )
 }
 

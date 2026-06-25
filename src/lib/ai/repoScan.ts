@@ -37,11 +37,20 @@ interface DirHandleLike {
   entries(): AsyncIterableIterator<[string, { kind: string; getFile?: () => Promise<File> }]>
 }
 
+/** Progress callback payload while walking a repo. `keyFile` is set only on the
+ *  tick where a high-signal file was just collected. */
+export interface ScanProgress {
+  files: number
+  keyFiles: number
+  keyFile?: string
+}
+
 /** Walk a directory handle into a RepoSnapshot. Bounded by the options so a huge
- *  repo doesn't stall the browser. */
+ *  repo doesn't stall the browser. `onProgress` fires as files are discovered. */
 export async function readRepoFiles(
   dir: FileSystemDirectoryHandle,
   opts: ReadRepoOptions = {},
+  onProgress?: (p: ScanProgress) => void,
 ): Promise<RepoSnapshot> {
   const maxFiles = opts.maxFiles ?? 40
   const maxFileBytes = opts.maxFileBytes ?? 16_000
@@ -50,6 +59,7 @@ export async function readRepoFiles(
 
   const tree: string[] = []
   const files: RepoFile[] = []
+  let walked = 0
 
   async function walk(handle: DirHandleLike, prefix: string, depth: number): Promise<void> {
     if (depth > 8) return
@@ -61,15 +71,19 @@ export async function readRepoFiles(
       } else {
         const path = `${prefix}${name}`
         if (tree.length < maxTreePaths) tree.push(path)
+        walked++
         if (files.length < maxFiles && isKeyFile(name) && entry.getFile) {
           try {
             const file = await entry.getFile()
             if (file.size <= maxRawFileBytes) {
               files.push({ path, content: (await file.text()).slice(0, maxFileBytes) })
+              onProgress?.({ files: walked, keyFiles: files.length, keyFile: path })
             }
           } catch {
             // unreadable file — skip
           }
+        } else if (walked % 40 === 0) {
+          onProgress?.({ files: walked, keyFiles: files.length })
         }
       }
     }
