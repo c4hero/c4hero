@@ -146,15 +146,36 @@ export function uniqueElementName(base: string, ws: Workspace): string {
 
 /** Add an element to the active view (no-op if no view is active or the
  *  element is already present). */
+/** Which element types each C4 view kind may show — a higher-level view never
+ *  shows lower-level internals (a System Landscape never shows containers, etc.),
+ *  though deeper views may show higher-level elements as external/boundary nodes. */
+const VIEW_ELEMENT_TYPES: Record<View['type'], ReadonlySet<ModelElement['type']>> = {
+  systemLandscape: new Set<ModelElement['type']>(['person', 'softwareSystem']),
+  systemContext: new Set<ModelElement['type']>(['person', 'softwareSystem']),
+  container: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container']),
+  component: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container', 'component']),
+}
+
+/** True when a view of `viewType` is allowed to display an element of `elementType`. */
+export function viewAllowsElementType(viewType: View['type'], elementType: ModelElement['type']): boolean {
+  return VIEW_ELEMENT_TYPES[viewType].has(elementType)
+}
+
 export function addToCurrentView(
   ws: Workspace,
   activeViewKey: string | null,
   elementId: string,
   position?: { x: number; y: number },
+  elementType?: ModelElement['type'],
 ): void {
   if (!activeViewKey) return
   const view = findViewHelper(ws, activeViewKey)
-  if (view && !view.elements.some((e) => e.id === elementId)) {
+  if (!view) return
+  // Don't drop an element into a view that can't hold its type (e.g. a container
+  // onto a System Landscape view). The element still lives in the model and is
+  // added to the appropriate scoped views by the caller.
+  if (elementType && !viewAllowsElementType(view.type, elementType)) return
+  if (!view.elements.some((e) => e.id === elementId)) {
     view.elements.push({ id: elementId, x: position?.x, y: position?.y })
   }
 }

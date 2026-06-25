@@ -37,7 +37,7 @@ export const createElementSlice: StateCreator<
       const ws = s.workspace
       const person: Person = { id, type: 'person', name: uniqueElementName(name, ws), tags: ['Element', 'Person'], properties: {}, location: location ?? 'Internal' }
       ws.model.people.push(person)
-      addToCurrentView(ws, s.activeViewKey, id, position)
+      addToCurrentView(ws, s.activeViewKey, id, position, 'person')
       // Auto-add to all system landscape views (they display every person/system)
       for (const v of ws.views.systemLandscapeViews) {
         if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === id)) {
@@ -61,7 +61,7 @@ export const createElementSlice: StateCreator<
       const ws = s.workspace
       const system: SoftwareSystem = { id, type: 'softwareSystem', name: uniqueElementName(name, ws), tags: ['Element', 'Software System'], properties: {}, containers: [], location: location ?? 'Internal' }
       ws.model.softwareSystems.push(system)
-      addToCurrentView(ws, s.activeViewKey, id, position)
+      addToCurrentView(ws, s.activeViewKey, id, position, 'softwareSystem')
       for (const v of ws.views.systemLandscapeViews) {
         if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === id)) {
           v.elements.push({ id })
@@ -89,7 +89,7 @@ export const createElementSlice: StateCreator<
       const tags = extraTag ? ['Element', 'Container', extraTag] : ['Element', 'Container']
       const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
       system.containers.push(container)
-      addToCurrentView(ws, s.activeViewKey, id, position)
+      addToCurrentView(ws, s.activeViewKey, id, position, 'container')
       // Also auto-add to all other container views scoped to the same system
       for (const v of ws.views.containerViews) {
         if (v.softwareSystemId === systemId && v.key !== s.activeViewKey) {
@@ -121,7 +121,7 @@ export const createElementSlice: StateCreator<
         pushUndoSnapshot(s)
         const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Element', 'Component'], properties: {} }
         container.components.push(comp)
-        addToCurrentView(ws, s.activeViewKey, id, position)
+        addToCurrentView(ws, s.activeViewKey, id, position, 'component')
         // Also auto-add to all other component views scoped to the same container
         for (const v of ws.views.componentViews) {
           if (v.containerId === containerId && v.key !== s.activeViewKey) {
