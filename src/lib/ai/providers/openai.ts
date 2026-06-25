@@ -70,6 +70,9 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
     async complete(req: AiTextRequest): Promise<string> {
       return call(config, {
         max_completion_tokens: req.maxTokens ?? 8000,
+        // Only sent when explicitly set: reasoning models (gpt-5, o-series)
+        // reject any temperature other than the default.
+        temperature: req.temperature,
         messages: messages(req.system, req.user, req.history),
       })
     },
@@ -79,6 +82,7 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
       const system = `${req.system}\n\nReturn ONLY a JSON object that conforms to this JSON Schema:\n${JSON.stringify(req.schema)}`
       const text = await call(config, {
         max_completion_tokens: req.maxTokens ?? 4000,
+        temperature: req.temperature,
         messages: messages(system, req.user, req.history),
         response_format: { type: 'json_object' },
       })

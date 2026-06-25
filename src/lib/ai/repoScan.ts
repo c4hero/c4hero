@@ -45,8 +45,11 @@ export interface ScanProgress {
   keyFile?: string
 }
 
-/** Walk a directory handle into a RepoSnapshot. Bounded by the options so a huge
- *  repo doesn't stall the browser. `onProgress` fires as files are discovered. */
+/** Walk a directory handle into a RepoSnapshot. The result is deterministic for
+ *  a given repo: paths and key files are collected fully (within generous walk
+ *  bounds), sorted, and only then capped — so the same repo always yields the
+ *  same snapshot regardless of filesystem iteration order. `onProgress` fires as
+ *  files are discovered and read. */
 export async function readRepoFiles(
   dir: FileSystemDirectoryHandle,
   opts: ReadRepoOptions = {},
@@ -56,40 +59,55 @@ export async function readRepoFiles(
   const maxFileBytes = opts.maxFileBytes ?? 16_000
   const maxTreePaths = opts.maxTreePaths ?? 800
   const maxRawFileBytes = opts.maxRawFileBytes ?? 512_000
+  // Generous walk-collection bounds so the sort+cap below sees the whole repo in
+  // the common case (caps only bite on very large repos).
+  const walkPathLimit = 20_000
+  const walkKeyLimit = 400
 
-  const tree: string[] = []
-  const files: RepoFile[] = []
+  const allPaths: string[] = []
+  const keyHandles: { path: string; getFile: () => Promise<File> }[] = []
   let walked = 0
 
   async function walk(handle: DirHandleLike, prefix: string, depth: number): Promise<void> {
-    if (depth > 8) return
+    if (depth > 8 || allPaths.length >= walkPathLimit) return
     for await (const [name, entry] of handle.entries()) {
-      if (tree.length >= maxTreePaths && files.length >= maxFiles) return
+      if (allPaths.length >= walkPathLimit) return
       if (entry.kind === 'directory') {
         if (isIgnoredDir(name)) continue
         await walk(entry as unknown as DirHandleLike, `${prefix}${name}/`, depth + 1)
       } else {
         const path = `${prefix}${name}`
-        if (tree.length < maxTreePaths) tree.push(path)
+        allPaths.push(path)
         walked++
-        if (files.length < maxFiles && isKeyFile(name) && entry.getFile) {
-          try {
-            const file = await entry.getFile()
-            if (file.size <= maxRawFileBytes) {
-              files.push({ path, content: (await file.text()).slice(0, maxFileBytes) })
-              onProgress?.({ files: walked, keyFiles: files.length, keyFile: path })
-            }
-          } catch {
-            // unreadable file — skip
-          }
-        } else if (walked % 40 === 0) {
-          onProgress?.({ files: walked, keyFiles: files.length })
+        if (isKeyFile(name) && entry.getFile && keyHandles.length < walkKeyLimit) {
+          keyHandles.push({ path, getFile: entry.getFile.bind(entry) })
         }
+        if (walked % 40 === 0) onProgress?.({ files: walked, keyFiles: keyHandles.length })
       }
     }
   }
 
   await walk(dir as unknown as DirHandleLike, '', 0)
+
+  // Deterministic ordering, then cap.
+  allPaths.sort()
+  keyHandles.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+  const tree = allPaths.slice(0, maxTreePaths)
+
+  const files: RepoFile[] = []
+  for (const { path, getFile } of keyHandles) {
+    if (files.length >= maxFiles) break
+    try {
+      const file = await getFile()
+      if (file.size <= maxRawFileBytes) {
+        files.push({ path, content: (await file.text()).slice(0, maxFileBytes) })
+        onProgress?.({ files: walked, keyFiles: files.length, keyFile: path })
+      }
+    } catch {
+      // unreadable file — skip
+    }
+  }
+
   return { repoName: dir.name, tree, files }
 }
 

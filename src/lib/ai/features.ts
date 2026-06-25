@@ -122,7 +122,7 @@ export async function scanRepo(provider: AiProvider, ws: Workspace | null, bundl
     user: repoScanUser(bundle),
     schema: repoScanSchema,
     validate: isRecord,
-    maxTokens: 6000,
+    maxTokens: 8000,
   })
   return toRepoScanResult(raw)
 }

@@ -70,7 +70,7 @@ export function createGeminiProvider(config: AiProviderConfig): AiProvider {
       return call(config, {
         systemInstruction: { parts: [{ text: req.system }] },
         contents: toContents(req.history, req.user),
-        generationConfig: { maxOutputTokens: req.maxTokens ?? 8000 },
+        generationConfig: { maxOutputTokens: req.maxTokens ?? 8000, temperature: req.temperature },
       })
     },
 
@@ -79,7 +79,7 @@ export function createGeminiProvider(config: AiProviderConfig): AiProvider {
       const text = await call(config, {
         systemInstruction: { parts: [{ text: system }] },
         contents: toContents(req.history, req.user),
-        generationConfig: { maxOutputTokens: req.maxTokens ?? 4000, responseMimeType: 'application/json' },
+        generationConfig: { maxOutputTokens: req.maxTokens ?? 4000, responseMimeType: 'application/json', temperature: req.temperature ?? 0 },
       })
       return parseAndValidate(text, req.validate, `Gemini (${config.model})`)
     },

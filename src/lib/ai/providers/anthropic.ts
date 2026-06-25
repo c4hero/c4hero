@@ -64,6 +64,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
     async complete(req: AiTextRequest): Promise<string> {
       return call(config, {
         max_tokens: req.maxTokens ?? 8000,
+        temperature: req.temperature,
         system: req.system,
         messages: [...(req.history ?? []), { role: 'user', content: req.user }],
       })
@@ -72,6 +73,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
     async completeJson<T>(req: AiJsonRequest<T>): Promise<T> {
       const text = await call(config, {
         max_tokens: req.maxTokens ?? 4000,
+        temperature: req.temperature ?? 0,
         system: req.system,
         messages: [...(req.history ?? []), { role: 'user', content: req.user }],
         output_config: { format: { type: 'json_schema', schema: req.schema } },

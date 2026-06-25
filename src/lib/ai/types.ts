@@ -22,6 +22,8 @@ export interface AiTextRequest {
   user: string
   /** Hard cap on output tokens. */
   maxTokens?: number
+  /** Sampling temperature. Structured features default to 0 for consistency. */
+  temperature?: number
 }
 
 export interface AiJsonRequest<T> extends AiTextRequest {
