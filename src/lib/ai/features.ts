@@ -6,12 +6,13 @@ import {
   interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
   repoScanSystem, repoScanUser,
 } from './prompts'
+import { isRecord } from '@/lib/guards'
 import {
   elementsMissingDescription, relationshipsMissingDescription,
 } from './context'
 import {
-  describeSchema, isDescribeResult, editSchema, isEditPlan, reviewSchema, isReviewResult,
-  repoScanSchema, isRepoScanResult,
+  describeSchema, editSchema, reviewSchema, repoScanSchema,
+  toDescribeResult, toEditPlan, toReviewResult, toRepoScanResult,
 } from './schema'
 import { extractDsl } from './dsl'
 
@@ -35,37 +36,40 @@ export async function generateDiagram(provider: AiProvider, description: string)
 export async function reviewArchitecture(
   provider: AiProvider, ws: Workspace, view?: View | null,
 ): Promise<ReviewResult> {
-  return provider.completeJson<ReviewResult>({
+  const raw = await provider.completeJson({
     system: reviewSystem(),
     user: reviewUser(ws, view),
     schema: reviewSchema,
-    validate: isReviewResult,
+    validate: isRecord,
     maxTokens: 6000,
   })
+  return toReviewResult(raw)
 }
 
 /** Auto-describe → returns validated descriptions for missing-description ids. */
 export async function autoDescribe(provider: AiProvider, ws: Workspace): Promise<DescribeResult> {
   const missingEl = elementsMissingDescription(ws).map((e) => e.id)
   const missingRel = relationshipsMissingDescription(ws).map((r) => r.id)
-  return provider.completeJson<DescribeResult>({
+  const raw = await provider.completeJson({
     system: describeSystem(),
     user: describeUser(ws, missingEl, missingRel),
     schema: describeSchema,
-    validate: isDescribeResult,
+    validate: isRecord,
     maxTokens: 4000,
   })
+  return toDescribeResult(raw)
 }
 
 /** Natural-language edit → returns a validated operation plan. */
 export async function planEdit(provider: AiProvider, ws: Workspace, instruction: string): Promise<EditPlan> {
-  return provider.completeJson<EditPlan>({
+  const raw = await provider.completeJson({
     system: editSystem(),
     user: editUser(ws, instruction),
     schema: editSchema,
-    validate: isEditPlan,
+    validate: isRecord,
     maxTokens: 4000,
   })
+  return toEditPlan(raw)
 }
 
 /** Draft an ADR → returns markdown. `ws` may be null (decision without a model). */
@@ -100,23 +104,25 @@ export function interviewKickoffMessage(view: View): string {
 export async function interviewBuildPlan(
   provider: AiProvider, ws: Workspace, view: View, history: AiChatTurn[],
 ): Promise<EditPlan> {
-  return provider.completeJson<EditPlan>({
+  const raw = await provider.completeJson({
     system: interviewPlanSystem(ws, view),
     history,
     user: interviewPlanUser(),
     schema: editSchema,
-    validate: isEditPlan,
+    validate: isRecord,
     maxTokens: 4000,
   })
+  return toEditPlan(raw)
 }
 
 /** Analyze a repo snapshot and propose model updates with provenance. */
 export async function scanRepo(provider: AiProvider, ws: Workspace | null, bundle: string): Promise<RepoScanResult> {
-  return provider.completeJson<RepoScanResult>({
+  const raw = await provider.completeJson({
     system: repoScanSystem(ws),
     user: repoScanUser(bundle),
     schema: repoScanSchema,
-    validate: isRepoScanResult,
+    validate: isRecord,
     maxTokens: 6000,
   })
+  return toRepoScanResult(raw)
 }

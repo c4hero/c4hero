@@ -1,5 +1,6 @@
 import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding, RepoScanResult, RepoProposal } from './types'
 import { isRecord, isStringArray } from '@/lib/guards'
+import { createLogger } from '@/lib/logger'
 
 // JSON Schemas (for Anthropic structured outputs) plus runtime validators for the
 // two features that need machine-readable results. Validators are exported and
@@ -80,7 +81,7 @@ const OP_NAMES: ReadonlySet<string> = new Set<EditOp['op']>([
   'addRelationship', 'updateElement', 'updateRelationship', 'deleteElement',
 ])
 
-function isEditOp(value: unknown): value is EditOp {
+export function isEditOp(value: unknown): value is EditOp {
   if (!isRecord(value) || typeof value.op !== 'string' || !OP_NAMES.has(value.op)) return false
   switch (value.op) {
     case 'addPerson':
@@ -181,4 +182,80 @@ function isRepoProposal(value: unknown): value is RepoProposal {
 
 export function isRepoScanResult(value: unknown): value is RepoScanResult {
   return isRecord(value) && Array.isArray(value.proposals) && value.proposals.every(isRepoProposal)
+}
+
+// ─── Tolerant sanitizers ────────────────────────────────────────────
+//
+// Models occasionally return a batch where one item is malformed. Rather than
+// reject the whole response, these keep the well-formed items and drop the rest
+// (logging how many were dropped), so a single bad operation never throws away a
+// good plan. The applier is already defensive about ops it can't apply.
+
+const log = createLogger('ai/schema')
+
+function dropLog(kind: string, kept: number, total: number): void {
+  if (kept < total) log.warn(`Dropped ${total - kept} malformed ${kind} from the model response`, { kept, total })
+}
+
+/** Filter an `{ operations }` envelope down to valid operations. */
+export function toEditPlan(value: unknown): EditPlan {
+  const ops = isRecord(value) && Array.isArray(value.operations) ? value.operations : []
+  const operations = ops.filter(isEditOp)
+  dropLog('operations', operations.length, ops.length)
+  return { operations }
+}
+
+/** Filter a `{ proposals }` envelope, keeping proposals with a valid op and
+ *  coercing missing provenance to empty strings. */
+export function toRepoScanResult(value: unknown): RepoScanResult {
+  const raw = isRecord(value) && Array.isArray(value.proposals) ? value.proposals : []
+  const proposals: RepoProposal[] = []
+  for (const p of raw) {
+    if (isRecord(p) && isEditOp(p.op)) {
+      proposals.push({
+        op: p.op,
+        src: typeof p.src === 'string' ? p.src : '',
+        label: typeof p.label === 'string' ? p.label : '',
+      })
+    }
+  }
+  dropLog('proposals', proposals.length, raw.length)
+  return { proposals }
+}
+
+function toReviewFinding(value: unknown): ReviewFinding | null {
+  if (!isRecord(value)) return null
+  if (typeof value.title !== 'string' || typeof value.detail !== 'string' || typeof value.suggestion !== 'string') return null
+  const severity: ReviewFinding['severity'] = value.severity === 'high' || value.severity === 'low' ? value.severity : 'medium'
+  const ops = Array.isArray(value.operations) ? value.operations.filter(isEditOp) : []
+  return {
+    title: value.title,
+    detail: value.detail,
+    category: typeof value.category === 'string' ? value.category : 'other',
+    severity,
+    elementIds: isStringArray(value.elementIds) ? value.elementIds : [],
+    suggestion: value.suggestion,
+    operations: ops.length ? ops : undefined,
+  }
+}
+
+/** Filter a `{ findings }` envelope, keeping well-formed findings (and dropping
+ *  any malformed operations inside each). */
+export function toReviewResult(value: unknown): ReviewResult {
+  const raw = isRecord(value) && Array.isArray(value.findings) ? value.findings : []
+  const findings = raw.map(toReviewFinding).filter((f): f is ReviewFinding => f !== null)
+  dropLog('findings', findings.length, raw.length)
+  return { findings }
+}
+
+function toPatches(value: unknown): DescribeResult['elements'] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((p) => (isRecord(p) && typeof p.id === 'string' && typeof p.description === 'string'
+    ? [{ id: p.id, description: p.description }] : []))
+}
+
+/** Coerce a `{ elements, relationships }` describe envelope, keeping valid patches. */
+export function toDescribeResult(value: unknown): DescribeResult {
+  const src = isRecord(value) ? value : {}
+  return { elements: toPatches(src.elements), relationships: toPatches(src.relationships) }
 }
