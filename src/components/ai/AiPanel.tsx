@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Settings, Home, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
-  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink, User, PanelRight, Square,
+  ArrowRight, KeyRound, ShieldCheck, ExternalLink, User, PanelRight, Square,
+  Pencil, Layers, Wand2,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -121,10 +122,6 @@ function AppView({
   onTogglePlacement: () => void
   onClose: () => void
 }) {
-  const tabs: { id: TabId; label: string; icon: typeof Home }[] = [
-    { id: 'home', label: 'Home', icon: Home },
-    ...AI_FEATURES.map((f) => ({ id: f.id as TabId, label: f.label, icon: f.icon })),
-  ]
   const meta = AI_FEATURES.find((f) => f.id === tab)
 
   return (
@@ -154,35 +151,34 @@ function AppView({
         </div>
       </div>
 
-      {/* tabs */}
-      <div data-scroll role="tablist" style={{ display: 'flex', gap: 3, padding: '8px 12px 0', borderBottom: `1px solid ${C.border}`, overflowX: 'auto', flexShrink: 0 }}>
-        {tabs.map((t) => {
-          const on = t.id === tab
-          const Icon = t.icon
-          const showLabel = docked ? on : true
-          return (
-            <button key={t.id} role="tab" aria-selected={on} onClick={() => setTab(t.id)} title={t.label}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: (docked && !on) ? '9px 9px 11px' : '9px 12px 11px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer', flex: 'none', whiteSpace: 'nowrap', background: on ? 'rgba(88,166,255,0.08)' : 'transparent', borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, color: on ? C.text : C.muted }}>
-              <Icon size={14} color={on ? C.accent : C.muted} /> {showLabel && t.label}
-            </button>
-          )
-        })}
+      {/* mode switcher: Home + segmented control */}
+      <div role="tablist" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <button role="tab" aria-selected={tab === 'home'} title="Home" aria-label="Home" onClick={() => setTab('home')} className="c4ai-ghost"
+          style={{ width: 36, height: 36, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${tab === 'home' ? 'rgba(88,166,255,0.4)' : C.border}`, background: tab === 'home' ? 'rgba(88,166,255,0.16)' : 'transparent', color: tab === 'home' ? C.accent : C.muted, cursor: 'pointer' }}>
+          <Home size={16} />
+        </button>
+        <div style={{ flex: 1, display: 'flex', gap: 3, padding: 3, borderRadius: 10, background: C.card, border: `1px solid ${C.border}` }}>
+          {AI_FEATURES.map((f) => {
+            const on = f.id === tab
+            const Icon = f.icon
+            return (
+              <button key={f.id} role="tab" aria-selected={on} onClick={() => setTab(f.id)}
+                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 32, borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', background: on ? 'rgba(88,166,255,0.16)' : 'transparent', color: on ? C.accent : C.muted }}>
+                <Icon size={15} color={on ? C.accent : C.muted} /> {(!docked || on) && f.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* body */}
       <div data-scroll style={{ padding: '18px 20px 22px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {tab === 'home' ? (
           <HomeLauncher onPick={setTab} />
+        ) : meta?.needsWorkspace && !workspace ? (
+          <Empty>Open or create a workspace to use this feature.</Empty>
         ) : (
-          <>
-            <button onClick={() => setTab('home')} className="c4ai-ghost"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start', marginBottom: 14, padding: '4px 8px 4px 4px', borderRadius: 7, border: 'none', background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
-              <ArrowLeft size={14} /> All tools
-            </button>
-            {meta?.needsWorkspace && !workspace
-              ? <Empty>Open or create a workspace to use this feature.</Empty>
-              : <FeatureBody feature={tab as AiFeatureId} provider={provider} workspace={workspace} onClose={onClose} />}
-          </>
+          <FeatureBody feature={tab as AiFeatureId} provider={provider} workspace={workspace} onClose={onClose} />
         )}
       </div>
     </>
@@ -214,34 +210,62 @@ function HomeLauncher({ onPick }: { onPick: (t: TabId) => void }) {
 
 function FeatureBody({ feature, provider, workspace, onClose }: { feature: AiFeatureId; provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
   switch (feature) {
-    case 'generate': return <GenerateBody provider={provider} onClose={onClose} />
+    case 'compose': return <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />
     case 'interview': return <InterviewBody provider={provider} onClose={onClose} />
-    case 'edit': return <EditBody provider={provider} workspace={workspace} onClose={onClose} />
-    case 'describe': return <DescribeBody provider={provider} workspace={workspace} onClose={onClose} />
     case 'review': return <ReviewBody provider={provider} workspace={workspace} />
     case 'adr': return <AdrBody provider={provider} workspace={workspace} />
   }
 }
 
-// ─── Generate ───────────────────────────────────────────────────────
+// ─── Describe (Generate + Edit merged) ──────────────────────────────
 
-function GenerateBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
+function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
+  const undoLen = useWorkspaceStore((s) => s.undoStack.length)
+  const lastSaved = useWorkspaceStore((s) => s.lastSavedUndoLength)
+  const hasUnsaved = !!workspace && undoLen !== lastSaved
+
+  const [mode, setMode] = useState<'new' | 'change'>(workspace ? 'change' : 'new')
   const [text, setText] = useState('')
   const run = useAiRun()
   const [dsl, setDsl] = useState<string | null>(null)
+  const [plan, setPlan] = useState<EditPlan | null>(null)
+  const [confirmReplace, setConfirmReplace] = useState(false)
   const parsed = useMemo(() => (dsl ? parseDSL(dsl) : null), [dsl])
-  const submit = () => { if (text.trim() && !run.loading) run.go(() => generateDiagram(provider, text), setDsl) }
+  const planLines = plan && workspace ? describeOps(plan, workspace) : []
+
+  function reset() { setDsl(null); setPlan(null); setConfirmReplace(false) }
+  function pick(m: 'new' | 'change') { setMode(m); reset() }
+
+  const placeholder = mode === 'new'
+    ? 'Describe a system in plain English — e.g. a food-delivery platform with a customer app, an orders service using Kafka, a payments service…'
+    : 'Describe a change — e.g. Add a Redis cache between the Web App and the Database.'
+  const canRun = mode === 'new' ? !!text.trim() : (!!text.trim() && !!workspace)
+
+  function submit() {
+    if (!canRun || run.loading) return
+    reset()
+    if (mode === 'new') run.go(() => generateDiagram(provider, text), setDsl)
+    else run.go(() => planEdit(provider, workspace!, text), setPlan)
+  }
+  function load() { if (parsed) { loadWorkspace(parsed.workspace); onClose() } }
+  const done = (mode === 'new' && parsed) || (mode === 'change' && plan)
 
   return (
     <>
-      <p style={blurb}>Describe a system in plain English — c4hero builds a fresh C4 model from it.</p>
-      <Field value={text} onChange={setText} grow={!parsed} onSubmit={submit}
-        placeholder="e.g. A food-delivery platform with a customer mobile app, a restaurant web portal, an API gateway, an orders service using Kafka, a payments service using Stripe, and a Postgres database." />
-      <RunButton label="Generate diagram" loading={run.loading} disabled={!text.trim()} onClick={submit} />
+      <p style={blurb}>Describe a system to build, or a change to make — c4hero turns it into model updates you can review.</p>
+
+      <div style={{ display: 'inline-flex', alignSelf: 'flex-start', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
+        <button onClick={() => pick('new')} style={composeToggleBtn(mode === 'new')}><Sparkles size={13} /> New model</button>
+        <button onClick={() => pick('change')} disabled={!workspace} title={workspace ? undefined : 'Open a workspace to change the current model'}
+          style={{ ...composeToggleBtn(mode === 'change'), borderLeft: `1px solid ${C.border}`, opacity: workspace ? 1 : 0.5 }}><Pencil size={13} /> Change current</button>
+      </div>
+
+      <Field value={text} onChange={setText} grow={!done} onSubmit={submit} placeholder={placeholder} />
+      <RunButton label={mode === 'new' ? 'Generate diagram' : 'Plan changes'} loading={run.loading} disabled={!canRun} onClick={submit} />
       <ErrorLine error={run.error} />
 
-      {parsed && (
+      {mode === 'new' && parsed && (
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <span style={kicker}>Preview</span>
@@ -249,25 +273,49 @@ function GenerateBody({ provider, onClose }: { provider: AiProvider; onClose: ()
           </div>
           <div style={{ ...kicker, marginTop: 14 }}>Elements</div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 8 }}>
-            {flattenElements(parsed.workspace).slice(0, 6).map((el) => (
-              <span key={el.id} style={chipBlue}>{el.name}</span>
-            ))}
-            {flattenElements(parsed.workspace).length > 6 && (
-              <span style={{ ...chipBlue, color: C.muted, borderColor: C.border, background: 'rgba(255,255,255,0.04)' }}>
-                +{flattenElements(parsed.workspace).length - 6} more
-              </span>
-            )}
+            {flattenElements(parsed.workspace).slice(0, 6).map((el) => <span key={el.id} style={chipBlue}>{el.name}</span>)}
+            {flattenElements(parsed.workspace).length > 6 && <span style={{ ...chipBlue, color: C.muted, borderColor: C.border, background: 'rgba(255,255,255,0.04)' }}>+{flattenElements(parsed.workspace).length - 6} more</span>}
           </div>
-          {parsed.errors.length > 0 && (
-            <div style={{ marginTop: 10, fontSize: 12, color: C.warnText }}>{parsed.errors.length} parser warning(s) — the diagram may be partial.</div>
+          {parsed.errors.length > 0 && <div style={{ marginTop: 10, fontSize: 12, color: C.warnText }}>{parsed.errors.length} parser warning(s) — the diagram may be partial.</div>}
+
+          {!confirmReplace ? (
+            <>
+              <div style={{ marginTop: 14, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
+                <Layers size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: C.text2 }}>
+                  {workspace ? <>This is a brand-new model. Loading it <strong style={{ color: C.text }}>replaces {workspace.name || 'the current model'}</strong> — it doesn’t merge into the open workspace.</> : 'Load this as a new workspace.'}
+                </span>
+              </div>
+              <Actions>
+                <button className="c4ai-pri" style={primaryBtn} disabled={!hasContent(parsed.workspace)} onClick={() => { if (hasUnsaved) setConfirmReplace(true); else load() }}>Load diagram</button>
+                <button className="c4ai-sec" style={secondaryBtn} onClick={reset}>Discard</button>
+              </Actions>
+            </>
+          ) : (
+            <div style={{ marginTop: 14, padding: '13px 14px', borderRadius: 10, background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.3)', animation: 'c4ai-fade .2s ease' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                <AlertCircle size={16} color={C.warn} style={{ flex: 'none', marginTop: 1 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#fed7aa' }}>Replace {workspace?.name || 'the current model'}?</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.45, color: C.warnText, marginTop: 3 }}>It has <strong style={{ color: '#fed7aa' }}>unsaved changes</strong>. Loading the new model discards your current diagram — this can’t be undone. Save it first if you want to keep it.</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 13, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="c4ai-sec" style={{ ...secondaryBtn, border: '1px solid rgba(239,68,68,0.3)', color: C.dangerText }} onClick={load}>Replace anyway</button>
+                <button className="c4ai-sec" style={secondaryBtn} onClick={() => setConfirmReplace(false)}>Cancel</button>
+              </div>
+            </div>
           )}
-          <div style={{ marginTop: 14, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.3)' }}>
-            <AlertCircle size={14} color={C.warn} style={{ flex: 'none', marginTop: 1 }} />
-            <span style={{ fontSize: 12, lineHeight: 1.45, color: C.warnText }}>Loading <strong style={{ color: '#fed7aa' }}>replaces your current model</strong> — it doesn’t merge into the open workspace.</span>
-          </div>
+        </Card>
+      )}
+
+      {mode === 'change' && plan && (
+        <Card>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{planLines.length} proposed change(s)</div>
+          <PlanList lines={planLines} />
           <Actions>
-            <button className="c4ai-pri" style={primaryBtn} disabled={!hasContent(parsed.workspace)} onClick={() => { loadWorkspace(parsed.workspace); onClose() }}>Load diagram</button>
-            <button className="c4ai-sec" style={secondaryBtn} onClick={() => setDsl(null)}>Discard</button>
+            <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length} onClick={() => { if (workspace) { applyPlanToStore(plan, workspace); onClose() } }}>Apply changes</button>
+            <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Discard</button>
           </Actions>
         </Card>
       )}
@@ -387,39 +435,10 @@ function Bubble({ who, children }: { who: 'ai' | 'user'; children: React.ReactNo
   )
 }
 
-// ─── Edit ───────────────────────────────────────────────────────────
+// ─── Review (audit findings + auto-describe tidy-up) ────────────────
 
-function EditBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
-  const [text, setText] = useState('')
-  const run = useAiRun()
-  const [plan, setPlan] = useState<EditPlan | null>(null)
-  const lines = plan && workspace ? describeOps(plan, workspace) : []
-  const submit = () => { if (text.trim() && !run.loading) run.go(() => planEdit(provider, workspace!, text), setPlan) }
-
-  return (
-    <>
-      <p style={blurb}>Change the current model in plain English — c4hero proposes a diff you can review before applying.</p>
-      <Field value={text} onChange={setText} grow={!plan} onSubmit={submit}
-        placeholder="e.g. Add a Redis cache between the Web App and the Database, and connect the Admin to the Web App." />
-      <RunButton label="Plan changes" loading={run.loading} disabled={!text.trim()} onClick={submit} />
-      <ErrorLine error={run.error} />
-      {plan && (
-        <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{lines.length} proposed change(s)</div>
-          <PlanList lines={lines} />
-          <Actions>
-            <button className="c4ai-pri" style={primaryBtn} disabled={!lines.length} onClick={() => { if (workspace) { applyPlanToStore(plan, workspace); onClose() } }}>Apply changes</button>
-            <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Discard</button>
-          </Actions>
-        </Card>
-      )}
-    </>
-  )
-}
-
-// ─── Auto-describe ──────────────────────────────────────────────────
-
-function DescribeBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
+/** Auto-describe, folded into the Review tab as a tidy-up card. */
+function DescribeSection({ provider, workspace }: { provider: AiProvider; workspace: Workspace | null }) {
   const missing = workspace ? countMissingDescriptions(workspace) : 0
   const run = useAiRun()
   const [preview, setPreview] = useState<DescribePreview | null>(null)
@@ -433,14 +452,22 @@ function DescribeBody({ provider, workspace, onClose }: { provider: AiProvider; 
       updateRelationship: (id, patch) => s.updateRelationship(id, patch),
     }
     applyDescribePreview(preview, actions)
-    onClose()
+    setPreview(null)
   }
 
   return (
-    <>
-      <p style={blurb}>{missing === 0 ? 'Every element and relationship already has a description.' : `${missing} element(s)/relationship(s) are missing a description.`}</p>
-      <RunButton label="Suggest descriptions" loading={run.loading} disabled={missing === 0}
-        onClick={() => run.go(async () => buildDescribePreview(await autoDescribe(provider, workspace!), workspace!), setPreview)} />
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ padding: '12px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <Wand2 size={16} color={C.accent} style={{ flex: 'none' }} />
+          <span style={{ fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{missing === 0 ? 'Every element and relationship has a description.' : `${missing} item(s) are missing a description.`}</span>
+        </div>
+        <button className="c4ai-pri" disabled={missing === 0 || run.loading}
+          onClick={() => run.go(async () => buildDescribePreview(await autoDescribe(provider, workspace!), workspace!), setPreview)}
+          style={{ marginTop: 11, display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 13px', borderRadius: 8, border: 'none', background: C.accent, color: C.ink, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (missing === 0 || run.loading) ? 0.55 : 1 }}>
+          {run.loading ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} {run.loading ? 'Thinking…' : 'Auto-write descriptions'}
+        </button>
+      </div>
       <ErrorLine error={run.error} />
       {preview && (
         <Card>
@@ -457,11 +484,9 @@ function DescribeBody({ provider, workspace, onClose }: { provider: AiProvider; 
           </Actions>
         </Card>
       )}
-    </>
+    </div>
   )
 }
-
-// ─── Review ─────────────────────────────────────────────────────────
 
 type ReviewScope = 'view' | 'workspace'
 type FindingStatus = 'applied' | 'dismissed'
@@ -516,6 +541,8 @@ function ReviewBody({ provider, workspace }: { provider: AiProvider; workspace: 
 
   return (
     <>
+      <DescribeSection provider={provider} workspace={workspace} />
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: C.muted2 }}>Scope:</span>
@@ -860,4 +887,7 @@ const pillGrey: React.CSSProperties = { fontSize: 10.5, padding: '1px 8px', bord
 const segWrap: React.CSSProperties = { display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }
 function segBtn(active: boolean): React.CSSProperties {
   return { height: 28, padding: '0 12px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: active ? C.accent : 'transparent', color: active ? C.ink : C.muted }
+}
+function composeToggleBtn(active: boolean): React.CSSProperties {
+  return { height: 30, padding: '0 13px', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: active ? 'rgba(88,166,255,0.16)' : 'transparent', color: active ? C.accent : C.muted }
 }

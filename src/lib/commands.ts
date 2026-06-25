@@ -423,12 +423,12 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
   // ─── AI assistant (BYOK) ───────────────────────────────
   commands.push(
     {
-      id: 'ai-generate',
-      label: 'AI: Generate diagram…',
+      id: 'ai-compose',
+      label: 'AI: Describe — build or change the model…',
       category: 'ai',
       icon: Sparkles,
-      keywords: ['ai', 'generate', 'create', 'describe', 'prompt'],
-      execute: () => store().setAiPanelOpen(true, 'generate'),
+      keywords: ['ai', 'describe', 'generate', 'create', 'edit', 'change', 'modify', 'prompt'],
+      execute: () => store().setAiPanelOpen(true, 'compose'),
     },
     {
       id: 'ai-interview',
@@ -440,29 +440,11 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       execute: () => store().setAiPanelOpen(true, 'interview'),
     },
     {
-      id: 'ai-edit',
-      label: 'AI: Edit with a prompt…',
-      category: 'ai',
-      icon: Sparkles,
-      keywords: ['ai', 'edit', 'change', 'modify', 'prompt'],
-      when: () => !!store().workspace,
-      execute: () => store().setAiPanelOpen(true, 'edit'),
-    },
-    {
-      id: 'ai-describe',
-      label: 'AI: Auto-describe elements',
-      category: 'ai',
-      icon: Sparkles,
-      keywords: ['ai', 'describe', 'documentation', 'fill'],
-      when: () => !!store().workspace,
-      execute: () => store().setAiPanelOpen(true, 'describe'),
-    },
-    {
       id: 'ai-review',
-      label: 'AI: Review architecture',
+      label: 'AI: Review & tidy up the model…',
       category: 'ai',
       icon: Sparkles,
-      keywords: ['ai', 'review', 'critique', 'feedback', 'audit'],
+      keywords: ['ai', 'review', 'critique', 'feedback', 'audit', 'describe', 'tidy', 'fix'],
       when: () => !!store().workspace,
       execute: () => store().setAiPanelOpen(true, 'review'),
     },

@@ -1,5 +1,7 @@
-/** The BYOK AI features, used as panel tab ids. */
-export type AiFeatureId = 'generate' | 'interview' | 'edit' | 'describe' | 'review' | 'adr'
+/** The BYOK AI features / panel modes. `compose` merges generate + edit;
+ *  auto-describe is folded into `review`; `adr` is reachable from the command
+ *  palette only. */
+export type AiFeatureId = 'compose' | 'interview' | 'review' | 'adr'
 
 // ─── Provider abstraction ───────────────────────────────────────────
 //

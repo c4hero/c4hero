@@ -1,4 +1,4 @@
-import { Sparkles, Wand2, Pencil, FileText, Stethoscope, MessagesSquare, type LucideIcon } from 'lucide-react'
+import { Sparkles, FileText, Stethoscope, MessagesSquare, type LucideIcon } from 'lucide-react'
 import type { AiFeatureId } from '@/lib/ai/types'
 
 export interface AiFeatureMeta {
@@ -10,16 +10,15 @@ export interface AiFeatureMeta {
   needsWorkspace: boolean
 }
 
-// Features shown in the launcher and tab bar. ADR is intentionally not here
-// (per the design) — it stays reachable via the command palette ("AI: Draft
-// ADR…"), which routes to ADR_FEATURE / AdrBody.
+// The three modes shown in the launcher and the segmented mode switcher.
+// Generate + Edit are merged into "Describe" (compose); Auto-describe is folded
+// into "Review". ADR is not here — it stays reachable via the command palette
+// ("AI: Draft ADR…"), which routes to ADR_FEATURE / AdrBody.
 export const AI_FEATURES: ReadonlyArray<AiFeatureMeta> = [
-  { id: 'generate', label: 'Generate', blurb: 'Describe a system → a new C4 diagram', icon: Sparkles, needsWorkspace: false },
-  { id: 'interview', label: 'Interview', blurb: 'Answer questions about this view to fill it in', icon: MessagesSquare, needsWorkspace: true },
-  { id: 'edit', label: 'Edit', blurb: 'Change the model in plain English', icon: Pencil, needsWorkspace: true },
-  { id: 'describe', label: 'Auto-describe', blurb: 'Fill in missing descriptions', icon: Wand2, needsWorkspace: true },
-  { id: 'review', label: 'Review', blurb: 'Triage issues in this view or the whole model', icon: Stethoscope, needsWorkspace: true },
+  { id: 'compose', label: 'Describe', blurb: 'Build or change the model in plain English', icon: Sparkles, needsWorkspace: false },
+  { id: 'interview', label: 'Interview', blurb: 'Answer questions to fill in this view', icon: MessagesSquare, needsWorkspace: true },
+  { id: 'review', label: 'Review', blurb: 'Audit, auto-fix and tidy up the model', icon: Stethoscope, needsWorkspace: true },
 ]
 
-/** ADR — reachable from the command palette, not the launcher/tabs. */
+/** ADR — reachable from the command palette, not the launcher/modes. */
 export const ADR_FEATURE: AiFeatureMeta = { id: 'adr', label: 'Draft ADR', blurb: 'Write a decision record', icon: FileText, needsWorkspace: false }
