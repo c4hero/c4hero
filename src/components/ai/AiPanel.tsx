@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink, PanelRight, Square,
-  Pencil, Layers, Wand2, Folder, GitBranch,
+  Pencil, Layers, Wand2, Folder, GitBranch, FileCode,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -15,12 +15,13 @@ import {
   createProvider, aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
+  scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
   findingsToMarkdown, sortedFindings, isActionable,
   type AiProvider, type EditActions, type DescribeActions,
   type EditPlan, type DescribePreview, type AiFeatureId, type AiChatTurn,
-  type ReviewResult, type ReviewFinding, type ReviewSeverity,
+  type ReviewResult, type ReviewFinding, type ReviewSeverity, type RepoScanResult,
 } from '@/lib/ai'
 import { AI_FEATURES, ADR_FEATURE } from './aiFeatureMeta'
 import { MicButton } from './dictation'
@@ -207,7 +208,7 @@ function FeatureBody({ feature, provider, workspace, onClose }: { feature: AiFea
     case 'compose': return <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />
     case 'interview': return <InterviewBody provider={provider} onClose={onClose} />
     case 'review': return <ReviewBody provider={provider} workspace={workspace} />
-    case 'repo': return <RepoBody />
+    case 'repo': return <RepoBody provider={provider} workspace={workspace} onClose={onClose} />
     case 'adr': return <AdrBody provider={provider} workspace={workspace} />
   }
 }
@@ -653,27 +654,129 @@ function AdrBody({ provider, workspace }: { provider: AiProvider; workspace: Wor
   )
 }
 
-// ─── Scan repo (entry point; analysis is a scoped follow-up) ─────────
+// ─── Scan repo ──────────────────────────────────────────────────────
 
-function RepoBody() {
+type RepoStage = 'idle' | 'scanning' | 'done'
+
+function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
+  const [stage, setStage] = useState<RepoStage>('idle')
+  const [status, setStatus] = useState('')
+  const [repoName, setRepoName] = useState('')
+  const [result, setResult] = useState<RepoScanResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [removed, setRemoved] = useState<Set<number>>(new Set())
+  const supported = canScanRepo()
+
+  async function choose() {
+    setError(null)
+    let dir: FileSystemDirectoryHandle
+    try {
+      dir = await window.showDirectoryPicker({ mode: 'read' })
+    } catch {
+      return // user cancelled the picker
+    }
+    setStage('scanning'); setRepoName(dir.name); setResult(null); setRemoved(new Set())
+    try {
+      setStatus(`Reading ${dir.name}…`)
+      const snapshot = await readRepoFiles(dir)
+      setStatus(`Analyzing ${snapshot.files.length} key file(s) from ${snapshot.tree.length} paths…`)
+      const res = await scanRepo(provider, workspace, buildRepoBundle(snapshot))
+      setResult(res); setStage('done')
+    } catch (err) {
+      setError(aiErrorMessage(err)); setStage('idle')
+    }
+  }
+
+  function apply() {
+    if (!result || !workspace) return
+    const ops = result.proposals.filter((_, i) => !removed.has(i)).map((p) => p.op)
+    if (ops.length) applyPlanToStore({ operations: ops }, workspace)
+    onClose()
+  }
+
+  if (!supported) {
+    return <Empty>Repo scanning needs the File System Access API — available in Chromium browsers (Chrome, Edge, Brave, Arc).</Empty>
+  }
+
+  if (stage === 'scanning') {
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Loader2 size={16} color={C.accent} className="animate-spin" />
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Scanning {repoName}…</span>
+        </div>
+        <p style={{ ...blurb, marginTop: 10 }}>{status}</p>
+      </>
+    )
+  }
+
+  if (stage === 'done' && result) {
+    const kept = result.proposals.filter((_, i) => !removed.has(i)).length
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, fontWeight: 600, color: C.text }}><GitBranch size={15} color="#7dd3fc" /> {repoName}</span>
+          <button className="c4ai-sec" style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted }} onClick={() => { setStage('idle'); setResult(null) }}><Folder size={12} /> Scan another</button>
+        </div>
+        <p style={{ ...blurb, margin: '10px 0 0' }}>
+          {result.proposals.length === 0
+            ? 'The model already matches what the code shows — nothing to propose.'
+            : <>From the code, c4hero proposes <strong style={{ color: C.text }}>{result.proposals.length} update(s)</strong>. Each carries the file it came from.</>}
+        </p>
+
+        {result.proposals.length > 0 && (
+          <>
+            <div style={{ marginTop: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden' }}>
+              <ul style={{ margin: 0, padding: 8, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {result.proposals.map((p, i) => {
+                  const gone = removed.has(i)
+                  const add = p.op.op.startsWith('add')
+                  return (
+                    <li key={i} style={{ padding: 8, opacity: gone ? 0.4 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                        <span style={{ marginTop: 1, flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: add ? 'rgba(34,197,94,0.14)' : 'rgba(88,166,255,0.14)', color: add ? C.greenText : '#7dd3fc' }}>{add ? 'Add' : 'Update'}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: C.text2, textDecoration: gone ? 'line-through' : 'none' }}>{p.label}</span>
+                        <button onClick={() => setRemoved((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })}
+                          className="c4ai-ghost" title={gone ? 'Restore' : 'Skip'} style={{ ...iconBtn, width: 22, height: 22, flex: 'none' }}>
+                          {gone ? <ArrowRight size={12} /> : <X size={12} />}
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, paddingLeft: 38 }}>
+                        <FileCode size={11} color={C.muted3} style={{ flex: 'none' }} />
+                        <span style={{ fontSize: 11, color: C.muted3, fontFamily: 'ui-monospace, monospace' }}>{p.src}</span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+            <Actions>
+              <button className="c4ai-pri" style={{ ...primaryBtn, height: 34 }} disabled={kept === 0 || !workspace} onClick={apply}>Apply {kept} update{kept === 1 ? '' : 's'}</button>
+              <button className="c4ai-sec" style={secondaryBtn} onClick={() => { setStage('idle'); setResult(null) }}>Discard</button>
+            </Actions>
+            {!workspace && <div style={{ ...blurb, marginTop: 8 }}>Open a workspace to apply these.</div>}
+          </>
+        )}
+      </>
+    )
+  }
+
+  // idle
   return (
     <>
-      <p style={blurb}>Point c4hero at a local repository. It reads the code on your machine and proposes model and view updates from what it finds — each carrying the file it came from.</p>
-
-      <div style={{ width: '100%', display: 'flex', gap: 14, alignItems: 'center', textAlign: 'left', padding: 18, borderRadius: 12, border: `1px dashed ${C.borderStrong}`, background: C.card, opacity: 0.7 }}>
+      <p style={blurb}>Point c4hero at a local repository. It reads the code on your machine and proposes model updates from what it finds — each carrying the file it came from.</p>
+      <button onClick={choose} className="c4ai-card"
+        style={{ width: '100%', display: 'flex', gap: 14, alignItems: 'center', textAlign: 'left', padding: 18, borderRadius: 12, border: `1px dashed ${C.borderStrong}`, background: C.card, cursor: 'pointer' }}>
         <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Folder size={24} /></span>
         <span style={{ minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>Choose a folder…</span>
           <span style={{ display: 'block', fontSize: 12, color: C.muted2, lineHeight: 1.45, marginTop: 2 }}>Reads a repo locally and proposes updates from the code.</span>
         </span>
-      </div>
-
+      </button>
+      <ErrorLine error={error} />
       <div style={{ marginTop: 16, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '11px 13px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
-        <GitBranch size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
-        <span style={{ fontSize: 12, lineHeight: 1.45, color: C.text2 }}>
-          <strong style={{ color: C.text }}>Coming soon.</strong> Repo scanning — reading the code in your browser and proposing model updates with provenance — is in progress.
-          Files would be read locally; only the snippets needed for analysis are sent to your AI provider with your key.
-        </span>
+        <ShieldCheck size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
+        <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Files are read in your browser. Only the file tree and key manifest/config files are sent to your AI provider with your key — c4hero has no server.</span>
       </div>
     </>
   )

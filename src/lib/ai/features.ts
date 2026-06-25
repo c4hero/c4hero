@@ -1,14 +1,18 @@
 import type { Workspace, View } from '@/types/model'
-import type { AiProvider, DescribeResult, EditPlan, ReviewResult, AiChatTurn } from './types'
+import type { AiProvider, DescribeResult, EditPlan, ReviewResult, RepoScanResult, AiChatTurn } from './types'
 import {
   generateSystem, generateUser, reviewSystem, reviewUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
   interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
+  repoScanSystem, repoScanUser,
 } from './prompts'
 import {
   elementsMissingDescription, relationshipsMissingDescription,
 } from './context'
-import { describeSchema, isDescribeResult, editSchema, isEditPlan, reviewSchema, isReviewResult } from './schema'
+import {
+  describeSchema, isDescribeResult, editSchema, isEditPlan, reviewSchema, isReviewResult,
+  repoScanSchema, isRepoScanResult,
+} from './schema'
 import { extractDsl } from './dsl'
 
 // Feature orchestration. Each function takes a provider (injected, so tests use a
@@ -103,5 +107,16 @@ export async function interviewBuildPlan(
     schema: editSchema,
     validate: isEditPlan,
     maxTokens: 4000,
+  })
+}
+
+/** Analyze a repo snapshot and propose model updates with provenance. */
+export async function scanRepo(provider: AiProvider, ws: Workspace | null, bundle: string): Promise<RepoScanResult> {
+  return provider.completeJson<RepoScanResult>({
+    system: repoScanSystem(ws),
+    user: repoScanUser(bundle),
+    schema: repoScanSchema,
+    validate: isRepoScanResult,
+    maxTokens: 6000,
   })
 }

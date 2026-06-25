@@ -203,3 +203,34 @@ export function interviewPlanSystem(ws: Workspace, view: View): string {
 export function interviewPlanUser(): string {
   return 'Based on everything I told you in this interview, produce the operations to update the model.'
 }
+
+// ─── Repo scan ──────────────────────────────────────────────────────
+
+export function repoScanSystem(ws: Workspace | null): string {
+  return [
+    'You analyze a code repository and propose updates to a C4 architecture model.',
+    'You are given a snapshot of the repo (its file tree plus the contents of key manifest and',
+    'config files) and the current model. Infer software systems, containers (apps, services,',
+    'datastores), their technologies, external systems (third-party SDKs/APIs the code uses), and',
+    'the relationships between them — based on what the code actually shows.',
+    '',
+    'Return a list of proposals. Each proposal has:',
+    '- op: a single operation (format below) that adds or corrects the model',
+    '- src: the repo file path that justifies it (e.g. "package.json", "orders/pom.xml")',
+    '- label: a short human-readable description of the change',
+    'Only propose what the code evidences; do not invent elements the repo does not show, and do',
+    'not re-add things already present and correct in the model. Reference existing elements by id',
+    'or exact name; give new elements a ref. Prefer setting technologies and descriptions you can',
+    'read from manifests. If the model already matches the code, return an empty proposals list.',
+    '',
+    'Operation format (used inside each proposal\'s `op`):',
+    editSystem(),
+    '',
+    'Current model (id-tagged):',
+    ws ? serializeContext(ws) : '(no current model — propose elements to create one)',
+  ].join('\n')
+}
+
+export function repoScanUser(bundle: string): string {
+  return `Repository snapshot:\n\n${bundle}\n\nPropose the model updates the code implies.`
+}

@@ -1,4 +1,4 @@
-import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding } from './types'
+import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding, RepoScanResult, RepoProposal } from './types'
 import { isRecord, isStringArray } from '@/lib/guards'
 
 // JSON Schemas (for Anthropic structured outputs) plus runtime validators for the
@@ -148,4 +148,37 @@ function isReviewFinding(value: unknown): value is ReviewFinding {
 
 export function isReviewResult(value: unknown): value is ReviewResult {
   return isRecord(value) && Array.isArray(value.findings) && value.findings.every(isReviewFinding)
+}
+
+// ─── Repo scan ──────────────────────────────────────────────────────
+
+const proposalSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    op: opSchema,
+    src: { type: 'string' },
+    label: { type: 'string' },
+  },
+  required: ['op', 'src', 'label'],
+}
+
+export const repoScanSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    proposals: { type: 'array', items: proposalSchema },
+  },
+  required: ['proposals'],
+}
+
+function isRepoProposal(value: unknown): value is RepoProposal {
+  return isRecord(value)
+    && isEditOp(value.op)
+    && typeof value.src === 'string'
+    && typeof value.label === 'string'
+}
+
+export function isRepoScanResult(value: unknown): value is RepoScanResult {
+  return isRecord(value) && Array.isArray(value.proposals) && value.proposals.every(isRepoProposal)
 }

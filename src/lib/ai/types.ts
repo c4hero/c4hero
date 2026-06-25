@@ -204,3 +204,32 @@ export interface ReviewFinding {
 export interface ReviewResult {
   findings: ReviewFinding[]
 }
+
+// ─── Repo scan ──────────────────────────────────────────────────────
+
+/** One file read from a local repository (content may be truncated). */
+export interface RepoFile {
+  path: string
+  content: string
+}
+
+/** A compact snapshot of a repo sent to the model: its file tree plus the
+ *  contents of high-signal manifest/config files. */
+export interface RepoSnapshot {
+  repoName: string
+  tree: string[]
+  files: RepoFile[]
+}
+
+/** A proposed model edit inferred from the code, with its source file. */
+export interface RepoProposal {
+  op: EditOp
+  /** Repo file path that justifies the proposal (provenance). */
+  src: string
+  /** Short human-readable description of the change. */
+  label: string
+}
+
+export interface RepoScanResult {
+  proposals: RepoProposal[]
+}

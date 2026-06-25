@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isDescribeResult, isEditPlan, isReviewResult } from './schema'
+import { isDescribeResult, isEditPlan, isReviewResult, isRepoScanResult } from './schema'
 
 describe('isDescribeResult', () => {
   it('accepts a well-formed result', () => {
@@ -61,5 +61,22 @@ describe('isReviewResult', () => {
     delete noSuggestion.suggestion
     expect(isReviewResult({ findings: [noSuggestion] })).toBe(false)
     expect(isReviewResult({})).toBe(false)
+  })
+})
+
+describe('isRepoScanResult', () => {
+  it('accepts proposals carrying an op, src and label', () => {
+    expect(isRepoScanResult({
+      proposals: [
+        { op: { op: 'addContainer', ref: 'c', parent: 'sys', name: 'payments' }, src: 'package.json', label: 'Add payments' },
+        { op: { op: 'updateElement', id: 'x', technology: 'Java' }, src: 'pom.xml', label: 'Set tech' },
+      ],
+    })).toBe(true)
+    expect(isRepoScanResult({ proposals: [] })).toBe(true)
+  })
+  it('rejects proposals missing provenance or with a bad op', () => {
+    expect(isRepoScanResult({ proposals: [{ op: { op: 'addPerson', ref: 'p', name: 'A' }, label: 'x' }] })).toBe(false)
+    expect(isRepoScanResult({ proposals: [{ op: { op: 'bogus' }, src: 'a', label: 'b' }] })).toBe(false)
+    expect(isRepoScanResult({})).toBe(false)
   })
 })
