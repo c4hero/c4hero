@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink, PanelRight, Square,
-  Pencil, Layers, Wand2, Folder, GitBranch, FileCode,
+  Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -18,10 +18,10 @@ import {
   scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
-  findingsToMarkdown, sortedFindings, isActionable,
+  findingsToMarkdown, sortedFindings, isActionable, classifyScope,
   type AiProvider, type EditActions, type DescribeActions,
   type EditPlan, type DescribePreview, type AiFeatureId, type AiChatTurn,
-  type ReviewResult, type ReviewFinding, type ReviewSeverity, type RepoScanResult,
+  type ReviewResult, type ReviewFinding, type ReviewSeverity, type RepoScanResult, type PlanScope,
 } from '@/lib/ai'
 import { AI_FEATURES, ADR_FEATURE } from './aiFeatureMeta'
 import { MicButton } from './dictation'
@@ -390,6 +390,8 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
         </div>
       )}
 
+      {started && !plan && qa.length > 0 && <PlanPreviewBar provider={provider} ws={ws} view={v} history={history} />}
+
       {started && !plan && (
         <div style={{ marginTop: 14 }}>
           <Field value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} onSubmit={answerNext} />
@@ -428,6 +430,64 @@ function Bubble({ who, children }: { who: 'ai' | 'user'; children: React.ReactNo
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
       <span style={{ background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.2)', borderRadius: '12px 12px 4px 12px', padding: '10px 13px', fontSize: 13, lineHeight: 1.5, color: C.text, maxWidth: '80%' }}>{children}</span>
+    </div>
+  )
+}
+
+const SCOPE_META: Record<PlanScope, { label: string; bg: string; color: string }> = {
+  view: { label: 'This view', bg: 'rgba(88,166,255,0.12)', color: '#7dd3fc' },
+  model: { label: 'Model only', bg: 'rgba(132,141,151,0.16)', color: '#9aa3ad' },
+  context: { label: '↗ Context', bg: 'rgba(249,115,22,0.12)', color: C.warnText },
+  component: { label: '↗ Component', bg: 'rgba(249,115,22,0.12)', color: C.warnText },
+}
+
+function ScopeTag({ scope }: { scope: PlanScope }) {
+  const m = SCOPE_META[scope]
+  return <span style={{ flex: 'none', marginTop: 1, fontSize: 9.5, fontWeight: 600, letterSpacing: '.03em', padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap', background: m.bg, color: m.color }}>{m.label}</span>
+}
+
+/** On-demand "what will I add" preview during the interview. Builds the plan
+ *  from answers given so far (one AI call), with each change scope-tagged. */
+function PlanPreviewBar({ provider, ws, view, history }: { provider: AiProvider; ws: Workspace; view: View; history: AiChatTurn[] }) {
+  const run = useAiRun()
+  const [plan, setPlan] = useState<EditPlan | null>(null)
+  const [open, setOpen] = useState(false)
+  const lines = plan ? describeOps(plan, ws) : []
+  const scopes = plan ? plan.operations.map((op) => classifyScope(op, ws, view)) : []
+  const offCount = scopes.filter((s) => s === 'context' || s === 'component').length
+
+  function toggle() {
+    if (!open && !plan && !run.loading) run.go(() => interviewBuildPlan(provider, ws, view, history), setPlan)
+    setOpen((o) => !o)
+  }
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <button onClick={toggle} className="c4ai-sec"
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+        {run.loading ? <Loader2 size={13} className="animate-spin" color={C.accent} /> : <Layers size={13} color={C.accent} />}
+        <span style={{ fontSize: 12, color: C.text2 }}>{plan ? `Will add ${plan.operations.length} update${plan.operations.length === 1 ? '' : 's'}` : 'Preview what I’ll add'}</span>
+        {offCount > 0 && <span style={{ fontSize: 11, color: C.warnText, background: 'rgba(249,115,22,0.1)', borderRadius: 999, padding: '1px 8px', whiteSpace: 'nowrap' }}>{offCount} off-view</span>}
+        <span style={{ flex: 1 }} />
+        <ChevronRight size={13} color={C.muted3} style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .18s' }} />
+      </button>
+      <ErrorLine error={run.error} />
+      {open && plan && (
+        <div style={{ marginTop: 8, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, padding: 8, animation: 'c4ai-fade .2s ease' }}>
+          {lines.length === 0 ? (
+            <div style={{ ...blurb, margin: '4px 6px' }}>Nothing to add from your answers yet.</div>
+          ) : (
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {lines.map((l, i) => (
+                <li key={i} style={{ padding: '7px 8px', borderRadius: 8, display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: C.text2 }}>{l}</span>
+                  <ScopeTag scope={scopes[i]} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }
