@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  X, Settings, Home, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
-  ArrowRight, KeyRound, ShieldCheck, ExternalLink, User, PanelRight, Square,
-  Pencil, Layers, Wand2,
+  X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
+  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink, PanelRight, Square,
+  Pencil, Layers, Wand2, Folder, GitBranch,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -22,7 +22,7 @@ import {
   type EditPlan, type DescribePreview, type AiFeatureId, type AiChatTurn,
   type ReviewResult, type ReviewFinding, type ReviewSeverity,
 } from '@/lib/ai'
-import { AI_FEATURES } from './aiFeatureMeta'
+import { AI_FEATURES, ADR_FEATURE } from './aiFeatureMeta'
 import { MicButton } from './dictation'
 
 // ─── Palette (the "AI Assistant Hybrid" design) ─────────────────────
@@ -122,7 +122,8 @@ function AppView({
   onTogglePlacement: () => void
   onClose: () => void
 }) {
-  const meta = AI_FEATURES.find((f) => f.id === tab)
+  const section = AI_FEATURES.find((f) => f.id === tab) ?? (tab === 'adr' ? ADR_FEATURE : undefined)
+  const SectionIcon = section?.icon
 
   return (
     <>
@@ -151,31 +152,24 @@ function AppView({
         </div>
       </div>
 
-      {/* mode switcher: Home + segmented control */}
-      <div role="tablist" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        <button role="tab" aria-selected={tab === 'home'} title="Home" aria-label="Home" onClick={() => setTab('home')} className="c4ai-ghost"
-          style={{ width: 36, height: 36, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${tab === 'home' ? 'rgba(88,166,255,0.4)' : C.border}`, background: tab === 'home' ? 'rgba(88,166,255,0.16)' : 'transparent', color: tab === 'home' ? C.accent : C.muted, cursor: 'pointer' }}>
-          <Home size={16} />
-        </button>
-        <div style={{ flex: 1, display: 'flex', gap: 3, padding: 3, borderRadius: 10, background: C.card, border: `1px solid ${C.border}` }}>
-          {AI_FEATURES.map((f) => {
-            const on = f.id === tab
-            const Icon = f.icon
-            return (
-              <button key={f.id} role="tab" aria-selected={on} onClick={() => setTab(f.id)}
-                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 32, borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', background: on ? 'rgba(88,166,255,0.16)' : 'transparent', color: on ? C.accent : C.muted }}>
-                <Icon size={15} color={on ? C.accent : C.muted} /> {(!docked || on) && f.label}
-              </button>
-            )
-          })}
+      {/* back-to-home bar — only shown inside a section */}
+      {tab !== 'home' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+          <button onClick={() => setTab('home')} className="c4ai-ghost"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 11px 0 9px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            <ArrowLeft size={14} /> Home
+          </button>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
+            {SectionIcon && <SectionIcon size={15} color={C.accent} />} {section?.label}
+          </span>
         </div>
-      </div>
+      )}
 
       {/* body */}
       <div data-scroll style={{ padding: '18px 20px 22px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {tab === 'home' ? (
           <HomeLauncher onPick={setTab} />
-        ) : meta?.needsWorkspace && !workspace ? (
+        ) : section?.needsWorkspace && !workspace ? (
           <Empty>Open or create a workspace to use this feature.</Empty>
         ) : (
           <FeatureBody feature={tab as AiFeatureId} provider={provider} workspace={workspace} onClose={onClose} />
@@ -213,6 +207,7 @@ function FeatureBody({ feature, provider, workspace, onClose }: { feature: AiFea
     case 'compose': return <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />
     case 'interview': return <InterviewBody provider={provider} onClose={onClose} />
     case 'review': return <ReviewBody provider={provider} workspace={workspace} />
+    case 'repo': return <RepoBody />
     case 'adr': return <AdrBody provider={provider} workspace={workspace} />
   }
 }
@@ -424,13 +419,14 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
 }
 
 function Bubble({ who, children }: { who: 'ai' | 'user'; children: React.ReactNode }) {
-  const ai = who === 'ai'
+  if (who === 'ai') {
+    // The assistant's question reads as plain prose — no avatar or bubble chrome.
+    return <div style={{ fontSize: 13, lineHeight: 1.55, color: C.text, padding: '0 2px' }}>{children}</div>
+  }
+  // The user's answer is a compact right-aligned bubble, no avatar.
   return (
-    <div style={{ display: 'flex', gap: 10, flexDirection: ai ? 'row' : 'row-reverse' }}>
-      <span style={{ width: 26, height: 26, flex: 'none', borderRadius: 8, background: ai ? 'rgba(88,166,255,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ai ? C.accent : C.muted }}>
-        {ai ? <Sparkles size={14} /> : <User size={13} />}
-      </span>
-      <span style={{ background: ai ? C.card : 'rgba(88,166,255,0.1)', border: `1px solid ${ai ? C.border : 'rgba(88,166,255,0.2)'}`, borderRadius: ai ? '4px 12px 12px 12px' : '12px 4px 12px 12px', padding: '10px 13px', fontSize: 13, lineHeight: 1.5, color: C.text, maxWidth: '80%' }}>{children}</span>
+    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <span style={{ background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.2)', borderRadius: '12px 12px 4px 12px', padding: '10px 13px', fontSize: 13, lineHeight: 1.5, color: C.text, maxWidth: '80%' }}>{children}</span>
     </div>
   )
 }
@@ -653,6 +649,32 @@ function AdrBody({ provider, workspace }: { provider: AiProvider; workspace: Wor
           <pre data-scroll style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '10px 0 0', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.55, color: C.text2, maxHeight: 280, overflowY: 'auto' }}>{md}</pre>
         </Card>
       )}
+    </>
+  )
+}
+
+// ─── Scan repo (entry point; analysis is a scoped follow-up) ─────────
+
+function RepoBody() {
+  return (
+    <>
+      <p style={blurb}>Point c4hero at a local repository. It reads the code on your machine and proposes model and view updates from what it finds — each carrying the file it came from.</p>
+
+      <div style={{ width: '100%', display: 'flex', gap: 14, alignItems: 'center', textAlign: 'left', padding: 18, borderRadius: 12, border: `1px dashed ${C.borderStrong}`, background: C.card, opacity: 0.7 }}>
+        <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Folder size={24} /></span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>Choose a folder…</span>
+          <span style={{ display: 'block', fontSize: 12, color: C.muted2, lineHeight: 1.45, marginTop: 2 }}>Reads a repo locally and proposes updates from the code.</span>
+        </span>
+      </div>
+
+      <div style={{ marginTop: 16, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '11px 13px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
+        <GitBranch size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
+        <span style={{ fontSize: 12, lineHeight: 1.45, color: C.text2 }}>
+          <strong style={{ color: C.text }}>Coming soon.</strong> Repo scanning — reading the code in your browser and proposing model updates with provenance — is in progress.
+          Files would be read locally; only the snippets needed for analysis are sent to your AI provider with your key.
+        </span>
+      </div>
     </>
   )
 }

@@ -1,4 +1,4 @@
-import { Sparkles, FileText, Stethoscope, MessagesSquare, type LucideIcon } from 'lucide-react'
+import { Sparkles, FileText, Stethoscope, MessagesSquare, GitBranch, type LucideIcon } from 'lucide-react'
 import type { AiFeatureId } from '@/lib/ai/types'
 
 export interface AiFeatureMeta {
@@ -18,6 +18,7 @@ export const AI_FEATURES: ReadonlyArray<AiFeatureMeta> = [
   { id: 'compose', label: 'Describe', blurb: 'Build or change the model in plain English', icon: Sparkles, needsWorkspace: false },
   { id: 'interview', label: 'Interview', blurb: 'Answer questions to fill in this view', icon: MessagesSquare, needsWorkspace: true },
   { id: 'review', label: 'Review', blurb: 'Audit, auto-fix and tidy up the model', icon: Stethoscope, needsWorkspace: true },
+  { id: 'repo', label: 'Scan repo', blurb: 'Point at a local repo — propose updates from the code', icon: GitBranch, needsWorkspace: false },
 ]
 
 /** ADR — reachable from the command palette, not the launcher/modes. */

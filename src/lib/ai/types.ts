@@ -1,7 +1,7 @@
 /** The BYOK AI features / panel modes. `compose` merges generate + edit;
- *  auto-describe is folded into `review`; `adr` is reachable from the command
- *  palette only. */
-export type AiFeatureId = 'compose' | 'interview' | 'review' | 'adr'
+ *  auto-describe is folded into `review`; `repo` scans a local repository;
+ *  `adr` is reachable from the command palette only. */
+export type AiFeatureId = 'compose' | 'interview' | 'review' | 'repo' | 'adr'
 
 // ─── Provider abstraction ───────────────────────────────────────────
 //
