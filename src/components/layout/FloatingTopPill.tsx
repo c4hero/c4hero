@@ -51,6 +51,7 @@ export default function FloatingTopPill() {
   const canRedo = useWorkspaceStore((s) => s.redoStack.length > 0)
 
   const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
+  const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
   const showUndoRedo = useSettingsStore((s) => s.showUndoRedo)
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -339,6 +340,18 @@ export default function FloatingTopPill() {
                 </button>
               </>
             )}
+
+            {/* AI assistant */}
+            <button
+              onClick={() => { const open = !useWorkspaceStore.getState().aiPanelOpen; useWorkspaceStore.getState().setAiPanelOpen(open); if (open) { setExportDialogOpen(false); setViewDropdownOpen(false); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) } }}
+              className="btn-icon"
+              data-active={aiPanelOpen ? 'true' : undefined}
+              style={{ width: 40, height: 44, borderRadius: 0, minWidth: 40, minHeight: 44 }}
+              title="AI assistant"
+              aria-label="AI assistant"
+            >
+              <Sparkles size={15} />
+            </button>
 
             {/* Export */}
             <button
