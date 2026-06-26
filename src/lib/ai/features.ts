@@ -1,18 +1,18 @@
 import type { Workspace, View } from '@/types/model'
-import type { AiProvider, DescribeResult, EditPlan, ReviewResult, RepoScanResult, AiChatTurn } from './types'
+import type { AiProvider, DescribeResult, EditPlan, ReviewResult, RepoScanResult, RepoProposal, AiChatTurn } from './types'
 import {
   generateSystem, generateUser, reviewSystem, reviewUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
   interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
-  repoScanSystem, repoScanUser,
+  repoElementsSystem, repoElementsUser, repoConnectionsSystem, repoConnectionsUser,
 } from './prompts'
 import { isRecord } from '@/lib/guards'
 import {
   elementsMissingDescription, relationshipsMissingDescription,
 } from './context'
 import {
-  describeSchema, editSchema, reviewSchema, repoScanSchema,
-  toDescribeResult, toEditPlan, toReviewResult, toRepoScanResult,
+  describeSchema, editSchema, reviewSchema, repoScanSchema, connectionsSchema,
+  toDescribeResult, toEditPlan, toReviewResult, toRepoProposals, toScanQuestions,
 } from './schema'
 import { extractDsl } from './dsl'
 import { mergeRepoProposals } from './repoScan'
@@ -116,31 +116,60 @@ export async function interviewBuildPlan(
   return toEditPlan(raw)
 }
 
-/** Analyze a repo snapshot and propose model updates with provenance.
+/** Analyze a repo snapshot in two phases — discover elements, then re-evaluate
+ *  the connections between them — and surface questions for anything ambiguous.
  *
- *  The model samples, so a single pass returns an inconsistent subset run to
- *  run. We run several passes in parallel and merge their union — far more
- *  consistent and complete. (The snapshot is already deterministic, and Claude
- *  no longer accepts a temperature override, so merging is the remaining lever.) */
+ *  Phase 1 runs several passes in parallel and merges their union (the model
+ *  samples, so one pass is inconsistent; the snapshot is deterministic and Claude
+ *  no longer accepts a temperature override, so merging is the remaining lever).
+ *  Phase 2 reasons about connections over the full, fixed element list — which is
+ *  far more accurate than inferring elements and links at once. */
 export async function scanRepo(
   provider: AiProvider, ws: Workspace | null, bundle: string, passes = SCAN_PASSES,
 ): Promise<RepoScanResult> {
-  const onePass = () => provider.completeJson({
-    system: repoScanSystem(ws),
-    user: repoScanUser(bundle),
+  // Phase 1 — elements only.
+  const elementsPass = () => provider.completeJson({
+    system: repoElementsSystem(ws),
+    user: repoElementsUser(bundle),
     schema: repoScanSchema,
     validate: isRecord,
     maxTokens: 8000,
-  }).then(toRepoScanResult)
+  }).then((r) => toRepoProposals(r.proposals))
 
-  const settled = await Promise.allSettled(Array.from({ length: Math.max(1, passes) }, onePass))
-  const ok = settled.filter((s): s is PromiseFulfilledResult<RepoScanResult> => s.status === 'fulfilled')
+  const settled = await Promise.allSettled(Array.from({ length: Math.max(1, passes) }, elementsPass))
+  const ok = settled.filter((s): s is PromiseFulfilledResult<RepoProposal[]> => s.status === 'fulfilled')
   if (ok.length === 0) {
     // Every pass failed — surface the real error (auth, connection, …).
     throw (settled[0] as PromiseRejectedResult).reason
   }
-  return { proposals: mergeRepoProposals(ok.flatMap((s) => s.value.proposals)) }
+  const elements = mergeRepoProposals(ok.flatMap((s) => s.value))
+
+  // Phase 2 — connections + questions over the discovered elements.
+  const conn = await provider.completeJson({
+    system: repoConnectionsSystem(ws),
+    user: repoConnectionsUser(bundle, listScanElements(elements)),
+    schema: connectionsSchema,
+    validate: isRecord,
+    maxTokens: 6000,
+  })
+
+  return {
+    proposals: [...elements, ...toRepoProposals(conn.relationships)],
+    questions: toScanQuestions(conn.questions),
+  }
 }
 
-/** How many parallel passes a scan runs; their union is returned. */
+/** How many parallel element passes a scan runs; their union is used. */
 export const SCAN_PASSES = 3
+
+/** A readable element list for the connections prompt. */
+function listScanElements(proposals: RepoProposal[]): string {
+  const lines: string[] = []
+  for (const { op } of proposals) {
+    if (op.op === 'addSoftwareSystem') lines.push(`- ${op.name}${op.external ? ' (external system)' : ' (software system)'}`)
+    else if (op.op === 'addContainer') lines.push(`- ${op.name} (container in ${op.parent})`)
+    else if (op.op === 'addComponent') lines.push(`- ${op.name} (component in ${op.parent})`)
+    else if (op.op === 'addPerson') lines.push(`- ${op.name} (person)`)
+  }
+  return lines.join('\n')
+}

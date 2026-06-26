@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
-  Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight,
+  Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
@@ -764,6 +764,7 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
   const [result, setResult] = useState<RepoScanResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [removed, setRemoved] = useState<Set<number>>(new Set())
+  const [answers, setAnswers] = useState<Record<number, number>>({})
   const supported = canScanRepo()
 
   async function choose() {
@@ -775,7 +776,7 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
       return // user cancelled the picker
     }
     setStage('scanning'); setPhase('reading'); setRepoName(dir.name)
-    setResult(null); setRemoved(new Set()); setCounts({ files: 0, keyFiles: 0 }); setFound([])
+    setResult(null); setRemoved(new Set()); setAnswers({}); setCounts({ files: 0, keyFiles: 0 }); setFound([])
     try {
       const snapshot = await readRepoFiles(dir, {}, (p) => {
         setCounts({ files: p.files, keyFiles: p.keyFiles })
@@ -791,7 +792,14 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
 
   function apply() {
     if (!result || !workspace) return
-    const ops = result.proposals.filter((_, i) => !removed.has(i)).map((p) => p.op)
+    const ops = [
+      ...result.proposals.filter((_, i) => !removed.has(i)).map((p) => p.op),
+      // ops chosen by answering the scan's questions
+      ...result.questions.flatMap((q, i) => {
+        const op = answers[i] != null ? q.options[answers[i]]?.op : undefined
+        return op ? [op] : []
+      }),
+    ]
     if (!ops.length) { onClose(); return }
 
     const before = useWorkspaceStore.getState()
@@ -842,6 +850,9 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
 
   if (stage === 'done' && result) {
     const kept = result.proposals.filter((_, i) => !removed.has(i)).length
+    const answeredOps = result.questions.reduce((n, q, i) => n + (answers[i] != null && q.options[answers[i]]?.op ? 1 : 0), 0)
+    const applyCount = kept + answeredOps
+    const nothing = result.proposals.length === 0 && result.questions.length === 0
     return (
       <>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
@@ -849,39 +860,71 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
           <button className="c4ai-sec" style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted }} onClick={() => { setStage('idle'); setResult(null) }}><Folder size={12} /> Scan another</button>
         </div>
         <p style={{ ...blurb, margin: '10px 0 0' }}>
-          {result.proposals.length === 0
+          {nothing
             ? 'The model already matches what the code shows — nothing to propose.'
-            : <>From the code, c4hero proposes <strong style={{ color: C.text }}>{result.proposals.length} update(s)</strong>. Each carries the file it came from.</>}
+            : <>From the code, c4hero proposes <strong style={{ color: C.text }}>{result.proposals.length} update{result.proposals.length === 1 ? '' : 's'}</strong>{result.questions.length > 0 && <> and has <strong style={{ color: C.text }}>{result.questions.length} question{result.questions.length === 1 ? '' : 's'}</strong></>}.</>}
         </p>
 
         {result.proposals.length > 0 && (
-          <>
-            <div style={{ marginTop: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden' }}>
-              <ul style={{ margin: 0, padding: 8, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {result.proposals.map((p, i) => {
-                  const gone = removed.has(i)
-                  const add = p.op.op.startsWith('add')
-                  return (
-                    <li key={i} style={{ padding: 8, opacity: gone ? 0.4 : 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-                        <span style={{ marginTop: 1, flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: add ? 'rgba(34,197,94,0.14)' : 'rgba(88,166,255,0.14)', color: add ? C.greenText : '#7dd3fc' }}>{add ? 'Add' : 'Update'}</span>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: C.text2, textDecoration: gone ? 'line-through' : 'none' }}>{p.label}</span>
-                        <button onClick={() => setRemoved((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })}
-                          className="c4ai-ghost" title={gone ? 'Restore' : 'Skip'} style={{ ...iconBtn, width: 22, height: 22, flex: 'none' }}>
-                          {gone ? <ArrowRight size={12} /> : <X size={12} />}
-                        </button>
-                      </div>
+          <div style={{ marginTop: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden' }}>
+            <ul style={{ margin: 0, padding: 8, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {result.proposals.map((p, i) => {
+                const gone = removed.has(i)
+                const add = p.op.op.startsWith('add')
+                return (
+                  <li key={i} style={{ padding: 8, opacity: gone ? 0.4 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                      <span style={{ marginTop: 1, flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: add ? 'rgba(34,197,94,0.14)' : 'rgba(88,166,255,0.14)', color: add ? C.greenText : '#7dd3fc' }}>{add ? 'Add' : 'Update'}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: C.text2, textDecoration: gone ? 'line-through' : 'none' }}>{p.label}</span>
+                      <button onClick={() => setRemoved((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })}
+                        className="c4ai-ghost" title={gone ? 'Restore' : 'Skip'} style={{ ...iconBtn, width: 22, height: 22, flex: 'none' }}>
+                        {gone ? <ArrowRight size={12} /> : <X size={12} />}
+                      </button>
+                    </div>
+                    {p.src && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, paddingLeft: 38 }}>
                         <FileCode size={11} color={C.muted3} style={{ flex: 'none' }} />
                         <span style={{ fontSize: 11, color: C.muted3, fontFamily: 'ui-monospace, monospace' }}>{p.src}</span>
                       </div>
-                    </li>
-                  )
-                })}
-              </ul>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
+        {result.questions.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8 }}>
+              <HelpCircle size={14} color="#fdba74" /> A few things I wasn’t sure about
             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {result.questions.map((q, qi) => (
+                <div key={qi} style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, padding: '11px 12px' }}>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.45, color: C.text2 }}>{q.text}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
+                    {q.options.map((o, oi) => {
+                      const sel = answers[qi] === oi
+                      return (
+                        <button key={oi} onClick={() => setAnswers((a) => ({ ...a, [qi]: a[qi] === oi ? -1 : oi }))}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, border: `1px solid ${sel ? C.accent : C.border}`, background: sel ? 'rgba(88,166,255,0.16)' : 'transparent', color: sel ? C.accent : C.muted }}>
+                          {sel && <Check size={12} />} {o.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ ...blurb, marginTop: 8 }}>Pick an answer to apply it; unanswered questions are skipped.</div>
+          </div>
+        )}
+
+        {!nothing && (
+          <>
             <Actions>
-              <button className="c4ai-pri" style={{ ...primaryBtn, height: 34 }} disabled={kept === 0 || !workspace} onClick={apply}>Apply {kept} update{kept === 1 ? '' : 's'}</button>
+              <button className="c4ai-pri" style={{ ...primaryBtn, height: 34 }} disabled={applyCount === 0 || !workspace} onClick={apply}>Apply {applyCount} update{applyCount === 1 ? '' : 's'}</button>
               <button className="c4ai-sec" style={secondaryBtn} onClick={() => { setStage('idle'); setResult(null) }}>Discard</button>
             </Actions>
             {!workspace && <div style={{ ...blurb, marginTop: 8 }}>Open a workspace to apply these.</div>}

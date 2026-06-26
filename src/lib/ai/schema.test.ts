@@ -109,6 +109,27 @@ describe('tolerant sanitizers', () => {
     ] })
     expect(res.proposals).toHaveLength(2)
     expect(res.proposals[1]).toMatchObject({ src: '', label: '' })
+    expect(res.questions).toEqual([])
+  })
+
+  it('toRepoScanResult keeps well-formed questions and drops bad option ops', () => {
+    const res = toRepoScanResult({
+      proposals: [],
+      questions: [
+        { text: 'Orders → Payments?', options: [
+          { label: 'Sync HTTP', op: { op: 'addRelationship', source: 'Orders', destination: 'Payments' } },
+          { label: 'No connection' },                                  // valid "none" option
+          { label: 'broken', op: { op: 'addRelationship', source: 'x' } }, // bad op → kept as none
+        ] },
+        { text: 'no options', options: [] },                            // dropped (no options)
+        { options: [{ label: 'x' }] },                                  // dropped (no text)
+      ],
+    })
+    expect(res.questions).toHaveLength(1)
+    expect(res.questions[0].options).toHaveLength(3)
+    expect(res.questions[0].options[0].op).toBeTruthy()
+    expect(res.questions[0].options[1].op).toBeUndefined()
+    expect(res.questions[0].options[2].op).toBeUndefined()
   })
 
   it('toReviewResult keeps valid findings and strips malformed operations', () => {

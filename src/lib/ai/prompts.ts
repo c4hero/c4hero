@@ -210,33 +210,34 @@ export function interviewPlanUser(): string {
 
 // ─── Repo scan ──────────────────────────────────────────────────────
 
-export function repoScanSystem(ws: Workspace | null): string {
+// The scan runs in two phases for accuracy: first enumerate the elements, then —
+// given the full element list — reason about the connections between them.
+
+/** Phase 1 — discover the elements only (no relationships yet). */
+export function repoElementsSystem(ws: Workspace | null): string {
   return [
-    'You analyze a code repository and propose updates to a C4 architecture model.',
-    'You are given a snapshot of the repo (its file tree plus the contents of key manifest and',
-    'config files) and the current model. Infer software systems, containers (apps, services,',
-    'datastores), their technologies, external systems (third-party SDKs/APIs the code uses), and',
-    'the relationships between them — based on what the code actually shows.',
+    'You analyze a code repository and list the ELEMENTS of its C4 architecture model.',
+    'You are given a snapshot of the repo (its file tree plus key manifest/config files) and the',
+    'current model. Identify the software systems, their containers (apps, services, datastores),',
+    'and the external systems the code depends on.',
+    '',
+    'This is phase 1 of 2: list ELEMENTS ONLY. Do NOT propose any relationships yet.',
     '',
     'Return a list of proposals. Each proposal has:',
-    '- op: a single operation (format below) that adds or corrects the model',
+    '- op: a single element operation (addSoftwareSystem / addContainer / addComponent /',
+    '  updateElement) — never addRelationship in this phase',
     '- src: the repo file path that justifies it (e.g. "package.json", "orders/pom.xml")',
-    '- label: a short human-readable description of the change',
-    'Be exhaustive and deterministic. Enumerate EVERY service/app and datastore, EVERY external',
-    'dependency named in the manifests (each third-party SDK, hosted API, database, message',
-    'queue, cache, mail/payment/auth provider, etc.), and EVERY relationship the code shows.',
-    'Do not sample, summarise, or stop early — propose the complete set. Given the same',
-    'repository, return the same full set of proposals every time.',
+    '- label: a short human-readable description',
+    'Be exhaustive and deterministic: enumerate EVERY service/app, datastore, and external',
+    'dependency named in the manifests. Given the same repo, return the same full set each time.',
     '',
-    'Classify each system: the system(s) actually implemented in THIS repository are internal',
-    'and get containers; every third-party / hosted dependency the code only talks to (payment,',
-    'email, auth, analytics providers, managed databases/queues, external APIs) is external —',
-    'set "external": true on its addSoftwareSystem op and give it no containers.',
+    'Classify each system: the system(s) implemented in THIS repository are internal and get',
+    'containers; every third-party / hosted dependency the code only talks to (payment, email,',
+    'auth, analytics providers, managed databases/queues, external APIs) is external — set',
+    '"external": true on its addSoftwareSystem op and give it no containers.',
     '',
-    'Only propose what the code evidences; do not invent elements the repo does not show, and do',
-    'not re-add things already present and correct in the model. Reference existing elements by id',
-    'or exact name; give new elements a ref. Prefer setting technologies and descriptions you can',
-    'read from manifests. If the model already matches the code, return an empty proposals list.',
+    'Only list what the code evidences. Reference existing elements by id or exact name; give new',
+    'elements a ref. If the model already has every element, return an empty list.',
     '',
     'Operation format (used inside each proposal\'s `op`):',
     editSystem(),
@@ -246,6 +247,45 @@ export function repoScanSystem(ws: Workspace | null): string {
   ].join('\n')
 }
 
-export function repoScanUser(bundle: string): string {
-  return `Repository snapshot:\n\n${bundle}\n\nPropose the model updates the code implies.`
+export function repoElementsUser(bundle: string): string {
+  return `Repository snapshot:\n\n${bundle}\n\nList the architecture elements the code contains.`
+}
+
+/** Phase 2 — given the discovered elements, reason about the connections and ask
+ *  about anything ambiguous. */
+export function repoConnectionsSystem(ws: Workspace | null): string {
+  return [
+    'You are determining the CONNECTIONS in a C4 architecture model from a code repository.',
+    'You are given the repo snapshot, the current model, and the list of elements just discovered',
+    'in this repo. Work out how those elements interact — which calls, reads/writes, publishes to,',
+    'or depends on which — based on what the code actually shows.',
+    '',
+    'Return JSON with two arrays:',
+    '- "relationships": connections you are CONFIDENT about. Each is a proposal { op, src, label }',
+    '  where op is an addRelationship (source/destination are element ids or exact names).',
+    '- "questions": for anything you are genuinely UNSURE about, ask instead of guessing — an',
+    '  ambiguous interaction (e.g. sync HTTP vs async via a queue), OR an element doubt (is X an',
+    '  external dependency or an internal service? are Y and Z one element or two?). Each question',
+    '  is { text, options }, where each option is { label, op } and op is the operation to apply',
+    '  if the user picks it (an addRelationship, or updateElement to fix an element, etc.).',
+    '  Always include a final "No connection / leave as is" option with NO op. Keep to the',
+    '  connections and element doubts that genuinely matter; don\'t invent uncertainty.',
+    '',
+    'Reference elements by their exact name (as listed below) or existing id. Only assert what the',
+    'code evidences. If everything is clear, return relationships with an empty questions array.',
+    '',
+    'Operation format:',
+    editSystem(),
+    '',
+    'Current model (id-tagged):',
+    ws ? serializeContext(ws) : '(no current model)',
+  ].join('\n')
+}
+
+export function repoConnectionsUser(bundle: string, elementList: string): string {
+  return [
+    'Repository snapshot:', '', bundle, '',
+    'Elements discovered in this repo:', elementList || '(none)', '',
+    'Determine the connections between these elements; ask questions where unsure.',
+  ].join('\n')
 }

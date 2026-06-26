@@ -235,6 +235,23 @@ export interface RepoProposal {
   label: string
 }
 
+/** One answer choice for a scan question. Choosing it applies `op` (omitted for
+ *  a "no / none" choice). */
+export interface ScanOption {
+  label: string
+  op?: EditOp
+}
+
+/** A point the scan was unsure about (an ambiguous connection, or whether an
+ *  element is external/internal/distinct), surfaced for the user to resolve. */
+export interface ScanQuestion {
+  text: string
+  options: ScanOption[]
+}
+
 export interface RepoScanResult {
+  /** Confident elements + relationships, applied by default. */
   proposals: RepoProposal[]
+  /** Things the scan wasn't sure about, for the user to answer. */
+  questions: ScanQuestion[]
 }
