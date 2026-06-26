@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
-  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
+  Home, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
@@ -159,6 +159,12 @@ function clampPx(v: number, min: number, max: number): number {
 
 // ─── App (header + tabs + body) ─────────────────────────────────────
 
+// Persistent nav: Home launcher + the four feature tabs.
+const NAV_TABS: { id: TabId; label: string; icon: typeof Home }[] = [
+  { id: 'home', label: 'Home', icon: Home },
+  ...AI_FEATURES.map((f) => ({ id: f.id as TabId, label: f.label, icon: f.icon })),
+]
+
 function AppView({
   provider, workspace, model, tab, setTab, onOpenSettings, onClose,
 }: {
@@ -171,7 +177,6 @@ function AppView({
   onClose: () => void
 }) {
   const section = AI_FEATURES.find((f) => f.id === tab) ?? (tab === 'adr' ? ADR_FEATURE : undefined)
-  const SectionIcon = section?.icon
 
   return (
     <>
@@ -190,18 +195,19 @@ function AppView({
         </div>
       </div>
 
-      {/* back-to-home bar — only shown inside a section */}
-      {tab !== 'home' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-          <button onClick={() => setTab('home')} className="c4ai-ghost"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 11px 0 9px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            <ArrowLeft size={14} /> Home
-          </button>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.text }}>
-            {SectionIcon && <SectionIcon size={15} color={C.accent} />} {section?.label}
-          </span>
-        </div>
-      )}
+      {/* mode tabs — the active tab keeps its label, the rest collapse to icons */}
+      <div role="tablist" style={{ display: 'flex', gap: 5, padding: '8px 12px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        {NAV_TABS.map((t) => {
+          const on = tab === t.id
+          const Icon = t.icon
+          return (
+            <button key={t.id} role="tab" aria-selected={on} title={t.label} onClick={() => setTab(t.id)} className="c4ai-sec"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: on ? 7 : 0, height: 32, ...(on ? { padding: '0 12px', flex: '0 1 auto' } : { width: 34, flex: 'none' }), borderRadius: 8, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 600, background: on ? 'rgba(88,166,255,0.12)' : 'transparent', color: on ? C.accent : C.muted }}>
+              <Icon size={15} />{on && <span>{t.label}</span>}
+            </button>
+          )
+        })}
+      </div>
 
       {/* body */}
       <div data-scroll style={{ padding: '18px 20px 22px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
