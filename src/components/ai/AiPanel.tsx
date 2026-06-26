@@ -49,6 +49,7 @@ const STYLE = `
 .c4ai-sec:hover{background:rgba(255,255,255,0.05)!important}
 .c4ai-card:hover{border-color:${C.borderStrong}!important;background:#1c2128!important}
 @keyframes c4ai-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes c4ai-rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
 @keyframes c4ai-node{0%,100%{opacity:.35}50%{opacity:1}}
 @keyframes c4ai-flow{to{stroke-dashoffset:-14}}
 @keyframes c4ai-radar{to{transform:rotate(360deg)}}
@@ -458,7 +459,7 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
           <div style={{ minHeight: 42, marginTop: 12, fontSize: 15, fontWeight: 600, lineHeight: 1.4, color: C.text }}>
             {run.loading && !question
               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: C.muted2 }}><Loader2 size={14} className="animate-spin" color={C.accent} /> Thinking…</span>
-              : question}
+              : <span key={question} style={{ display: 'block', animation: 'c4ai-rise .3s ease both' }}>{question}</span>}
           </div>
           <div style={{ marginTop: 12 }}>
             <Field value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} onSubmit={answerNext} />
@@ -477,7 +478,7 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
       )}
 
       {started && !plan && wrapUp && (
-        <div style={{ borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, padding: 16 }}>
+        <div style={{ borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, padding: 16, animation: 'c4ai-fade .25s ease' }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>That’s {answeredN} question{answeredN === 1 ? '' : 's'} answered.</div>
           <p style={{ ...blurb, margin: '8px 0 0' }}>Keep going for more detail, or wrap up and turn your answers into model updates.</p>
           <Actions>
@@ -890,7 +891,7 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
     const connEntries = entries.filter((e) => e.p.op.op === 'addRelationship')
 
     const proposalGroup = (title: string, group: { p: typeof result.proposals[number]; i: number }[]) => (
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 14, animation: 'c4ai-fade .25s ease' }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.muted, marginBottom: 7 }}>{title}</div>
         <div style={{ borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden' }}>
           <ul style={{ margin: 0, padding: 8, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1024,10 +1025,12 @@ function ScanningView({ phase, repoName, counts, found }: {
   }, [phase])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '8px 0' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '8px 0', animation: 'c4ai-fade .25s ease' }}>
       <ScanGraph />
       <div style={{ marginTop: 16, fontSize: 13, fontWeight: 600, color: C.text }}>
-        {phase === 'reading' ? `Reading ${repoName}…` : ANALYZE_MESSAGES[msg]}
+        <span key={phase === 'reading' ? 'reading' : msg} style={{ display: 'inline-block', animation: 'c4ai-fade .3s ease' }}>
+          {phase === 'reading' ? `Reading ${repoName}…` : ANALYZE_MESSAGES[msg]}
+        </span>
       </div>
       <div style={{ marginTop: 6, fontSize: 12, color: C.muted }}>
         {phase === 'reading'
