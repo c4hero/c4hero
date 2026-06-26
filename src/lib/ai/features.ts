@@ -15,6 +15,7 @@ import {
   toDescribeResult, toEditPlan, toReviewResult, toRepoScanResult,
 } from './schema'
 import { extractDsl } from './dsl'
+import { mergeRepoProposals } from './repoScan'
 
 // Feature orchestration. Each function takes a provider (injected, so tests use a
 // fake) plus inputs, and returns parsed/validated results. No store access here —
@@ -115,14 +116,31 @@ export async function interviewBuildPlan(
   return toEditPlan(raw)
 }
 
-/** Analyze a repo snapshot and propose model updates with provenance. */
-export async function scanRepo(provider: AiProvider, ws: Workspace | null, bundle: string): Promise<RepoScanResult> {
-  const raw = await provider.completeJson({
+/** Analyze a repo snapshot and propose model updates with provenance.
+ *
+ *  The model samples, so a single pass returns an inconsistent subset run to
+ *  run. We run several passes in parallel and merge their union — far more
+ *  consistent and complete. (The snapshot is already deterministic, and Claude
+ *  no longer accepts a temperature override, so merging is the remaining lever.) */
+export async function scanRepo(
+  provider: AiProvider, ws: Workspace | null, bundle: string, passes = SCAN_PASSES,
+): Promise<RepoScanResult> {
+  const onePass = () => provider.completeJson({
     system: repoScanSystem(ws),
     user: repoScanUser(bundle),
     schema: repoScanSchema,
     validate: isRecord,
     maxTokens: 8000,
-  })
-  return toRepoScanResult(raw)
+  }).then(toRepoScanResult)
+
+  const settled = await Promise.allSettled(Array.from({ length: Math.max(1, passes) }, onePass))
+  const ok = settled.filter((s): s is PromiseFulfilledResult<RepoScanResult> => s.status === 'fulfilled')
+  if (ok.length === 0) {
+    // Every pass failed — surface the real error (auth, connection, …).
+    throw (settled[0] as PromiseRejectedResult).reason
+  }
+  return { proposals: mergeRepoProposals(ok.flatMap((s) => s.value.proposals)) }
 }
+
+/** How many parallel passes a scan runs; their union is returned. */
+export const SCAN_PASSES = 3

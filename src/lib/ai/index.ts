@@ -15,7 +15,7 @@ export { AiError, aiErrorMessage } from './types'
 
 export { findingsToMarkdown, sortedFindings, isActionable } from './review'
 export { classifyScope, type PlanScope } from './planScope'
-export { readRepoFiles, buildRepoBundle, canScanRepo, isKeyFile, isIgnoredDir } from './repoScan'
+export { readRepoFiles, buildRepoBundle, canScanRepo, isKeyFile, isIgnoredDir, mergeRepoProposals } from './repoScan'
 
 export type { AiProviderId, AiProviderMeta, AiModelOption } from './providerMeta'
 export { AI_PROVIDER_META, AI_PROVIDER_IDS, getProviderMeta, isAiProviderId } from './providerMeta'

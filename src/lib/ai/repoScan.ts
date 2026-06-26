@@ -1,4 +1,4 @@
-import type { RepoFile, RepoSnapshot } from './types'
+import type { RepoFile, RepoSnapshot, RepoProposal } from './types'
 
 // Read a local repository through the File System Access API and reduce it to a
 // compact, architecture-revealing snapshot: the file tree plus the contents of
@@ -132,4 +132,37 @@ export function buildRepoBundle(snapshot: RepoSnapshot, maxChars = 24_000): stri
 /** Whether the browser supports picking a local folder. */
 export function canScanRepo(): boolean {
   return typeof window !== 'undefined' && 'showDirectoryPicker' in window
+}
+
+// A stable identity for a proposal so passes can be deduped/merged. Adds key on
+// type+name(+parent); relationships on their endpoints; updates on id+fields.
+function proposalKey(p: RepoProposal): string {
+  const op = p.op
+  const lc = (s?: string) => (s ?? '').trim().toLowerCase()
+  switch (op.op) {
+    case 'addPerson':
+    case 'addSoftwareSystem': return `${op.op}|${lc(op.name)}`
+    case 'addContainer':
+    case 'addComponent': return `${op.op}|${lc(op.parent)}|${lc(op.name)}`
+    case 'addRelationship': return `rel|${lc(op.source)}|${lc(op.destination)}`
+    case 'updateElement':
+    case 'updateRelationship': {
+      const fields = Object.keys(op).filter((k) => k !== 'op' && k !== 'id').sort().join(',')
+      return `${op.op}|${lc(op.id)}|${fields}`
+    }
+    case 'deleteElement': return `del|${lc(op.id)}`
+    default: return JSON.stringify(op)
+  }
+}
+
+/** Merge proposals from one or more scan passes into a deduped, deterministically
+ *  ordered set — the union, so multiple passes converge on a stable, complete
+ *  result rather than whatever a single (sampled) pass happened to return. */
+export function mergeRepoProposals(proposals: RepoProposal[]): RepoProposal[] {
+  const byKey = new Map<string, RepoProposal>()
+  for (const p of proposals) {
+    const k = proposalKey(p)
+    if (!byKey.has(k)) byKey.set(k, p)
+  }
+  return [...byKey.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([, p]) => p)
 }

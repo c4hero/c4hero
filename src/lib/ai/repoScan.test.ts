@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { isKeyFile, isIgnoredDir, buildRepoBundle } from './repoScan'
-import type { RepoSnapshot } from './types'
+import { isKeyFile, isIgnoredDir, buildRepoBundle, mergeRepoProposals } from './repoScan'
+import type { RepoSnapshot, RepoProposal } from './types'
 
 describe('isIgnoredDir', () => {
   it('skips dependency/build folders and dotdirs', () => {
@@ -53,5 +53,27 @@ describe('buildRepoBundle', () => {
   it('honors the character budget', () => {
     const big: RepoSnapshot = { repoName: 'x', tree: [], files: [{ path: 'a', content: 'z'.repeat(5000) }] }
     expect(buildRepoBundle(big, 500).length).toBeLessThanOrEqual(500)
+  })
+})
+
+describe('mergeRepoProposals', () => {
+  const c = (name: string, parent = 'shop'): RepoProposal => ({ op: { op: 'addContainer', ref: name, parent, name }, src: 'x', label: name })
+  const rel = (s: string, d: string): RepoProposal => ({ op: { op: 'addRelationship', source: s, destination: d }, src: 'x', label: `${s}->${d}` })
+
+  it('dedupes the union across passes regardless of casing', () => {
+    const passA = [c('Payments'), c('Postgres'), rel('Web', 'Postgres')]
+    const passB = [c('postgres'), c('Redis'), rel('web', 'postgres')]
+    const merged = mergeRepoProposals([...passA, ...passB])
+    expect(merged).toHaveLength(4) // Payments, Postgres, Redis, Web->Postgres
+  })
+
+  it('is order-independent and deterministic', () => {
+    const a = [c('B'), c('A'), c('C')]
+    const b = [c('C'), c('A'), c('B')]
+    expect(mergeRepoProposals(a)).toEqual(mergeRepoProposals(b))
+  })
+
+  it('keeps containers with the same name under different parents', () => {
+    expect(mergeRepoProposals([c('db', 'orders'), c('db', 'billing')])).toHaveLength(2)
   })
 })
