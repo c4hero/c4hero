@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   Home, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
@@ -374,6 +374,10 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
 
 // ─── Interview ──────────────────────────────────────────────────────
 
+// Questions per round before offering to wrap up (the interview is otherwise
+// open-ended; "Keep going" adds another round).
+const INTERVIEW_TARGET = 5
+
 function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
@@ -384,17 +388,17 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
   const [question, setQuestion] = useState<string | null>(null)
   const [answer, setAnswer] = useState('')
   const [plan, setPlan] = useState<EditPlan | null>(null)
+  const [target, setTarget] = useState(INTERVIEW_TARGET)
+  const [wrapUp, setWrapUp] = useState(false)
   const run = useAiRun()
-  const endRef = useRef<HTMLDivElement>(null)
   const started = history.length > 0
-
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [qa.length, question, plan, run.loading])
 
   if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
   const ws = workspace
   const v: View = view
 
   function start() {
+    setWrapUp(false); setTarget(INTERVIEW_TARGET); setQa([])
     run.go(async () => {
       const kickoff = interviewKickoffMessage(v)
       const q = await interviewAsk(provider, ws, v, [], kickoff)
@@ -407,53 +411,79 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
     const a = answer.trim()
     setQa((p) => [...p, { q: question, a }])
     setAnswer('')
+    setWrapUp(qa.length + 1 >= target) // hit the planned count → offer to wrap up
+    // Always fetch the next question so the transcript ends on a question
+    // (keeps history alternating, and the next one is ready if they continue).
     run.go(async () => {
       const q = await interviewAsk(provider, ws, v, history, a)
       setHistory([...history, { role: 'user', content: a }, { role: 'assistant', content: q }])
       return q
     }, setQuestion)
   }
-  function finish() {
-    let finalHistory = history
-    if (question && answer.trim()) {
-      const a = answer.trim()
-      finalHistory = [...history, { role: 'user', content: a }]
-      setQa((p) => [...p, { q: question, a }]); setAnswer(''); setQuestion(null)
-    }
-    run.go(() => interviewBuildPlan(provider, ws, v, finalHistory), setPlan)
+  function skip() {
+    if (!question || run.loading) return
+    const msg = 'Let’s skip that one — ask me something else.'
+    setAnswer('')
+    run.go(async () => {
+      const q = await interviewAsk(provider, ws, v, history, msg)
+      setHistory([...history, { role: 'user', content: msg }, { role: 'assistant', content: q }])
+      return q
+    }, setQuestion)
   }
+  function keepGoing() { setWrapUp(false); setTarget((t) => t + INTERVIEW_TARGET) }
+  // Build from the committed transcript (always ends on a question), so the plan
+  // request alternates cleanly. An unsent draft answer is ignored.
+  function finish() { run.go(() => interviewBuildPlan(provider, ws, v, history), setPlan) }
 
   const planLines = plan ? describeOps(plan, ws) : []
+  const answeredN = qa.length
+  const dotCount = Math.max(target, answeredN + 1)
 
   return (
     <>
-      <p style={blurb}>Filling in <span style={{ color: '#7dd3fc' }}>{viewLabel(v)}</span>. Answer the questions; c4hero turns them into model updates.</p>
+      <p style={blurb}>Filling in <span style={{ color: '#7dd3fc' }}>{viewLabel(v)}</span>. Answer a few questions; c4hero turns them into model updates.</p>
 
       {!started && !plan && <RunButton label="Start interview" loading={run.loading} onClick={start} />}
 
-      {(started || plan) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {qa.map((x, i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <Bubble who="ai">{x.q}</Bubble>
-              <Bubble who="user">{x.a}</Bubble>
+      {started && !plan && !wrapUp && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+            <div style={{ display: 'flex', gap: 5 }}>
+              {Array.from({ length: dotCount }, (_, i) => (
+                <span key={i} style={{ width: 18, height: 4, borderRadius: 999, background: i <= answeredN ? C.accent : 'rgba(88,166,255,0.2)' }} />
+              ))}
             </div>
-          ))}
-          {!plan && question && <Bubble who="ai">{question}</Bubble>}
-        </div>
+            <span style={{ fontSize: 11, color: C.muted }}>Question {answeredN + 1} of {dotCount}</span>
+          </div>
+          <div style={{ minHeight: 42, marginTop: 12, fontSize: 15, fontWeight: 600, lineHeight: 1.4, color: C.text }}>
+            {run.loading && !question
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: C.muted2 }}><Loader2 size={14} className="animate-spin" color={C.accent} /> Thinking…</span>
+              : question}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Field value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} onSubmit={answerNext} />
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="c4ai-sec" style={{ ...secondaryBtn, color: C.muted }} onClick={skip} disabled={run.loading}>Skip</button>
+                <button className="c4ai-sec" style={{ ...secondaryBtn, color: C.muted }} onClick={finish} disabled={run.loading}>Finish</button>
+              </div>
+              <button className="c4ai-pri" style={{ ...primaryBtn, height: 32 }} onClick={answerNext} disabled={run.loading || !answer.trim()}>
+                {run.loading ? 'Thinking…' : 'Answer'} <ArrowRight size={13} />
+              </button>
+            </div>
+          </div>
+          {qa.length > 0 && <PlanPreviewBar provider={provider} ws={ws} view={v} history={history} />}
+        </>
       )}
 
-      {started && !plan && qa.length > 0 && <PlanPreviewBar provider={provider} ws={ws} view={v} history={history} />}
-
-      {started && !plan && (
-        <div style={{ marginTop: 14 }}>
-          <Field value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} onSubmit={answerNext} />
-          <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button className="c4ai-sec" style={{ ...secondaryBtn, color: C.muted }} onClick={finish} disabled={run.loading}>Finish &amp; update model</button>
-            <button className="c4ai-pri" style={{ ...primaryBtn, height: 32 }} onClick={answerNext} disabled={run.loading || !answer.trim()}>
-              {run.loading ? 'Thinking…' : 'Answer'} <ArrowRight size={13} />
-            </button>
-          </div>
+      {started && !plan && wrapUp && (
+        <div style={{ borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, padding: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>That’s {answeredN} question{answeredN === 1 ? '' : 's'} answered.</div>
+          <p style={{ ...blurb, margin: '8px 0 0' }}>Keep going for more detail, or wrap up and turn your answers into model updates.</p>
+          <Actions>
+            <button className="c4ai-sec" style={secondaryBtn} onClick={keepGoing} disabled={run.loading}>Keep going</button>
+            <button className="c4ai-pri" style={primaryBtn} onClick={finish} disabled={run.loading}>Finish &amp; update model</button>
+          </Actions>
         </div>
       )}
 
@@ -469,21 +499,7 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
           </Actions>
         </Card>
       )}
-      <div ref={endRef} />
     </>
-  )
-}
-
-function Bubble({ who, children }: { who: 'ai' | 'user'; children: React.ReactNode }) {
-  if (who === 'ai') {
-    // The assistant's question reads as plain prose — no avatar or bubble chrome.
-    return <div style={{ fontSize: 13, lineHeight: 1.55, color: C.text, padding: '0 2px' }}>{children}</div>
-  }
-  // The user's answer is a compact right-aligned bubble, no avatar.
-  return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <span style={{ background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.2)', borderRadius: '12px 12px 4px 12px', padding: '10px 13px', fontSize: 13, lineHeight: 1.5, color: C.text, maxWidth: '80%' }}>{children}</span>
-    </div>
   )
 }
 
