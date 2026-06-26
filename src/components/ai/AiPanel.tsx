@@ -818,10 +818,10 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
       if (foreign.length) after.removeElementsFromView(activeKey, foreign)
     }
 
-    // Give each newly-imported system its own container (L2) view, and open the
-    // largest one so the import lands in its own diagram.
+    // Give each newly-imported *internal* system its own container (L2) view, and
+    // open the largest. External systems are black boxes — no view for them.
     const newSystems = ws1.model.softwareSystems
-      .filter((s) => !beforeSystemIds.has(s.id))
+      .filter((s) => !beforeSystemIds.has(s.id) && s.location !== 'External')
       .sort((a, b) => b.containers.length - a.containers.length)
     let primaryKey: string | null = null
     for (const sys of newSystems) {
@@ -1214,7 +1214,7 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
   const s = useWorkspaceStore.getState()
   const actions: EditActions = {
     addPerson: (name) => s.addPerson(name),
-    addSoftwareSystem: (name) => s.addSoftwareSystem(name),
+    addSoftwareSystem: (name, external) => s.addSoftwareSystem(name, undefined, external ? 'External' : undefined),
     addContainer: (systemId, name) => s.addContainer(systemId, name),
     addComponent: (containerId, name) => s.addComponent(containerId, name),
     addRelationship: (src, dst, desc, tech) => s.addRelationship(src, dst, desc, tech),

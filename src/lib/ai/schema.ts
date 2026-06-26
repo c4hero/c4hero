@@ -63,6 +63,7 @@ const opSchema = {
     parent: { type: 'string' },
     source: { type: 'string' },
     destination: { type: 'string' },
+    external: { type: 'boolean' },
   },
   required: ['op'],
 }

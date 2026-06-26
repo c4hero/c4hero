@@ -100,6 +100,9 @@ export interface AddSoftwareSystemOp {
   ref: string
   name: string
   description?: string
+  /** True for a third-party / hosted system the code merely depends on (Stripe,
+   *  SendGrid, a managed DB, …) — modelled as a black box (location External). */
+  external?: boolean
 }
 
 export interface AddContainerOp {

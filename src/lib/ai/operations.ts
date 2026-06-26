@@ -9,7 +9,7 @@ import { elementNameMap, elementIdSet, flattenElements } from './context'
 
 export interface EditActions {
   addPerson: (name: string) => string
-  addSoftwareSystem: (name: string) => string
+  addSoftwareSystem: (name: string, external?: boolean) => string
   addContainer: (systemId: string, name: string) => string
   addComponent: (containerId: string, name: string) => string
   addRelationship: (sourceId: string, destinationId: string, description?: string, technology?: string) => string
@@ -82,7 +82,7 @@ export function applyEditPlan(
       }
       case 'addSoftwareSystem': {
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
-        const id = actions.addSoftwareSystem(op.name.trim())
+        const id = actions.addSoftwareSystem(op.name.trim(), op.external)
         register(op.ref, id, op.name)
         if (op.description?.trim()) actions.updateElement(id, { description: op.description.trim() })
         ok(op)

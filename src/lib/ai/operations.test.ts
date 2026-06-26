@@ -38,6 +38,17 @@ describe('applyEditPlan', () => {
     expect(result.skippedCount).toBe(0)
   })
 
+  it('passes the external flag through when adding a software system', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'addSoftwareSystem', ref: 's1', name: 'Stripe', external: true },
+      { op: 'addSoftwareSystem', ref: 's2', name: 'Orders Service' },
+    ] }, actions, ws)
+    expect(actions.addSoftwareSystem).toHaveBeenCalledWith('Stripe', true)
+    expect(actions.addSoftwareSystem).toHaveBeenCalledWith('Orders Service', undefined)
+  })
+
   it('skips ops with an unresolvable parent or endpoint', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()
