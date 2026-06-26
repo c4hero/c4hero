@@ -48,6 +48,9 @@ export const createElementSlice: StateCreator<
       s.selectedElementIds = [id]
       s.selectedRelationshipId = null
       s.selectedGroupId = null
+      // Adding a node opens the inspector; close the AI panel so it isn't hidden behind it.
+      s.aiPanelOpen = false
+      s.aiSettingsOpen = false
     })
     announce('Person created')
     return id
@@ -71,6 +74,9 @@ export const createElementSlice: StateCreator<
       s.selectedElementIds = [id]
       s.selectedRelationshipId = null
       s.selectedGroupId = null
+      // Adding a node opens the inspector; close the AI panel so it isn't hidden behind it.
+      s.aiPanelOpen = false
+      s.aiSettingsOpen = false
     })
     get().revalidateScope()
     announce('System created')
@@ -100,6 +106,8 @@ export const createElementSlice: StateCreator<
       s.selectedElementIds = [id]
       s.selectedRelationshipId = null
       s.selectedGroupId = null
+      s.aiPanelOpen = false
+      s.aiSettingsOpen = false
       added = true
     })
     if (added) {
@@ -132,6 +140,8 @@ export const createElementSlice: StateCreator<
         s.selectedElementIds = [id]
         s.selectedRelationshipId = null
         s.selectedGroupId = null
+        s.aiPanelOpen = false
+        s.aiSettingsOpen = false
         added = true
         return
       }
