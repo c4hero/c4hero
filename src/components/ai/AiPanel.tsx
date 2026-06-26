@@ -853,6 +853,44 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
     const answeredOps = result.questions.reduce((n, q, i) => n + (answers[i] != null && q.options[answers[i]]?.op ? 1 : 0), 0)
     const applyCount = kept + answeredOps
     const nothing = result.proposals.length === 0 && result.questions.length === 0
+    const entries = result.proposals.map((p, i) => ({ p, i }))
+    const elementEntries = entries.filter((e) => e.p.op.op !== 'addRelationship')
+    const connEntries = entries.filter((e) => e.p.op.op === 'addRelationship')
+
+    const proposalGroup = (title: string, group: { p: typeof result.proposals[number]; i: number }[]) => (
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.muted, marginBottom: 7 }}>{title}</div>
+        <div style={{ borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden' }}>
+          <ul style={{ margin: 0, padding: 8, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {group.map(({ p, i }) => {
+              const gone = removed.has(i)
+              const rel = p.op.op === 'addRelationship'
+              const add = p.op.op.startsWith('add')
+              const tag = rel ? 'Link' : add ? 'Add' : 'Update'
+              return (
+                <li key={i} style={{ padding: 8, opacity: gone ? 0.4 : 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                    <span style={{ marginTop: 1, flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: rel ? 'rgba(167,139,250,0.16)' : add ? 'rgba(34,197,94,0.14)' : 'rgba(88,166,255,0.14)', color: rel ? '#c4b5fd' : add ? C.greenText : '#7dd3fc' }}>{tag}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: C.text2, textDecoration: gone ? 'line-through' : 'none', wordBreak: 'break-word' }}>{p.label}</span>
+                    <button onClick={() => setRemoved((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })}
+                      className="c4ai-ghost" title={gone ? 'Restore' : 'Skip'} style={{ ...iconBtn, width: 22, height: 22, flex: 'none' }}>
+                      {gone ? <ArrowRight size={12} /> : <X size={12} />}
+                    </button>
+                  </div>
+                  {p.src && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, paddingLeft: 38 }}>
+                      <FileCode size={11} color={C.muted3} style={{ flex: 'none' }} />
+                      <span style={{ fontSize: 11, color: C.muted3, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all' }}>{p.src}</span>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      </div>
+    )
+
     return (
       <>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
@@ -865,51 +903,28 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
             : <>From the code, c4hero proposes <strong style={{ color: C.text }}>{result.proposals.length} update{result.proposals.length === 1 ? '' : 's'}</strong>{result.questions.length > 0 && <> and has <strong style={{ color: C.text }}>{result.questions.length} question{result.questions.length === 1 ? '' : 's'}</strong></>}.</>}
         </p>
 
-        {result.proposals.length > 0 && (
-          <div style={{ marginTop: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden' }}>
-            <ul style={{ margin: 0, padding: 8, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {result.proposals.map((p, i) => {
-                const gone = removed.has(i)
-                const add = p.op.op.startsWith('add')
-                return (
-                  <li key={i} style={{ padding: 8, opacity: gone ? 0.4 : 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-                      <span style={{ marginTop: 1, flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: add ? 'rgba(34,197,94,0.14)' : 'rgba(88,166,255,0.14)', color: add ? C.greenText : '#7dd3fc' }}>{add ? 'Add' : 'Update'}</span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: C.text2, textDecoration: gone ? 'line-through' : 'none' }}>{p.label}</span>
-                      <button onClick={() => setRemoved((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })}
-                        className="c4ai-ghost" title={gone ? 'Restore' : 'Skip'} style={{ ...iconBtn, width: 22, height: 22, flex: 'none' }}>
-                        {gone ? <ArrowRight size={12} /> : <X size={12} />}
-                      </button>
-                    </div>
-                    {p.src && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, paddingLeft: 38 }}>
-                        <FileCode size={11} color={C.muted3} style={{ flex: 'none' }} />
-                        <span style={{ fontSize: 11, color: C.muted3, fontFamily: 'ui-monospace, monospace' }}>{p.src}</span>
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        )}
+        {elementEntries.length > 0 && proposalGroup('Elements', elementEntries)}
+        {connEntries.length > 0 && proposalGroup('Connections', connEntries)}
 
         {result.questions.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8 }}>
+          <div style={{ marginTop: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 9 }}>
               <HelpCircle size={14} color="#fdba74" /> A few things I wasn’t sure about
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {result.questions.map((q, qi) => (
-                <div key={qi} style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, padding: '11px 12px' }}>
-                  <div style={{ fontSize: 12.5, lineHeight: 1.45, color: C.text2 }}>{q.text}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
+                <div key={qi} style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, padding: '12px 13px' }}>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.text, fontWeight: 500 }}>{q.text}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
                     {q.options.map((o, oi) => {
                       const sel = answers[qi] === oi
                       return (
                         <button key={oi} onClick={() => setAnswers((a) => ({ ...a, [qi]: a[qi] === oi ? -1 : oi }))}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, border: `1px solid ${sel ? C.accent : C.border}`, background: sel ? 'rgba(88,166,255,0.16)' : 'transparent', color: sel ? C.accent : C.muted }}>
-                          {sel && <Check size={12} />} {o.label}
+                          style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left', padding: '9px 11px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${sel ? C.accent : C.border}`, background: sel ? 'rgba(88,166,255,0.12)' : 'transparent' }}>
+                          <span style={{ width: 15, height: 15, flex: 'none', marginTop: 1, borderRadius: '50%', border: `1.5px solid ${sel ? C.accent : C.muted3}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {sel && <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.accent }} />}
+                          </span>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: sel ? C.text : C.text2, wordBreak: 'break-word' }}>{o.label}</span>
                         </button>
                       )
                     })}
@@ -917,7 +932,7 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
                 </div>
               ))}
             </div>
-            <div style={{ ...blurb, marginTop: 8 }}>Pick an answer to apply it; unanswered questions are skipped.</div>
+            <div style={{ ...blurb, marginTop: 9 }}>Pick an answer to apply it; unanswered questions are skipped.</div>
           </div>
         )}
 
