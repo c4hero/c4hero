@@ -3,6 +3,7 @@ import {
   X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   Home, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
+  Activity, Unlink, Cpu, Box, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
@@ -18,7 +19,8 @@ import {
   scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
   buildDescribePreview, applyDescribePreview, countMissingDescriptions,
-  findingsToMarkdown, sortedFindings, isActionable, classifyScope,
+  findingsToMarkdown, sortedFindings, isActionable, classifyScope, modelHealth,
+  type ModelGap, type ModelGapId,
   type AiProvider, type EditActions, type DescribeActions,
   type EditPlan, type DescribePreview, type AiFeatureId, type AiChatTurn,
   type ReviewResult, type ReviewFinding, type ReviewSeverity, type RepoScanResult, type PlanScope,
@@ -213,7 +215,7 @@ function AppView({
       {/* body */}
       <div data-scroll style={{ padding: '18px 20px 22px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {tab === 'home' ? (
-          <HomeLauncher onPick={setTab} />
+          <HomeLauncher onPick={setTab} workspace={workspace} />
         ) : section?.needsWorkspace && !workspace ? (
           <Empty>Open or create a workspace to use this feature.</Empty>
         ) : (
@@ -224,9 +226,51 @@ function AppView({
   )
 }
 
-function HomeLauncher({ onPick }: { onPick: (t: TabId) => void }) {
+const GAP_META: Record<ModelGapId, { icon: LucideIcon; tab: TabId; action: string }> = {
+  descriptions: { icon: Wand2, tab: 'review', action: 'Auto-write' },
+  unconnected: { icon: Unlink, tab: 'interview', action: 'Add links' },
+  technology: { icon: Cpu, tab: 'review', action: 'Review' },
+  emptySystems: { icon: Box, tab: 'review', action: 'Review' },
+}
+
+// Instant, no-AI model-health readout on Home. Each gap routes to its fix.
+function ModelHealthCard({ gaps, onPick }: { gaps: ModelGap[]; onPick: (t: TabId) => void }) {
+  return (
+    <div style={{ marginBottom: 18, padding: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gaps.length ? 10 : 0 }}>
+        <Activity size={15} color={C.accent} />
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>Model health</span>
+      </div>
+      {gaps.length === 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12.5, color: C.text2 }}>
+          <Check size={14} color={C.green} /> Looks tidy — everything’s described, connected, and typed.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {gaps.map((g) => {
+            const m = GAP_META[g.id]
+            const Icon = m.icon
+            return (
+              <button key={g.id} onClick={() => onPick(m.tab)} className="c4ai-sec"
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 9px', borderRadius: 9, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                <span style={{ width: 26, height: 26, flex: 'none', borderRadius: 7, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Icon size={14} /></span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.text2 }}>{g.label}</span>
+                <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>{m.action}</span>
+                <ChevronRight size={14} color={C.muted3} style={{ flex: 'none' }} />
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function HomeLauncher({ onPick, workspace }: { onPick: (t: TabId) => void; workspace: Workspace | null }) {
+  const gaps = workspace ? modelHealth(workspace) : []
   return (
     <>
+      {workspace && <ModelHealthCard gaps={gaps} onPick={onPick} />}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2, marginBottom: 13 }}>What do you want to do?</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
         {AI_FEATURES.map((f) => {
