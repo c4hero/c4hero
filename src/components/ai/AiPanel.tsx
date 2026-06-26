@@ -1176,7 +1176,12 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
   const { enabled, showInTopBar, provider, apiKeys, models, update, setApiKey, setModel } = useAiSettingsStore()
   const meta = AI_PROVIDER_META[provider]
   const [reveal, setReveal] = useState(false)
+  const [edit, setEdit] = useState(false)
   const modelListId = `c4ai-models-${provider}`
+  const key = apiKeys[provider] ?? ''
+  const maskedKey = key.length > 10 ? `${key.slice(0, 6)}····${key.slice(-3)}` : (key ? '••••••' : '—')
+  const providerName = meta.label.replace(/ \(Claude\)$/, '')
+  const model = models[provider] || meta.defaultModel
 
   return (
     <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
@@ -1184,49 +1189,70 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
         <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 15, fontWeight: 700, color: C.text }}><KeyRound size={16} color={C.accent} /> AI settings</span>
         <button onClick={onDone ?? onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
       </div>
-      <div style={{ padding: '18px 20px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <div><div style={fieldLabel}>Enable AI features</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>Show the AI assistant and its commands.</div></div>
-          <button role="switch" aria-checked={enabled} onClick={() => update({ enabled: !enabled })} style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? C.accent : 'rgba(255,255,255,0.16)', position: 'relative', flex: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-            <span style={{ position: 'absolute', top: 2, [enabled ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: enabled ? C.ink : C.text } as React.CSSProperties} />
-          </button>
-        </div>
+      <div style={{ padding: '18px 20px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!edit ? (
+          <>
+            {/* read-first: live connection summary */}
+            <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.06)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, boxShadow: '0 0 6px rgba(34,197,94,0.6)' }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Connected</span>
+              </div>
+              <div style={{ marginTop: 11, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {([['Provider', providerName, false], ['Model', model, false], ['Key', maskedKey, true]] as const).map(([k, val, mono]) => (
+                  <div key={k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <span style={{ fontSize: 12, color: C.muted }}>{k}</span>
+                    <span style={{ fontSize: 12, color: C.text, fontWeight: 600, fontFamily: mono ? 'ui-monospace, monospace' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button className="c4ai-sec" onClick={() => setEdit(true)} style={{ height: 36, borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Change key or provider</button>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <div><div style={fieldLabel}>Show AI button in top bar</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>When off, open the assistant from the command palette (⌘K).</div></div>
-          <button role="switch" aria-checked={showInTopBar} onClick={() => update({ showInTopBar: !showInTopBar })} style={{ width: 36, height: 20, borderRadius: 999, background: showInTopBar ? C.accent : 'rgba(255,255,255,0.16)', position: 'relative', flex: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-            <span style={{ position: 'absolute', top: 2, [showInTopBar ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: showInTopBar ? C.ink : C.text } as React.CSSProperties} />
-          </button>
-        </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+              <div><div style={fieldLabel}>Enable AI features</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>Show the AI assistant and its commands.</div></div>
+              <button role="switch" aria-checked={enabled} onClick={() => update({ enabled: !enabled })} style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? C.accent : 'rgba(255,255,255,0.16)', position: 'relative', flex: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                <span style={{ position: 'absolute', top: 2, [enabled ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: enabled ? C.ink : C.text } as React.CSSProperties} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+              <div><div style={fieldLabel}>Show AI button in top bar</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>When off, open the assistant from the command palette (⌘K).</div></div>
+              <button role="switch" aria-checked={showInTopBar} onClick={() => update({ showInTopBar: !showInTopBar })} style={{ width: 36, height: 20, borderRadius: 999, background: showInTopBar ? C.accent : 'rgba(255,255,255,0.16)', position: 'relative', flex: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                <span style={{ position: 'absolute', top: 2, [showInTopBar ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: showInTopBar ? C.ink : C.text } as React.CSSProperties} />
+              </button>
+            </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={fieldLabel}>Provider</div>
-          <ProviderPicker value={provider} onPick={(id) => update({ provider: id })} />
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={fieldLabel}>{meta.keyLabel}</div>
-            <a href={meta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent }}>{meta.keyHelpLabel} <ExternalLink size={11} /></a>
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input type={reveal ? 'text' : 'password'} value={apiKeys[provider] ?? ''} onChange={(e) => setApiKey(e.target.value)} placeholder={meta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
-            <button className="c4ai-sec" onClick={() => setReveal((r) => !r)} style={{ ...secondaryBtn, height: 38, padding: '0 12px' }}>{reveal ? 'Hide' : 'Show'}</button>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={fieldLabel}>Model</div>
-          <input list={modelListId} value={models[provider] ?? ''} onChange={(e) => setModel(e.target.value)} placeholder={meta.defaultModel} autoComplete="off" spellCheck={false} style={keyInput} />
-          <datalist id={modelListId}>{meta.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</datalist>
-        </div>
-
-        <SecurityNote />
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
-          <button onClick={() => { setApiKey(''); onClose() }} style={{ height: 34, padding: '0 14px', borderRadius: 10, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: C.dangerText, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Disconnect key</button>
-          <button className="c4ai-pri" onClick={onDone ?? onClose} style={{ ...primaryBtn, height: 34 }}>Done</button>
-        </div>
+            <SecurityNote />
+            <button onClick={() => { setApiKey(''); onClose() }} style={{ height: 34, borderRadius: 10, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: C.dangerText, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Disconnect key</button>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={fieldLabel}>Provider</div>
+              <ProviderPicker value={provider} onPick={(id) => update({ provider: id })} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={fieldLabel}>{meta.keyLabel}</div>
+                <a href={meta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent }}>{meta.keyHelpLabel} <ExternalLink size={11} /></a>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input type={reveal ? 'text' : 'password'} value={apiKeys[provider] ?? ''} onChange={(e) => setApiKey(e.target.value)} placeholder={meta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
+                <button className="c4ai-sec" onClick={() => setReveal((r) => !r)} style={{ ...secondaryBtn, height: 38, padding: '0 12px' }}>{reveal ? 'Hide' : 'Show'}</button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={fieldLabel}>Model</div>
+              <input list={modelListId} value={models[provider] ?? ''} onChange={(e) => setModel(e.target.value)} placeholder={meta.defaultModel} autoComplete="off" spellCheck={false} style={keyInput} />
+              <datalist id={modelListId}>{meta.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</datalist>
+            </div>
+            <SecurityNote />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="c4ai-sec" onClick={() => setEdit(false)} style={{ ...secondaryBtn, height: 34 }}>Cancel</button>
+              <button className="c4ai-pri" onClick={() => setEdit(false)} style={{ ...primaryBtn, height: 34 }}>Save</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
