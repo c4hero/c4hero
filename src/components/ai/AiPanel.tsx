@@ -258,13 +258,23 @@ function FeatureBody({ feature, provider, workspace, onClose }: { feature: AiFea
 
 // ─── Describe (Generate + Edit merged) ──────────────────────────────
 
+// Guess whether a compose prompt is building a new model or changing the current
+// one, from its verbs. Defaults to "change" when ambiguous (safer — "new"
+// replaces the workspace), and only "new" on clear build language.
+function detectComposeMode(text: string): 'new' | 'change' {
+  const t = text.toLowerCase()
+  const change = /\b(add|change|connect|remove|rename|update|delete|set|move|introduce|split|insert|replace)\b/.test(t)
+  const build = /\b(build|create|new model|new system|new diagram|model for|platform with|system with|design a)\b/.test(t)
+  if (build && !change) return 'new'
+  return 'change'
+}
+
 function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const undoLen = useWorkspaceStore((s) => s.undoStack.length)
   const lastSaved = useWorkspaceStore((s) => s.lastSavedUndoLength)
   const hasUnsaved = !!workspace && undoLen !== lastSaved
 
-  const [mode, setMode] = useState<'new' | 'change'>(workspace ? 'change' : 'new')
   const [text, setText] = useState('')
   const run = useAiRun()
   const [dsl, setDsl] = useState<string | null>(null)
@@ -273,38 +283,38 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
   const parsed = useMemo(() => (dsl ? parseDSL(dsl) : null), [dsl])
   const planLines = plan && workspace ? describeOps(plan, workspace) : []
 
-  function reset() { setDsl(null); setPlan(null); setConfirmReplace(false) }
-  function pick(m: 'new' | 'change') { setMode(m); reset() }
+  // Auto-detect intent. Without a workspace there's nothing to change → "new".
+  const detected: 'new' | 'change' = !workspace ? 'new' : detectComposeMode(text)
+  const DetIcon = detected === 'new' ? Sparkles : Pencil
+  const detectedHint = !text.trim()
+    ? 'Intent is detected automatically as you type.'
+    : detected === 'new' ? 'Detected: new model — opens in a new workspace.' : `Detected: change to ${workspace?.name || 'the current model'}.`
 
-  const placeholder = mode === 'new'
-    ? 'Describe a system in plain English — e.g. a food-delivery platform with a customer app, an orders service using Kafka, a payments service…'
-    : 'Describe a change — e.g. Add a Redis cache between the Web App and the Database.'
-  const canRun = mode === 'new' ? !!text.trim() : (!!text.trim() && !!workspace)
+  function reset() { setDsl(null); setPlan(null); setConfirmReplace(false) }
+  const canRun = !!text.trim() && (detected === 'new' || !!workspace)
 
   function submit() {
     if (!canRun || run.loading) return
     reset()
-    if (mode === 'new') run.go(() => generateDiagram(provider, text), setDsl)
+    if (detected === 'new') run.go(() => generateDiagram(provider, text), setDsl)
     else run.go(() => planEdit(provider, workspace!, text), setPlan)
   }
   function load() { if (parsed) { loadWorkspace(parsed.workspace); onClose() } }
-  const done = (mode === 'new' && parsed) || (mode === 'change' && plan)
+  const done = !!parsed || !!plan
 
   return (
     <>
-      <p style={blurb}>Describe a system to build, or a change to make — c4hero turns it into model updates you can review.</p>
+      <p style={blurb}>Say what you want — c4hero figures out whether you’re building a new model or changing the current one.</p>
 
-      <div style={{ display: 'inline-flex', alignSelf: 'flex-start', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
-        <button onClick={() => pick('new')} style={composeToggleBtn(mode === 'new')}><Sparkles size={13} /> New model</button>
-        <button onClick={() => pick('change')} disabled={!workspace} title={workspace ? undefined : 'Open a workspace to change the current model'}
-          style={{ ...composeToggleBtn(mode === 'change'), borderLeft: `1px solid ${C.border}`, opacity: workspace ? 1 : 0.5 }}><Pencil size={13} /> Change current</button>
+      <Field value={text} onChange={setText} grow={!done} onSubmit={submit} placeholder="Describe a system to build, or a change to make — e.g. add a Redis cache between the Web App and the database." />
+      <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 9, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
+        <DetIcon size={13} color={C.accent} style={{ flex: 'none' }} />
+        <span style={{ fontSize: 11.5, color: C.text2, lineHeight: 1.4 }}>{detectedHint}</span>
       </div>
-
-      <Field value={text} onChange={setText} grow={!done} onSubmit={submit} placeholder={placeholder} />
-      <RunButton label={mode === 'new' ? 'Generate diagram' : 'Plan changes'} loading={run.loading} disabled={!canRun} onClick={submit} />
+      <RunButton label={detected === 'new' ? 'Generate diagram' : 'Plan changes'} loading={run.loading} disabled={!canRun} onClick={submit} />
       <ErrorLine error={run.error} />
 
-      {mode === 'new' && parsed && (
+      {parsed && (
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <span style={kicker}>Preview</span>
@@ -348,7 +358,7 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
         </Card>
       )}
 
-      {mode === 'change' && plan && (
+      {plan && (
         <Card>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{planLines.length} proposed change(s)</div>
           <PlanList lines={planLines} />
@@ -1322,7 +1332,4 @@ const pillGrey: React.CSSProperties = { fontSize: 10.5, padding: '1px 8px', bord
 const segWrap: React.CSSProperties = { display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }
 function segBtn(active: boolean): React.CSSProperties {
   return { height: 28, padding: '0 12px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: active ? C.accent : 'transparent', color: active ? C.ink : C.muted }
-}
-function composeToggleBtn(active: boolean): React.CSSProperties {
-  return { height: 30, padding: '0 13px', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: active ? 'rgba(88,166,255,0.16)' : 'transparent', color: active ? C.accent : C.muted }
 }
