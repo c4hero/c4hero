@@ -272,16 +272,16 @@ function HomeLauncher({ onPick, workspace }: { onPick: (t: TabId) => void; works
     <>
       {workspace && <ModelHealthCard gaps={gaps} onPick={onPick} />}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2, marginBottom: 10 }}>What do you want to do?</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {AI_FEATURES.map((f) => {
           const Icon = f.icon
           return (
             <button key={f.id} onClick={() => onPick(f.id)} className="c4ai-card"
-              style={{ display: 'flex', gap: 11, alignItems: 'center', textAlign: 'left', padding: '10px 12px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }}>
-              <span style={{ width: 32, height: 32, flex: 'none', borderRadius: 9, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Icon size={16} /></span>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.text }}>{f.label}</span>
-                <span style={{ display: 'block', fontSize: 11.5, color: C.muted2, lineHeight: 1.35, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.blurb}</span>
+              style={{ display: 'flex', gap: 10, alignItems: 'center', textAlign: 'left', padding: '7px 11px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }}>
+              <span style={{ width: 28, height: 28, flex: 'none', borderRadius: 8, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Icon size={15} /></span>
+              <span style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 7, overflow: 'hidden' }}>
+                <span style={{ flex: 'none', fontSize: 13, fontWeight: 600, color: C.text }}>{f.label}</span>
+                <span style={{ minWidth: 0, fontSize: 11.5, color: C.muted2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.blurb}</span>
               </span>
             </button>
           )
