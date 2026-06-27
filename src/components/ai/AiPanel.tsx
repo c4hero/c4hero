@@ -246,7 +246,7 @@ function ModelHealthCard({ gaps, onPick }: { gaps: ModelGap[]; onPick: (t: TabId
           <Check size={14} color={C.green} /> Looks tidy — everything’s described, connected, and typed.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div data-scroll style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 138, overflowY: 'auto' }}>
           {gaps.map((g) => {
             const m = GAP_META[g.id]
             const Icon = m.icon
