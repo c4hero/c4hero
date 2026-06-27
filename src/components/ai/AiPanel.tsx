@@ -215,7 +215,7 @@ function AppView({
       {/* body */}
       <div data-scroll style={{ padding: '18px 20px 22px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {tab === 'home' ? (
-          <HomeLauncher onPick={setTab} workspace={workspace} />
+          <HomeLauncher onPick={setTab} provider={provider} workspace={workspace} />
         ) : section?.needsWorkspace && !workspace ? (
           <Empty>Open or create a workspace to use this feature.</Empty>
         ) : (
@@ -226,15 +226,47 @@ function AppView({
   )
 }
 
-const GAP_META: Record<ModelGapId, { icon: LucideIcon; tab: TabId; action: string }> = {
-  descriptions: { icon: Wand2, tab: 'review', action: 'Auto-write' },
-  unconnected: { icon: Unlink, tab: 'interview', action: 'Add links' },
-  technology: { icon: Cpu, tab: 'review', action: 'Review' },
-  emptySystems: { icon: Box, tab: 'review', action: 'Review' },
+const GAP_META: Record<ModelGapId, { icon: LucideIcon; action: string }> = {
+  descriptions: { icon: Wand2, action: 'Write' },
+  unconnected: { icon: Unlink, action: 'Connect' },
+  technology: { icon: Cpu, action: 'Set tech' },
+  emptySystems: { icon: Box, action: 'Build' },
 }
 
-// Instant, no-AI model-health readout on Home. Each gap routes to its fix.
-function ModelHealthCard({ gaps, onPick }: { gaps: ModelGap[]; onPick: (t: TabId) => void }) {
+// Instruction per gap for the AI to fix it in place (descriptions uses the
+// dedicated auto-describe path instead).
+const GAP_FIX: Record<Exclude<ModelGapId, 'descriptions'>, string> = {
+  technology: 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.',
+  unconnected: 'Several elements have no relationships. Add the relationships the model implies for them, connecting each unconnected element where an interaction is clearly suggested by the names and descriptions. Do not invent unlikely connections, and do not change anything else.',
+  emptySystems: 'Each internal software system that has no containers should get the containers its name and description imply — give each a short description and a technology. Do not modify other systems.',
+}
+
+// Instant, no-AI model-health readout on Home. Clicking a gap fixes it in place.
+function ModelHealthCard({ gaps, provider, workspace }: { gaps: ModelGap[]; provider: AiProvider; workspace: Workspace }) {
+  const [busy, setBusy] = useState<ModelGapId | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function fixGap(g: ModelGap) {
+    if (busy) return
+    setBusy(g.id); setError(null)
+    try {
+      if (g.id === 'descriptions') {
+        const preview = buildDescribePreview(await autoDescribe(provider, workspace), workspace)
+        const s = useWorkspaceStore.getState()
+        const actions: DescribeActions = { updateElement: (id, p) => s.updateElement(id, p), updateRelationship: (id, p) => s.updateRelationship(id, p) }
+        applyDescribePreview(preview, actions)
+      } else {
+        applyPlanToStore(await planEdit(provider, workspace, GAP_FIX[g.id]), workspace)
+        // Adding elements toggles the panel closed (inspector rule) — keep it open.
+        useWorkspaceStore.getState().setAiPanelOpen(true)
+      }
+    } catch (err) {
+      setError(aiErrorMessage(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <div style={{ marginBottom: 14, padding: '12px 13px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.card }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gaps.length ? 8 : 0 }}>
@@ -250,27 +282,30 @@ function ModelHealthCard({ gaps, onPick }: { gaps: ModelGap[]; onPick: (t: TabId
           {gaps.map((g) => {
             const m = GAP_META[g.id]
             const Icon = m.icon
+            const fixing = busy === g.id
             return (
-              <button key={g.id} onClick={() => onPick(m.tab)} className="c4ai-sec"
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 9px', borderRadius: 9, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
-                <span style={{ width: 26, height: 26, flex: 'none', borderRadius: 7, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Icon size={14} /></span>
+              <button key={g.id} onClick={() => fixGap(g)} disabled={!!busy} className="c4ai-sec"
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 9px', borderRadius: 9, border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', textAlign: 'left', opacity: busy && !fixing ? 0.5 : 1 }}>
+                <span style={{ width: 26, height: 26, flex: 'none', borderRadius: 7, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}>
+                  {fixing ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
+                </span>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.text2 }}>{g.label}</span>
-                <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>{m.action}</span>
-                <ChevronRight size={14} color={C.muted3} style={{ flex: 'none' }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: fixing ? C.muted : C.accent, whiteSpace: 'nowrap' }}>{fixing ? 'Fixing…' : m.action}</span>
               </button>
             )
           })}
         </div>
       )}
+      <ErrorLine error={error} />
     </div>
   )
 }
 
-function HomeLauncher({ onPick, workspace }: { onPick: (t: TabId) => void; workspace: Workspace | null }) {
+function HomeLauncher({ onPick, provider, workspace }: { onPick: (t: TabId) => void; provider: AiProvider; workspace: Workspace | null }) {
   const gaps = workspace ? modelHealth(workspace) : []
   return (
     <>
-      {workspace && <ModelHealthCard gaps={gaps} onPick={onPick} />}
+      {workspace && <ModelHealthCard gaps={gaps} provider={provider} workspace={workspace} />}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2, marginBottom: 10 }}>What do you want to do?</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {AI_FEATURES.map((f) => {
