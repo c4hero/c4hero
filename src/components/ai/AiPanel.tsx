@@ -236,8 +236,8 @@ const GAP_META: Record<ModelGapId, { icon: LucideIcon; tab: TabId; action: strin
 // Instant, no-AI model-health readout on Home. Each gap routes to its fix.
 function ModelHealthCard({ gaps, onPick }: { gaps: ModelGap[]; onPick: (t: TabId) => void }) {
   return (
-    <div style={{ marginBottom: 18, padding: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gaps.length ? 10 : 0 }}>
+    <div style={{ marginBottom: 14, padding: '12px 13px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.card }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gaps.length ? 8 : 0 }}>
         <Activity size={15} color={C.accent} />
         <span style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>Model health</span>
       </div>
@@ -271,17 +271,17 @@ function HomeLauncher({ onPick, workspace }: { onPick: (t: TabId) => void; works
   return (
     <>
       {workspace && <ModelHealthCard gaps={gaps} onPick={onPick} />}
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2, marginBottom: 13 }}>What do you want to do?</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2, marginBottom: 10 }}>What do you want to do?</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {AI_FEATURES.map((f) => {
           const Icon = f.icon
           return (
             <button key={f.id} onClick={() => onPick(f.id)} className="c4ai-card"
-              style={{ display: 'flex', gap: 13, alignItems: 'flex-start', textAlign: 'left', padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }}>
-              <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 10, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Icon size={19} /></span>
+              style={{ display: 'flex', gap: 11, alignItems: 'center', textAlign: 'left', padding: '10px 12px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }}>
+              <span style={{ width: 32, height: 32, flex: 'none', borderRadius: 9, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Icon size={16} /></span>
               <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>{f.label}</span>
-                <span style={{ display: 'block', fontSize: 12, color: C.muted2, lineHeight: 1.45, marginTop: 2 }}>{f.blurb}</span>
+                <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.text }}>{f.label}</span>
+                <span style={{ display: 'block', fontSize: 11.5, color: C.muted2, lineHeight: 1.35, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.blurb}</span>
               </span>
             </button>
           )
