@@ -456,7 +456,9 @@ function AppView({
     }
   }
 
-  const completePct = workspace ? modelHealthPercent(workspace) : 100
+  // Memoized — AppView re-renders on every wizard keystroke; without this each
+  // one would re-walk the whole model tree via modelHealthPercent.
+  const completePct = useMemo(() => (workspace ? modelHealthPercent(workspace) : 100), [workspace])
 
   // A key that changes on every screen / wizard sub-state change (but NOT between
   // wizard steps — those animate per-card). Drives the body entrance animation so
@@ -613,7 +615,7 @@ function HomeDashboard({
   onInterview: () => void
   onRepo: () => void
 }) {
-  const missingCount = workspace ? missingInfoGaps(workspace).length : 0
+  const missingCount = useMemo(() => (workspace ? missingInfoGaps(workspace).length : 0), [workspace])
   const allClear = missingCount === 0
 
   if (!workspace) {
