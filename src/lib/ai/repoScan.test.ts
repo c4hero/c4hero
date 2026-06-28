@@ -76,4 +76,14 @@ describe('mergeRepoProposals', () => {
   it('keeps containers with the same name under different parents', () => {
     expect(mergeRepoProposals([c('db', 'orders'), c('db', 'billing')])).toHaveLength(2)
   })
+
+  it('orders parents before children so applyEditPlan can resolve them', () => {
+    const sys: RepoProposal = { op: { op: 'addSoftwareSystem', ref: 'orders', name: 'Orders' }, src: 'x', label: 'Orders' }
+    const cont: RepoProposal = { op: { op: 'addContainer', ref: 'api', parent: 'Orders', name: 'API' }, src: 'x', label: 'API' }
+    const comp: RepoProposal = { op: { op: 'addComponent', ref: 'svc', parent: 'API', name: 'Service' }, src: 'x', label: 'Service' }
+    const link = rel('API', 'db')
+    // Feed them out of order (component first); merge must reorder.
+    const ranks = mergeRepoProposals([comp, link, cont, sys]).map((p) => p.op.op)
+    expect(ranks).toEqual(['addSoftwareSystem', 'addContainer', 'addComponent', 'addRelationship'])
+  })
 })

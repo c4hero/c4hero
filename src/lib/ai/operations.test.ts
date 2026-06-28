@@ -161,6 +161,17 @@ describe('applyEditPlan — parent-type and existence guards', () => {
     expect(result.skippedCount).toBe(2)
   })
 
+  it('skips addContainer under an external software system (the UI forbids it)', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'addSoftwareSystem', ref: 'ext', name: 'Stripe', external: true },
+      { op: 'addContainer', ref: 'c', parent: 'ext', name: 'API' },
+    ] }, actions, ws)
+    expect(actions.addContainer).not.toHaveBeenCalled()
+    expect(result.applied.find((a) => a.op.op === 'addContainer')).toMatchObject({ ok: false, reason: 'parent is an external system' })
+  })
+
   it('skips addComponent when the parent is not a container', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()

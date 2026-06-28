@@ -492,7 +492,7 @@ function AppView({
               step={cur} idx={curIdx} total={queue.length}
               draft={drafts[cur.key] ?? ''} draftLoading={draftsLoading && (drafts[cur.key] ?? '') === ''}
               onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
-              onRewrite={() => { if (workspace && cur.type === 'fix') rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
+              onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
               onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace)) : undefined}
               onApply={applyStep} onSkip={skipStep} onDismiss={() => advance(cur.key, 'dismiss')}
             />
@@ -738,12 +738,14 @@ function WizardStep({
 
 function FixCard({ gap, draft, draftLoading, onDraft, onRewrite, onReveal, onApply, onSkip }: {
   gap: MissingGap; draft: string; draftLoading: boolean
-  onDraft: (v: string) => void; onRewrite: () => void; onReveal?: () => void; onApply: () => void; onSkip: () => void
+  onDraft: (v: string) => void; onRewrite: () => void | Promise<void>; onReveal?: () => void; onApply: () => void; onSkip: () => void
 }) {
   const k = KIND[gap.kind]
   const Icon = k.icon
   const [regen, setRegen] = useState(false)
-  function rewrite() { setRegen(true); Promise.resolve(onRewrite()).finally(() => setTimeout(() => setRegen(false), 300)) }
+  // Hold the spinner until the actual rewrite call settles (onRewrite returns the
+  // async rewriteDraft promise), not a fixed timer.
+  function rewrite() { setRegen(true); Promise.resolve(onRewrite()).finally(() => setRegen(false)) }
 
   return (
     <div style={{ marginTop: 18, animation: 'c4ai-next .3s cubic-bezier(0.16,1,0.3,1) both' }}>

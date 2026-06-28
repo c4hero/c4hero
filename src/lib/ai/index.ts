@@ -15,7 +15,6 @@ export { AiError, aiErrorMessage } from './types'
 
 export { findingsToMarkdown, sortedFindings, isActionable } from './review'
 export { classifyScope, type PlanScope } from './planScope'
-export { modelHealth, type ModelGap, type ModelGapId } from './health'
 export {
   missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp,
   type MissingGap, type GapKind,

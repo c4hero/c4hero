@@ -37,7 +37,15 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
     throw new AiError('invalid-response', 'The model declined this request.')
   }
   const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? '').join('')
-  if (!text.trim()) throw new AiError('invalid-response', 'The model returned an empty response.')
+  if (!text.trim()) {
+    // Reasoning ("thinking") models — e.g. the default Gemini 2.5 Flash — can
+    // spend the whole output budget on internal reasoning and return no content
+    // with finishReason MAX_TOKENS. Give an actionable error, not a bare "empty".
+    if (candidate?.finishReason === 'MAX_TOKENS') {
+      throw new AiError('invalid-response', 'The model spent its entire output budget on reasoning and returned no answer. Try a smaller scope, or pick a non-reasoning model in AI settings.')
+    }
+    throw new AiError('invalid-response', 'The model returned an empty response.')
+  }
   return text
 }
 
@@ -56,7 +64,9 @@ export function createGeminiProvider(config: AiProviderConfig): AiProvider {
       const text = await call(config, {
         systemInstruction: { parts: [{ text: system }] },
         contents: toContents(req.history, req.user),
-        generationConfig: { maxOutputTokens: req.maxTokens ?? 4000, responseMimeType: 'application/json', temperature: req.temperature ?? 0 },
+        // Higher floor than `complete`'s caller passes: reasoning models share
+        // this budget with their thinking tokens, so structured output needs room.
+        generationConfig: { maxOutputTokens: req.maxTokens ?? 8000, responseMimeType: 'application/json', temperature: req.temperature ?? 0 },
       })
       return parseAndValidate(text, req.validate, `Gemini (${config.model})`)
     },

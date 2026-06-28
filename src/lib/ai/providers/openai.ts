@@ -30,7 +30,15 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
     throw new AiError('invalid-response', 'The model declined this request.')
   }
   const text = choice?.message?.content ?? ''
-  if (!text.trim()) throw new AiError('invalid-response', 'The model returned an empty response.')
+  if (!text.trim()) {
+    // Reasoning models — e.g. the default GPT-5 mini — count reasoning tokens
+    // against the completion budget and can stop with finish_reason 'length'
+    // before emitting any visible content. Give an actionable error.
+    if (choice?.finish_reason === 'length') {
+      throw new AiError('invalid-response', 'The model spent its entire output budget on reasoning and returned no answer. Try a smaller scope, or pick a non-reasoning model in AI settings.')
+    }
+    throw new AiError('invalid-response', 'The model returned an empty response.')
+  }
   return text
 }
 
@@ -58,7 +66,9 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
       // JSON mode requires the word "json" in the prompt; the schema block supplies it.
       const system = `${req.system}\n\nReturn ONLY a JSON object that conforms to this JSON Schema:\n${JSON.stringify(req.schema)}`
       const text = await call(config, {
-        max_completion_tokens: req.maxTokens ?? 4000,
+        // Higher floor than the caller passes: reasoning models share this budget
+        // with their reasoning tokens, so structured output needs room.
+        max_completion_tokens: req.maxTokens ?? 8000,
         temperature: req.temperature,
         messages: messages(system, req.user, req.history),
         response_format: { type: 'json_object' },

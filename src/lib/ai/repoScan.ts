@@ -155,14 +155,38 @@ function proposalKey(p: RepoProposal): string {
   }
 }
 
+// Apply order rank: a parent must exist before its child resolves. People and
+// systems first, then containers, then components, then relationships (which
+// reference elements), then everything else. applyEditPlan processes proposals
+// in this order, so emitting a component before its parent system would leave
+// the parent unresolvable and the child silently dropped.
+function opRank(p: RepoProposal): number {
+  switch (p.op.op) {
+    case 'addPerson':
+    case 'addSoftwareSystem': return 0
+    case 'addContainer': return 1
+    case 'addComponent': return 2
+    case 'addRelationship': return 3
+    default: return 4
+  }
+}
+
 /** Merge proposals from one or more scan passes into a deduped, deterministically
  *  ordered set — the union, so multiple passes converge on a stable, complete
- *  result rather than whatever a single (sampled) pass happened to return. */
+ *  result rather than whatever a single (sampled) pass happened to return.
+ *  Ordered parents-before-children so applyEditPlan can resolve every parent. */
 export function mergeRepoProposals(proposals: RepoProposal[]): RepoProposal[] {
   const byKey = new Map<string, RepoProposal>()
   for (const p of proposals) {
     const k = proposalKey(p)
     if (!byKey.has(k)) byKey.set(k, p)
   }
-  return [...byKey.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([, p]) => p)
+  return [...byKey.values()].sort((a, b) => {
+    const r = opRank(a) - opRank(b)
+    if (r !== 0) return r
+    // Stable tie-break within a rank for deterministic output.
+    const ka = proposalKey(a)
+    const kb = proposalKey(b)
+    return ka < kb ? -1 : ka > kb ? 1 : 0
+  })
 }

@@ -56,6 +56,11 @@ export function applyEditPlan(
     else if (el.type === 'container') containerIds.add(el.id)
   }
   const relIds = new Set(ws.model.relationships.map((r) => r.id))
+  // External systems can't hold containers (the UI forbids it via getCreatableTypes);
+  // reject AI ops that would create that otherwise-impossible model state.
+  const externalSystemIds = new Set(
+    ws.model.softwareSystems.filter((s) => s.location === 'External').map((s) => s.id),
+  )
   const applied: AppliedOp[] = []
 
   // Register a newly-created element so later ops can target it by ref, id, or name.
@@ -97,6 +102,7 @@ export function applyEditPlan(
         const id = actions.addSoftwareSystem(op.name.trim(), op.external)
         register(op.ref, id, op.name)
         systemIds.add(id)
+        if (op.external) externalSystemIds.add(id)
         if (op.description?.trim()) actions.updateElement(id, { description: op.description.trim() })
         ok(op)
         break
@@ -105,6 +111,7 @@ export function applyEditPlan(
         const parentId = resolve(op.parent)
         if (!parentId) { skip(op, 'unknown parent system'); break }
         if (!systemIds.has(parentId)) { skip(op, 'parent is not a software system'); break }
+        if (externalSystemIds.has(parentId)) { skip(op, 'parent is an external system'); break }
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addContainer(parentId, op.name.trim())
         register(op.ref, id, op.name)
