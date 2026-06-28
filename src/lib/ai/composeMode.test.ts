@@ -19,13 +19,16 @@ describe('detectComposeMode', () => {
     expect(detectComposeMode('Update my model to a new architecture')).toBe('change')
     expect(detectComposeMode('Migrate to a new microservices architecture')).toBe('change')
     expect(detectComposeMode('Rename the service and move it to a new layer')).toBe('change')
+    // "new architecture/diagram/system landscape" is an addition, not a replace.
+    expect(detectComposeMode('Create a new system landscape for billing')).toBe('change')
+    expect(detectComposeMode('Design a new architecture diagram')).toBe('change')
   })
 
   it('replaces the model only on an explicit start-fresh / new-model intent', () => {
     expect(detectComposeMode('Create a new system from scratch with a web app and a database')).toBe('new')
     expect(detectComposeMode('Start over with a fresh diagram')).toBe('new')
-    expect(detectComposeMode('Design a new architecture for an ordering service')).toBe('new')
     expect(detectComposeMode('A new model for a banking system')).toBe('new')
     expect(detectComposeMode('Replace my model with a microservices design')).toBe('new')
+    expect(detectComposeMode('Build a brand new workspace')).toBe('new')
   })
 })

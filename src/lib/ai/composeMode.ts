@@ -9,8 +9,12 @@
 // over a non-empty workspace, as a second line of defence.
 // Pure + unit-tested so the heuristic can evolve without touching the panel.
 
-// Nouns that denote the whole model (vs. an element like a service/container).
-const MODEL_NOUN = '(model|diagram|workspace|architecture|system landscape)'
+// Nouns that denote the WHOLE model (vs. an element, a view, or a sub-diagram).
+// Deliberately narrow: "model"/"workspace" unambiguously mean the entire thing,
+// whereas "a new architecture/diagram/system landscape" is usually an addition
+// to the current model, so those stay a 'change' (and the UI confirms a replace
+// anyway).
+const MODEL_NOUN = '(model|workspace)'
 
 export function detectComposeMode(text: string): 'new' | 'change' {
   const t = text.toLowerCase()

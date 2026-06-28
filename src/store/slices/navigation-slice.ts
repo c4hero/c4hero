@@ -55,23 +55,29 @@ export const createNavigationSlice: StateCreator<
   clearFocusElement: () => set({ focusElementId: null }),
 
   // After a batch (AI) apply that suppressed per-op view switching, navigate
-  // ONCE to the view that best shows the newly-created elements — the one
-  // containing the most of them, preferring more specific views (component >
-  // container > context > landscape). A single, predictable jump, not per-op.
+  // ONCE to the view that best shows the newly-created elements. Prefer DEPTH:
+  // the most specific view tier (component > container > context > landscape)
+  // that contains any new element wins, tie-broken by count within the tier.
+  // (A plain max-count would bias to landscape/context, which accumulate every
+  // new system+person, so "add a container/component" would land you on a
+  // high-level diagram instead of the deep elements you just created.)
   focusViewForElements: (ids) => set((s) => {
     if (!s.workspace || ids.length === 0) return
     const idSet = new Set(ids)
-    const ordered = [
-      ...s.workspace.views.componentViews,
-      ...s.workspace.views.containerViews,
-      ...s.workspace.views.systemContextViews,
-      ...s.workspace.views.systemLandscapeViews,
+    const tiers = [
+      s.workspace.views.componentViews,
+      s.workspace.views.containerViews,
+      s.workspace.views.systemContextViews,
+      s.workspace.views.systemLandscapeViews,
     ]
     let best: string | null = null
-    let bestCount = 0
-    for (const v of ordered) {
-      const count = v.elements.reduce((n, e) => n + (idSet.has(e.id) ? 1 : 0), 0)
-      if (count > bestCount) { bestCount = count; best = v.key }
+    for (const tier of tiers) {
+      let bestCount = 0
+      for (const v of tier) {
+        const count = v.elements.reduce((n, e) => n + (idSet.has(e.id) ? 1 : 0), 0)
+        if (count > bestCount) { bestCount = count; best = v.key }
+      }
+      if (best) break // most-specific tier with any new element wins
     }
     if (best && best !== s.activeViewKey) {
       if (s.activeViewKey) s.viewHistory.push(s.activeViewKey)

@@ -14,13 +14,14 @@ export function clearAiSession(prefix?: string): void {
   for (const k of [...AI_SESSION.keys()]) if (k.startsWith(prefix)) AI_SESSION.delete(k)
 }
 
-/** Drop the whole cache when the active workspace changes, so one model's
- *  in-progress flow can never resume on top of another. Synchronous (call it in
- *  render before the persistent reads) so there's no stale-restore flash. */
-export function ensureSessionForWorkspace(name: string | null): void {
-  if (AI_SESSION.get('__ws') !== name) {
+/** Drop the whole cache when the active diagram changes, so one model's
+ *  in-progress flow can never resume on top of another. `key` must be a STABLE,
+ *  unique diagram identifier (the route, not the workspace name). Synchronous
+ *  (call it in render before the persistent reads) so there's no stale flash. */
+export function ensureSessionForWorkspace(key: string | null): void {
+  if (AI_SESSION.get('__ws') !== key) {
     AI_SESSION.clear()
-    AI_SESSION.set('__ws', name)
+    AI_SESSION.set('__ws', key)
   }
 }
 

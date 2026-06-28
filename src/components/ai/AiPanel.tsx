@@ -282,7 +282,9 @@ function AppView({
   onClose: () => void
 }) {
   // Drop any cached flow from a different workspace before restoring below.
-  ensureSessionForWorkspace(workspace?.name ?? null)
+  // Key the resume cache on the diagram ROUTE, not the workspace name — names
+  // aren't unique (two "Untitled" diagrams would share a flow otherwise).
+  ensureSessionForWorkspace(typeof window !== 'undefined' ? window.location.pathname : null)
   const [view, setView] = usePersistentState<SweepView>('sweep.view', initialFeature ? FEATURE_TO_VIEW[initialFeature] : 'home')
 
   // Sweep state — persisted across close→reopen so an in-progress wizard resumes.

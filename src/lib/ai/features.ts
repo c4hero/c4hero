@@ -77,7 +77,9 @@ export async function suggestTags(
     user: `Element: ${target.name} (${target.type})${target.technology ? ` · tech: ${target.technology}` : ''}${target.description ? `\nDescription: ${target.description}` : ''}\n\n${vocabLine}\n\nReturn JSON: { "tags": string[] } with 0–4 tags that apply to this element.`,
     schema: { type: 'object', additionalProperties: false, properties: { tags: { type: 'array', items: { type: 'string' } } }, required: ['tags'] },
     validate: isRecord,
-    maxTokens: 300,
+    // Reasoning models share this budget with their thinking tokens; a tight cap
+    // would starve the (tiny) JSON output.
+    maxTokens: 1500,
   })
   const list = isRecord(raw) && Array.isArray((raw as { tags?: unknown }).tags) ? (raw as { tags: unknown[] }).tags : []
   const cleaned = list.map((t) => (typeof t === 'string' ? t.trim() : '')).filter(Boolean)
@@ -125,7 +127,10 @@ export async function interviewAsk(
     system: interviewSystem(ws, view),
     history,
     user: userMessage,
-    maxTokens: 600,
+    // The question itself is short, but the default models are reasoning models
+    // that spend thinking tokens from this same budget — keep enough headroom
+    // that the answer isn't starved (a 600 cap left interviews empty/truncated).
+    maxTokens: 2500,
   })
 }
 

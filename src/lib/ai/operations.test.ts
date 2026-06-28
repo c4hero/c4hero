@@ -188,6 +188,18 @@ describe('applyEditPlan — parent-type and existence guards', () => {
     expect(result.appliedCount).toBe(1)
   })
 
+  it('applies parents before children even when the plan emits them out of order', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'addComponent', ref: 'svc', parent: 'api', name: 'Service' }, // child emitted first
+      { op: 'addContainer', ref: 'api', parent: 'sys', name: 'API' },
+      { op: 'addSoftwareSystem', ref: 'sys', name: 'Billing' },           // grandparent last
+    ] }, actions, ws)
+    expect(result.appliedCount).toBe(3)
+    expect(result.skippedCount).toBe(0)
+  })
+
   it('resolves children against elements created earlier in the same plan', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()

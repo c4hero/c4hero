@@ -1,6 +1,6 @@
 import type { Workspace } from '@/types/model'
 import type { EditOp, EditPlan } from './types'
-import { elementNameMap, elementIdSet, flattenElements } from './context'
+import { elementNameMap, flattenElements } from './context'
 
 // Apply an AI-produced EditPlan against the workspace store. The applier is
 // decoupled from zustand via the EditActions interface so it can be unit-tested
@@ -31,25 +31,44 @@ export interface ApplyResult {
   skippedCount: number
 }
 
-/** Apply each operation in order, resolving refs to real ids. Invalid ops
- *  (unknown parent, missing element, empty name) are skipped, not fatal. */
+// Dependency order: a parent/endpoint must be created before whatever references
+// it. People+systems, then containers, then components, then relationships, then
+// updates, then deletes (last, so nothing a relationship needs is gone first).
+function opRank(op: EditOp): number {
+  switch (op.op) {
+    case 'addPerson':
+    case 'addSoftwareSystem': return 0
+    case 'addContainer': return 1
+    case 'addComponent': return 2
+    case 'addRelationship': return 3
+    case 'updateElement':
+    case 'updateRelationship': return 4
+    case 'deleteElement': return 5
+    default: return 4
+  }
+}
+
+/** Apply each operation in dependency order, resolving refs to real ids. Invalid
+ *  ops (unknown parent, missing element, empty name) are skipped, not fatal. */
 export function applyEditPlan(
   plan: EditPlan,
   actions: EditActions,
   ws: Workspace,
 ): ApplyResult {
   const refMap = new Map<string, string>()
-  const validIds = new Set(elementIdSet(ws))
   // Name → id, so a relationship that references an element by its display name
   // (a common model behaviour, especially from the interview) still resolves.
   // First occurrence wins for duplicate names.
   const nameToId = new Map<string, string>()
-  // Track element types so we can validate a parent BEFORE creating a child —
-  // the store's addContainer/addComponent return a fresh id even when they skip
-  // creation (wrong parent type), so a post-hoc `if (!id)` guard is dead.
+  // Built from a SINGLE model walk: the set of valid ids, plus per-type id sets
+  // so we can validate a parent BEFORE creating a child (the store's
+  // addContainer/addComponent return a fresh id even when they skip creation on
+  // a wrong parent type, so a post-hoc `if (!id)` guard is dead).
+  const validIds = new Set<string>()
   const systemIds = new Set<string>()
   const containerIds = new Set<string>()
   for (const el of flattenElements(ws)) {
+    validIds.add(el.id)
     const key = el.name.trim().toLowerCase()
     if (key && !nameToId.has(key)) nameToId.set(key, el.id)
     if (el.type === 'softwareSystem') systemIds.add(el.id)
@@ -87,7 +106,13 @@ export function applyEditPlan(
   const skip = (op: EditOp, reason: string) => applied.push({ op, ok: false, reason })
   const ok = (op: EditOp) => applied.push({ op, ok: true })
 
-  for (const op of plan.operations) {
+  // Apply parents before children (and relationships/updates after the elements
+  // they reference, deletes last). A model — especially planEdit/interview, which
+  // unlike repoScan isn't pre-sorted — may emit a child before its parent; in
+  // emitted order resolve() wouldn't find the parent and the child would be
+  // dropped as "unknown parent". Stable sort preserves order within a rank.
+  const ordered = [...plan.operations].sort((a, b) => opRank(a) - opRank(b))
+  for (const op of ordered) {
     switch (op.op) {
       case 'addPerson': {
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
