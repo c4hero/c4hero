@@ -1326,10 +1326,13 @@ body {
 [data-canvas-panning] .c4ai {
   opacity: 0.4 !important;
   pointer-events: none !important;
-  /* Drop borders/shadows while faded so a panel's edge doesn't read as a thin
-     line floating over the canvas. */
+  /* Drop borders/shadows AND the backdrop blur while faded — a partially
+     transparent element that still blurs the canvas behind it leaves a hard
+     blur-boundary edge that reads as a thin line floating over the diagram. */
   border-color: transparent !important;
   box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .glass-panel {

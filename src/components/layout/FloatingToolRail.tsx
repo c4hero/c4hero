@@ -45,6 +45,7 @@ export default function FloatingToolRail() {
   const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
   const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
   const aiReady = useAiSettingsStore(isAiReady)
+  const [aiHover, setAiHover] = useState(false)
 
 
 
@@ -145,12 +146,14 @@ export default function FloatingToolRail() {
           (green = key set + AI on, grey = off / needs setup). */}
       <button
         type="button"
-        className="glass-panel hover-lift-inactive"
-        title={aiPanelOpen ? 'Hide AI assistant' : aiReady ? 'AI assistant' : 'AI assistant — set up your key'}
+        className="glass-panel"
+        title={aiPanelOpen ? 'Hide AI assistant (I)' : aiReady ? 'AI assistant (I)' : 'AI assistant — set up your key (I)'}
         aria-label="AI assistant"
         aria-pressed={aiPanelOpen}
         data-active={aiPanelOpen ? 'true' : undefined}
         onClick={() => setAiPanelOpen(!useWorkspaceStore.getState().aiPanelOpen)}
+        onPointerEnter={() => setAiHover(true)}
+        onPointerLeave={() => setAiHover(false)}
         style={{
           position: 'relative',
           minWidth: 44,
@@ -160,6 +163,11 @@ export default function FloatingToolRail() {
           justifyContent: 'center',
           borderRadius: 'var(--radius-lg)',
           cursor: 'pointer',
+          // Self-contained hover so it reads consistently: keep the glass fill
+          // and brighten on hover. The shared hover-lift class instead *replaces*
+          // the background, which made this standalone glass button flicker.
+          transition: 'filter 0.12s ease, color 0.12s ease, background 0.12s ease',
+          filter: aiHover ? 'brightness(1.18)' : undefined,
           // Open = solid accent fill with a dark icon (clearly "on"); closed =
           // accent icon when ready, muted when off.
           color: aiPanelOpen ? 'var(--color-bg-primary)' : aiReady ? 'var(--color-accent)' : 'var(--color-text-muted)',
@@ -167,8 +175,8 @@ export default function FloatingToolRail() {
           borderColor: aiPanelOpen ? 'var(--color-accent)' : undefined,
         }}
       >
-        <Sparkles size={18} />
-        <span style={{ position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: '50%', background: aiReady ? '#22c55e' : 'var(--color-text-muted)', border: `2px solid ${aiPanelOpen ? 'var(--color-accent)' : 'var(--glass-bg-heavy)'}` }} />
+        <Sparkles size={18} style={{ pointerEvents: 'none' }} />
+        <span style={{ pointerEvents: 'none', position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: '50%', background: aiReady ? '#22c55e' : 'var(--color-text-muted)', border: `2px solid ${aiPanelOpen ? 'var(--color-accent)' : 'var(--glass-bg-heavy)'}` }} />
       </button>
 
     <div

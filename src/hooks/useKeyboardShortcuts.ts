@@ -143,6 +143,9 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   'a': (store) => {
     if (store.workspace) store.setAddElementPanelOpen(!store.addElementPanelOpen)
   },
+  'i': (store) => {
+    if (store.workspace) store.setAiPanelOpen(!store.aiPanelOpen)
+  },
   'h': (store) => {
     if (store.workspace) store.setHighlighterOpenFacet(store.highlighterOpenFacet ? null : 'tags')
   },
