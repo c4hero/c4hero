@@ -81,6 +81,7 @@
   "overrides": {
     "@rollup/plugin-terser": "^1.0.0",
     "postcss": "^8.5.12",
-    "serialize-javascript": "^7.0.5"
+    "serialize-javascript": "^7.0.5",
+    "undici": "^7.28.0"
   }
 }
