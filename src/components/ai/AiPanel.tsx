@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { clearAiSession, ensureSessionForWorkspace, usePersistentState } from './sessionCache'
 import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
@@ -280,13 +281,16 @@ function AppView({
   onOpenSettings: () => void
   onClose: () => void
 }) {
-  const [view, setView] = useState<SweepView>(() => (initialFeature ? FEATURE_TO_VIEW[initialFeature] : 'home'))
+  // Drop any cached flow from a different workspace before restoring below.
+  ensureSessionForWorkspace(workspace?.name ?? null)
+  const [view, setView] = usePersistentState<SweepView>('sweep.view', initialFeature ? FEATURE_TO_VIEW[initialFeature] : 'home')
 
-  // Sweep state.
-  const [queue, setQueue] = useState<Step[]>([])
-  const [curIdx, setCurIdx] = useState(0)
-  const [decisions, setDecisions] = useState<Record<string, StepStatus>>({})
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  // Sweep state — persisted across close→reopen so an in-progress wizard resumes.
+  const [queue, setQueue] = usePersistentState<Step[]>('sweep.queue', [])
+  const [curIdx, setCurIdx] = usePersistentState('sweep.curIdx', 0)
+  const [decisions, setDecisions] = usePersistentState<Record<string, StepStatus>>('sweep.decisions', {})
+  const [drafts, setDrafts] = usePersistentState<Record<string, string>>('sweep.drafts', {})
+  // Transient (in-flight) flags — not worth persisting.
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -443,6 +447,10 @@ function AppView({
       useWorkspaceStore.getState().setAiPanelOpen(true)
       setAppliedCount(result?.appliedCount ?? 0)
       setView('committed')
+      // The sweep is consumed — drop its cached resume state so reopening lands
+      // on Home, not a stale "committed"/wizard screen. (React keeps this render
+      // on the committed screen; only the persistence cache is cleared.)
+      clearAiSession('sweep')
     } finally {
       setCommitting(false)
     }
@@ -1159,17 +1167,23 @@ const INTERVIEW_TARGET = 5
 function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const view = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
-  const [history, setHistory] = useState<AiChatTurn[]>([])
-  const [qa, setQa] = useState<{ q: string; a: string }[]>([])
-  const [question, setQuestion] = useState<string | null>(null)
-  const [answer, setAnswer] = useState('')
+  // Conversation state persists across close→reopen so a long interview resumes.
+  const [history, setHistory] = usePersistentState<AiChatTurn[]>('interview.history', [])
+  const [qa, setQa] = usePersistentState<{ q: string; a: string }[]>('interview.qa', [])
+  const [question, setQuestion] = usePersistentState<string | null>('interview.question', null)
+  const [answer, setAnswer] = usePersistentState('interview.answer', '')
+  // The view the interview is grounded on. Pinned at start so switching views
+  // (or reopening on a different one) doesn't silently re-ground the questions.
+  const [pinnedKey, setPinnedKey] = usePersistentState<string | null>('interview.viewKey', null)
   const [plan, setPlan] = useState<EditPlan | null>(null)
   const [target, setTarget] = useState(INTERVIEW_TARGET)
   const [wrapUp, setWrapUp] = useState(false)
   const run = useAiRun()
   const started = history.length > 0
+  const groundKey = started && pinnedKey ? pinnedKey : activeViewKey
+  const view = workspace && groundKey ? getActiveView(workspace, groundKey) : undefined
+  const mismatched = started && !!pinnedKey && pinnedKey !== activeViewKey
 
   // Elements the current question names (≥3 chars, whole-word match) — surfaced
   // as chips and highlighted on the canvas so you can see what's being asked about.
@@ -1193,6 +1207,7 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
   const v: View = view
 
   function start() {
+    setPinnedKey(activeViewKey) // pin the interview to the view it began on
     setWrapUp(false); setTarget(INTERVIEW_TARGET); setQa([])
     run.go(async () => {
       const kickoff = interviewKickoffMessage(v)
@@ -1226,6 +1241,9 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
     }, setQuestion)
   }
   function keepGoing() { setWrapUp(false); setTarget((t) => t + INTERVIEW_TARGET) }
+  // Discard the pinned conversation and offer a fresh interview on the view the
+  // user is now looking at.
+  function reground() { setHistory([]); setQa([]); setQuestion(null); setAnswer(''); setPinnedKey(null); setWrapUp(false); setPlan(null) }
   // Build from the committed transcript (always ends on a question), so the plan
   // request alternates cleanly. An unsent draft answer is ignored.
   function finish() { run.go(() => interviewBuildPlan(provider, ws, v, history), setPlan) }
@@ -1236,6 +1254,13 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
 
   return (
     <>
+      {mismatched && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', marginBottom: 12, borderRadius: 9, border: '1px solid rgba(168,85,247,0.3)', background: 'rgba(168,85,247,0.08)', fontSize: 11.5, color: C.muted2 }}>
+          <MessagesSquare size={13} color="#c4b5fd" style={{ flex: 'none' }} />
+          <span style={{ flex: 1, minWidth: 0 }}>About <strong style={{ color: C.text2 }}>{viewLabel(v)}</strong> — you’re viewing a different one.</span>
+          <button onClick={reground} style={{ flex: 'none', border: 'none', background: 'transparent', color: '#c4b5fd', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>Re-ground</button>
+        </div>
+      )}
       {!started && !plan ? (
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '6px 0 2px' }}>
@@ -1324,7 +1349,7 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
           <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{planLines.length} proposed change(s) from your answers</div>
           <PlanList lines={planLines} />
           <Actions>
-            <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length} onClick={() => { applyPlanToStore(plan, ws); onClose() }}>Apply changes</button>
+            <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length} onClick={() => { applyPlanToStore(plan, ws); clearAiSession('interview'); onClose() }}>Apply changes</button>
             <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Back</button>
           </Actions>
         </Card>
