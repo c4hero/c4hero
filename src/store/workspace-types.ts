@@ -222,6 +222,7 @@ export interface WorkspaceState extends UndoState {
   aiPanelOpen: boolean
   aiPanelFeature: AiFeatureId | null
   setAiPanelOpen: (open: boolean, feature?: AiFeatureId | null) => void
+  clearAiPanelFeature: () => void
   aiSettingsOpen: boolean
   setAiSettingsOpen: (open: boolean) => void
   canvasGuideOpen: boolean

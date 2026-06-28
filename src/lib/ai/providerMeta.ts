@@ -85,5 +85,5 @@ export function getProviderMeta(id: AiProviderId): AiProviderMeta {
 }
 
 export function isAiProviderId(value: unknown): value is AiProviderId {
-  return value === 'anthropic' || value === 'openai' || value === 'gemini'
+  return AI_PROVIDER_IDS.includes(value as AiProviderId)
 }

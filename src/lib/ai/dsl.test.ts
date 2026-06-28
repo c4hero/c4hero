@@ -33,4 +33,16 @@ describe('extractDsl', () => {
   it('returns from workspace onward when braces are unbalanced', () => {
     expect(extractDsl('workspace "X" {\n  model {')).toContain('workspace "X" {')
   })
+
+  it('ignores braces inside quoted string literals', () => {
+    const dsl = 'workspace {\n  model {\n    a = person "Name with a } brace" "uses { and } in desc"\n  }\n}'
+    expect(extractDsl('prose\n' + dsl + '\ntrailing prose')).toBe(dsl)
+  })
+
+  it('does not let a brace in a description truncate the block', () => {
+    const dsl = 'workspace "X" {\n  model {\n    s = softwareSystem "S" "Emits a } then continues"\n  }\n}'
+    // Without string-awareness the first "}" inside the description would close
+    // the workspace early and drop the rest.
+    expect(extractDsl(dsl + '\nmore prose')).toBe(dsl)
+  })
 })

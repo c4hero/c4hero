@@ -1,6 +1,6 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest } from '../types'
 import { AiError } from '../types'
-import { httpFail, readErrorMessage, parseAndValidate } from './http'
+import { postJson, parseAndValidate } from './http'
 
 // Anthropic Messages API, called directly from the browser with the user's key.
 // Direct browser calls require the `anthropic-dangerous-direct-browser-access`
@@ -13,38 +13,17 @@ interface AnthropicBlock { type: string; text?: string }
 interface AnthropicResponse { content?: AnthropicBlock[]; stop_reason?: string }
 
 async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
-  let res: Response
-  try {
-    res = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': config.apiKey,
-        'anthropic-version': API_VERSION,
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({ model: config.model, ...body }),
-    })
-  } catch {
-    throw new AiError(
-      'connection',
-      "The browser blocked or failed the request to api.anthropic.com before it left. This is "
-      + 'usually a privacy/ad-block extension, a stale cached page (try a hard refresh or an '
-      + 'incognito window), or a network firewall — not your API key. Check the browser console '
-      + 'for the exact reason.',
-    )
-  }
-
-  if (!res.ok) {
-    httpFail(`Anthropic (${config.model})`, res.status, await readErrorMessage(res, `Request failed (${res.status})`))
-  }
-
-  let data: AnthropicResponse
-  try {
-    data = (await res.json()) as AnthropicResponse
-  } catch {
-    throw new AiError('invalid-response', 'Malformed response from Anthropic.')
-  }
+  const data = (await postJson({
+    url: API_URL,
+    headers: {
+      'x-api-key': config.apiKey,
+      'anthropic-version': API_VERSION,
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: { model: config.model, ...body },
+    host: 'api.anthropic.com',
+    label: `Anthropic (${config.model})`,
+  })) as AnthropicResponse
 
   if (data.stop_reason === 'refusal') {
     throw new AiError('invalid-response', 'The model declined this request.')

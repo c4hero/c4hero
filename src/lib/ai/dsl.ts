@@ -25,8 +25,16 @@ export function extractDsl(text: string): string {
   if (openIdx === -1) return unfenced.slice(start).trim()
 
   let depth = 0
+  let inString = false
   for (let i = openIdx; i < unfenced.length; i++) {
     const ch = unfenced[i]
+    // Skip braces inside a quoted string literal (a name/description like
+    // "the closing } symbol") — counting them would close the block early.
+    if (inString) {
+      if (ch === '"' && unfenced[i - 1] !== '\\') inString = false
+      continue
+    }
+    if (ch === '"') { inString = true; continue }
     if (ch === '{') depth++
     else if (ch === '}') {
       depth--

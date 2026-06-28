@@ -1,6 +1,6 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn } from '../types'
 import { AiError } from '../types'
-import { httpFail, readErrorMessage, parseAndValidate } from './http'
+import { postJson, parseAndValidate } from './http'
 
 // Google Gemini (Generative Language API), called directly from the browser with
 // the user's key. For structured output we request a JSON response MIME type and
@@ -24,36 +24,13 @@ function toContents(history: AiChatTurn[] | undefined, user: string) {
 
 async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
   const url = `${BASE}/${encodeURIComponent(config.model)}:generateContent`
-  let res: Response
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': config.apiKey,
-      },
-      body: JSON.stringify(body),
-    })
-  } catch {
-    throw new AiError(
-      'connection',
-      'The browser blocked or failed the request to generativelanguage.googleapis.com before it '
-      + 'left. This is usually a privacy/ad-block extension, a stale cached page (try a hard refresh '
-      + 'or an incognito window), or a network firewall — not your API key. Check the browser console '
-      + 'for the exact reason.',
-    )
-  }
-
-  if (!res.ok) {
-    httpFail(`Gemini (${config.model})`, res.status, await readErrorMessage(res, `Request failed (${res.status})`))
-  }
-
-  let data: GeminiResponse
-  try {
-    data = (await res.json()) as GeminiResponse
-  } catch {
-    throw new AiError('invalid-response', 'Malformed response from Gemini.')
-  }
+  const data = (await postJson({
+    url,
+    headers: { 'x-goog-api-key': config.apiKey },
+    body,
+    host: 'generativelanguage.googleapis.com',
+    label: `Gemini (${config.model})`,
+  })) as GeminiResponse
 
   const candidate = data.candidates?.[0]
   if (candidate?.finishReason === 'SAFETY' || candidate?.finishReason === 'BLOCKLIST') {

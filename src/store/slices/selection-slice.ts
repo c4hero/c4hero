@@ -24,19 +24,22 @@ export const createSelectionSlice: StateCreator<
     s.selectedElementIds = ids
     s.selectedRelationshipId = null
     s.selectedGroupId = null
-    if (ids.length > 0) { s.highlighterOpenFacet = null; s.aiPanelOpen = false }
+    // Opening the inspector closes BOTH AI surfaces (panel + settings); App.tsx
+    // renders the assistant whenever either flag is set, so closing only
+    // aiPanelOpen would leave AI settings stacked over the inspector.
+    if (ids.length > 0) { s.highlighterOpenFacet = null; s.aiPanelOpen = false; s.aiSettingsOpen = false }
   }),
   selectRelationship: (id) => set((s) => {
     s.selectedRelationshipId = id
     s.selectedElementIds = []
     s.selectedGroupId = null
-    if (id) { s.highlighterOpenFacet = null; s.aiPanelOpen = false }
+    if (id) { s.highlighterOpenFacet = null; s.aiPanelOpen = false; s.aiSettingsOpen = false }
   }),
   selectGroup: (id) => set((s) => {
     s.selectedGroupId = id
     s.selectedElementIds = []
     s.selectedRelationshipId = null
-    if (id) { s.highlighterOpenFacet = null; s.aiPanelOpen = false }
+    if (id) { s.highlighterOpenFacet = null; s.aiPanelOpen = false; s.aiSettingsOpen = false }
   }),
   clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 })

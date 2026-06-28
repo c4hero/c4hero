@@ -24,6 +24,47 @@ export function httpFail(provider: string, status: number, message: string): nev
   throw mapHttpError(status, message)
 }
 
+/** POST a JSON body and return the parsed JSON response, mapping every failure
+ *  mode to the shared AiError kinds. Each provider differs only in url/headers/
+ *  body/host/label, so the fetch + connection-error + non-OK + malformed-body
+ *  handling lives here instead of being copy-pasted three times. */
+export async function postJson(opts: {
+  url: string
+  headers: Record<string, string>
+  body: unknown
+  /** Host shown in the connection-error message, e.g. `api.anthropic.com`. */
+  host: string
+  /** Provider label for logs / errors, e.g. `Anthropic (claude-…)`. */
+  label: string
+}): Promise<unknown> {
+  let res: Response
+  try {
+    res = await fetch(opts.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...opts.headers },
+      body: JSON.stringify(opts.body),
+    })
+  } catch {
+    throw new AiError(
+      'connection',
+      `The browser blocked or failed the request to ${opts.host} before it left. This is `
+      + 'usually a privacy/ad-block extension, a stale cached page (try a hard refresh or an '
+      + 'incognito window), or a network firewall — not your API key. Check the browser console '
+      + 'for the exact reason.',
+    )
+  }
+
+  if (!res.ok) {
+    httpFail(opts.label, res.status, await readErrorMessage(res, `Request failed (${res.status})`))
+  }
+
+  try {
+    return await res.json()
+  } catch {
+    throw new AiError('invalid-response', `Malformed response from ${opts.label}.`)
+  }
+}
+
 /** Parse a JSON error body's `error.message` (Anthropic / OpenAI / Gemini all
  *  use this shape), falling back to a status string. */
 export async function readErrorMessage(res: Response, fallback: string): Promise<string> {

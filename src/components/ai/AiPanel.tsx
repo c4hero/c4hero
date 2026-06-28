@@ -15,7 +15,7 @@ import { downloadFile } from '@/lib/exportUtils'
 import type { View, Workspace } from '@/types/model'
 import {
   createProvider, aiErrorMessage,
-  generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr,
+  generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr, detectComposeMode,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
   scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
@@ -362,11 +362,18 @@ function AppView({
 
   function goHome() { resetSweep(); setView('home') }
 
-  // Honor a command-palette deep-link that wants a review sweep.
+  // Honor a command-palette deep-link — on mount AND while the panel is already
+  // open. Running an AI feature command (Review/Interview/ADR…) on an open panel
+  // must switch the tab, not silently no-op; we consume the one-shot so it can't
+  // fire again later.
+  const storeFeature = useWorkspaceStore((s) => s.aiPanelFeature)
   useEffect(() => {
-    if (initialFeature === 'review' && workspace) startSweep(['review'])
+    if (!storeFeature) return
+    if (storeFeature === 'review') { if (workspace) startSweep(['review']) }
+    else { resetSweep(); setView(FEATURE_TO_VIEW[storeFeature]) }
+    useWorkspaceStore.getState().clearAiPanelFeature()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [storeFeature, workspace])
 
   // ── queue navigation ──
   const cur = view === 'wizard' && curIdx >= 0 && curIdx < queue.length ? queue[curIdx] : null
@@ -981,17 +988,6 @@ function ReviewScanning({ workspace }: { workspace: Workspace }) {
 }
 
 // ─── Describe (Generate + Edit merged) ──────────────────────────────
-
-// Guess whether a compose prompt is building a new model or changing the current
-// one, from its verbs. Defaults to "change" when ambiguous (safer — "new"
-// replaces the workspace), and only "new" on clear build language.
-function detectComposeMode(text: string): 'new' | 'change' {
-  const t = text.toLowerCase()
-  const change = /\b(add|change|connect|remove|rename|update|delete|set|move|introduce|split|insert|replace)\b/.test(t)
-  const build = /\b(build|create|new model|new system|new diagram|model for|platform with|system with|design a)\b/.test(t)
-  if (build && !change) return 'new'
-  return 'change'
-}
 
 const DESCRIBE_EXAMPLES = [
   'Add a Redis cache between the Web App and the database',

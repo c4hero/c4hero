@@ -28,16 +28,6 @@ export const describeSchema = {
   required: ['elements', 'relationships'],
 }
 
-function isPatchArray(value: unknown): boolean {
-  return Array.isArray(value) && value.every(
-    (p) => isRecord(p) && typeof p.id === 'string' && typeof p.description === 'string',
-  )
-}
-
-export function isDescribeResult(value: unknown): value is DescribeResult {
-  return isRecord(value) && isPatchArray(value.elements) && isPatchArray(value.relationships)
-}
-
 // ─── Edit ───────────────────────────────────────────────────────────
 
 // One permissive object schema covering every op variant; the runtime validator
@@ -102,10 +92,6 @@ export function isEditOp(value: unknown): value is EditOp {
   }
 }
 
-export function isEditPlan(value: unknown): value is EditPlan {
-  return isRecord(value) && Array.isArray(value.operations) && value.operations.every(isEditOp)
-}
-
 // ─── Review ─────────────────────────────────────────────────────────
 
 const REVIEW_CATEGORIES = [
@@ -136,20 +122,6 @@ export const reviewSchema = {
     findings: { type: 'array', items: findingSchema },
   },
   required: ['findings'],
-}
-
-function isReviewFinding(value: unknown): value is ReviewFinding {
-  if (!isRecord(value)) return false
-  if (typeof value.title !== 'string' || typeof value.detail !== 'string') return false
-  if (typeof value.category !== 'string' || typeof value.suggestion !== 'string') return false
-  if (value.severity !== 'high' && value.severity !== 'medium' && value.severity !== 'low') return false
-  if (!isStringArray(value.elementIds)) return false
-  if (value.operations !== undefined && !(Array.isArray(value.operations) && value.operations.every(isEditOp))) return false
-  return true
-}
-
-export function isReviewResult(value: unknown): value is ReviewResult {
-  return isRecord(value) && Array.isArray(value.findings) && value.findings.every(isReviewFinding)
 }
 
 // ─── Repo scan ──────────────────────────────────────────────────────
@@ -201,17 +173,6 @@ export const connectionsSchema = {
     questions: { type: 'array', items: questionSchema },
   },
   required: ['relationships', 'questions'],
-}
-
-function isRepoProposal(value: unknown): value is RepoProposal {
-  return isRecord(value)
-    && isEditOp(value.op)
-    && typeof value.src === 'string'
-    && typeof value.label === 'string'
-}
-
-export function isRepoScanResult(value: unknown): value is RepoScanResult {
-  return isRecord(value) && Array.isArray(value.proposals) && value.proposals.every(isRepoProposal)
 }
 
 // ─── Tolerant sanitizers ────────────────────────────────────────────

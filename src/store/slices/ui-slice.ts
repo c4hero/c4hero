@@ -18,7 +18,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'setCanvasSettingsOpen' | 'setCanvasGuideOpen' | 'setAddElementPanelOpen' | 'setHighlighterOpenFacet'
   | 'setViewsPanelOpen' | 'toggleViewsPanel'
   | 'setCreateViewDialogOpen'
-  | 'aiPanelOpen' | 'aiPanelFeature' | 'setAiPanelOpen' | 'aiSettingsOpen' | 'setAiSettingsOpen'
+  | 'aiPanelOpen' | 'aiPanelFeature' | 'setAiPanelOpen' | 'clearAiPanelFeature' | 'aiSettingsOpen' | 'setAiSettingsOpen'
 >
 
 export const createUiSlice: StateCreator<
@@ -68,6 +68,9 @@ export const createUiSlice: StateCreator<
     }
   }),
   setAiSettingsOpen: (open) => set({ aiSettingsOpen: open, commandPaletteOpen: false }),
+  // Consume the one-shot deep-link feature (after the panel routes to it)
+  // without closing the panel, so a stale feature can't fire again later.
+  clearAiPanelFeature: () => set({ aiPanelFeature: null }),
   setCanvasGuideOpen: (open) => set({ canvasGuideOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
   setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),

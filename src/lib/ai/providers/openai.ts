@@ -1,6 +1,6 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest } from '../types'
 import { AiError } from '../types'
-import { httpFail, readErrorMessage, parseAndValidate } from './http'
+import { postJson, parseAndValidate } from './http'
 
 // OpenAI Chat Completions API, called directly from the browser with the user's
 // key. For structured output we use JSON mode (`response_format: json_object`)
@@ -17,36 +17,13 @@ interface OpenAiChoice {
 interface OpenAiResponse { choices?: OpenAiChoice[] }
 
 async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
-  let res: Response
-  try {
-    res = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({ model: config.model, ...body }),
-    })
-  } catch {
-    throw new AiError(
-      'connection',
-      'The browser blocked or failed the request to api.openai.com before it left. This is '
-      + 'usually a privacy/ad-block extension, a stale cached page (try a hard refresh or an '
-      + 'incognito window), or a network firewall — not your API key. Check the browser console '
-      + 'for the exact reason.',
-    )
-  }
-
-  if (!res.ok) {
-    httpFail(`OpenAI (${config.model})`, res.status, await readErrorMessage(res, `Request failed (${res.status})`))
-  }
-
-  let data: OpenAiResponse
-  try {
-    data = (await res.json()) as OpenAiResponse
-  } catch {
-    throw new AiError('invalid-response', 'Malformed response from OpenAI.')
-  }
+  const data = (await postJson({
+    url: API_URL,
+    headers: { authorization: `Bearer ${config.apiKey}` },
+    body: { model: config.model, ...body },
+    host: 'api.openai.com',
+    label: `OpenAI (${config.model})`,
+  })) as OpenAiResponse
 
   const choice = data.choices?.[0]
   if (choice?.message?.refusal) {

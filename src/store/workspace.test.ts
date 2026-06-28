@@ -211,6 +211,38 @@ describe('Relationship and container mutations', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
   })
 
+  it('addContainer on a view that cannot hold it creates a scoped container view so it is not stranded', () => {
+    const land = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(land)
+    const cid = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const ws = useWorkspaceStore.getState().workspace!
+    // A container view for 'api' now exists and shows the new container…
+    const cv = ws.views.containerViews.find((v) => v.softwareSystemId === 'api')
+    expect(cv).toBeDefined()
+    expect(cv!.elements.some((e) => e.id === cid)).toBe(true)
+    // …it became active, and the landscape view never received the container.
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(cv!.key)
+    expect(ws.views.systemLandscapeViews.find((v) => v.key === land)!.elements.some((e) => e.id === cid)).toBe(false)
+  })
+
+  it('addContainer reuses an existing scoped container view instead of creating another', () => {
+    const cvKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const land = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(land)
+    const before = useWorkspaceStore.getState().workspace!.views.containerViews.length
+    const cid = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.containerViews.length).toBe(before) // no extra view created
+    expect(ws.views.containerViews.find((v) => v.key === cvKey)!.elements.some((e) => e.id === cid)).toBe(true)
+  })
+
+  it('selecting an element closes BOTH the AI panel and AI settings (no stacking over the inspector)', () => {
+    useWorkspaceStore.getState().setAiSettingsOpen(true)
+    useWorkspaceStore.getState().selectElements(['alice'])
+    expect(useWorkspaceStore.getState().aiSettingsOpen).toBe(false)
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
+  })
+
   it('addRelationship creates a relationship with correct fields', () => {
     useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls', 'gRPC')
     const ws = useWorkspaceStore.getState().workspace!

@@ -1,9 +1,6 @@
 import type { Workspace, ModelElement } from '@/types/model'
 import type { EditOp } from './types'
-import {
-  flattenElements, elementNameMap,
-  elementsMissingDescription, relationshipsMissingDescription,
-} from './context'
+import { flattenElements, relationshipsMissingDescription } from './context'
 
 // Pure, deterministic logic for the Guided Sweep's "Missing info" category and
 // the instant model-health readout. No AI, no store access — unit-tested in
@@ -36,7 +33,10 @@ function blank(value?: string): boolean {
  */
 export function missingInfoGaps(ws: Workspace): MissingGap[] {
   const gaps: MissingGap[] = []
+  // Flatten the model ONCE and reuse it for desc/tech gaps and the name map
+  // (these loops previously re-walked the whole tree three times).
   const els = flattenElements(ws)
+  const names = new Map(els.map((el) => [el.id, el.name]))
 
   // title — element with an empty/whitespace name (rare; no auto-placeholders).
   for (const el of els) {
@@ -46,8 +46,10 @@ export function missingInfoGaps(ws: Workspace): MissingGap[] {
   }
 
   // desc — any element with no description.
-  for (const el of elementsMissingDescription(ws)) {
-    gaps.push({ key: `desc:${el.id}`, kind: 'desc', targetId: el.id, targetKind: 'element', label: el.name || '(unnamed element)', elementType: el.type })
+  for (const el of els) {
+    if (blank(el.description)) {
+      gaps.push({ key: `desc:${el.id}`, kind: 'desc', targetId: el.id, targetKind: 'element', label: el.name || '(unnamed element)', elementType: el.type })
+    }
   }
 
   // tech — containers/components with no technology.
@@ -58,7 +60,6 @@ export function missingInfoGaps(ws: Workspace): MissingGap[] {
   }
 
   // rel — relationships with no description (untyped links).
-  const names = elementNameMap(ws)
   for (const r of relationshipsMissingDescription(ws)) {
     const label = `${names.get(r.sourceId) ?? r.sourceId} → ${names.get(r.destinationId) ?? r.destinationId}`
     gaps.push({ key: `rel:${r.id}`, kind: 'rel', targetId: r.id, targetKind: 'relationship', label })
