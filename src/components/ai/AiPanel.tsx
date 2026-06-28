@@ -3,7 +3,7 @@ import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
-  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, type LucideIcon,
+  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Trophy, Star, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
@@ -630,24 +630,39 @@ function HomeDashboard({
       <div style={{ padding: '12px 14px', borderRadius: 13, border: `1px solid ${C.border}`, background: 'linear-gradient(165deg, #1a222e, #161b22)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: C.text2 }}><Activity size={14} color={C.accent} /> Model health</span>
-          <span style={{ fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: '-.02em' }}>{completePct}<span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>%</span></span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 20, fontWeight: 800, color: allClear ? '#facc15' : C.text, letterSpacing: '-.02em' }}>
+            {allClear && <Star size={15} fill="#facc15" color="#facc15" />}
+            {completePct}<span style={{ fontSize: 12, color: allClear ? '#facc15' : C.muted, fontWeight: 600 }}>%</span>
+          </span>
         </div>
         <div style={{ marginTop: 8, height: 7, borderRadius: 999, background: C.ink, overflow: 'hidden', border: '1px solid rgba(88,166,255,0.1)' }}>
           <div style={{ height: '100%', width: `${completePct}%`, background: 'linear-gradient(90deg,#58a6ff,#7dd3fc)', borderRadius: 999, transition: 'width .45s cubic-bezier(0.16,1,0.3,1)' }} />
         </div>
         <div style={{ marginTop: 8, fontSize: 12, color: C.muted2, lineHeight: 1.4 }}>
           {allClear
-            ? <>Everything’s described, typed and labelled.</>
+            ? <>All instant checks pass.</>
             : <><span style={{ color: C.text, fontWeight: 700 }}>{plural(missingCount, 'quick fix', 'quick fixes')}</span> ready — I can walk you through them. Run a deep review for deeper issues.</>}
         </div>
       </div>
 
-      {/* Start guided cleanup */}
-      <button onClick={onStartAll}
-        style={{ width: '100%', marginTop: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 42, borderRadius: 11, border: 'none', background: C.accent, color: C.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer' }} className="c4ai-pri">
-        <Wand2 size={16} /><span>Start guided cleanup</span><ArrowRight size={15} />
-      </button>
-      <div style={{ marginTop: 6, textAlign: 'center', fontSize: 11, color: C.muted3 }}>One step at a time — review everything before it’s applied.</div>
+      {/* Start guided cleanup — or, when there's nothing to fix, a little win. */}
+      {allClear ? (
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 11, padding: '13px 14px', borderRadius: 11, border: '1px solid rgba(250,204,21,0.3)', background: 'linear-gradient(165deg, rgba(250,204,21,0.1), rgba(245,158,11,0.04))' }}>
+          <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 10, background: 'rgba(250,204,21,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#facc15' }}><Trophy size={20} /></span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Nicely done — 100% complete</div>
+            <div style={{ fontSize: 12, color: C.muted2, marginTop: 2, lineHeight: 1.4 }}>Every element is described, typed and labelled. Run a deep review for deeper issues.</div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <button onClick={onStartAll}
+            style={{ width: '100%', marginTop: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 42, borderRadius: 11, border: 'none', background: C.accent, color: C.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer' }} className="c4ai-pri">
+            <Wand2 size={16} /><span>Start guided cleanup</span><ArrowRight size={15} />
+          </button>
+          <div style={{ marginTop: 6, textAlign: 'center', fontSize: 11, color: C.muted3 }}>One step at a time — review everything before it’s applied.</div>
+        </>
+      )}
 
       {/* Categories */}
       <div style={sectionLabel}>Or jump to a category</div>
