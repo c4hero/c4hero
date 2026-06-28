@@ -55,10 +55,17 @@ export const createUiSlice: StateCreator<
   setSearchOpen: (open) => set({ searchOpen: open, commandPaletteOpen: false }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
   setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
-  setAiPanelOpen: (open, feature) => set({
-    aiPanelOpen: open,
-    aiPanelFeature: open ? (feature ?? null) : null,
-    commandPaletteOpen: false,
+  setAiPanelOpen: (open, feature) => set((s) => {
+    s.aiPanelOpen = open
+    s.aiPanelFeature = open ? (feature ?? null) : null
+    s.commandPaletteOpen = false
+    if (open) {
+      // Opening the assistant closes the inspector (clears selection) so the
+      // two side panels never stack — mirrors selection closing the assistant.
+      s.selectedElementIds = []
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
+    }
   }),
   setAiSettingsOpen: (open) => set({ aiSettingsOpen: open, commandPaletteOpen: false }),
   setCanvasGuideOpen: (open) => set({ canvasGuideOpen: open, commandPaletteOpen: false }),

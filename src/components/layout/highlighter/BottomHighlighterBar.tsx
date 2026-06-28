@@ -252,6 +252,7 @@ export default function BottomHighlighterBar() {
     <div
       ref={containerRef}
       data-canvas-chrome="highlighter-bar"
+      data-canvas-fit-chrome="bottom"
       role="complementary"
       aria-label="Highlighter"
       style={{

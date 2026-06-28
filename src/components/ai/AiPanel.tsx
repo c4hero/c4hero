@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  X, Settings, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
-  Home, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
+  X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
+  ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
-  Activity, Unlink, Cpu, Box, type LucideIcon,
+  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
+import { allViewsOf } from '@/store/workspace-helpers'
 import { useAiSettingsStore, isAiReady, activeAiConfig, type PanelPos } from '@/store/ai-settings'
 import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
 import { parseDSL } from '@/lib/dsl'
@@ -18,14 +19,13 @@ import {
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
   scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
-  buildDescribePreview, applyDescribePreview, countMissingDescriptions,
-  findingsToMarkdown, sortedFindings, isActionable, classifyScope, modelHealth,
-  type ModelGap, type ModelGapId,
-  type AiProvider, type EditActions, type DescribeActions,
-  type EditPlan, type DescribePreview, type AiFeatureId, type AiChatTurn,
-  type ReviewResult, type ReviewFinding, type ReviewSeverity, type RepoScanResult, type PlanScope,
+  sortedFindings, isActionable, classifyScope,
+  missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp,
+  type MissingGap, type GapKind,
+  type AiProvider, type EditActions,
+  type EditPlan, type AiFeatureId, type AiChatTurn,
+  type ReviewFinding, type ReviewSeverity, type RepoScanResult, type PlanScope,
 } from '@/lib/ai'
-import { AI_FEATURES, ADR_FEATURE } from './aiFeatureMeta'
 import { MicButton } from './dictation'
 
 // ─── Palette (the "AI Assistant Hybrid" design) ─────────────────────
@@ -33,14 +33,15 @@ import { MicButton } from './dictation'
 const C = {
   accent: '#58a6ff', accentHover: '#79b8ff', ink: '#0d1117',
   text: '#e6edf3', text2: '#c9d1d9', muted: '#8b949e', muted2: '#848d97', muted3: '#6e7681',
-  panel: 'rgba(26,34,46,0.99)', card: '#161b22',
+  // Match the floating chrome (top pill / tool rail / bottom strip) — they all
+  // use the heavy glass surface, so the assistant reads as part of the same set.
+  panel: 'var(--glass-bg-heavy)', card: '#161b22',
   border: 'rgba(88,166,255,0.16)', borderStrong: 'rgba(88,166,255,0.45)',
   green: '#22c55e', greenText: '#86efac',
   danger: '#ef4444', dangerText: '#fca5a5',
   warn: '#f97316', warnText: '#fdba74',
 }
 
-type TabId = 'home' | AiFeatureId
 
 const STYLE = `
 .c4ai [data-scroll]{scrollbar-width:thin;scrollbar-color:rgba(88,166,255,0.28) transparent}
@@ -52,6 +53,10 @@ const STYLE = `
 .c4ai-card:hover{border-color:${C.borderStrong}!important;background:#1c2128!important}
 @keyframes c4ai-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes c4ai-rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+@keyframes c4ai-result{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes c4ai-stagger{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes c4ai-screen{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes c4ai-next{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
 @keyframes c4ai-node{0%,100%{opacity:.35}50%{opacity:1}}
 @keyframes c4ai-flow{to{stroke-dashoffset:-14}}
 @keyframes c4ai-radar{to{transform:rotate(360deg)}}
@@ -70,7 +75,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   const settings = useAiSettingsStore()
   const setStoreSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
 
-  const [tab, setTab] = useState<TabId>(() => useWorkspaceStore.getState().aiPanelFeature ?? 'home')
+  const [initialFeature] = useState(() => useWorkspaceStore.getState().aiPanelFeature)
   const [settingsOpen, setSettingsOpen] = useState(() => useWorkspaceStore.getState().aiSettingsOpen)
 
   const { provider: providerId, apiKey, model } = activeAiConfig(settings)
@@ -89,21 +94,42 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
 
   // Draggable floating panel. `pos` is the persisted top-left; null = default
   // top-right anchor. Dragging starts on any element marked [data-drag-handle].
-  const [pos, setPos] = useState<PanelPos | null>(settings.panelPos)
+  // The stored position is clamped to the current viewport so a panel dragged on
+  // a big screen never lands off-screen on a smaller one.
+  const [pos, setPos] = useState<PanelPos | null>(
+    () => (settings.panelPos ? clampPanelPos(settings.panelPos, window.innerWidth, window.innerHeight) : null),
+  )
+
+  // On resize keep a dragged panel on-screen and inside the top/bottom band, and
+  // hold its distance from the *right* edge constant (the panel docks near the
+  // right, so it should track that edge rather than drift as the width changes).
+  const lastW = useRef(window.innerWidth)
+  useEffect(() => {
+    const onResize = () => {
+      const w = window.innerWidth
+      const h = window.innerHeight
+      const prevW = lastW.current
+      lastW.current = w
+      setPos((p) => {
+        if (!p) return p
+        const rightGap = prevW - (p.x + PANEL_WIDTH)
+        return clampPanelPos({ x: w - PANEL_WIDTH - rightGap, y: p.y }, w, h)
+      })
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   function startDrag(e: React.PointerEvent) {
     const t = e.target as HTMLElement
     if (t.closest('button, input, textarea, a, select, [role="switch"]')) return
     if (!t.closest('[data-drag-handle]')) return
-    const base = pos ?? { x: Math.max(8, window.innerWidth - PANEL_WIDTH - 14), y: 14 }
+    const base = pos ?? { x: Math.max(EDGE, window.innerWidth - PANEL_WIDTH - 14), y: TOP_INSET }
     const startX = e.clientX
     const startY = e.clientY
     let latest = base
     const move = (ev: PointerEvent) => {
-      latest = {
-        x: clampPx(base.x + ev.clientX - startX, 8, window.innerWidth - PANEL_WIDTH - 8),
-        y: clampPx(base.y + ev.clientY - startY, 8, window.innerHeight - 44),
-      }
+      latest = clampPanelPos({ x: base.x + ev.clientX - startX, y: base.y + ev.clientY - startY }, window.innerWidth, window.innerHeight)
       setPos(latest)
     }
     const up = () => {
@@ -122,13 +148,19 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
     boxShadow: '0 16px 64px rgba(0,0,0,0.6)', overflow: 'hidden',
     fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
     width: `min(${PANEL_WIDTH}px, calc(100vw - 28px))`,
-    height: 'min(620px, calc(100dvh - 28px))',
     borderRadius: 12,
-    // null → anchor top-right; once dragged → explicit left/top. `bottom: auto`
-    // overrides DialogShell's docked full-height rail so our height applies.
-    top: pos ? pos.y : 14,
-    bottom: 'auto',
-    ...(pos ? { left: pos.x, right: 'auto' } : { right: 14 }),
+    // Default anchor: top-right, vertically inset to sit *between* the floating
+    // top pill (top:14, h44) and the bottom-right zoom HUD (bottom:14, h~44),
+    // shrinking to fit on smaller screens. Once dragged, switch to an explicit
+    // top-left with a capped height. `bottom: auto` (drag case) overrides
+    // DialogShell's docked full-height rail.
+    ...(pos
+      ? { top: pos.y, bottom: 'auto', height: `min(${MAX_PANEL_H}px, calc(100dvh - ${TOP_INSET + BOTTOM_INSET}px))`, left: pos.x, right: 'auto' }
+      : {
+          top: 'max(64px, calc(env(safe-area-inset-top, 0px) + 58px))',
+          bottom: 'max(72px, calc(env(safe-area-inset-bottom, 0px) + 66px))',
+          height: 'auto', right: 14,
+        }),
   }
 
   return (
@@ -147,7 +179,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
         {mode === 'app' && provider && (
           <AppView
             provider={provider} workspace={workspace} model={model}
-            tab={tab} setTab={setTab} onOpenSettings={openSettings} onClose={onClose}
+            initialFeature={initialFeature} onOpenSettings={openSettings} onClose={onClose}
           />
         )}
       </div>
@@ -156,184 +188,788 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
 }
 
 const PANEL_WIDTH = 360
+
+/** Compact model name for the header pill (drops the vendor prefix), so it
+ *  doesn't crowd the view title — e.g. "claude-haiku-4-5" → "haiku-4-5". */
+function shortModel(m: string): string {
+  return m.replace(/^(claude-|gemini-|models\/)/, '')
+}
+const EDGE = 8            // min gap to the viewport edge
+const TOP_INSET = 64     // clears the floating top pill (top:14 + h44)
+const BOTTOM_INSET = 72  // clears the bottom-right zoom HUD
+const MAX_PANEL_H = 820  // cap so it doesn't get absurdly tall on big screens
+
 function clampPx(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), Math.max(min, max))
 }
 
-// ─── App (header + tabs + body) ─────────────────────────────────────
+/** Escape a string for safe use inside a RegExp (element names can contain
+ *  regex metacharacters like dots or parens). */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
-// Persistent nav: Home launcher + the four feature tabs.
-const NAV_TABS: { id: TabId; label: string; icon: typeof Home }[] = [
-  { id: 'home', label: 'Home', icon: Home },
-  ...AI_FEATURES.map((f) => ({ id: f.id as TabId, label: f.label, icon: f.icon })),
-]
+/** Height a dragged panel occupies: the top↔bottom band, capped, never negative. */
+function panelBandHeight(viewportH: number): number {
+  return Math.min(MAX_PANEL_H, Math.max(160, viewportH - TOP_INSET - BOTTOM_INSET))
+}
+
+/** Clamp a dragged top-left so the panel stays fully on-screen and within the
+ *  top/bottom band, whatever the current viewport size. */
+function clampPanelPos(p: PanelPos, viewportW: number, viewportH: number): PanelPos {
+  const maxX = Math.max(EDGE, viewportW - PANEL_WIDTH - EDGE)
+  const maxY = Math.max(TOP_INSET, viewportH - BOTTOM_INSET - panelBandHeight(viewportH))
+  return { x: clampPx(p.x, EDGE, maxX), y: clampPx(p.y, TOP_INSET, maxY) }
+}
+
+// ─── App (guided-sweep controller) ──────────────────────────────────
+//
+// One AI assistant, one guided flow. The Home dashboard funnels everything into
+// a step-by-step wizard over a merged queue (instant missing-info fixes + AI
+// review findings), a batch-review screen, and a commit. Interview and repo —
+// inherently conversational / folder-driven — are reachable from the dashboard
+// as their own focused flows (existing InterviewBody / RepoBody).
+
+type SweepView = 'home' | 'wizard' | 'review' | 'committed' | 'describe' | 'interview' | 'repo' | 'adr'
+
+const FEATURE_TO_VIEW: Record<AiFeatureId, SweepView> = {
+  compose: 'describe', interview: 'interview', review: 'wizard', repo: 'repo', adr: 'adr',
+}
+
+const VIEW_TITLE: Partial<Record<SweepView, string>> = {
+  wizard: 'Guided cleanup', review: 'Guided cleanup', committed: 'Cleanup applied',
+  describe: 'Describe', interview: 'Interview', repo: 'From your code', adr: 'Draft ADR',
+}
+
+// Per-category presentation (matches the imported design's palette).
+type CatId = 'missing' | 'review'
+const CAT: Record<CatId, { label: string; sub: string; icon: LucideIcon; color: string; bg: string; iconBg: string }> = {
+  missing: { label: 'Missing info', sub: 'Titles, descriptions and technologies', icon: Wand2, color: C.accent, bg: 'rgba(88,166,255,0.16)', iconBg: 'rgba(88,166,255,0.1)' },
+  review: { label: 'Deep review', sub: 'Orphans, untyped links, naming', icon: Stethoscope, color: C.warn, bg: 'rgba(249,115,22,0.16)', iconBg: 'rgba(249,115,22,0.1)' },
+}
+
+// Icon + label per missing-info kind.
+const KIND: Record<GapKind, { icon: LucideIcon; label: string; prompt: string }> = {
+  title: { icon: Type, label: 'title', prompt: 'Still has a placeholder name.' },
+  desc: { icon: Pencil, label: 'description', prompt: 'This element has no description.' },
+  tech: { icon: Cpu, label: 'technology', prompt: 'No technology is set.' },
+  rel: { icon: Link2, label: 'label', prompt: 'This relationship is untyped.' },
+}
+
+const SEV: Record<ReviewSeverity, { label: string; bg: string; color: string }> = {
+  high: { label: 'High', bg: 'rgba(239,68,68,0.12)', color: C.dangerText },
+  medium: { label: 'Medium', bg: 'rgba(249,115,22,0.12)', color: C.warnText },
+  low: { label: 'Low', bg: 'rgba(132,141,151,0.14)', color: '#9aa3ad' },
+}
+
+// Instruction reused to draft technologies for the missing-info "tech" gaps.
+const TECH_INSTRUCTION = 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.'
+
+type StepStatus = 'apply' | 'skip' | 'dismiss'
+interface FixStep { type: 'fix'; key: string; cat: 'missing'; gap: MissingGap }
+interface FindingStep { type: 'finding'; key: string; cat: 'review'; finding: ReviewFinding }
+type Step = FixStep | FindingStep
 
 function AppView({
-  provider, workspace, model, tab, setTab, onOpenSettings, onClose,
+  provider, workspace, model, initialFeature, onOpenSettings, onClose,
 }: {
   provider: AiProvider
   workspace: Workspace | null
   model: string
-  tab: TabId
-  setTab: (t: TabId) => void
+  initialFeature: AiFeatureId | null
   onOpenSettings: () => void
   onClose: () => void
 }) {
-  const section = AI_FEATURES.find((f) => f.id === tab) ?? (tab === 'adr' ? ADR_FEATURE : undefined)
+  const [view, setView] = useState<SweepView>(() => (initialFeature ? FEATURE_TO_VIEW[initialFeature] : 'home'))
+
+  // Sweep state.
+  const [queue, setQueue] = useState<Step[]>([])
+  const [curIdx, setCurIdx] = useState(0)
+  const [decisions, setDecisions] = useState<Record<string, StepStatus>>({})
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [draftsLoading, setDraftsLoading] = useState(false)
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [committing, setCommitting] = useState(false)
+  const [appliedCount, setAppliedCount] = useState(0)
+
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
+
+  // Build the missing-info steps for the current workspace.
+  function missingSteps(ws: Workspace): FixStep[] {
+    return missingInfoGaps(ws).map((gap) => ({ type: 'fix', key: gap.key, cat: 'missing', gap }))
+  }
+
+  // Lazily draft suggested values for the missing-info gaps (descriptions via
+  // auto-describe; technologies via a targeted edit). Never overwrites a value
+  // the user has already typed or one already drafted.
+  async function loadMissingDrafts(ws: Workspace, gaps: MissingGap[]) {
+    const needDesc = gaps.some((g) => g.kind === 'desc' || g.kind === 'rel')
+    const needTech = gaps.some((g) => g.kind === 'tech')
+    if (!needDesc && !needTech) return
+    setDraftsLoading(true)
+    try {
+      const tasks: Promise<void>[] = []
+      if (needDesc) tasks.push(autoDescribe(provider, ws).then((r) => {
+        setDrafts((d) => {
+          const n = { ...d }
+          for (const p of r.elements) { const k = `desc:${p.id}`; if (n[k] === undefined && p.description?.trim()) n[k] = p.description.trim() }
+          for (const p of r.relationships) { const k = `rel:${p.id}`; if (n[k] === undefined && p.description?.trim()) n[k] = p.description.trim() }
+          return n
+        })
+      }))
+      if (needTech) tasks.push(planEdit(provider, ws, TECH_INSTRUCTION).then((plan) => {
+        setDrafts((d) => {
+          const n = { ...d }
+          for (const op of plan.operations) if (op.op === 'updateElement' && op.technology?.trim()) { const k = `tech:${op.id}`; if (n[k] === undefined) n[k] = op.technology.trim() }
+          return n
+        })
+      }))
+      await Promise.allSettled(tasks)
+    } finally {
+      setDraftsLoading(false)
+    }
+  }
+
+  // Run the architecture review and append its findings to the live queue.
+  async function loadReview(ws: Workspace) {
+    setReviewLoading(true); setError(null)
+    try {
+      const result = await reviewArchitecture(provider, ws, activeView ?? null)
+      const steps: FindingStep[] = sortedFindings(result).map((finding, i) => ({ type: 'finding', key: `f:${i}`, cat: 'review', finding }))
+      setQueue((q) => [...q, ...steps])
+    } catch (err) {
+      setError(aiErrorMessage(err))
+    } finally {
+      setReviewLoading(false)
+    }
+  }
+
+  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setError(null) }
+
+  function startSweep(cats: CatId[]) {
+    if (!workspace) return
+    resetSweep()
+    const ws = workspace
+    const initial = cats.includes('missing') ? missingSteps(ws) : []
+    setQueue(initial)
+    setCurIdx(0)
+    setView('wizard')
+    if (cats.includes('missing') && initial.length) loadMissingDrafts(ws, initial.map((s) => s.gap))
+    if (cats.includes('review')) loadReview(ws)
+  }
+
+  function goHome() { resetSweep(); setView('home') }
+
+  // Honor a command-palette deep-link that wants a review sweep.
+  useEffect(() => {
+    if (initialFeature === 'review' && workspace) startSweep(['review'])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── queue navigation ──
+  const cur = view === 'wizard' && curIdx >= 0 && curIdx < queue.length ? queue[curIdx] : null
+
+  function advance(key: string, status: StepStatus) {
+    const next = { ...decisions, [key]: status }
+    setDecisions(next)
+    let i = curIdx + 1
+    while (i < queue.length && next[queue[i].key]) i++
+    setCurIdx(i)
+  }
+  function applyStep() {
+    if (!cur) return
+    // Mirror the disabled "add to batch" button: a fix needs a non-empty draft.
+    if (cur.type === 'fix' && !(drafts[cur.key] ?? '').trim()) return
+    if (cur.type === 'finding' && !isActionable(cur.finding)) { advance(cur.key, 'dismiss'); return }
+    advance(cur.key, 'apply')
+  }
+  function skipStep() { if (cur) advance(cur.key, cur.type === 'finding' && !isActionable(cur.finding) ? 'dismiss' : 'skip') }
+
+  // ⌘↵ apply · esc skip, while stepping through the wizard.
+  useEffect(() => {
+    if (view !== 'wizard' || !cur) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); skipStep() }
+      else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); applyStep() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, cur])
+
+  // ── batch / commit ──
+  const stagedKeys = useMemo(() => queue.filter((s) => decisions[s.key] === 'apply'), [queue, decisions])
+  const stagedFixKeys = useMemo(() => new Set(stagedKeys.filter((s) => s.type === 'fix').map((s) => s.key)), [stagedKeys])
+
+  function commit() {
+    if (!workspace || committing) return
+    const ws = workspace
+    const ops: EditPlan['operations'] = []
+    for (const s of queue) {
+      if (decisions[s.key] !== 'apply') continue
+      if (s.type === 'fix') { const v = (drafts[s.key] ?? '').trim(); if (v) ops.push(gapToOp(s.gap, v)) }
+      else if (s.type === 'finding' && s.finding.operations?.length) ops.push(...s.finding.operations)
+    }
+    setCommitting(true)
+    try {
+      if (ops.length) applyPlanToStore({ operations: ops }, ws)
+      // Adding/updating elements can toggle the panel closed — keep it open.
+      useWorkspaceStore.getState().setAiPanelOpen(true)
+      setAppliedCount(stagedKeys.length)
+      setView('committed')
+    } finally {
+      setCommitting(false)
+    }
+  }
+
+  const completePct = workspace ? modelHealthPercent(workspace) : 100
+
+  // A key that changes on every screen / wizard sub-state change (but NOT between
+  // wizard steps — those animate per-card). Drives the body entrance animation so
+  // a screen change is always visible. Step-to-step is handled by the card key.
+  const screenKey = view !== 'wizard' ? view : cur ? 'wizard-step' : reviewLoading ? 'wizard-scan' : 'wizard-review'
 
   return (
     <>
       {/* header (drag handle) */}
       <div data-drag-handle style={{ ...headerRow, cursor: 'move' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 15, fontWeight: 700, color: C.text }}>
-          <Sparkles size={17} color={C.accent} /> AI assistant
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span title={`Connected — ${model}`} style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, boxShadow: '0 0 6px rgba(34,197,94,0.6)' }} />
-          <button onClick={onOpenSettings} className="c4ai-ghost" aria-label="AI settings" title="AI settings"
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer' }}>
-            <Settings size={13} />
+        {view === 'home' ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: '1 1 auto', fontSize: 15, fontWeight: 700, color: C.text, whiteSpace: 'nowrap' }}>
+            <Sparkles size={17} color={C.accent} style={{ flex: 'none' }} /> AI assistant
+          </span>
+        ) : (
+          <button onClick={goHome} className="c4ai-ghost" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto', height: 30, padding: '0 10px 0 7px', borderRadius: 9, border: 'none', background: 'transparent', color: C.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', overflow: 'hidden' }}>
+            <ArrowLeft size={16} color={C.muted} style={{ flex: 'none' }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{VIEW_TITLE[view] ?? 'Back'}</span>
+          </button>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+          <button onClick={onOpenSettings} title={`Connected — ${model} · open AI settings`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 7px 0 9px', borderRadius: 999, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.22)', fontSize: 11, fontWeight: 500, color: C.greenText, cursor: 'pointer', maxWidth: 138, overflow: 'hidden' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, flex: 'none' }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortModel(model)}</span>
+            <Settings size={11} style={{ flex: 'none', opacity: 0.85 }} />
           </button>
           <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
         </div>
       </div>
 
-      {/* mode tabs — the active tab keeps its label, the rest collapse to icons */}
-      <div role="tablist" style={{ display: 'flex', gap: 5, padding: '8px 12px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        {NAV_TABS.map((t) => {
-          const on = tab === t.id
-          const Icon = t.icon
-          return (
-            <button key={t.id} role="tab" aria-selected={on} title={t.label} onClick={() => setTab(t.id)} className="c4ai-sec"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: on ? 7 : 0, height: 32, ...(on ? { padding: '0 12px', flex: '0 1 auto' } : { width: 34, flex: 'none' }), borderRadius: 8, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 600, background: on ? 'rgba(88,166,255,0.12)' : 'transparent', color: on ? C.accent : C.muted }}>
-              <Icon size={15} />{on && <span>{t.label}</span>}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* body */}
-      <div data-scroll style={{ padding: '18px 20px 22px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {tab === 'home' ? (
-          <HomeLauncher onPick={setTab} provider={provider} workspace={workspace} />
-        ) : section?.needsWorkspace && !workspace ? (
-          <Empty>Open or create a workspace to use this feature.</Empty>
-        ) : (
-          <FeatureBody feature={tab as AiFeatureId} provider={provider} workspace={workspace} onClose={onClose} />
+      {/* body — keyed wrapper so every screen / sub-state change replays an
+          entrance animation, making the transition unmistakable. */}
+      <div data-scroll style={{ padding: '20px 20px 24px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div key={screenKey} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', animation: 'c4ai-screen .32s cubic-bezier(0.16,1,0.3,1) both' }}>
+        {view === 'home' && (
+          <HomeDashboard
+            workspace={workspace} completePct={completePct}
+            onStartAll={() => startSweep(['missing'])}
+            onStartCat={(c) => startSweep([c])}
+            onDescribe={() => setView('describe')}
+            onInterview={() => setView('interview')}
+            onRepo={() => setView('repo')}
+          />
         )}
+
+        {view === 'wizard' && (
+          cur ? (
+            <WizardStep
+              step={cur} idx={curIdx} total={queue.length}
+              draft={drafts[cur.key] ?? ''} draftLoading={draftsLoading && (drafts[cur.key] ?? '') === ''}
+              onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
+              onRewrite={() => { if (workspace && cur.type === 'fix') rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
+              onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace)) : undefined}
+              onApply={applyStep} onSkip={skipStep} onDismiss={() => advance(cur.key, 'dismiss')}
+            />
+          ) : reviewLoading && workspace ? (
+            <ReviewScanning workspace={workspace} />
+          ) : (
+            <ReviewScreen
+              queue={queue} decisions={decisions} drafts={drafts}
+              completePct={completePct} projectedPct={workspace ? projectedHealthPercent(workspace, stagedFixKeys) : completePct}
+              committing={committing}
+              onRemove={(key) => setDecisions((d) => ({ ...d, [key]: 'skip' }))}
+              onRestore={(key) => setDecisions((d) => ({ ...d, [key]: 'apply' }))}
+              onCommit={commit} onDiscard={goHome}
+            />
+          )
+        )}
+        {view === 'wizard' && <ErrorLine error={error} />}
+
+        {view === 'committed' && (
+          <CommittedScreen count={appliedCount} completePct={completePct} onHome={goHome} />
+        )}
+
+        {view === 'describe' && <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />}
+        {view === 'interview' && (workspace ? <InterviewBody provider={provider} onClose={onClose} /> : <Empty>Open or create a workspace to start an interview.</Empty>)}
+        {view === 'repo' && <RepoBody provider={provider} workspace={workspace} onClose={onClose} />}
+        {view === 'adr' && <AdrBody provider={provider} workspace={workspace} />}
+        </div>
       </div>
     </>
   )
 }
 
-const GAP_META: Record<ModelGapId, { icon: LucideIcon; action: string }> = {
-  descriptions: { icon: Wand2, action: 'Write' },
-  unconnected: { icon: Unlink, action: 'Connect' },
-  technology: { icon: Cpu, action: 'Set tech' },
-  emptySystems: { icon: Box, action: 'Build' },
-}
-
-// Instruction per gap for the AI to fix it in place (descriptions uses the
-// dedicated auto-describe path instead).
-const GAP_FIX: Record<Exclude<ModelGapId, 'descriptions'>, string> = {
-  technology: 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.',
-  unconnected: 'Several elements have no relationships. Add the relationships the model implies for them, connecting each unconnected element where an interaction is clearly suggested by the names and descriptions. Do not invent unlikely connections, and do not change anything else.',
-  emptySystems: 'Each internal software system that has no containers should get the containers its name and description imply — give each a short description and a technology. Do not modify other systems.',
-}
-
-// Instant, no-AI model-health readout on Home. Clicking a gap fixes it in place.
-function ModelHealthCard({ gaps, provider, workspace }: { gaps: ModelGap[]; provider: AiProvider; workspace: Workspace }) {
-  const [busy, setBusy] = useState<ModelGapId | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function fixGap(g: ModelGap) {
-    if (busy) return
-    setBusy(g.id); setError(null)
-    try {
-      if (g.id === 'descriptions') {
-        const preview = buildDescribePreview(await autoDescribe(provider, workspace), workspace)
-        const s = useWorkspaceStore.getState()
-        const actions: DescribeActions = { updateElement: (id, p) => s.updateElement(id, p), updateRelationship: (id, p) => s.updateRelationship(id, p) }
-        applyDescribePreview(preview, actions)
-      } else {
-        applyPlanToStore(await planEdit(provider, workspace, GAP_FIX[g.id]), workspace)
-        // Adding elements toggles the panel closed (inspector rule) — keep it open.
-        useWorkspaceStore.getState().setAiPanelOpen(true)
-      }
-    } catch (err) {
-      setError(aiErrorMessage(err))
-    } finally {
-      setBusy(null)
+// Re-draft a single missing-info gap on demand (the wizard's "Rewrite").
+async function rewriteDraft(
+  provider: AiProvider, ws: Workspace, step: FixStep,
+  setDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+  setError: (e: string | null) => void,
+) {
+  try {
+    const { gap } = step
+    if (gap.kind === 'desc' || gap.kind === 'rel') {
+      const r = await autoDescribe(provider, ws)
+      const list = gap.kind === 'desc' ? r.elements : r.relationships
+      const hit = list.find((p) => p.id === gap.targetId)
+      if (hit?.description?.trim()) setDrafts((d) => ({ ...d, [gap.key]: hit.description.trim() }))
+    } else if (gap.kind === 'tech') {
+      const plan = await planEdit(provider, ws, TECH_INSTRUCTION)
+      const op = plan.operations.find((o) => o.op === 'updateElement' && o.id === gap.targetId && o.technology?.trim())
+      if (op && op.op === 'updateElement' && op.technology) setDrafts((d) => ({ ...d, [gap.key]: op.technology!.trim() }))
     }
+  } catch (err) {
+    setError(aiErrorMessage(err))
+  }
+}
+
+// The element id(s) a step refers to, for revealing them on the canvas. A
+// relationship gap resolves to its two endpoints.
+function stepElementIds(step: Step, ws: Workspace): string[] {
+  if (step.type === 'finding') return step.finding.elementIds ?? []
+  const g = step.gap
+  if (g.kind === 'rel') {
+    const r = ws.model.relationships.find((x) => x.id === g.targetId)
+    return r ? [r.sourceId, r.destinationId] : []
+  }
+  return [g.targetId]
+}
+
+// Switch to a view that shows the element(s) and select them — the same reveal
+// the search dialog uses. Keeps the AI panel open (selection alone never closes
+// it; only adding elements does).
+function revealInDiagram(ws: Workspace, ids: string[]) {
+  const real = ids.filter(Boolean)
+  if (!real.length) return
+  const s = useWorkspaceStore.getState()
+  const view = allViewsOf(ws).find((v) => v.elements.some((e) => real.includes(e.id)))
+  if (view) s.setActiveView(view.key)
+  // Pan to the element rather than select it, so the AI panel stays open
+  // (selecting opens the inspector, which now closes the panel).
+  useWorkspaceStore.setState({ focusElementId: real[0] })
+}
+
+function RevealLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="c4ai-ghost"
+      style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', border: 'none', background: 'transparent', color: C.accent, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+      <CornerDownRight size={13} /> Show in diagram
+    </button>
+  )
+}
+
+// ─── Home dashboard ─────────────────────────────────────────────────
+
+function HomeDashboard({
+  workspace, completePct, onStartAll, onStartCat, onDescribe, onInterview, onRepo,
+}: {
+  workspace: Workspace | null
+  completePct: number
+  onStartAll: () => void
+  onStartCat: (c: CatId) => void
+  onDescribe: () => void
+  onInterview: () => void
+  onRepo: () => void
+}) {
+  const missingCount = workspace ? missingInfoGaps(workspace).length : 0
+  const allClear = missingCount === 0
+
+  if (!workspace) {
+    return (
+      <>
+        <Empty>Open or create a workspace, then I can review it with you.</Empty>
+        <button onClick={onDescribe} className="c4ai-card" style={describeBtn}>
+          <span style={describeIcon}><SquarePen size={18} /></span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>Describe a change</span>
+            <span style={{ display: 'block', fontSize: 12, color: C.muted2, marginTop: 2 }}>Build or edit the model in plain English</span>
+          </span>
+          <ArrowRight size={16} color={C.muted3} style={{ flex: 'none' }} />
+        </button>
+      </>
+    )
   }
 
   return (
-    <div style={{ marginBottom: 14, padding: '12px 13px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.card }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: gaps.length ? 8 : 0 }}>
-        <Activity size={15} color={C.accent} />
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>Model health</span>
+    <>
+      {/* Model health */}
+      <div style={{ padding: '12px 14px', borderRadius: 13, border: `1px solid ${C.border}`, background: 'linear-gradient(165deg, #1a222e, #161b22)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: C.text2 }}><Activity size={14} color={C.accent} /> Model health</span>
+          <span style={{ fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: '-.02em' }}>{completePct}<span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>%</span></span>
+        </div>
+        <div style={{ marginTop: 8, height: 7, borderRadius: 999, background: C.ink, overflow: 'hidden', border: '1px solid rgba(88,166,255,0.1)' }}>
+          <div style={{ height: '100%', width: `${completePct}%`, background: 'linear-gradient(90deg,#58a6ff,#7dd3fc)', borderRadius: 999, transition: 'width .45s cubic-bezier(0.16,1,0.3,1)' }} />
+        </div>
+        <div style={{ marginTop: 8, fontSize: 12, color: C.muted2, lineHeight: 1.4 }}>
+          {allClear
+            ? <>Everything’s described, typed and labelled.</>
+            : <><span style={{ color: C.text, fontWeight: 700 }}>{plural(missingCount, 'quick fix', 'quick fixes')}</span> ready — I can walk you through them. Run a deep review for deeper issues.</>}
+        </div>
       </div>
-      {gaps.length === 0 ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12.5, color: C.text2 }}>
-          <Check size={14} color={C.green} /> Looks tidy — everything’s described, connected, and typed.
-        </div>
+
+      {/* Start guided cleanup */}
+      <button onClick={onStartAll}
+        style={{ width: '100%', marginTop: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 42, borderRadius: 11, border: 'none', background: C.accent, color: C.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer' }} className="c4ai-pri">
+        <Wand2 size={16} /><span>Start guided cleanup</span><ArrowRight size={15} />
+      </button>
+      <div style={{ marginTop: 6, textAlign: 'center', fontSize: 11, color: C.muted3 }}>One step at a time — review everything before it’s applied.</div>
+
+      {/* Categories */}
+      <div style={sectionLabel}>Or jump to a category</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <CategoryRow cat="review" onClick={() => onStartCat('review')} actionLabel="Scan" />
+        <CategoryButton icon={MessagesSquare} color="#a78bfa" iconBg="rgba(168,85,247,0.1)" label="Interview" sub="Answer questions to enrich this view" onClick={onInterview} />
+        <CategoryButton icon={GitBranch} color={C.green} iconBg="rgba(34,197,94,0.1)" label="From your code" sub="Point at a local repo — propose updates" onClick={onRepo} />
+      </div>
+
+      {/* Build something */}
+      <div style={sectionLabel}>Build something</div>
+      <button onClick={onDescribe} className="c4ai-card" style={describeBtn}>
+        <span style={describeIcon}><Sparkles size={19} /></span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>Describe a change</span>
+          <span style={{ display: 'block', fontSize: 12, color: C.muted2, marginTop: 2 }}>Build or edit the model in plain English</span>
+        </span>
+        <ArrowRight size={16} color={C.muted3} style={{ flex: 'none' }} />
+      </button>
+    </>
+  )
+}
+
+function CategoryRow({ cat, count, actionLabel, onClick }: { cat: CatId; count?: number; actionLabel?: string; onClick: () => void }) {
+  const m = CAT[cat]
+  const Icon = m.icon
+  const done = count === 0
+  return (
+    <button onClick={onClick} disabled={done} className="c4ai-card"
+      style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 13, border: `1px solid ${done ? 'rgba(34,197,94,0.2)' : C.border}`, background: C.card, cursor: done ? 'default' : 'pointer', opacity: done ? 0.7 : 1 }}>
+      <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.iconBg, color: m.color }}><Icon size={19} /></span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>{m.label}</span>
+        <span style={{ display: 'block', fontSize: 12, color: C.muted2, marginTop: 2 }}>{m.sub}</span>
+      </span>
+      {done ? (
+        <span style={{ flex: 'none', width: 26, height: 26, borderRadius: '50%', background: 'rgba(34,197,94,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.greenText }}><Check size={15} /></span>
+      ) : count != null ? (
+        <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 24, height: 24, padding: '0 8px', borderRadius: 999, background: m.bg, color: m.color, fontSize: 12, fontWeight: 700 }}>{count}</span>
       ) : (
-        <div data-scroll style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 138, overflowY: 'auto' }}>
-          {gaps.map((g) => {
-            const m = GAP_META[g.id]
-            const Icon = m.icon
-            const fixing = busy === g.id
-            return (
-              <button key={g.id} onClick={() => fixGap(g)} disabled={!!busy} className="c4ai-sec"
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 9px', borderRadius: 9, border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', textAlign: 'left', opacity: busy && !fixing ? 0.5 : 1 }}>
-                <span style={{ width: 26, height: 26, flex: 'none', borderRadius: 7, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}>
-                  {fixing ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
-                </span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.text2 }}>{g.label}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: fixing ? C.muted : C.accent, whiteSpace: 'nowrap' }}>{fixing ? 'Fixing…' : m.action}</span>
-              </button>
-            )
-          })}
-        </div>
+        <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: m.color }}>{actionLabel} <ArrowRight size={13} /></span>
       )}
-      <ErrorLine error={error} />
+    </button>
+  )
+}
+
+function CategoryButton({ icon: Icon, color, iconBg, label, sub, onClick }: { icon: LucideIcon; color: string; iconBg: string; label: string; sub: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="c4ai-card"
+      style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 13, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }}>
+      <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: iconBg, color }}><Icon size={19} /></span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 12, color: C.muted2, marginTop: 2 }}>{sub}</span>
+      </span>
+      <ArrowRight size={16} color={C.muted3} style={{ flex: 'none' }} />
+    </button>
+  )
+}
+
+// ─── Wizard step ────────────────────────────────────────────────────
+
+function WizardStep({
+  step, idx, total, draft, draftLoading, onDraft, onRewrite, onReveal, onApply, onSkip, onDismiss,
+}: {
+  step: Step; idx: number; total: number
+  draft: string; draftLoading: boolean
+  onDraft: (v: string) => void; onRewrite: () => void; onReveal?: () => void
+  onApply: () => void; onSkip: () => void; onDismiss: () => void
+}) {
+  const cm = CAT[step.cat]
+  const CatIcon = cm.icon
+  const pct = total > 0 ? Math.round((idx / total) * 100) : 0
+
+  return (
+    <div>
+      {/* progress + chip */}
+      <div style={{ height: 6, borderRadius: 999, background: C.card, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#58a6ff,#7dd3fc)', borderRadius: 999, transition: 'width .35s' }} />
+      </div>
+      <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 999, background: cm.bg, color: cm.color }}><CatIcon size={12} /> {cm.label}</span>
+        <span style={{ fontSize: 12, color: C.muted2 }}>Step {Math.min(idx + 1, total)} of {total}</span>
+      </div>
+
+      {step.type === 'fix'
+        ? <FixCard key={step.key} gap={step.gap} draft={draft} draftLoading={draftLoading} onDraft={onDraft} onRewrite={onRewrite} onReveal={onReveal} onApply={onApply} onSkip={onSkip} />
+        : <FindingCardStep key={step.key} finding={step.finding} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onDismiss={onDismiss} />}
+
+      {/* keyboard tips — kept at the bottom, out of the way */}
+      <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 10.5, color: '#4d555e' }}>
+        <span style={kbd}>⌘ ↵</span> apply <span style={{ color: '#30363d' }}>·</span> <span style={kbd}>esc</span> skip
+      </div>
     </div>
   )
 }
 
-function HomeLauncher({ onPick, provider, workspace }: { onPick: (t: TabId) => void; provider: AiProvider; workspace: Workspace | null }) {
-  const gaps = workspace ? modelHealth(workspace) : []
+function FixCard({ gap, draft, draftLoading, onDraft, onRewrite, onReveal, onApply, onSkip }: {
+  gap: MissingGap; draft: string; draftLoading: boolean
+  onDraft: (v: string) => void; onRewrite: () => void; onReveal?: () => void; onApply: () => void; onSkip: () => void
+}) {
+  const k = KIND[gap.kind]
+  const Icon = k.icon
+  const [regen, setRegen] = useState(false)
+  function rewrite() { setRegen(true); Promise.resolve(onRewrite()).finally(() => setTimeout(() => setRegen(false), 300)) }
+
   return (
-    <>
-      {workspace && <ModelHealthCard gaps={gaps} provider={provider} workspace={workspace} />}
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2, marginBottom: 10 }}>What do you want to do?</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {AI_FEATURES.map((f) => {
-          const Icon = f.icon
-          return (
-            <button key={f.id} onClick={() => onPick(f.id)} className="c4ai-card"
-              style={{ display: 'flex', gap: 10, alignItems: 'center', textAlign: 'left', padding: '7px 11px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }}>
-              <span style={{ width: 28, height: 28, flex: 'none', borderRadius: 8, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Icon size={15} /></span>
-              <span style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 7, overflow: 'hidden' }}>
-                <span style={{ flex: 'none', fontSize: 13, fontWeight: 600, color: C.text }}>{f.label}</span>
-                <span style={{ minWidth: 0, fontSize: 11.5, color: C.muted2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.blurb}</span>
-              </span>
-            </button>
-          )
-        })}
+    <div style={{ marginTop: 18, animation: 'c4ai-next .3s cubic-bezier(0.16,1,0.3,1) both' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+        <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 12, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7dd3fc' }}><Icon size={23} /></span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{gap.label}</div>
+          <div style={{ fontSize: 13, color: C.muted2, marginTop: 2 }}>{k.prompt}</div>
+        </div>
       </div>
-    </>
+      <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>
+        <Sparkles size={13} color={C.accent} /> Suggested {k.label}
+        {draftLoading && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 'auto', letterSpacing: 0, textTransform: 'none', fontWeight: 500, color: C.muted2 }}><Loader2 size={12} className="animate-spin" /> Drafting…</span>}
+      </div>
+      <textarea value={draft} onChange={(e) => onDraft(e.target.value)}
+        placeholder={draftLoading ? 'Drafting a suggestion…' : `Type a ${k.label}…`}
+        style={{ width: '100%', marginTop: 9, resize: 'vertical', minHeight: gap.kind === 'desc' ? 92 : 52, padding: '13px 15px', borderRadius: 12, border: `1px solid ${C.borderStrong}`, background: C.card, color: C.text, fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit' }} />
+      {onReveal && <div><RevealLink onClick={onReveal} /></div>}
+      <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <button onClick={onApply} disabled={!draft.trim()} className="c4ai-pri"
+          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', opacity: draft.trim() ? 1 : 0.55 }}>
+          <Check size={16} /> Looks good — add to batch
+        </button>
+        <div style={{ display: 'flex', gap: 9 }}>
+          <button onClick={onSkip} className="c4ai-ghost" style={wizSecBtn}>Skip</button>
+          <button onClick={rewrite} disabled={regen} className="c4ai-sec" style={{ ...wizSecBtn, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, color: C.text2 }}>
+            {regen ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Rewrite
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
-function FeatureBody({ feature, provider, workspace, onClose }: { feature: AiFeatureId; provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
-  switch (feature) {
-    case 'compose': return <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />
-    case 'interview': return <InterviewBody provider={provider} onClose={onClose} />
-    case 'review': return <ReviewBody provider={provider} workspace={workspace} />
-    case 'repo': return <RepoBody provider={provider} workspace={workspace} onClose={onClose} />
-    case 'adr': return <AdrBody provider={provider} workspace={workspace} />
-  }
+function FindingCardStep({ finding, onReveal, onApply, onSkip, onDismiss }: { finding: ReviewFinding; onReveal?: () => void; onApply: () => void; onSkip: () => void; onDismiss: () => void }) {
+  const sev = SEV[finding.severity]
+  const actionable = isActionable(finding)
+  return (
+    <div style={{ marginTop: 18, animation: 'c4ai-next .3s cubic-bezier(0.16,1,0.3,1) both' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13 }}>
+        <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 12, background: sev.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: sev.color }}><AlertCircle size={23} /></span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>{finding.title}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: sev.color, marginTop: 3 }}>{sev.label} severity · {finding.category}</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 16, fontSize: 14, color: C.text2, lineHeight: 1.55 }}>{finding.detail}</div>
+      <div style={{ marginTop: 14, padding: '13px 15px', borderRadius: 12, background: 'rgba(88,166,255,0.07)', border: '1px solid rgba(88,166,255,0.2)' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>Suggested fix</span>
+        <div style={{ fontSize: 13.5, color: C.text, lineHeight: 1.5, marginTop: 4 }}>{finding.suggestion}</div>
+      </div>
+      {onReveal && <div><RevealLink onClick={onReveal} /></div>}
+      <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {actionable && (
+          <button onClick={onApply} className="c4ai-pri"
+            style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
+            <Check size={16} /> Add fix to batch
+          </button>
+        )}
+        <div style={{ display: 'flex', gap: 9 }}>
+          <button onClick={onDismiss} className="c4ai-ghost" style={wizSecBtn}>{actionable ? 'Dismiss' : 'Got it'}</button>
+          {actionable && <button onClick={onSkip} className="c4ai-ghost" style={wizSecBtn}>Decide later</button>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Review (batch) screen ──────────────────────────────────────────
+
+function ReviewScreen({
+  queue, decisions, drafts, completePct, projectedPct, committing, onRemove, onRestore, onCommit, onDiscard,
+}: {
+  queue: Step[]; decisions: Record<string, StepStatus>; drafts: Record<string, string>
+  completePct: number; projectedPct: number; committing: boolean
+  onRemove: (key: string) => void; onRestore: (key: string) => void; onCommit: () => void; onDiscard: () => void
+}) {
+  const staged = queue.filter((s) => decisions[s.key] === 'apply')
+  const skipped = queue.filter((s) => decisions[s.key] === 'skip' || decisions[s.key] === 'dismiss')
+  const applyN = staged.length
+
+  const rowOf = (s: Step): { label: string; value: string } =>
+    s.type === 'fix' ? { label: s.gap.label, value: (drafts[s.key] ?? '').trim() || '(empty)' }
+      : { label: s.finding.title, value: s.finding.suggestion }
+  const labelOf = (s: Step) => (s.type === 'fix' ? s.gap.label : s.finding.title)
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+        <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}><Layers size={20} /></span>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>{applyN > 0 ? `Review ${plural(applyN, 'change', 'changes')}` : 'Nothing staged yet'}</div>
+          <div style={{ fontSize: 12.5, color: C.muted2, marginTop: 1 }}>Health {completePct}% → <span style={{ color: '#7dd3fc', fontWeight: 600 }}>{projectedPct}%</span> once applied</div>
+        </div>
+      </div>
+
+      {applyN > 0 ? (
+        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {staged.map((s, i) => {
+            const r = rowOf(s)
+            const cm = CAT[s.cat]
+            return (
+              <div key={s.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 12px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-stagger .4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.08 + i * 0.05}s` }}>
+                <span style={{ flex: 'none', marginTop: 1, fontSize: 9, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 5, background: cm.bg, color: cm.color }}>{cm.label}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text }}>{r.label}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: '#9aa3ad', lineHeight: 1.45, marginTop: 2 }}>{r.value}</span>
+                </span>
+                <button onClick={() => onRemove(s.key)} aria-label="Remove from batch" className="c4ai-ghost" style={{ flex: 'none', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: 'none', background: 'transparent', color: C.muted3, cursor: 'pointer' }}><X size={14} /></button>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div style={{ marginTop: 16, padding: 18, borderRadius: 12, border: '1px dashed rgba(88,166,255,0.2)', background: C.card, textAlign: 'center', fontSize: 12.5, color: C.muted2, lineHeight: 1.5 }}>
+          {skipped.length > 0
+            ? 'You skipped everything this run. Restore an item below, or head back to the dashboard.'
+            : 'Nothing to review — your model’s in good shape.'}
+        </div>
+      )}
+
+      {skipped.length > 0 && (
+        <>
+          <div style={{ marginTop: 18, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>Skipped · {skipped.length}</div>
+          <div style={{ marginTop: 9, display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {skipped.map((s) => (
+              <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(88,166,255,0.1)' }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{labelOf(s)}</span>
+                {decisions[s.key] === 'skip' && <button onClick={() => onRestore(s.key)} className="c4ai-sec" style={{ flex: 'none', height: 26, padding: '0 11px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.text2, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>Restore</button>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <button onClick={onCommit} disabled={applyN === 0 || committing} className="c4ai-pri"
+          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: 13, border: 'none', background: applyN > 0 ? C.accent : 'rgba(88,166,255,0.16)', color: applyN > 0 ? C.ink : C.muted3, fontSize: 15, fontWeight: 700, cursor: applyN > 0 ? 'pointer' : 'default' }}>
+          {committing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {applyN > 0 ? `Apply ${plural(applyN, 'change', 'changes')}` : 'Nothing to apply'}
+        </button>
+        <button onClick={onDiscard} className="c4ai-ghost" style={{ width: '100%', height: 40, borderRadius: 11, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>Discard &amp; back to dashboard</button>
+      </div>
+    </div>
+  )
+}
+
+function CommittedScreen({ count, completePct, onHome }: { count: number; completePct: number; onHome: () => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '34px 12px' }}>
+      <span style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(34,197,94,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.green, animation: 'c4ai-pop .4s ease' }}><CheckCircle2 size={34} /></span>
+      <h2 style={{ margin: '18px 0 0', fontSize: 19, fontWeight: 700, color: C.text }}>Cleanup applied</h2>
+      <p style={{ margin: '9px 0 0', fontSize: 13.5, lineHeight: 1.55, color: C.muted2, maxWidth: 290 }}>
+        Committed {plural(count, 'change', 'changes')} to the model. Model health is now <strong style={{ color: '#7dd3fc' }}>{completePct}%</strong>.
+      </p>
+      <button onClick={onHome} className="c4ai-pri" style={{ marginTop: 20, height: 42, padding: '0 22px', borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Back to dashboard</button>
+    </div>
+  )
+}
+
+// While the architecture review runs (one AI call, no streamed progress), walk a
+// live checklist of the model's *real* elements, relationships and the quality
+// aspects being audited — each ticks green as the "beam" passes it. Grounds the
+// wait in what's actually being looked at, then settles on "Synthesizing…".
+function ReviewScanning({ workspace }: { workspace: Workspace }) {
+  const items = useMemo(() => {
+    const out: { label: string; icon: LucideIcon }[] = []
+    for (const e of flattenElements(workspace)) out.push({ label: e.name?.trim() || '(unnamed element)', icon: Box })
+    const names = elementNameMap(workspace)
+    for (const r of (workspace.model.relationships ?? []).slice(0, 8)) {
+      out.push({ label: `${names.get(r.sourceId) ?? '?'} → ${names.get(r.destinationId) ?? '?'}`, icon: Link2 })
+    }
+    out.push(
+      { label: 'Orphaned elements', icon: Unlink },
+      { label: 'Naming consistency', icon: Type },
+      { label: 'Boundaries & scope', icon: Layers },
+    )
+    return out
+  }, [workspace])
+
+  const [idx, setIdx] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i < items.length ? i + 1 : i)), 520)
+    return () => clearInterval(t)
+  }, [items.length])
+
+  const total = items.length
+  const done = idx >= total
+  const progress = total ? Math.min(idx, total) / total : 1
+  const ROW = 36, VISIBLE = 5, RING = 58
+  const circ = 2 * Math.PI * RING
+  const offset = -(idx - 2) * ROW // glide so the current item stays centered
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '8px 0 4px' }}>
+      {/* progress ring + sonar pulse around the deep-review (stethoscope) motif */}
+      <div style={{ position: 'relative', width: 140, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ position: 'absolute', width: 104, height: 104, borderRadius: '50%', border: '1px solid rgba(88,166,255,0.4)', animation: 'c4ai-ringpulse 2.4s ease-out infinite' }} />
+        <span style={{ position: 'absolute', width: 104, height: 104, borderRadius: '50%', border: '1px solid rgba(88,166,255,0.4)', animation: 'c4ai-ringpulse 2.4s ease-out infinite 1.2s' }} />
+        <svg viewBox="0 0 140 140" width="140" height="140" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+          <circle cx="70" cy="70" r={RING} fill="none" stroke="rgba(88,166,255,0.12)" strokeWidth="4" />
+          <circle cx="70" cy="70" r={RING} fill="none" stroke="#58a6ff" strokeWidth="4" strokeLinecap="round"
+            strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)}
+            style={{ transition: 'stroke-dashoffset .55s cubic-bezier(0.16,1,0.3,1)', filter: 'drop-shadow(0 0 5px rgba(88,166,255,0.5))' }} />
+        </svg>
+        <span style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, animation: 'c4ai-float 4s ease-in-out infinite' }}>
+          <Stethoscope size={26} />
+        </span>
+      </div>
+      <div style={{ marginTop: 10, fontSize: 13.5, fontWeight: 700, color: C.text }}>
+        {done ? 'Synthesizing findings…' : `Reviewing ${workspace.name || 'your model'}…`}
+      </div>
+      <div style={{ marginTop: 4, fontSize: 11.5, color: C.muted }}>
+        {done ? 'Cross-checking everything once more' : `Evaluating ${Math.min(idx + 1, total)} of ${total}`}
+      </div>
+      {/* smooth filmstrip — the whole list glides, edges fade via a mask */}
+      <div style={{ width: '100%', height: ROW * VISIBLE, marginTop: 12, overflow: 'hidden',
+        WebkitMaskImage: 'linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent)',
+        maskImage: 'linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent)' }}>
+        <div style={{ transform: `translateY(${offset}px)`, transition: 'transform .5s cubic-bezier(0.16,1,0.3,1)', display: 'flex', flexDirection: 'column' }}>
+          {items.map((it, i) => {
+            const isDone = i < idx
+            const isCurrent = i === idx && !done
+            const Icon = it.icon
+            const dist = Math.abs(i - idx)
+            const op = isCurrent ? 1 : isDone ? Math.max(0.32, 0.7 - dist * 0.12) : Math.max(0.18, 0.42 - dist * 0.09)
+            return (
+              <div key={i} style={{ height: ROW, display: 'flex', alignItems: 'center', gap: 9, padding: '0 11px', borderRadius: 9,
+                background: isCurrent ? 'rgba(88,166,255,0.1)' : 'transparent',
+                border: `1px solid ${isCurrent ? 'rgba(88,166,255,0.22)' : 'transparent'}`,
+                opacity: op, transition: 'opacity .45s ease, background .45s ease, border-color .45s ease' }}>
+                <span style={{ width: 20, height: 20, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDone ? C.green : isCurrent ? C.accent : C.muted3 }}>
+                  {isDone ? <Check size={14} /> : isCurrent ? <Loader2 size={13} className="animate-spin" /> : <Icon size={13} />}
+                </span>
+                <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 12.5, color: isCurrent ? C.text : C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── Describe (Generate + Edit merged) ──────────────────────────────
@@ -348,6 +984,12 @@ function detectComposeMode(text: string): 'new' | 'change' {
   if (build && !change) return 'new'
   return 'change'
 }
+
+const DESCRIBE_EXAMPLES = [
+  'Add a Redis cache between the Web App and the database',
+  'Split the monolith into separate Orders and Payments services',
+  'Add Stripe as an external payment system the API calls',
+]
 
 function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
@@ -384,7 +1026,29 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
 
   return (
     <>
-      <p style={blurb}>Say what you want — c4hero figures out whether you’re building a new model or changing the current one.</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 13 }}>
+        <span style={{ width: 40, height: 40, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><SquarePen size={19} /></span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Describe a change</div>
+          <div style={{ fontSize: 12, color: C.muted2, marginTop: 1 }}>Plain English — I’ll detect build vs. change for you.</div>
+        </div>
+      </div>
+
+      {!done && !text.trim() && (
+        <div style={{ marginBottom: 13 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3, marginBottom: 8 }}>Try one of these</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {DESCRIBE_EXAMPLES.map((ex, i) => (
+              <button key={i} onClick={() => setText(ex)} className="c4ai-card"
+                style={{ display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '9px 11px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer', animation: 'c4ai-stagger .4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.06 + i * 0.06}s` }}>
+                <Wand2 size={13} color={C.accent} style={{ flex: 'none' }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.text2 }}>{ex}</span>
+                <ArrowRight size={13} color={C.muted3} style={{ flex: 'none' }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Field value={text} onChange={setText} grow={!done} onSubmit={submit} placeholder="Describe a system to build, or a change to make — e.g. add a Redis cache between the Web App and the database." />
       <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 9, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
@@ -473,6 +1137,23 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
   const run = useAiRun()
   const started = history.length > 0
 
+  // Elements the current question names (≥3 chars, whole-word match) — surfaced
+  // as chips and highlighted on the canvas so you can see what's being asked about.
+  const mentioned = useMemo(() => {
+    if (!workspace || !question) return [] as { id: string; name: string }[]
+    return flattenElements(workspace)
+      .filter((e) => e.name.trim().length >= 3 && new RegExp(`\\b${escapeRegExp(e.name.trim())}\\b`, 'i').test(question))
+      .map((e) => ({ id: e.id, name: e.name }))
+      .slice(0, 6)
+  }, [workspace, question])
+
+  useEffect(() => {
+    if (!mentioned.length) return
+    // Pan the canvas to the first mentioned element. We pan rather than *select*
+    // it — selecting opens the inspector, which closes this panel.
+    useWorkspaceStore.setState({ focusElementId: mentioned[0].id })
+  }, [mentioned])
+
   if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
   const ws = workspace
   const v: View = view
@@ -521,9 +1202,33 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
 
   return (
     <>
-      <p style={blurb}>Filling in <span style={{ color: '#7dd3fc' }}>{viewLabel(v)}</span>. Answer a few questions; c4hero turns them into model updates.</p>
-
-      {!started && !plan && <RunButton label="Start interview" loading={run.loading} onClick={start} />}
+      {!started && !plan ? (
+        <div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '6px 0 2px' }}>
+            <span style={{ position: 'relative', width: 60, height: 60, borderRadius: 16, background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c4b5fd', animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}>
+              <MessagesSquare size={28} />
+              <span style={{ position: 'absolute', inset: -1, borderRadius: 16, border: '1px solid rgba(168,85,247,0.35)', animation: 'c4ai-ringpulse 2.4s ease-out infinite' }} />
+            </span>
+            <h2 style={{ margin: '16px 0 0', fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>Let’s fill in <span style={{ color: '#c4b5fd' }}>{viewLabel(v)}</span></h2>
+            <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 300 }}>A handful of focused questions, and I’ll turn your answers straight into model updates — no diagram editing needed.</p>
+          </div>
+          <div style={{ marginTop: 18, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>Things I might ask</div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {['What’s the primary responsibility here?', 'Which datastores or services does it rely on?', 'Any external systems — email, payments, SMS?'].map((q, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-stagger .4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.1 + i * 0.07}s` }}>
+                <span style={{ width: 24, height: 24, flex: 'none', borderRadius: 7, background: 'rgba(168,85,247,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c4b5fd' }}><HelpCircle size={13} /></span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.text2, textAlign: 'left' }}>{q}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={start} disabled={run.loading} className="c4ai-pri"
+            style={{ width: '100%', marginTop: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', opacity: run.loading ? 0.6 : 1 }}>
+            {run.loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} {run.loading ? 'Starting…' : 'Start interview'} {!run.loading && <ArrowRight size={15} />}
+          </button>
+        </div>
+      ) : (
+        <p style={blurb}>Filling in <span style={{ color: '#7dd3fc' }}>{viewLabel(v)}</span>. Answer a few questions; c4hero turns them into model updates.</p>
+      )}
 
       {started && !plan && !wrapUp && (
         <>
@@ -540,6 +1245,17 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: C.muted2 }}><Loader2 size={14} className="animate-spin" color={C.accent} /> Thinking…</span>
               : <span key={question} style={{ display: 'block', animation: 'c4ai-rise .3s ease both' }}>{question}</span>}
           </div>
+          {mentioned.length > 0 && (
+            <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', animation: 'c4ai-fade .25s ease' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.muted2 }}><CornerDownRight size={12} /> Highlighting</span>
+              {mentioned.map((m) => (
+                <button key={m.id} onClick={() => useWorkspaceStore.setState({ focusElementId: m.id })}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: '#142540', border: '1px solid rgba(37,99,235,0.4)', fontSize: 11, color: '#7dd3fc', cursor: 'pointer' }}>
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          )}
           <div style={{ marginTop: 12 }}>
             <Field value={answer} onChange={setAnswer} placeholder="Type or dictate your answer…" rows={3} onSubmit={answerNext} />
             <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
@@ -637,195 +1353,6 @@ function PlanPreviewBar({ provider, ws, view, history }: { provider: AiProvider;
           )}
         </div>
       )}
-    </div>
-  )
-}
-
-// ─── Review (audit findings + auto-describe tidy-up) ────────────────
-
-/** Auto-describe, folded into the Review tab as a tidy-up card. */
-function DescribeSection({ provider, workspace }: { provider: AiProvider; workspace: Workspace | null }) {
-  const missing = workspace ? countMissingDescriptions(workspace) : 0
-  const run = useAiRun()
-  const [preview, setPreview] = useState<DescribePreview | null>(null)
-  const count = preview ? preview.elements.length + preview.relationships.length : 0
-
-  function apply() {
-    if (!preview) return
-    const s = useWorkspaceStore.getState()
-    const actions: DescribeActions = {
-      updateElement: (id, patch) => s.updateElement(id, patch),
-      updateRelationship: (id, patch) => s.updateRelationship(id, patch),
-    }
-    applyDescribePreview(preview, actions)
-    setPreview(null)
-  }
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ padding: '12px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <Wand2 size={16} color={C.accent} style={{ flex: 'none' }} />
-          <span style={{ fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{missing === 0 ? 'Every element and relationship has a description.' : `${missing} item(s) are missing a description.`}</span>
-        </div>
-        <button className="c4ai-pri" disabled={missing === 0 || run.loading}
-          onClick={() => run.go(async () => buildDescribePreview(await autoDescribe(provider, workspace!), workspace!), setPreview)}
-          style={{ marginTop: 11, display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 13px', borderRadius: 8, border: 'none', background: C.accent, color: C.ink, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (missing === 0 || run.loading) ? 0.55 : 1 }}>
-          {run.loading ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} {run.loading ? 'Thinking…' : 'Auto-write descriptions'}
-        </button>
-      </div>
-      <ErrorLine error={run.error} />
-      {preview && (
-        <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{count} suggested description(s)</div>
-          {count === 0 ? <div style={{ ...blurb, margin: '8px 0 0' }}>No applicable suggestions.</div> : (
-            <ul style={{ margin: '10px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {preview.elements.map((p) => <li key={`e-${p.id}`} style={liStyle}><strong>{p.label}:</strong> {p.description}</li>)}
-              {preview.relationships.map((p) => <li key={`r-${p.id}`} style={liStyle}><strong>{p.label}:</strong> {p.description}</li>)}
-            </ul>
-          )}
-          <Actions>
-            <button className="c4ai-pri" style={primaryBtn} disabled={count === 0} onClick={apply}>Apply descriptions</button>
-            <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPreview(null)}>Discard</button>
-          </Actions>
-        </Card>
-      )}
-    </div>
-  )
-}
-
-type ReviewScope = 'view' | 'workspace'
-type FindingStatus = 'applied' | 'dismissed'
-
-const SEV: Record<ReviewSeverity, { dot: string; text: string; line: string; label: string }> = {
-  high: { dot: C.danger, text: C.dangerText, line: 'rgba(239,68,68,0.18)', label: 'High' },
-  medium: { dot: C.warn, text: C.warnText, line: 'rgba(249,115,22,0.18)', label: 'Medium' },
-  low: { dot: C.muted2, text: C.muted, line: 'rgba(132,141,151,0.18)', label: 'Low' },
-}
-
-function ReviewBody({ provider, workspace }: { provider: AiProvider; workspace: Workspace | null }) {
-  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
-
-  const [scope, setScope] = useState<ReviewScope>('view')
-  const run = useAiRun()
-  const [result, setResult] = useState<ReviewResult | null>(null)
-  const [status, setStatus] = useState<Record<number, FindingStatus>>({})
-  const [copied, setCopied] = useState(false)
-
-  const canView = !!activeView
-  const effScope: ReviewScope = canView ? scope : 'workspace'
-  const findings = result ? sortedFindings(result) : []
-  const names = workspace ? elementNameMap(workspace) : new Map<string, string>()
-  const indexOf = (f: ReviewFinding) => findings.indexOf(f)
-
-  function runReview() {
-    run.go(() => reviewArchitecture(provider, workspace!, effScope === 'view' ? activeView : null), (r) => { setResult(r); setStatus({}) })
-  }
-  function applyOne(f: ReviewFinding) {
-    const i = indexOf(f)
-    if (!workspace || !isActionable(f)) return
-    applyPlanToStore({ operations: f.operations ?? [] }, workspace)
-    setStatus((s) => ({ ...s, [i]: 'applied' }))
-  }
-  function applyAll() {
-    if (!workspace) return
-    const next = { ...status }
-    findings.forEach((f, i) => { if (isActionable(f) && !status[i]) { applyPlanToStore({ operations: f.operations ?? [] }, workspace); next[i] = 'applied' } })
-    setStatus(next)
-  }
-  function copyMd() {
-    if (!result) return
-    navigator.clipboard?.writeText(findingsToMarkdown(result)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }).catch(() => {})
-  }
-
-  const pending = findings.filter((f, i) => isActionable(f) && !status[i]).length
-  const fixable = findings.filter(isActionable).length
-  const groups = (['high', 'medium', 'low'] as ReviewSeverity[])
-    .map((sev) => ({ sev, items: findings.filter((f) => f.severity === sev) }))
-    .filter((g) => g.items.length > 0)
-
-  return (
-    <>
-      <DescribeSection provider={provider} workspace={workspace} />
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: C.muted2 }}>Scope:</span>
-          <div style={segWrap}>
-            <button onClick={() => setScope('view')} disabled={!canView} style={segBtn(effScope === 'view')} title={canView ? undefined : 'Open a view to scope to it'}>This view</button>
-            <button onClick={() => setScope('workspace')} style={segBtn(effScope === 'workspace')}>Whole model</button>
-          </div>
-        </div>
-        {result && findings.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <button className="c4ai-sec" onClick={copyMd} style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.text }}>{copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}</button>
-            {pending > 0 && <button className="c4ai-pri" onClick={applyAll} style={{ ...miniBtn, border: 'none', background: C.accent, color: C.ink, fontWeight: 600 }}>Apply all ({pending})</button>}
-          </div>
-        )}
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <RunButton label={result ? 'Re-run review' : 'Review architecture'} loading={run.loading} onClick={runReview} />
-      </div>
-      <ErrorLine error={run.error} />
-
-      {result && (
-        findings.length === 0 ? (
-          <div style={{ ...blurb, marginTop: 14 }}>This {effScope === 'view' ? 'view' : 'model'} looks complete — nothing to flag.</div>
-        ) : (
-          <>
-            <div style={{ marginTop: 12, fontSize: 13, color: C.muted }}><span style={{ color: C.text, fontWeight: 600 }}>{findings.length} finding{findings.length === 1 ? '' : 's'}</span> · {fixable} fixable</div>
-            {groups.map((g) => (
-              <div key={g.sev}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 18 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: SEV[g.sev].dot }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: SEV[g.sev].text }}>{SEV[g.sev].label}</span>
-                  <span style={{ fontSize: 11, color: C.muted2 }}>{g.items.length}</span>
-                  <span style={{ flex: 1, height: 1, background: SEV[g.sev].line }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                  {g.items.map((f) => <FindingCard key={indexOf(f)} finding={f} names={names} status={status[indexOf(f)]} onApply={() => applyOne(f)} onDismiss={() => setStatus((s) => ({ ...s, [indexOf(f)]: 'dismissed' }))} />)}
-                </div>
-              </div>
-            ))}
-          </>
-        )
-      )}
-    </>
-  )
-}
-
-function FindingCard({ finding, names, status, onApply, onDismiss }: { finding: ReviewFinding; names: Map<string, string>; status?: FindingStatus; onApply: () => void; onDismiss: () => void }) {
-  const actionable = isActionable(finding)
-  const done = status === 'applied' || status === 'dismissed'
-  const affected = finding.elementIds.map((id) => names.get(id) ?? id).filter(Boolean)
-  return (
-    <div style={{ display: 'flex', borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden', opacity: done ? 0.6 : 1 }}>
-      <span style={{ width: 3, flex: 'none', background: SEV[finding.severity].dot }} />
-      <div style={{ padding: '13px 15px', flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{finding.title}</span>
-          <span style={pillGrey}>{finding.category}</span>
-          {status === 'applied' && <span style={{ ...pillGrey, background: 'rgba(34,197,94,0.14)', color: C.greenText }}>✓ applied</span>}
-          {status === 'dismissed' && <span style={pillGrey}>dismissed</span>}
-        </div>
-        <div style={{ fontSize: 13, color: C.text2, lineHeight: 1.5, marginTop: 6 }}>{finding.detail}</div>
-        {affected.length > 0 && !done && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            <span style={{ fontSize: 11, color: C.muted2 }}>Affects:</span>
-            {affected.map((name, i) => <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: '#142540', border: '1px solid rgba(37,99,235,0.4)', fontSize: 11, color: '#7dd3fc' }}>{name}</span>)}
-          </div>
-        )}
-        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginTop: 8 }}><strong style={{ color: C.text }}>Suggestion:</strong> {finding.suggestion}</div>
-        {!done && (
-          <div style={{ marginTop: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
-            {actionable && <button className="c4ai-pri" style={{ ...miniBtn, height: 30, border: 'none', background: C.accent, color: C.ink, fontWeight: 600 }} onClick={onApply}>Apply fix</button>}
-            <button className="c4ai-sec" style={{ ...miniBtn, height: 30, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted }} onClick={onDismiss}>Dismiss</button>
-            {!actionable && <span style={{ fontSize: 11, color: C.muted2 }}>Advisory — no automatic fix</span>}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
@@ -1062,23 +1589,46 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
   }
 
   // idle
+  const looksFor: { icon: LucideIcon; t: string; s: string }[] = [
+    { icon: FileCode, t: 'Manifests & configs', s: 'package.json, pom.xml, go.mod, application.yml…' },
+    { icon: Box, t: 'Services & containers', s: 'apps and modules, and how they’re wired together' },
+    { icon: Link2, t: 'External dependencies', s: 'databases, queues, Stripe, SendGrid…' },
+  ]
   return (
-    <>
-      <p style={blurb}>Point c4hero at a local repository. It reads the code on your machine and proposes model updates from what it finds — each carrying the file it came from.</p>
-      <button onClick={choose} className="c4ai-card"
-        style={{ width: '100%', display: 'flex', gap: 14, alignItems: 'center', textAlign: 'left', padding: 18, borderRadius: 12, border: `1px dashed ${C.borderStrong}`, background: C.card, cursor: 'pointer' }}>
-        <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><Folder size={24} /></span>
-        <span style={{ minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>Choose a folder…</span>
-          <span style={{ display: 'block', fontSize: 12, color: C.muted2, lineHeight: 1.45, marginTop: 2 }}>Reads a repo locally and proposes updates from the code.</span>
+    <div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '6px 0 2px' }}>
+        <span style={{ position: 'relative', width: 60, height: 60, borderRadius: 16, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#86efac', animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}>
+          <GitBranch size={27} />
+          <span style={{ position: 'absolute', inset: -1, borderRadius: 16, border: '1px solid rgba(34,197,94,0.35)', animation: 'c4ai-ringpulse 2.4s ease-out infinite' }} />
         </span>
+        <h2 style={{ margin: '16px 0 0', fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>Build the model <span style={{ color: '#86efac' }}>from your code</span></h2>
+        <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 300 }}>Point me at a local repo. I read it on your machine and propose containers, services and connections — each tagged with the file it came from.</p>
+      </div>
+      <div style={{ marginTop: 18, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>What I look for</div>
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {looksFor.map((r, i) => {
+          const I = r.icon
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-stagger .4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.1 + i * 0.07}s` }}>
+              <span style={{ width: 26, height: 26, flex: 'none', borderRadius: 7, background: 'rgba(34,197,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#86efac' }}><I size={14} /></span>
+              <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.text }}>{r.t}</span>
+                <span style={{ display: 'block', fontSize: 11.5, color: C.muted2, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.s}</span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <button onClick={choose} className="c4ai-pri"
+        style={{ width: '100%', marginTop: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
+        <Folder size={16} /> Choose a folder…
       </button>
       <ErrorLine error={error} />
-      <div style={{ marginTop: 16, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '11px 13px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '11px 13px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
         <ShieldCheck size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
         <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Files are read in your browser. Only the file tree and key manifest/config files are sent to your AI provider with your key — c4hero has no server.</span>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -1195,6 +1745,18 @@ function ScanGraph() {
 
 // ─── BYOK welcome + Settings ────────────────────────────────────────
 
+// Simple monochrome provider marks (evocative, not official logos).
+function ProviderGlyph({ id, size = 18 }: { id: AiProviderId; size?: number }) {
+  if (id === 'gemini') { // Gemini — sparkle
+    return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c.45 5.1 2.4 7.05 7.5 7.5-5.1.45-7.05 2.4-7.5 7.5-.45-5.1-2.4-7.05-7.5-7.5C9.6 9.05 11.55 7.1 12 2Z" /></svg>
+  }
+  if (id === 'openai') { // knot — approximated as a 6-point flower
+    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M12 3.5a3.2 3.2 0 0 1 5.3 1.4 3.2 3.2 0 0 1 1.6 5.4 3.2 3.2 0 0 1-1.6 5.4A3.2 3.2 0 0 1 12 20.5a3.2 3.2 0 0 1-5.3-1.4 3.2 3.2 0 0 1-1.6-5.4 3.2 3.2 0 0 1 1.6-5.4A3.2 3.2 0 0 1 12 3.5Z" /><circle cx="12" cy="12" r="3" /></svg>
+  }
+  // Anthropic — sunburst
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M12 2.5v3.5M12 18v3.5M2.5 12H6M18 12h3.5M5.1 5.1l2.5 2.5M16.4 16.4l2.5 2.5M18.9 5.1l-2.5 2.5M7.6 16.4l-2.5 2.5" /><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" /></svg>
+}
+
 function ProviderPicker({ value, onPick }: { value: AiProviderId; onPick: (id: AiProviderId) => void }) {
   return (
     <div style={{ display: 'flex', gap: 7 }}>
@@ -1202,7 +1764,8 @@ function ProviderPicker({ value, onPick }: { value: AiProviderId; onPick: (id: A
         const on = id === value
         return (
           <button key={id} onClick={() => onPick(id)}
-            style={{ flex: 1, height: 36, borderRadius: 10, fontSize: 13, cursor: 'pointer', background: on ? 'rgba(88,166,255,0.1)' : 'transparent', border: `1px solid ${on ? C.borderStrong : C.border}`, color: on ? C.text : C.muted, fontWeight: on ? 600 : 500 }}>
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, height: 58, borderRadius: 10, fontSize: 12, cursor: 'pointer', background: on ? 'rgba(88,166,255,0.1)' : 'transparent', border: `1px solid ${on ? C.borderStrong : C.border}`, color: on ? C.text : C.muted, fontWeight: on ? 600 : 500 }}>
+            <span style={{ color: on ? C.accent : C.muted2 }}><ProviderGlyph id={id} size={18} /></span>
             {AI_PROVIDER_META[id].label.replace(/^Google /, '').replace(/ \(Claude\)$/, '')}
           </button>
         )
@@ -1255,11 +1818,10 @@ function ByokWelcome({ onClose }: { onClose: () => void }) {
 }
 
 function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () => void }) {
-  const { enabled, showInTopBar, provider, apiKeys, models, update, setApiKey, setModel } = useAiSettingsStore()
+  const { enabled, provider, apiKeys, models, update, setApiKey, setModel } = useAiSettingsStore()
   const meta = AI_PROVIDER_META[provider]
   const [reveal, setReveal] = useState(false)
   const [edit, setEdit] = useState(false)
-  const modelListId = `c4ai-models-${provider}`
   const key = apiKeys[provider] ?? ''
   const maskedKey = key.length > 10 ? `${key.slice(0, 6)}····${key.slice(-3)}` : (key ? '••••••' : '—')
   const providerName = meta.label.replace(/ \(Claude\)$/, '')
@@ -1268,8 +1830,14 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
   return (
     <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
       <div data-drag-handle style={{ ...headerRow, cursor: 'move' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 15, fontWeight: 700, color: C.text }}><KeyRound size={16} color={C.accent} /> AI settings</span>
-        <button onClick={onDone ?? onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
+        {onDone ? (
+          <button onClick={onDone} className="c4ai-ghost" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px 0 7px', borderRadius: 9, border: 'none', background: 'transparent', color: C.text, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+            <ArrowLeft size={16} color={C.muted} /> AI settings
+          </button>
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 15, fontWeight: 700, color: C.text }}><KeyRound size={16} color={C.accent} /> AI settings</span>
+        )}
+        <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
       </div>
       <div style={{ padding: '18px 20px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!edit ? (
@@ -1297,13 +1865,6 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
                 <span style={{ position: 'absolute', top: 2, [enabled ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: enabled ? C.ink : C.text } as React.CSSProperties} />
               </button>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-              <div><div style={fieldLabel}>Show AI button in top bar</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>When off, open the assistant from the command palette (⌘K).</div></div>
-              <button role="switch" aria-checked={showInTopBar} onClick={() => update({ showInTopBar: !showInTopBar })} style={{ width: 36, height: 20, borderRadius: 999, background: showInTopBar ? C.accent : 'rgba(255,255,255,0.16)', position: 'relative', flex: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                <span style={{ position: 'absolute', top: 2, [showInTopBar ? 'right' : 'left']: 2, width: 16, height: 16, borderRadius: '50%', background: showInTopBar ? C.ink : C.text } as React.CSSProperties} />
-              </button>
-            </div>
-
             <SecurityNote />
             <button onClick={() => { setApiKey(''); onClose() }} style={{ height: 34, borderRadius: 10, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: C.dangerText, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Disconnect key</button>
           </>
@@ -1314,9 +1875,9 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
               <ProviderPicker value={provider} onPick={(id) => update({ provider: id })} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={fieldLabel}>{meta.keyLabel}</div>
-                <a href={meta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent }}>{meta.keyHelpLabel} <ExternalLink size={11} /></a>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ ...fieldLabel, whiteSpace: 'nowrap' }}>API key</div>
+                <a href={meta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent, whiteSpace: 'nowrap' }}>Get a key <ExternalLink size={11} /></a>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <input type={reveal ? 'text' : 'password'} value={apiKeys[provider] ?? ''} onChange={(e) => setApiKey(e.target.value)} placeholder={meta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
@@ -1325,8 +1886,22 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={fieldLabel}>Model</div>
-              <input list={modelListId} value={models[provider] ?? ''} onChange={(e) => setModel(e.target.value)} placeholder={meta.defaultModel} autoComplete="off" spellCheck={false} style={keyInput} />
-              <datalist id={modelListId}>{meta.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</datalist>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {meta.models.map((m) => {
+                  const on = (models[provider] || meta.defaultModel) === m.id
+                  const recommended = m.id === meta.defaultModel
+                  return (
+                    <button key={m.id} onClick={() => setModel(m.id)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 38, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left', background: on ? 'rgba(88,166,255,0.1)' : C.card, border: `1px solid ${on ? C.borderStrong : C.border}`, color: on ? C.text : C.text2, fontSize: 13, fontWeight: on ? 600 : 500 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</span>
+                        {recommended && <span style={{ flex: 'none', fontSize: 9, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: 'rgba(88,166,255,0.16)', color: C.accent }}>Recommended</span>}
+                      </span>
+                      {on && <Check size={15} color={C.accent} style={{ flex: 'none' }} />}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             <SecurityNote />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -1442,6 +2017,11 @@ function adrFilename(topic: string): string {
 // ─── style objects ──────────────────────────────────────────────────
 
 const headerRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 13px', borderBottom: `1px solid ${C.border}`, flex: 'none' }
+const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: C.muted3, margin: '18px 0 10px' }
+const wizSecBtn: React.CSSProperties = { flex: 1, height: 40, borderRadius: 11, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }
+const describeBtn: React.CSSProperties = { width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 13, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }
+const describeIcon: React.CSSProperties = { width: 38, height: 38, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }
+const kbd: React.CSSProperties = { fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(88,166,255,0.18)', color: C.muted3 }
 const iconBtn: React.CSSProperties = { width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer' }
 const blurb: React.CSSProperties = { fontSize: 12, color: C.muted2, margin: '0 0 12px' }
 const kicker: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2 }
@@ -1452,8 +2032,3 @@ const secondaryBtn: React.CSSProperties = { height: 32, padding: '0 14px', borde
 const miniBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }
 const keyInput: React.CSSProperties = { flex: 1, minWidth: 0, width: '100%', height: 38, padding: '0 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontFamily: 'ui-monospace, monospace', fontSize: 13 }
 const chipBlue: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500, background: '#142540', border: '1px solid rgba(37,99,235,0.4)', color: '#7dd3fc' }
-const pillGrey: React.CSSProperties = { fontSize: 10.5, padding: '1px 8px', borderRadius: 999, background: 'rgba(132,141,151,0.16)', color: C.muted }
-const segWrap: React.CSSProperties = { display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }
-function segBtn(active: boolean): React.CSSProperties {
-  return { height: 28, padding: '0 12px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: active ? C.accent : 'transparent', color: active ? C.ink : C.muted }
-}

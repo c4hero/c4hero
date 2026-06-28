@@ -7,9 +7,9 @@ describe('normalizeAiSettings', () => {
     expect(s.enabled).toBe(true)
     expect(s.provider).toBe('anthropic')
     expect(s.apiKeys).toEqual({ anthropic: '', openai: '', gemini: '' })
-    expect(s.models.anthropic).toBe('claude-opus-4-8')
-    expect(s.models.openai).toBe('gpt-5')
-    expect(s.models.gemini).toBe('gemini-2.5-pro')
+    expect(s.models.anthropic).toBe('claude-sonnet-4-6')
+    expect(s.models.openai).toBe('gpt-5-mini')
+    expect(s.models.gemini).toBe('gemini-2.5-flash')
     expect(s.panelPos).toBeNull()
     expect(s.showInTopBar).toBe(true)
   })
@@ -62,7 +62,7 @@ describe('activeAiConfig', () => {
 
   it('falls back to the provider default model when the stored model is blank', () => {
     const s = normalizeAiSettings({ provider: 'openai', apiKeys: { openai: 'o' }, models: { openai: '' } })
-    expect(activeAiConfig(s).model).toBe('gpt-5')
+    expect(activeAiConfig(s).model).toBe('gpt-5-mini')
   })
 })
 

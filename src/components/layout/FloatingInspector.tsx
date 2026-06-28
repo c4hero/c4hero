@@ -46,20 +46,22 @@ export default function FloatingInspector() {
   return (
     <div
       ref={containerRef}
+      data-canvas-chrome="inspector"
       style={{
+        // Frame matched to the AI assistant panel so the two read as a set.
         position: 'fixed',
-        top: 72,
+        top: 64,
         right: 14,
         zIndex: 50,
-        width: 260,
-        maxHeight: 'calc(100dvh - 86px)',
+        width: 'min(360px, calc(100vw - 28px))',
+        maxHeight: 'calc(100dvh - 136px)',
         overflowY: 'auto',
-        borderRadius: 'var(--radius-lg)',
-        border: '1px solid var(--color-border)',
-        background: 'var(--glass-bg)',
+        borderRadius: 12,
+        border: '1px solid rgba(88,166,255,0.16)',
+        background: 'var(--glass-bg-heavy)',
         backdropFilter: 'blur(var(--glass-blur))',
         WebkitBackdropFilter: 'blur(var(--glass-blur))',
-        boxShadow: 'var(--glass-shadow)',
+        boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
         opacity: visible ? 1 : 0,
         transform: visible ? 'translateY(0)' : 'translateY(-8px)',
         pointerEvents: visible ? 'auto' : 'none',

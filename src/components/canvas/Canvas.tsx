@@ -6,6 +6,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useStore,
   type Node,
   type Edge,
   type OnSelectionChangeParams,
@@ -887,6 +888,21 @@ export default function Canvas() {
     pointerEvents: minimapMode === 'always' || minimapVisible ? 'auto' : 'none',
   }), [minimapMode, minimapVisible])
 
+  // Fade the floating chrome only while the user actually *moves* the pane.
+  // `paneDragging` is true the moment a pointer goes down on the pane (even for a
+  // plain click), so we additionally require an onMove to fire — that excludes
+  // clicks (no movement), and resizes/zoom/programmatic moves aren't pane-drags.
+  const paneDragging = useStore((s) => s.paneDragging)
+  const draggingRef = useRef(false)
+  useEffect(() => {
+    draggingRef.current = paneDragging
+    if (!paneDragging) document.documentElement.removeAttribute('data-canvas-panning')
+  }, [paneDragging])
+
+  const onMove = useCallback(() => {
+    if (draggingRef.current) document.documentElement.setAttribute('data-canvas-panning', '')
+  }, [])
+
   const onMoveStart = useCallback(() => {
     setMinimapVisible(true)
     if (hideTimer.current) clearTimeout(hideTimer.current)
@@ -902,6 +918,9 @@ export default function Canvas() {
       saveViewport(workspaceRef.current?.name, activeViewKey, rf.getViewport())
     }
   }, [activeViewKey])
+
+  // Safety: never leave the chrome faded if we unmount mid-drag.
+  useEffect(() => () => document.documentElement.removeAttribute('data-canvas-panning'), [])
 
   const multiSelectModeRef = useRef(multiSelectMode)
   useEffect(() => { multiSelectModeRef.current = multiSelectMode }, [multiSelectMode])
@@ -1068,6 +1087,7 @@ export default function Canvas() {
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onMoveStart={onMoveStart}
+        onMove={onMove}
         onMoveEnd={onMoveEnd}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}

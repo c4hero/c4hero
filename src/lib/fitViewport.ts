@@ -47,7 +47,9 @@ export function fitContentNodesToViewport(
   options: FitOptions = {},
 ): boolean {
   if (!reactFlow) return false
-  return fitNodesToViewport(reactFlow, reactFlow.getNodes().filter(isContentFitNode), options)
+  // Fit every visible node — content, group boundaries AND the focal scope
+  // boundary — so no outline or boundary label gets clipped behind the chrome.
+  return fitNodesToViewport(reactFlow, reactFlow.getNodes(), options)
 }
 
 export function fitNodesToViewport(

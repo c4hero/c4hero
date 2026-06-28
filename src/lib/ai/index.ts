@@ -16,6 +16,10 @@ export { AiError, aiErrorMessage } from './types'
 export { findingsToMarkdown, sortedFindings, isActionable } from './review'
 export { classifyScope, type PlanScope } from './planScope'
 export { modelHealth, type ModelGap, type ModelGapId } from './health'
+export {
+  missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp,
+  type MissingGap, type GapKind,
+} from './sweep'
 export { readRepoFiles, buildRepoBundle, canScanRepo, isKeyFile, isIgnoredDir, mergeRepoProposals } from './repoScan'
 
 export type { AiProviderId, AiProviderMeta, AiModelOption } from './providerMeta'
@@ -25,7 +29,7 @@ export { createProvider } from './providers'
 
 export {
   generateDiagram, reviewArchitecture, autoDescribe, planEdit, draftAdr,
-  interviewAsk, interviewKickoffMessage, interviewBuildPlan, scanRepo,
+  interviewAsk, interviewKickoffMessage, interviewBuildPlan, scanRepo, suggestTags,
 } from './features'
 
 export {

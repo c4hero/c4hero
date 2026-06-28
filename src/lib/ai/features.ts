@@ -61,6 +61,39 @@ export async function autoDescribe(provider: AiProvider, ws: Workspace): Promise
   return toDescribeResult(raw)
 }
 
+/** Suggest a few category tags for one element. When `vocabulary` is non-empty
+ *  the result is constrained to it (keeps the user's taxonomy consistent);
+ *  otherwise a few sensible new tags are proposed. Returns 0–5 tags. */
+export async function suggestTags(
+  provider: AiProvider,
+  target: { name: string; type: string; description?: string; technology?: string },
+  vocabulary: string[],
+): Promise<string[]> {
+  const vocabLine = vocabulary.length
+    ? `Choose ONLY from this existing tag vocabulary — do not invent new tags: ${vocabulary.join(', ')}.`
+    : 'There is no existing tag vocabulary, so propose up to 4 short, reusable category tags (e.g. "Database", "External", "Critical", "Gateway").'
+  const raw = await provider.completeJson({
+    system: 'You categorise software-architecture elements with short tags used for styling, grouping and filtering. Return only tags that genuinely apply; prefer fewer, high-signal tags over many.',
+    user: `Element: ${target.name} (${target.type})${target.technology ? ` · tech: ${target.technology}` : ''}${target.description ? `\nDescription: ${target.description}` : ''}\n\n${vocabLine}\n\nReturn JSON: { "tags": string[] } with 0–4 tags that apply to this element.`,
+    schema: { type: 'object', additionalProperties: false, properties: { tags: { type: 'array', items: { type: 'string' } } }, required: ['tags'] },
+    validate: isRecord,
+    maxTokens: 300,
+  })
+  const list = isRecord(raw) && Array.isArray((raw as { tags?: unknown }).tags) ? (raw as { tags: unknown[] }).tags : []
+  const cleaned = list.map((t) => (typeof t === 'string' ? t.trim() : '')).filter(Boolean)
+  if (vocabulary.length) {
+    const byLower = new Map(vocabulary.map((v) => [v.toLowerCase(), v]))
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const t of cleaned) {
+      const match = byLower.get(t.toLowerCase())
+      if (match && !seen.has(match)) { seen.add(match); out.push(match) }
+    }
+    return out.slice(0, 5)
+  }
+  return [...new Set(cleaned)].slice(0, 4)
+}
+
 /** Natural-language edit → returns a validated operation plan. */
 export async function planEdit(provider: AiProvider, ws: Workspace, instruction: string): Promise<EditPlan> {
   const raw = await provider.completeJson({

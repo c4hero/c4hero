@@ -13,7 +13,9 @@ import {
   Maximize2,
   Settings,
   MousePointerClick,
+  Sparkles,
 } from 'lucide-react'
+import { useAiSettingsStore, isAiReady } from '@/store/ai-settings'
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
@@ -39,6 +41,10 @@ export default function FloatingToolRail() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const resetAndRelayout = useWorkspaceStore((s) => s.resetAndRelayout)
+
+  const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
+  const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
+  const aiReady = useAiSettingsStore(isAiReady)
 
 
 
@@ -120,17 +126,58 @@ export default function FloatingToolRail() {
   return (
     <>
     <div
-      className="glass-panel"
-      role="toolbar"
-      aria-label="Canvas tools"
-      data-canvas-fit-chrome={fitChromeSide}
-      data-canvas-chrome="tool-rail"
+      data-canvas-chrome="tool-rail-wrap"
       style={{
         position: 'fixed',
         left: 14,
         top: '50%',
         transform: 'translateY(-50%)',
         zIndex: 50,
+        display: 'flex',
+        flexDirection: 'column',
+        // Stretch so the AI button matches the tool rail's width.
+        alignItems: 'stretch',
+        gap: 10,
+      }}
+    >
+      {/* AI assistant — its own button above the tool rail. Shows two states:
+          a filled accent background while the dialog is open, and a status dot
+          (green = key set + AI on, grey = off / needs setup). */}
+      <button
+        type="button"
+        className="glass-panel hover-lift-inactive"
+        title={aiPanelOpen ? 'Hide AI assistant' : aiReady ? 'AI assistant' : 'AI assistant — set up your key'}
+        aria-label="AI assistant"
+        aria-pressed={aiPanelOpen}
+        data-active={aiPanelOpen ? 'true' : undefined}
+        onClick={() => setAiPanelOpen(!useWorkspaceStore.getState().aiPanelOpen)}
+        style={{
+          position: 'relative',
+          minWidth: 44,
+          height: 44,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 'var(--radius-lg)',
+          cursor: 'pointer',
+          // Open = solid accent fill with a dark icon (clearly "on"); closed =
+          // accent icon when ready, muted when off.
+          color: aiPanelOpen ? 'var(--color-bg-primary)' : aiReady ? 'var(--color-accent)' : 'var(--color-text-muted)',
+          background: aiPanelOpen ? 'var(--color-accent)' : undefined,
+          borderColor: aiPanelOpen ? 'var(--color-accent)' : undefined,
+        }}
+      >
+        <Sparkles size={18} />
+        <span style={{ position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: '50%', background: aiReady ? '#22c55e' : 'var(--color-text-muted)', border: `2px solid ${aiPanelOpen ? 'var(--color-accent)' : 'var(--glass-bg-heavy)'}` }} />
+      </button>
+
+    <div
+      className="glass-panel"
+      role="toolbar"
+      aria-label="Canvas tools"
+      data-canvas-fit-chrome={fitChromeSide}
+      data-canvas-chrome="tool-rail"
+      style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -240,6 +287,7 @@ export default function FloatingToolRail() {
         onClick={() => setCanvasSettingsOpen(true)}
       />
     </div>
+    </div>
     {addPanelOpen && breakpoint === 'mobile' && (
       <div ref={addElementFlyoutRef} data-mobile-add-flyout>
         <AddElementPanel onClose={() => setAddPanelOpen(false)} />
@@ -295,7 +343,9 @@ const RailBtn = forwardRef<HTMLButtonElement, {
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 10,
-        margin: '1px 4px',
+        // No horizontal margin: keeps the rail the same width as the 44px AI
+        // button above it. The stretch wrapper then matches them exactly.
+        margin: '1px 0',
         ...(active ? { background: 'var(--color-accent-active)' } : {}),
         color: active ? 'var(--color-accent)' : color ?? 'var(--color-text-muted)',
         cursor: onClick ? 'pointer' : 'default',

@@ -1153,11 +1153,16 @@ body {
   /* Floating tool rail: collapse to a horizontal strip near the top edge
      instead of a vertical column on the left. Vertical orientation eats
      too much horizontal space on narrow viewports. */
-  [data-canvas-chrome="tool-rail"] {
+  /* The AI button + tool rail share a positioned wrapper; on phones it docks to
+     the bottom centre as a row (AI button beside the tool row). */
+  [data-canvas-chrome="tool-rail-wrap"] {
     top: auto !important;
     bottom: 14px !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
+    flex-direction: row !important;
+  }
+  [data-canvas-chrome="tool-rail"] {
     flex-direction: row !important;
     padding: 0 8px !important;
   }
@@ -1304,6 +1309,28 @@ body {
 }
 
 /* ─── Glass panels ─────────────────────────────────────────── */
+
+/* While dragging the canvas, fade the floating chrome (toolbars, panels, HUD)
+   so the diagram stays visible; it restores smoothly when the drag stops. */
+.glass-panel,
+.glass-panel-solid,
+.glass-flyout,
+[data-canvas-chrome],
+.c4ai {
+  transition: opacity 0.16s ease;
+}
+[data-canvas-panning] .glass-panel,
+[data-canvas-panning] .glass-panel-solid,
+[data-canvas-panning] .glass-flyout,
+[data-canvas-panning] [data-canvas-chrome],
+[data-canvas-panning] .c4ai {
+  opacity: 0.4 !important;
+  pointer-events: none !important;
+  /* Drop borders/shadows while faded so a panel's edge doesn't read as a thin
+     line floating over the canvas. */
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
 
 .glass-panel {
   background: var(--glass-bg);

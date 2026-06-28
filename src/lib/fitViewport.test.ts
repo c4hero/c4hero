@@ -94,7 +94,7 @@ describe('fitViewport', () => {
     expect(fitOptions).toEqual({ duration: 0 })
   })
 
-  it('fits only content nodes, not group or boundary overlays', () => {
+  it('fits all visible nodes, including group and scope boundaries', () => {
     const canvas = document.createElement('div')
     canvas.className = 'react-flow'
     document.body.append(canvas)
@@ -103,18 +103,18 @@ describe('fitViewport', () => {
     const reactFlow = {
       getNodes: () => [
         makeNode('content', 0, 0, 100, 100),
-        makeNode('group-content', 10_000, 10_000, 500, 500),
-        makeNode('__scope_boundary__', -10_000, -10_000, 500, 500),
+        makeNode('group-content', 450, 350, 100, 100),
+        makeNode('__scope_boundary__', 0, 0, 1000, 800), // boundary IS included
       ],
       setViewport: vi.fn(),
     } as unknown as ReactFlowInstance
 
     fitContentNodesToViewport(reactFlow, { duration: 0, padding: 0, maxZoom: 10 })
 
-    // No chrome → only the 16px bottom floor applies, leaving 1000×784 usable.
-    // Node 100×100 fits at 7.84x (height-bound). Centered → x=108, y=0.
+    // The scope boundary spans the full 1000×800; 16px bottom floor → 1000×784
+    // usable → height-bound zoom 0.98, centered.
     expect(reactFlow.setViewport).toHaveBeenCalledWith(
-      { x: expect.closeTo(108) as unknown as number, y: expect.closeTo(0) as unknown as number, zoom: expect.closeTo(7.84) as unknown as number },
+      { x: expect.closeTo(10) as unknown as number, y: expect.closeTo(0) as unknown as number, zoom: expect.closeTo(0.98) as unknown as number },
       { duration: 0 },
     )
   })

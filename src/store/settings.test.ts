@@ -3,9 +3,9 @@ import { useSettingsStore } from './settings'
 
 const STORAGE_KEY = 'c4hero.json'
 
-// Known defaults — mirror DEFAULTS in settings.ts (matchMedia mock returns matches:false → 'auto')
+// Known defaults — mirror DEFAULTS in settings.ts
 const RESET_DEFAULTS = {
-  minimapMode: 'auto' as const,
+  minimapMode: 'never' as const,
   showUndoRedo: false,
   showZoomControls: false,
   snapToGrid: false,
@@ -127,7 +127,7 @@ describe('useSettingsStore', () => {
 
     const freshStore = await importFreshSettingsStore()
     expect(freshStore.getState()).toMatchObject({
-      minimapMode: 'auto',
+      minimapMode: 'never',
       showUndoRedo: false,
       showZoomControls: true,
       snapToGrid: false,
