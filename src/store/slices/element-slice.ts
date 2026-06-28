@@ -96,21 +96,22 @@ export const createElementSlice: StateCreator<
       const tags = extraTag ? ['Element', 'Container', extraTag] : ['Element', 'Container']
       const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
       system.containers.push(container)
-      addToCurrentView(ws, s.activeViewKey, id, position, 'container')
-      // Also auto-add to all other container views scoped to the same system
+      // A container belongs ONLY in its own system's container views — never in
+      // the active view if that view is scoped to a different system (that would
+      // render system B's container inside system A's view). Add it to every
+      // container view scoped to THIS system (with the drop position on the
+      // active one); if the system has no container view yet, create and switch
+      // to one so the container isn't stranded invisibly. Matters for AI-applied
+      // ops, which run regardless of the active view.
+      let placed = false
       for (const v of ws.views.containerViews) {
-        if (v.softwareSystemId === systemId && v.key !== s.activeViewKey) {
-          if (!v.elements.some(e => e.id === id)) v.elements.push({ id })
+        if (v.softwareSystemId !== systemId) continue
+        if (!v.elements.some(e => e.id === id)) {
+          v.elements.push(v.key === s.activeViewKey ? { id, x: position?.x, y: position?.y } : { id })
         }
+        placed = true
       }
-      // If no view can show this new container (the active view can't hold it —
-      // e.g. a landscape/context view — and the system has no container view),
-      // create and switch to a scoped container view so it isn't stranded
-      // invisibly in the model. Matters for AI-applied ops that run regardless
-      // of the active view.
-      const containerVisible = (!!s.activeViewKey && !!findViewHelper(ws, s.activeViewKey)?.elements.some(e => e.id === id))
-        || ws.views.containerViews.some(v => v.softwareSystemId === systemId && v.elements.some(e => e.id === id))
-      if (!containerVisible) {
+      if (!placed) {
         const vk = nanoid(8)
         const { elements, relationships } = buildInitialViewContent(ws.model, 'container', systemId)
         ws.views.containerViews.push({ type: 'container', key: vk, title: `${system.name} — Containers`, elements, relationships, autoLayout: { direction: 'TB' }, softwareSystemId: systemId })
@@ -143,19 +144,19 @@ export const createElementSlice: StateCreator<
         pushUndoSnapshot(s)
         const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Element', 'Component'], properties: {} }
         container.components.push(comp)
-        addToCurrentView(ws, s.activeViewKey, id, position, 'component')
-        // Also auto-add to all other component views scoped to the same container
+        // A component belongs ONLY in its own container's component views (not in
+        // a different container's active view). Add to every component view
+        // scoped to THIS container (position on the active one); if none exists,
+        // create + switch to one so it isn't stranded invisibly (see addContainer).
+        let placed = false
         for (const v of ws.views.componentViews) {
-          if (v.containerId === containerId && v.key !== s.activeViewKey) {
-            if (!v.elements.some(e => e.id === id)) v.elements.push({ id })
+          if (v.containerId !== containerId) continue
+          if (!v.elements.some(e => e.id === id)) {
+            v.elements.push(v.key === s.activeViewKey ? { id, x: position?.x, y: position?.y } : { id })
           }
+          placed = true
         }
-        // If no view can show this new component (active view can't hold it and
-        // the container has no component view), create + switch to a scoped
-        // component view so it isn't stranded invisibly (see addContainer).
-        const componentVisible = (!!s.activeViewKey && !!findViewHelper(ws, s.activeViewKey)?.elements.some(e => e.id === id))
-          || ws.views.componentViews.some(v => v.containerId === containerId && v.elements.some(e => e.id === id))
-        if (!componentVisible) {
+        if (!placed) {
           const vk = nanoid(8)
           const { elements, relationships } = buildInitialViewContent(ws.model, 'component', containerId)
           ws.views.componentViews.push({ type: 'component', key: vk, title: `${container.name} — Components`, elements, relationships, autoLayout: { direction: 'TB' }, containerId })

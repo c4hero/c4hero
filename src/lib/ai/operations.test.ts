@@ -189,6 +189,17 @@ describe('applyEditPlan — parent-type and existence guards', () => {
     expect(result.skippedCount).toBe(0)
   })
 
+  it('a new element sharing a name does not hijack by-name resolution of the existing one', () => {
+    const ws = makeWorkspace() // has a container named "Web App" (id 'web')
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'addSoftwareSystem', ref: 'dup', name: 'Web App' }, // same name as existing 'web'
+      { op: 'addRelationship', source: 'cust', destination: 'Web App' }, // by name → must be existing 'web'
+    ] }, actions, ws)
+    // The relationship resolves to the pre-existing 'web', not the new system's id.
+    expect(actions.addRelationship).toHaveBeenCalledWith('cust', 'web', undefined, undefined)
+  })
+
   it('skips updateRelationship for an unknown relationship id', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()

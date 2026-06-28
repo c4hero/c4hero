@@ -19,6 +19,12 @@ describe('detectComposeMode', () => {
     expect(detectComposeMode('A payments platform with a web app, an API and a database')).toBe('new')
   })
 
+  it('does NOT treat "change to a new architecture" as new (would replace the workspace — data loss)', () => {
+    expect(detectComposeMode('Update my model to a new architecture')).toBe('change')
+    expect(detectComposeMode('Migrate to a new microservices architecture')).toBe('change')
+    expect(detectComposeMode('Rename the service and move it to a new layer')).toBe('change')
+  })
+
   it('defaults to "change" when ambiguous', () => {
     expect(detectComposeMode('the database')).toBe('change')
   })

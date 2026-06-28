@@ -63,7 +63,11 @@ export function applyEditPlan(
     refMap.set(ref, id)
     validIds.add(id)
     const key = name.trim().toLowerCase()
-    if (key) nameToId.set(key, id)
+    // Don't let a newly-created element hijack name resolution for an existing
+    // element of the same name — keep the first (existing) mapping so a later
+    // by-name reference can't silently resolve to the wrong element. Targeting
+    // the new element by `ref` (the precise handle) still works.
+    if (key && !nameToId.has(key)) nameToId.set(key, id)
   }
 
   // Resolve a token to a concrete id: a ref defined earlier, an existing id,

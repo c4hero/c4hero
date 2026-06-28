@@ -243,6 +243,27 @@ describe('Relationship and container mutations', () => {
     expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
   })
 
+  it('opening AI settings clears the selection (mirror direction — no inspector stacking)', () => {
+    useWorkspaceStore.getState().selectElements(['alice'])
+    useWorkspaceStore.getState().setAiSettingsOpen(true)
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual([])
+  })
+
+  it('addContainer never leaks a container into another system\'s active view', () => {
+    const sysB = useWorkspaceStore.getState().addSoftwareSystem('Billing')
+    const apiView = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    useWorkspaceStore.getState().setActiveView(apiView)
+    // Create a container in system B while viewing system A's container view.
+    const cid = useWorkspaceStore.getState().addContainer(sysB, 'Invoices')
+    const ws = useWorkspaceStore.getState().workspace!
+    // It must NOT land in system A's view…
+    expect(ws.views.containerViews.find((v) => v.key === apiView)!.elements.some((e) => e.id === cid)).toBe(false)
+    // …it goes into a container view scoped to system B (auto-created).
+    const bView = ws.views.containerViews.find((v) => v.softwareSystemId === sysB)
+    expect(bView).toBeDefined()
+    expect(bView!.elements.some((e) => e.id === cid)).toBe(true)
+  })
+
   it('addRelationship creates a relationship with correct fields', () => {
     useWorkspaceStore.getState().addRelationship('alice', 'api', 'calls', 'gRPC')
     const ws = useWorkspaceStore.getState().workspace!

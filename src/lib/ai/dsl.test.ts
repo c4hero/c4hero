@@ -39,6 +39,12 @@ describe('extractDsl', () => {
     expect(extractDsl('prose\n' + dsl + '\ntrailing prose')).toBe(dsl)
   })
 
+  it('anchors on the workspace declaration, not a prose mention of the word', () => {
+    const dsl = 'workspace "X" {\n  model {}\n}'
+    expect(extractDsl('Here is your workspace:\n```dsl\n' + dsl + '\n```')).toBe(dsl)
+    expect(extractDsl('I built a workspace for you. workspace {\n  model {}\n}')).toBe('workspace {\n  model {}\n}')
+  })
+
   it('does not let a brace in a description truncate the block', () => {
     const dsl = 'workspace "X" {\n  model {\n    s = softwareSystem "S" "Emits a } then continues"\n  }\n}'
     // Without string-awareness the first "}" inside the description would close

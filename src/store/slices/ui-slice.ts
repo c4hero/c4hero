@@ -67,7 +67,17 @@ export const createUiSlice: StateCreator<
       s.selectedGroupId = null
     }
   }),
-  setAiSettingsOpen: (open) => set({ aiSettingsOpen: open, commandPaletteOpen: false }),
+  setAiSettingsOpen: (open) => set((s) => {
+    s.aiSettingsOpen = open
+    s.commandPaletteOpen = false
+    // Opening AI settings closes the inspector too (App.tsx renders the panel on
+    // aiPanelOpen || aiSettingsOpen, so a live selection would stack behind it).
+    if (open) {
+      s.selectedElementIds = []
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
+    }
+  }),
   // Consume the one-shot deep-link feature (after the panel routes to it)
   // without closing the panel, so a stale feature can't fire again later.
   clearAiPanelFeature: () => set({ aiPanelFeature: null }),

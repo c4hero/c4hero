@@ -672,7 +672,9 @@ function ElementRelationsTab({ elementId }: { elementId: string }) {
   }
 
   const outgoing = rels.filter((r) => r.sourceId === elementId)
-  const incoming = rels.filter((r) => r.destinationId === elementId)
+  // A self-loop (source === destination === this element) matches both filters;
+  // keep it only under Outgoing so it isn't listed (and counted) twice.
+  const incoming = rels.filter((r) => r.destinationId === elementId && r.sourceId !== elementId)
 
   const row = (rel: Relationship, isSource: boolean) => {
     const otherId = isSource ? rel.destinationId : rel.sourceId

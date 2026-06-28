@@ -17,12 +17,19 @@ export function stripCodeFence(text: string): string {
 export function extractDsl(text: string): string {
   const unfenced = stripCodeFence(text)
 
-  const start = unfenced.search(/\bworkspace\b/)
-  if (start === -1) return unfenced
-
-  // Walk braces from the first `{` after `workspace` to find the matching close.
-  const openIdx = unfenced.indexOf('{', start)
-  if (openIdx === -1) return unfenced.slice(start).trim()
+  // Anchor on the actual `workspace [ "name" [ "desc" ] ] {` declaration, not a
+  // stray mention of the word in prose ("Here is your workspace:") which would
+  // otherwise splice the preamble into the returned DSL.
+  const decl = /\bworkspace\b\s*(?:"(?:[^"\\]|\\.)*"\s*)*\{/.exec(unfenced)
+  if (!decl) {
+    // No real block — fall back to the first bare mention so the parser can
+    // report a precise error, or return everything when there's none.
+    const bare = unfenced.search(/\bworkspace\b/)
+    return bare === -1 ? unfenced : unfenced.slice(bare).trim()
+  }
+  const start = decl.index
+  // The matched declaration ends at its opening brace.
+  const openIdx = start + decl[0].length - 1
 
   let depth = 0
   let inString = false
