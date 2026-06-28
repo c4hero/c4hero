@@ -78,6 +78,9 @@ export const createNavigationSlice: StateCreator<
       s.selectedElementIds = []
       s.selectedRelationshipId = null
       s.selectedGroupId = null
+      // Match the other view-switches — don't carry stale highlight filters into
+      // the destination view.
+      if (clearHighlightFiltersWithStash(s)) announce('Highlighter cleared on view change')
     }
   }),
 

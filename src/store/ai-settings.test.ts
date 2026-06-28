@@ -48,6 +48,19 @@ describe('normalizeAiSettings', () => {
     expect(s.models.anthropic).toBe('claude-sonnet-4-6')
     expect(s.provider).toBe('anthropic')
   })
+
+  it('still migrates a legacy top-level model when a partial models object is present', () => {
+    // A partial write left `models` present but without an anthropic entry; the
+    // legacy top-level `model` must not be shadowed and reset to the default.
+    const s = normalizeAiSettings({ model: 'claude-opus-4-8', models: { openai: 'gpt-5' } })
+    expect(s.models.anthropic).toBe('claude-opus-4-8')
+    expect(s.models.openai).toBe('gpt-5')
+  })
+
+  it('prefers an explicit models.anthropic over the legacy top-level model', () => {
+    const s = normalizeAiSettings({ model: 'claude-opus-4-8', models: { anthropic: 'claude-haiku-4-5' } })
+    expect(s.models.anthropic).toBe('claude-haiku-4-5')
+  })
 })
 
 describe('activeAiConfig', () => {

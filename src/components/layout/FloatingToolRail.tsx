@@ -42,8 +42,11 @@ export default function FloatingToolRail() {
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const resetAndRelayout = useWorkspaceStore((s) => s.resetAndRelayout)
 
-  const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
   const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
+  const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
+  // The assistant renders on aiPanelOpen OR aiSettingsOpen, so the button must
+  // reflect/toggle either — otherwise it can't dismiss a settings-opened panel.
+  const aiOpen = useWorkspaceStore((s) => s.aiPanelOpen || s.aiSettingsOpen)
   const aiReady = useAiSettingsStore(isAiReady)
   const [aiHover, setAiHover] = useState(false)
 
@@ -147,11 +150,15 @@ export default function FloatingToolRail() {
       <button
         type="button"
         className="glass-panel"
-        title={aiPanelOpen ? 'Hide AI assistant (I)' : aiReady ? 'AI assistant (I)' : 'AI assistant — set up your key (I)'}
+        title={aiOpen ? 'Hide AI assistant (I)' : aiReady ? 'AI assistant (I)' : 'AI assistant — set up your key (I)'}
         aria-label="AI assistant"
-        aria-pressed={aiPanelOpen}
-        data-active={aiPanelOpen ? 'true' : undefined}
-        onClick={() => setAiPanelOpen(!useWorkspaceStore.getState().aiPanelOpen)}
+        aria-pressed={aiOpen}
+        data-active={aiOpen ? 'true' : undefined}
+        onClick={() => {
+          const s = useWorkspaceStore.getState()
+          if (s.aiPanelOpen || s.aiSettingsOpen) { setAiPanelOpen(false); setAiSettingsOpen(false) }
+          else setAiPanelOpen(true)
+        }}
         onPointerEnter={() => setAiHover(true)}
         onPointerLeave={() => setAiHover(false)}
         style={{
@@ -170,13 +177,13 @@ export default function FloatingToolRail() {
           filter: aiHover ? 'brightness(1.18)' : undefined,
           // Open = solid accent fill with a dark icon (clearly "on"); closed =
           // accent icon when ready, muted when off.
-          color: aiPanelOpen ? 'var(--color-bg-primary)' : aiReady ? 'var(--color-accent)' : 'var(--color-text-muted)',
-          background: aiPanelOpen ? 'var(--color-accent)' : undefined,
-          borderColor: aiPanelOpen ? 'var(--color-accent)' : undefined,
+          color: aiOpen ? 'var(--color-bg-primary)' : aiReady ? 'var(--color-accent)' : 'var(--color-text-muted)',
+          background: aiOpen ? 'var(--color-accent)' : undefined,
+          borderColor: aiOpen ? 'var(--color-accent)' : undefined,
         }}
       >
         <Sparkles size={18} style={{ pointerEvents: 'none' }} />
-        <span style={{ pointerEvents: 'none', position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: '50%', background: aiReady ? '#22c55e' : 'var(--color-text-muted)', border: `2px solid ${aiPanelOpen ? 'var(--color-accent)' : 'var(--glass-bg-heavy)'}` }} />
+        <span style={{ pointerEvents: 'none', position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: '50%', background: aiReady ? '#22c55e' : 'var(--color-text-muted)', border: `2px solid ${aiOpen ? 'var(--color-accent)' : 'var(--glass-bg-heavy)'}` }} />
       </button>
 
     <div

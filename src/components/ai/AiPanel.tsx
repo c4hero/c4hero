@@ -1095,7 +1095,7 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
                 </span>
               </div>
               <Actions>
-                <button className="c4ai-pri" style={primaryBtn} disabled={!hasContent(parsed.workspace)} onClick={() => { if (hasUnsaved) setConfirmReplace(true); else load() }}>Load diagram</button>
+                <button className="c4ai-pri" style={primaryBtn} disabled={!hasContent(parsed.workspace)} onClick={() => { if (workspace) setConfirmReplace(true); else load() }}>Load diagram</button>
                 <button className="c4ai-sec" style={secondaryBtn} onClick={reset}>Discard</button>
               </Actions>
             </>
@@ -1105,7 +1105,11 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
                 <AlertCircle size={16} color={C.warn} style={{ flex: 'none', marginTop: 1 }} />
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#fed7aa' }}>Replace {workspace?.name || 'the current model'}?</div>
-                  <div style={{ fontSize: 12, lineHeight: 1.45, color: C.warnText, marginTop: 3 }}>It has <strong style={{ color: '#fed7aa' }}>unsaved changes</strong>. Loading the new model discards your current diagram — this can’t be undone. Save it first if you want to keep it.</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.45, color: C.warnText, marginTop: 3 }}>
+                    {hasUnsaved
+                      ? <>It has <strong style={{ color: '#fed7aa' }}>unsaved changes</strong>. Loading the new model discards your current diagram — this can’t be undone. Save it first if you want to keep it.</>
+                      : <>Loading the new model <strong style={{ color: '#fed7aa' }}>replaces</strong> your current diagram. This can’t be undone.</>}
+                  </div>
                 </div>
               </div>
               <div style={{ marginTop: 13, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1482,12 +1486,16 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
 
     // Give each newly-imported *internal* system its own container (L2) view, and
     // open the largest. External systems are black boxes — no view for them.
+    // applyPlanToStore's addContainer already auto-creates a scoped container
+    // view for systems that gained containers, so reuse it rather than making a
+    // duplicate; only create one for systems that don't have one yet.
     const newSystems = ws1.model.softwareSystems
       .filter((s) => !beforeSystemIds.has(s.id) && s.location !== 'External')
       .sort((a, b) => b.containers.length - a.containers.length)
     let primaryKey: string | null = null
     for (const sys of newSystems) {
-      const key = after.addView('container', sys.id, `${sys.name} — Containers`)
+      const existing = ws1.views.containerViews.find((v) => v.softwareSystemId === sys.id)
+      const key = existing ? existing.key : after.addView('container', sys.id, `${sys.name} — Containers`)
       if (!primaryKey) primaryKey = key
     }
     if (primaryKey) after.setActiveView(primaryKey)

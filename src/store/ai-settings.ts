@@ -66,9 +66,13 @@ export function normalizeAiSettings(value: unknown): AiSettings {
   const models = readStringMap(source, 'models', defaultModels())
 
   // Back-compat: migrate the original single-provider (Anthropic-only) shape
-  // where the key/model lived at the top level as `apiKey` / `model`.
+  // where the key/model lived at the top level as `apiKey` / `model`. Check the
+  // specific stored anthropic field (not the whole `models` object) — readStringMap
+  // already defaulted models.anthropic, so a partial `models` object must not
+  // shadow a legacy top-level `model` and silently reset the user's choice.
+  const rawModels = isRecord(source.models) ? (source.models as Record<string, unknown>) : {}
   if (typeof source.apiKey === 'string' && !apiKeys.anthropic) apiKeys.anthropic = source.apiKey
-  if (typeof source.model === 'string' && source.models === undefined) models.anthropic = source.model
+  if (typeof source.model === 'string' && typeof rawModels.anthropic !== 'string') models.anthropic = source.model
 
   return {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULTS.enabled,

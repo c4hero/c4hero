@@ -45,6 +45,11 @@ describe('extractDsl', () => {
     expect(extractDsl('I built a workspace for you. workspace {\n  model {}\n}')).toBe('workspace {\n  model {}\n}')
   })
 
+  it('handles a string ending in an escaped backslash', () => {
+    const dsl = 'workspace {\n  model {\n    a = person "A" "path C:\\\\"\n  }\n}'
+    expect(extractDsl(dsl + '\ntrailing')).toBe(dsl)
+  })
+
   it('does not let a brace in a description truncate the block', () => {
     const dsl = 'workspace "X" {\n  model {\n    s = softwareSystem "S" "Emits a } then continues"\n  }\n}'
     // Without string-awareness the first "}" inside the description would close

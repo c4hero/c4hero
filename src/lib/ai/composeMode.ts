@@ -1,21 +1,28 @@
-// Guess whether a "Describe" compose prompt is building a NEW model or CHANGING
-// the current one, from its verbs. Defaults to "change" when ambiguous (safer —
-// "new" replaces the whole workspace), and only "new" on clear build language.
+// Guess whether a "Describe" compose prompt is building a NEW model (which
+// REPLACES the whole workspace) or CHANGING the current one.
+//
+// IMPORTANT: this is only consulted when a workspace already EXISTS (the caller
+// uses `!workspace ? 'new' : detectComposeMode(text)`). In that context the user
+// almost always means to extend what they have, and a wrong 'new' wipes their
+// model — so we default hard to 'change' and only return 'new' on an explicit
+// "start fresh / new model" intent. The Describe UI also confirms before loading
+// over a non-empty workspace, as a second line of defence.
 // Pure + unit-tested so the heuristic can evolve without touching the panel.
+
+// Nouns that denote the whole model (vs. an element like a service/container).
+const MODEL_NOUN = '(model|diagram|workspace|architecture|system landscape)'
 
 export function detectComposeMode(text: string): 'new' | 'change' {
   const t = text.toLowerCase()
-  const change = /\b(add|change|connect|remove|rename|update|delete|set|move|introduce|split|insert|replace)\b/.test(t)
-  const build = /\b(build|create|new model|new system|new diagram|model for|platform with|system with|design a)\b/.test(t)
-  // A clear "build/create/design a new …" (or "from scratch") is a brand-new
-  // model even when the prompt also lists what to put in it — so this wins over
-  // the change verbs that such a description naturally contains. We require a
-  // BUILD verb next to "new": a bare "new architecture/model" alternative is too
-  // broad — "update my model to a new architecture" must stay a change, since
-  // "new" routes to generate which REPLACES the whole workspace (data loss).
-  const newIntent = /\b(from scratch|greenfield)\b/.test(t)
-    || /\b(build|create|design|generate|make|start)\s+(a\s+|an\s+|the\s+)?new\b/.test(t)
-  if (newIntent) return 'new'
-  if (build && !change) return 'new'
-  return 'change'
+  const replace =
+    /\b(from scratch|greenfield|start over|start fresh|start again)\b/.test(t)
+    // "replace the/my model", "replace everything", …
+    || new RegExp(`\\breplace\\b[^.!?\\n]*\\b(model|diagram|workspace|architecture|everything)\\b`).test(t)
+    // "build/create/design a new model", "generate a new architecture", …
+    // (deliberately excludes "update"/"model" as verbs so "update my model to a
+    // new architecture" stays a change.)
+    || new RegExp(`\\b(build|create|generate|make|design)\\b[^.!?\\n]*\\bnew\\b[^.!?\\n]*\\b${MODEL_NOUN}\\b`).test(t)
+    // "a new model for …", "new diagram of …"
+    || new RegExp(`\\bnew\\b[^.!?\\n]*\\b${MODEL_NOUN}\\b[^.!?\\n]*\\b(for|of)\\b`).test(t)
+  return replace ? 'new' : 'change'
 }

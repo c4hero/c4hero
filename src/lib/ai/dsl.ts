@@ -38,7 +38,10 @@ export function extractDsl(text: string): string {
     // Skip braces inside a quoted string literal (a name/description like
     // "the closing } symbol") — counting them would close the block early.
     if (inString) {
-      if (ch === '"' && unfenced[i - 1] !== '\\') inString = false
+      // A backslash escapes the next char; consume it so an escaped backslash
+      // (e.g. "C:\\") doesn't make the following quote look escaped and strand us.
+      if (ch === '\\') { i++; continue }
+      if (ch === '"') inString = false
       continue
     }
     if (ch === '"') { inString = true; continue }
