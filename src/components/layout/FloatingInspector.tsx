@@ -9,6 +9,10 @@ export default function FloatingInspector() {
   const selectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
+  // The assistant and inspector share the same top-right slot. While the
+  // assistant is open it owns the slot, so the inspector yields — this lets a
+  // mid-flow assistant survive a canvas selection without the two overlapping.
+  const aiOpen = useWorkspaceStore((s) => s.aiPanelOpen || s.aiSettingsOpen)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const hasElement = !!workspace && selectedIds.length > 0 && getSelectedElement(workspace, selectedIds) !== undefined
@@ -41,7 +45,7 @@ export default function FloatingInspector() {
     }
   }, [visible, clearSelection])
 
-  if (!workspace || multiSelectMode) return null
+  if (!workspace || multiSelectMode || aiOpen) return null
 
   return (
     <div

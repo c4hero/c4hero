@@ -19,6 +19,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'setViewsPanelOpen' | 'toggleViewsPanel'
   | 'setCreateViewDialogOpen'
   | 'aiPanelOpen' | 'aiPanelFeature' | 'setAiPanelOpen' | 'clearAiPanelFeature' | 'aiSettingsOpen' | 'setAiSettingsOpen'
+  | 'aiPanelBusy' | 'setAiPanelBusy' | 'batchApplying' | 'setBatchApplying'
 >
 
 export const createUiSlice: StateCreator<
@@ -35,6 +36,12 @@ export const createUiSlice: StateCreator<
   aiPanelOpen: false,
   aiPanelFeature: null,
   aiSettingsOpen: false,
+  // True while the assistant is mid-flow (interview/wizard/etc.) — selecting a
+  // canvas node then must NOT close the panel and discard in-progress work.
+  aiPanelBusy: false,
+  // True only during an AI batch apply, so per-element view auto-switching is
+  // suppressed (the panel navigates once afterwards instead of jumping per op).
+  batchApplying: false,
   canvasGuideOpen: false,
   addElementPanelOpen: false,
   highlighterOpenFacet: null,
@@ -81,6 +88,8 @@ export const createUiSlice: StateCreator<
   // Consume the one-shot deep-link feature (after the panel routes to it)
   // without closing the panel, so a stale feature can't fire again later.
   clearAiPanelFeature: () => set({ aiPanelFeature: null }),
+  setAiPanelBusy: (busy) => set({ aiPanelBusy: busy }),
+  setBatchApplying: (on) => set({ batchApplying: on }),
   setCanvasGuideOpen: (open) => set({ canvasGuideOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
   setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),

@@ -115,7 +115,9 @@ export const createElementSlice: StateCreator<
         const vk = nanoid(8)
         const { elements, relationships } = buildInitialViewContent(ws.model, 'container', systemId)
         ws.views.containerViews.push({ type: 'container', key: vk, title: `${system.name} — Containers`, elements, relationships, autoLayout: { direction: 'TB' }, softwareSystemId: systemId })
-        s.activeViewKey = vk
+        // During a batch AI apply, don't jump per-op — the panel navigates once
+        // afterwards (focusViewForElements). For a single creation, switch to it.
+        if (!s.batchApplying) s.activeViewKey = vk
       }
       s.focusElementId = id
       s.selectedElementIds = [id]
@@ -160,7 +162,7 @@ export const createElementSlice: StateCreator<
           const vk = nanoid(8)
           const { elements, relationships } = buildInitialViewContent(ws.model, 'component', containerId)
           ws.views.componentViews.push({ type: 'component', key: vk, title: `${container.name} — Components`, elements, relationships, autoLayout: { direction: 'TB' }, containerId })
-          s.activeViewKey = vk
+          if (!s.batchApplying) s.activeViewKey = vk
         }
         s.focusElementId = id
         s.selectedElementIds = [id]

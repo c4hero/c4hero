@@ -123,6 +123,7 @@ export interface WorkspaceState extends UndoState {
   openCreateViewFromZoom: () => void
   setCreateViewDefaults: (defaults: { type: ViewType; scopeId?: string } | null) => void
   navigateBack: () => void
+  focusViewForElements: (ids: string[]) => void
 
   // Selection
   selectElements: (ids: string[]) => void
@@ -223,6 +224,10 @@ export interface WorkspaceState extends UndoState {
   aiPanelFeature: AiFeatureId | null
   setAiPanelOpen: (open: boolean, feature?: AiFeatureId | null) => void
   clearAiPanelFeature: () => void
+  aiPanelBusy: boolean
+  setAiPanelBusy: (busy: boolean) => void
+  batchApplying: boolean
+  setBatchApplying: (on: boolean) => void
   aiSettingsOpen: boolean
   setAiSettingsOpen: (open: boolean) => void
   canvasGuideOpen: boolean

@@ -249,6 +249,36 @@ describe('Relationship and container mutations', () => {
     expect(useWorkspaceStore.getState().selectedElementIds).toEqual([])
   })
 
+  it('selecting a node while the assistant is busy keeps the panel open (no lost interview)', () => {
+    useWorkspaceStore.getState().setAiPanelOpen(true)
+    useWorkspaceStore.getState().setAiPanelBusy(true)
+    useWorkspaceStore.getState().selectElements(['alice'])
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(true) // survives the click
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual(['alice'])
+    useWorkspaceStore.getState().setAiPanelBusy(false)
+  })
+
+  it('addContainer during a batch apply does not jump the active view', () => {
+    const land = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(land)
+    useWorkspaceStore.getState().setBatchApplying(true)
+    const cid = useWorkspaceStore.getState().addContainer('api', 'Web')
+    useWorkspaceStore.getState().setBatchApplying(false)
+    // Scoped view created, but the canvas stayed put (panel navigates once after).
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(land)
+    const cv = useWorkspaceStore.getState().workspace!.views.containerViews.find((v) => v.softwareSystemId === 'api')
+    expect(cv!.elements.some((e) => e.id === cid)).toBe(true)
+  })
+
+  it('focusViewForElements navigates to the view containing the most of them', () => {
+    const cid = useWorkspaceStore.getState().addContainer('api', 'Web') // creates + switches to api container view
+    const apiView = useWorkspaceStore.getState().activeViewKey!
+    const land = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(land)
+    useWorkspaceStore.getState().focusViewForElements([cid])
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(apiView)
+  })
+
   it('addContainer never leaks a container into another system\'s active view', () => {
     const sysB = useWorkspaceStore.getState().addSoftwareSystem('Billing')
     const apiView = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')

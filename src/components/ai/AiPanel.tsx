@@ -375,6 +375,15 @@ function AppView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeFeature, workspace])
 
+  // Mark the assistant "busy" whenever it's in a flow (anything but Home), so a
+  // canvas selection won't close the panel and discard an in-progress interview
+  // or staged sweep. Cleared on Home and on unmount.
+  useEffect(() => {
+    const store = useWorkspaceStore.getState()
+    store.setAiPanelBusy(view !== 'home')
+    return () => store.setAiPanelBusy(false)
+  }, [view])
+
   // ── queue navigation ──
   const cur = view === 'wizard' && curIdx >= 0 && curIdx < queue.length ? queue[curIdx] : null
 
@@ -2001,7 +2010,20 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
     updateRelationship: (id, patch) => s.updateRelationship(id, patch),
     deleteElement: (id) => s.deleteElement(id),
   }
-  return applyEditPlan(plan, actions, ws)
+  // Apply in batch mode so the per-op addContainer/addComponent don't jump the
+  // canvas to each created view; then navigate ONCE to where the new elements are.
+  const before = new Set(flattenElements(ws).map((e) => e.id))
+  s.setBatchApplying(true)
+  let result
+  try {
+    result = applyEditPlan(plan, actions, ws)
+  } finally {
+    s.setBatchApplying(false)
+  }
+  const updated = useWorkspaceStore.getState().workspace
+  const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []
+  if (newIds.length) useWorkspaceStore.getState().focusViewForElements(newIds)
+  return result
 }
 
 function summarize(ws: Workspace): string {

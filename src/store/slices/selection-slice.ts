@@ -26,20 +26,23 @@ export const createSelectionSlice: StateCreator<
     s.selectedGroupId = null
     // Opening the inspector closes BOTH AI surfaces (panel + settings); App.tsx
     // renders the assistant whenever either flag is set, so closing only
-    // aiPanelOpen would leave AI settings stacked over the inspector.
-    if (ids.length > 0) { s.highlighterOpenFacet = null; s.aiPanelOpen = false; s.aiSettingsOpen = false }
+    // aiPanelOpen would leave AI settings stacked over the inspector. EXCEPT
+    // while the assistant is mid-flow (aiPanelBusy) — an interview even invites
+    // you to click highlighted nodes — where closing it would discard the work;
+    // there the panel stays and App suppresses the inspector behind it.
+    if (ids.length > 0) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false } }
   }),
   selectRelationship: (id) => set((s) => {
     s.selectedRelationshipId = id
     s.selectedElementIds = []
     s.selectedGroupId = null
-    if (id) { s.highlighterOpenFacet = null; s.aiPanelOpen = false; s.aiSettingsOpen = false }
+    if (id) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false } }
   }),
   selectGroup: (id) => set((s) => {
     s.selectedGroupId = id
     s.selectedElementIds = []
     s.selectedRelationshipId = null
-    if (id) { s.highlighterOpenFacet = null; s.aiPanelOpen = false; s.aiSettingsOpen = false }
+    if (id) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false } }
   }),
   clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 })

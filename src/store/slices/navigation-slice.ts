@@ -36,7 +36,7 @@ export type NavigationSlice = Pick<WorkspaceState,
   | 'focusElementId' | 'clearFocusElement'
   | 'setActiveView' | 'drillInto' | 'zoomInto'
   | 'confirmZoomCreate' | 'cancelZoomConfirm' | 'openCreateViewFromZoom'
-  | 'setCreateViewDefaults' | 'navigateBack'
+  | 'setCreateViewDefaults' | 'navigateBack' | 'focusViewForElements'
 >
 
 export const createNavigationSlice: StateCreator<
@@ -52,6 +52,34 @@ export const createNavigationSlice: StateCreator<
   focusElementId: null,
 
   clearFocusElement: () => set({ focusElementId: null }),
+
+  // After a batch (AI) apply that suppressed per-op view switching, navigate
+  // ONCE to the view that best shows the newly-created elements — the one
+  // containing the most of them, preferring more specific views (component >
+  // container > context > landscape). A single, predictable jump, not per-op.
+  focusViewForElements: (ids) => set((s) => {
+    if (!s.workspace || ids.length === 0) return
+    const idSet = new Set(ids)
+    const ordered = [
+      ...s.workspace.views.componentViews,
+      ...s.workspace.views.containerViews,
+      ...s.workspace.views.systemContextViews,
+      ...s.workspace.views.systemLandscapeViews,
+    ]
+    let best: string | null = null
+    let bestCount = 0
+    for (const v of ordered) {
+      const count = v.elements.reduce((n, e) => n + (idSet.has(e.id) ? 1 : 0), 0)
+      if (count > bestCount) { bestCount = count; best = v.key }
+    }
+    if (best && best !== s.activeViewKey) {
+      if (s.activeViewKey) s.viewHistory.push(s.activeViewKey)
+      s.activeViewKey = best
+      s.selectedElementIds = []
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
+    }
+  }),
 
   setActiveView: (key) => set((s) => {
     const changed = s.activeViewKey !== key
