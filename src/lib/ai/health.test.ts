@@ -47,4 +47,20 @@ describe('modelHealth', () => {
     }
     expect(ids(ws).emptySystems).toBeUndefined()
   })
+
+  it('counts an empty, unconnected internal system once (emptySystems, not also unconnected)', () => {
+    const ws: Workspace = {
+      name: 'T',
+      model: {
+        people: [],
+        softwareSystems: [{ id: 'empty', type: 'softwareSystem', name: 'Orphan', description: 'd', tags: [], properties: {}, containers: [] }],
+        relationships: [],
+        groups: [],
+      },
+      views: { systemLandscapeViews: [], systemContextViews: [], containerViews: [], componentViews: [], configuration: { styles: { elements: [], relationships: [] } } },
+    }
+    const gaps = ids(ws)
+    expect(gaps.emptySystems).toBe(1)
+    expect(gaps.unconnected).toBeUndefined()
+  })
 })

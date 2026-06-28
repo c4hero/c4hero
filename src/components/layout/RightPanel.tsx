@@ -189,11 +189,11 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
           <div className="text-[11px]" style={{ color: typeColor }}>{getElementTypeLabel(element)}</div>
         </div>
         <div className="flex items-center gap-1">
-          {/* When AI is configured + enabled, the top-nav action becomes "auto-fill
-             missing fields". Otherwise it's the original "remove from view"
-             (touch-friendly parity with Backspace; hidden on the focal-scope
-             element and when the element isn't in the active view). */}
-          {aiReady ? (
+          {/* When AI is configured + enabled, an "auto-fill missing fields" action
+             is added. The "remove from view" control stays regardless (touch-
+             friendly parity with Backspace; hidden on the focal-scope element and
+             when the element isn't in the active view) so AI users don't lose it. */}
+          {aiReady && (
             <button
               onClick={() => suggest(['description', 'technology', 'tags'])}
               disabled={busyField === 'all' || !hasMissing}
@@ -204,21 +204,20 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             >
               {busyField === 'all' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             </button>
-          ) : (
-            !isFocal && activeViewKey && appearsInActiveView && (
-              <button
-                onClick={() => {
-                  if (!activeViewKey) return
-                  removeElementsFromView(activeViewKey, [element.id])
-                }}
-                className="btn-icon !min-h-7 !min-w-7 !p-1"
-                aria-label="Remove from view"
-                title="Remove from this view (model unchanged)"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                <EyeOff size={14} />
-              </button>
-            )
+          )}
+          {!isFocal && activeViewKey && appearsInActiveView && (
+            <button
+              onClick={() => {
+                if (!activeViewKey) return
+                removeElementsFromView(activeViewKey, [element.id])
+              }}
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              aria-label="Remove from view"
+              title="Remove from this view (model unchanged)"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              <EyeOff size={14} />
+            </button>
           )}
           {isFocal ? (
             <button

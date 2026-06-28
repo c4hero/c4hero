@@ -62,6 +62,10 @@ export const createRelationshipSlice: StateCreator<
       s.selectedRelationshipId = id
       s.selectedElementIds = []
       s.selectedGroupId = null
+      // Match the add-node methods: opening the inspector for the new
+      // relationship must close the AI assistant so they don't overlap.
+      s.aiPanelOpen = false
+      s.aiSettingsOpen = false
     })
     return created ? id : ''
   },

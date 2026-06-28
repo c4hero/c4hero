@@ -33,7 +33,12 @@ export function modelHealth(ws: Workspace): ModelGap[] {
   }
 
   const descriptions = countMissingDescriptions(ws)
-  const unconnected = els.filter((e) => !connected.has(e.id) && !hasChildren.has(e.id)).length
+  // Empty internal systems are reported under `emptySystems`; don't also count
+  // them as `unconnected` or the same element shows up under two gaps at once.
+  const emptySystemIds = new Set(
+    ws.model.softwareSystems.filter((s) => s.location !== 'External' && s.containers.length === 0).map((s) => s.id),
+  )
+  const unconnected = els.filter((e) => !connected.has(e.id) && !hasChildren.has(e.id) && !emptySystemIds.has(e.id)).length
 
   let technology = 0
   for (const sys of ws.model.softwareSystems) {
@@ -43,7 +48,7 @@ export function modelHealth(ws: Workspace): ModelGap[] {
     }
   }
 
-  const emptySystems = ws.model.softwareSystems.filter((s) => s.location !== 'External' && s.containers.length === 0).length
+  const emptySystems = emptySystemIds.size
 
   const gaps: ModelGap[] = [
     { id: 'descriptions', count: descriptions, label: plural(descriptions, 'item missing a description', 'items missing a description') },

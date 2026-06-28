@@ -44,10 +44,18 @@ export function applyEditPlan(
   // (a common model behaviour, especially from the interview) still resolves.
   // First occurrence wins for duplicate names.
   const nameToId = new Map<string, string>()
+  // Track element types so we can validate a parent BEFORE creating a child —
+  // the store's addContainer/addComponent return a fresh id even when they skip
+  // creation (wrong parent type), so a post-hoc `if (!id)` guard is dead.
+  const systemIds = new Set<string>()
+  const containerIds = new Set<string>()
   for (const el of flattenElements(ws)) {
     const key = el.name.trim().toLowerCase()
     if (key && !nameToId.has(key)) nameToId.set(key, el.id)
+    if (el.type === 'softwareSystem') systemIds.add(el.id)
+    else if (el.type === 'container') containerIds.add(el.id)
   }
+  const relIds = new Set(ws.model.relationships.map((r) => r.id))
   const applied: AppliedOp[] = []
 
   // Register a newly-created element so later ops can target it by ref, id, or name.
@@ -84,6 +92,7 @@ export function applyEditPlan(
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addSoftwareSystem(op.name.trim(), op.external)
         register(op.ref, id, op.name)
+        systemIds.add(id)
         if (op.description?.trim()) actions.updateElement(id, { description: op.description.trim() })
         ok(op)
         break
@@ -91,10 +100,11 @@ export function applyEditPlan(
       case 'addContainer': {
         const parentId = resolve(op.parent)
         if (!parentId) { skip(op, 'unknown parent system'); break }
+        if (!systemIds.has(parentId)) { skip(op, 'parent is not a software system'); break }
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addContainer(parentId, op.name.trim())
-        if (!id) { skip(op, 'parent is not a software system'); break }
         register(op.ref, id, op.name)
+        containerIds.add(id)
         if (op.description?.trim() || op.technology?.trim()) {
           actions.updateElement(id, { description: op.description?.trim(), technology: op.technology?.trim() })
         }
@@ -104,9 +114,9 @@ export function applyEditPlan(
       case 'addComponent': {
         const parentId = resolve(op.parent)
         if (!parentId) { skip(op, 'unknown parent container'); break }
+        if (!containerIds.has(parentId)) { skip(op, 'parent is not a container'); break }
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addComponent(parentId, op.name.trim())
-        if (!id) { skip(op, 'parent is not a container'); break }
         register(op.ref, id, op.name)
         if (op.description?.trim() || op.technology?.trim()) {
           actions.updateElement(id, { description: op.description?.trim(), technology: op.technology?.trim() })
@@ -135,6 +145,7 @@ export function applyEditPlan(
         break
       }
       case 'updateRelationship': {
+        if (!relIds.has(op.id)) { skip(op, 'relationship not found'); break }
         actions.updateRelationship(op.id, {
           description: op.description?.trim() || undefined,
           technology: op.technology?.trim() || undefined,

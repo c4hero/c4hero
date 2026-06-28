@@ -144,7 +144,12 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.workspace) store.setAddElementPanelOpen(!store.addElementPanelOpen)
   },
   'i': (store) => {
-    if (store.workspace) store.setAiPanelOpen(!store.aiPanelOpen)
+    // The AI panel only renders on a diagram route (see App.tsx `onCanvas`).
+    // Toggling it elsewhere would clear the selection and pop the panel open
+    // later when a diagram is finally opened, so gate it on the same condition.
+    if (!store.workspace) return
+    if (!/\/collection\/[^/]+\/[^/]+/.test(window.location.pathname)) return
+    store.setAiPanelOpen(!store.aiPanelOpen)
   },
   'h': (store) => {
     if (store.workspace) store.setHighlighterOpenFacet(store.highlighterOpenFacet ? null : 'tags')

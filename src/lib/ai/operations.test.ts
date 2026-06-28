@@ -136,3 +136,88 @@ describe('describeOps', () => {
     expect(lines[2]).toBe('Delete Database')
   })
 })
+
+describe('applyEditPlan — parent-type and existence guards', () => {
+  it('skips addContainer when the parent is not a software system', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    // 'web' is a container, not a system.
+    const result = applyEditPlan({ operations: [{ op: 'addContainer', ref: 'x', parent: 'web', name: 'Sub' }] }, actions, ws)
+    expect(actions.addContainer).not.toHaveBeenCalled()
+    expect(result.appliedCount).toBe(0)
+    expect(result.applied[0]).toMatchObject({ ok: false, reason: 'parent is not a software system' })
+  })
+
+  it('does not register a ref for a skipped addContainer, so its children stay unresolved', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'addContainer', ref: 'bad', parent: 'admin', name: 'Sub' }, // admin is a person
+      { op: 'addRelationship', source: 'web', destination: 'bad' },       // 'bad' must not resolve
+    ] }, actions, ws)
+    expect(actions.addContainer).not.toHaveBeenCalled()
+    expect(actions.addRelationship).not.toHaveBeenCalled()
+    expect(result.appliedCount).toBe(0)
+    expect(result.skippedCount).toBe(2)
+  })
+
+  it('skips addComponent when the parent is not a container', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [{ op: 'addComponent', ref: 'c', parent: 'shop', name: 'Comp' }] }, actions, ws)
+    expect(actions.addComponent).not.toHaveBeenCalled()
+    expect(result.applied[0]).toMatchObject({ ok: false, reason: 'parent is not a container' })
+  })
+
+  it('adds a component under a real container', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [{ op: 'addComponent', ref: 'c', parent: 'web', name: 'Comp' }] }, actions, ws)
+    expect(actions.addComponent).toHaveBeenCalledWith('web', 'Comp')
+    expect(result.appliedCount).toBe(1)
+  })
+
+  it('resolves children against elements created earlier in the same plan', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'addSoftwareSystem', ref: 'sys', name: 'Billing' },
+      { op: 'addContainer', ref: 'api', parent: 'sys', name: 'API' },     // parent = just-created system
+      { op: 'addComponent', ref: 'svc', parent: 'api', name: 'Service' }, // parent = just-created container
+    ] }, actions, ws)
+    expect(result.appliedCount).toBe(3)
+    expect(result.skippedCount).toBe(0)
+  })
+
+  it('skips updateRelationship for an unknown relationship id', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'updateRelationship', id: 'nope', description: 'x' },
+      { op: 'updateRelationship', id: 'r1', description: 'updated' },
+    ] }, actions, ws)
+    expect(actions.updateRelationship).toHaveBeenCalledTimes(1)
+    expect(actions.updateRelationship).toHaveBeenCalledWith('r1', { description: 'updated', technology: undefined })
+    expect(result.appliedCount).toBe(1)
+    expect(result.skippedCount).toBe(1)
+  })
+})
+
+describe('describeOps — every op kind', () => {
+  it('produces a readable line for each operation', () => {
+    const ws = makeWorkspace()
+    const lines = describeOps({ operations: [
+      { op: 'addPerson', ref: 'p', name: 'New User' },
+      { op: 'addSoftwareSystem', ref: 's', name: 'New Sys' },
+      { op: 'addComponent', ref: 'c', parent: 'web', name: 'Worker', technology: 'Go' },
+      { op: 'updateElement', id: 'web', name: 'Portal', description: 'd', technology: 'Vue' },
+      { op: 'updateRelationship', id: 'r1', description: 'reads from' },
+    ] }, ws)
+    expect(lines[0]).toContain('Add person “New User”')
+    expect(lines[1]).toContain('Add software system “New Sys”')
+    expect(lines[2]).toContain('Worker')
+    expect(lines[2]).toContain('Go')
+    expect(lines[3]).toContain('rename “Portal”')
+    expect(lines[4]).toContain('relationship')
+  })
+})

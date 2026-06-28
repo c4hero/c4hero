@@ -391,8 +391,14 @@ function AppView({
   useEffect(() => {
     if (view !== 'wizard' || !cur) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); skipStep() }
-      else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); applyStep() }
+      const t = e.target as HTMLElement | null
+      const typing = !!t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)
+      if (e.key === 'Escape') {
+        // While editing a draft, Escape just defocuses the field — it must not
+        // skip the step and discard what the user is typing.
+        if (typing) { t!.blur(); return }
+        e.preventDefault(); skipStep()
+      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); applyStep() }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -414,10 +420,12 @@ function AppView({
     }
     setCommitting(true)
     try {
-      if (ops.length) applyPlanToStore({ operations: ops }, ws)
+      // Count the operations the store actually applied (a finding can carry
+      // several ops, a blank-draft fix carries none), not the staged-step count.
+      const result = ops.length ? applyPlanToStore({ operations: ops }, ws) : null
       // Adding/updating elements can toggle the panel closed — keep it open.
       useWorkspaceStore.getState().setAiPanelOpen(true)
-      setAppliedCount(stagedKeys.length)
+      setAppliedCount(result?.appliedCount ?? 0)
       setView('committed')
     } finally {
       setCommitting(false)
@@ -1995,7 +2003,7 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
     updateRelationship: (id, patch) => s.updateRelationship(id, patch),
     deleteElement: (id) => s.deleteElement(id),
   }
-  applyEditPlan(plan, actions, ws)
+  return applyEditPlan(plan, actions, ws)
 }
 
 function summarize(ws: Workspace): string {
