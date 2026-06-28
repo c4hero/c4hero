@@ -443,8 +443,8 @@ function AppView({
       // Count the operations the store actually applied (a finding can carry
       // several ops, a blank-draft fix carries none), not the staged-step count.
       const result = ops.length ? applyPlanToStore({ operations: ops }, ws) : null
-      // Adding/updating elements can toggle the panel closed — keep it open.
-      useWorkspaceStore.getState().setAiPanelOpen(true)
+      // (The create actions no longer close the panel during a batch apply, so
+      // no re-open bandaid is needed here.)
       setAppliedCount(result?.appliedCount ?? 0)
       setView('committed')
       // The sweep is consumed — drop its cached resume state so reopening lands
@@ -459,6 +459,9 @@ function AppView({
   // Memoized — AppView re-renders on every wizard keystroke; without this each
   // one would re-walk the whole model tree via modelHealthPercent.
   const completePct = useMemo(() => (workspace ? modelHealthPercent(workspace) : 100), [workspace])
+  // Memoized like completePct — recomputing on every staged-checkbox toggle
+  // would re-walk the whole model tree twice (healthCounts + missingInfoGaps).
+  const projectedPct = useMemo(() => (workspace ? projectedHealthPercent(workspace, stagedFixKeys) : completePct), [workspace, stagedFixKeys, completePct])
 
   // A key that changes on every screen / wizard sub-state change (but NOT between
   // wizard steps — those animate per-card). Drives the body entrance animation so
@@ -520,7 +523,7 @@ function AppView({
           ) : (
             <ReviewScreen
               queue={queue} decisions={decisions} drafts={drafts}
-              completePct={completePct} projectedPct={workspace ? projectedHealthPercent(workspace, stagedFixKeys) : completePct}
+              completePct={completePct} projectedPct={projectedPct}
               committing={committing}
               onRemove={(key) => setDecisions((d) => ({ ...d, [key]: 'skip' }))}
               onRestore={(key) => setDecisions((d) => ({ ...d, [key]: 'apply' }))}
@@ -2062,7 +2065,10 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
   }
   // Apply in batch mode so the per-op addContainer/addComponent don't jump the
   // canvas to each created view; then navigate ONCE to where the new elements are.
-  const before = new Set(flattenElements(ws).map((e) => e.id))
+  // Diff against the LIVE store (not the possibly-stale `ws` prop snapshot) so the
+  // new-element set — and thus the view we navigate to — is accurate.
+  const liveBefore = s.workspace ?? ws
+  const before = new Set(flattenElements(liveBefore).map((e) => e.id))
   s.setBatchApplying(true)
   let result
   try {

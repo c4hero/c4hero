@@ -76,9 +76,12 @@ export function useDictation(onFinalText: (text: string) => void): Dictation {
     try {
       rec.start()
       setListening(true)
-    } catch {
-      // start() throws if already started — treat as listening.
-      setListening(true)
+    } catch (err) {
+      // start() throws InvalidStateError when it's already running — that's a
+      // benign re-entry, so treat it as listening. Any other error (e.g. not
+      // allowed / insecure context) is a real failure: stay not-listening so the
+      // button doesn't get stuck showing "Listening…" while nothing is captured.
+      setListening((err as { name?: string })?.name === 'InvalidStateError')
     }
   }
 

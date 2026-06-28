@@ -89,6 +89,12 @@ describe('AI providers', () => {
     })
   }
 
+  it('salvages JSON even when the prose preamble contains a brace', async () => {
+    stubFetch(() => okText('Here is the result {as requested}: {"a":3}'))
+    const p = createProvider('anthropic', cfg)
+    expect(await p.completeJson({ system: 's', user: 'u', schema: {}, validate: isObj })).toEqual({ a: 3 })
+  })
+
   it('threads chat history without error', async () => {
     stubFetch(() => okText('ok'))
     for (const id of PROVIDERS) {

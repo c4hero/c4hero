@@ -180,6 +180,30 @@ export function addToCurrentView(
   }
 }
 
+/** Reset the element/relationship/group selection on the draft. One place to
+ *  change if selection ever gains another field. */
+export function clearSelectionDraft(
+  s: { selectedElementIds: string[]; selectedRelationshipId: string | null; selectedGroupId: string | null },
+): void {
+  s.selectedElementIds = []
+  s.selectedRelationshipId = null
+  s.selectedGroupId = null
+}
+
+/** Select a just-created element and close the assistant so the inspector shows
+ *  — EXCEPT during an AI batch apply, which keeps the panel to show its results.
+ *  Centralizes the selection-reset + panel-close that every create action shares. */
+export function selectCreated(
+  s: { batchApplying: boolean; aiPanelOpen: boolean; aiSettingsOpen: boolean; focusElementId: string | null; selectedElementIds: string[]; selectedRelationshipId: string | null; selectedGroupId: string | null },
+  id: string,
+): void {
+  s.focusElementId = id
+  s.selectedElementIds = [id]
+  s.selectedRelationshipId = null
+  s.selectedGroupId = null
+  if (!s.batchApplying) { s.aiPanelOpen = false; s.aiSettingsOpen = false }
+}
+
 
 /** Result of a cascade delete: the model is mutated in place, and the caller
  *  gets back the full set of element IDs that were removed (direct + implicit

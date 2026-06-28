@@ -77,13 +77,35 @@ export async function readErrorMessage(res: Response, fallback: string): Promise
   return fallback
 }
 
-// Try the raw text, then a fence-stripped version, then the outermost {...}
-// block — models occasionally wrap JSON in markdown or add a sentence of prose.
+// Find the index of the brace that closes the `{` at `open`, ignoring braces
+// inside string literals. Returns -1 if unbalanced.
+function matchBrace(text: string, open: number): number {
+  let depth = 0
+  let inString = false
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i]
+    if (inString) {
+      if (ch === '\\') { i++; continue }
+      if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') { inString = true; continue }
+    if (ch === '{') depth++
+    else if (ch === '}') { depth--; if (depth === 0) return i }
+  }
+  return -1
+}
+
+// Try the raw text, then a fence-stripped version, then each balanced `{ … }`
+// block in order — models occasionally wrap JSON in markdown or a sentence of
+// prose. We brace-balance (string-aware) each candidate rather than slicing the
+// first `{` to the last `}`, which a stray brace in the prose would corrupt.
 function tryParseJson(text: string): { ok: true; value: unknown } | { ok: false } {
   const candidates = [text, stripCodeFence(text)]
-  const open = text.indexOf('{')
-  const close = text.lastIndexOf('}')
-  if (open !== -1 && close > open) candidates.push(text.slice(open, close + 1))
+  for (let i = text.indexOf('{'); i !== -1; i = text.indexOf('{', i + 1)) {
+    const close = matchBrace(text, i)
+    if (close !== -1) candidates.push(text.slice(i, close + 1))
+  }
   for (const c of candidates) {
     try {
       return { ok: true, value: JSON.parse(c) }

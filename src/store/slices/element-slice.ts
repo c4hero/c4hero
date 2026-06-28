@@ -11,6 +11,7 @@ import {
   uniqueElementName,
   findViewHelper,
   buildInitialViewContent,
+  selectCreated,
 } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 
@@ -45,13 +46,7 @@ export const createElementSlice: StateCreator<
           v.elements.push({ id })
         }
       }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-      // Adding a node opens the inspector; close the AI panel so it isn't hidden behind it.
-      s.aiPanelOpen = false
-      s.aiSettingsOpen = false
+      selectCreated(s, id)
     })
     announce('Person created')
     return id
@@ -71,13 +66,7 @@ export const createElementSlice: StateCreator<
           v.elements.push({ id })
         }
       }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-      // Adding a node opens the inspector; close the AI panel so it isn't hidden behind it.
-      s.aiPanelOpen = false
-      s.aiSettingsOpen = false
+      selectCreated(s, id)
     })
     get().revalidateScope()
     announce('System created')
@@ -119,12 +108,7 @@ export const createElementSlice: StateCreator<
         // afterwards (focusViewForElements). For a single creation, switch to it.
         if (!s.batchApplying) s.activeViewKey = vk
       }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-      s.aiPanelOpen = false
-      s.aiSettingsOpen = false
+      selectCreated(s, id)
       added = true
     })
     if (added) {
@@ -164,12 +148,7 @@ export const createElementSlice: StateCreator<
           ws.views.componentViews.push({ type: 'component', key: vk, title: `${container.name} — Components`, elements, relationships, autoLayout: { direction: 'TB' }, containerId })
           if (!s.batchApplying) s.activeViewKey = vk
         }
-        s.focusElementId = id
-        s.selectedElementIds = [id]
-        s.selectedRelationshipId = null
-        s.selectedGroupId = null
-        s.aiPanelOpen = false
-        s.aiSettingsOpen = false
+        selectCreated(s, id)
         added = true
         return
       }

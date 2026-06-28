@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { findChildViewHelper as findChildView, getZoomTarget } from '../workspace-selectors'
+import { clearSelectionDraft } from '../workspace-helpers'
 import { announce } from '@/lib/announce'
 
 /** If any Highlighter filter is non-empty, snapshot all four into
@@ -75,9 +76,7 @@ export const createNavigationSlice: StateCreator<
     if (best && best !== s.activeViewKey) {
       if (s.activeViewKey) s.viewHistory.push(s.activeViewKey)
       s.activeViewKey = best
-      s.selectedElementIds = []
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
+      clearSelectionDraft(s)
       // Match the other view-switches — don't carry stale highlight filters into
       // the destination view.
       if (clearHighlightFiltersWithStash(s)) announce('Highlighter cleared on view change')

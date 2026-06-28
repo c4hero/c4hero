@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
+import { clearSelectionDraft } from '../workspace-helpers'
 
 /** Pure UI state: panel/dialog open flags, canvas-mode toggles, and the
  *  pending-delete confirmation. Holds no workspace data. */
@@ -66,24 +67,16 @@ export const createUiSlice: StateCreator<
     s.aiPanelOpen = open
     s.aiPanelFeature = open ? (feature ?? null) : null
     s.commandPaletteOpen = false
-    if (open) {
-      // Opening the assistant closes the inspector (clears selection) so the
-      // two side panels never stack — mirrors selection closing the assistant.
-      s.selectedElementIds = []
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-    }
+    // Opening the assistant closes the inspector (clears selection) so the two
+    // side panels never stack — mirrors selection closing the assistant.
+    if (open) clearSelectionDraft(s)
   }),
   setAiSettingsOpen: (open) => set((s) => {
     s.aiSettingsOpen = open
     s.commandPaletteOpen = false
     // Opening AI settings closes the inspector too (App.tsx renders the panel on
     // aiPanelOpen || aiSettingsOpen, so a live selection would stack behind it).
-    if (open) {
-      s.selectedElementIds = []
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
-    }
+    if (open) clearSelectionDraft(s)
   }),
   // Consume the one-shot deep-link feature (after the panel routes to it)
   // without closing the panel, so a stale feature can't fire again later.

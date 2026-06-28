@@ -45,6 +45,16 @@ describe('extractDsl', () => {
     expect(extractDsl('I built a workspace for you. workspace {\n  model {}\n}')).toBe('workspace {\n  model {}\n}')
   })
 
+  it('ignores braces inside // and # comments', () => {
+    const dsl = 'workspace {\n  // returns a map {key: value}\n  model {\n    a = person "A"\n  }\n  # TODO: close } the loop\n}'
+    expect(extractDsl(dsl + '\nafter')).toBe(dsl)
+  })
+
+  it('ignores braces inside /* */ block comments', () => {
+    const dsl = 'workspace {\n  /* a brace } here */\n  model {}\n}'
+    expect(extractDsl(dsl + '\nmore')).toBe(dsl)
+  })
+
   it('handles a string ending in an escaped backslash', () => {
     const dsl = 'workspace {\n  model {\n    a = person "A" "path C:\\\\"\n  }\n}'
     expect(extractDsl(dsl + '\ntrailing')).toBe(dsl)

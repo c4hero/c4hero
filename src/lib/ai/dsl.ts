@@ -33,6 +33,7 @@ export function extractDsl(text: string): string {
 
   let depth = 0
   let inString = false
+  let lineStart = true // first non-space on a line — needed for `#` comments
   for (let i = openIdx; i < unfenced.length; i++) {
     const ch = unfenced[i]
     // Skip braces inside a quoted string literal (a name/description like
@@ -42,8 +43,15 @@ export function extractDsl(text: string): string {
       // (e.g. "C:\\") doesn't make the following quote look escaped and strand us.
       if (ch === '\\') { i++; continue }
       if (ch === '"') inString = false
+      lineStart = false
       continue
     }
+    // Skip Structurizr DSL comments — a brace inside one must not be counted.
+    if (ch === '\n') { lineStart = true; continue }
+    if (ch === '/' && unfenced[i + 1] === '/') { const nl = unfenced.indexOf('\n', i); if (nl === -1) break; i = nl; lineStart = true; continue }
+    if (ch === '#' && lineStart) { const nl = unfenced.indexOf('\n', i); if (nl === -1) break; i = nl; lineStart = true; continue }
+    if (ch === '/' && unfenced[i + 1] === '*') { const end = unfenced.indexOf('*/', i + 2); if (end === -1) break; i = end + 1; lineStart = false; continue }
+    if (ch !== ' ' && ch !== '\t') lineStart = false
     if (ch === '"') { inString = true; continue }
     if (ch === '{') depth++
     else if (ch === '}') {
