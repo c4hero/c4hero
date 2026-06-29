@@ -524,7 +524,7 @@ function AppView({
               onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
               onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace)) : undefined}
               onBack={curIdx > 0 ? goBack : undefined}
-              onApply={applyStep} onSkip={skipStep} onDismiss={() => advance(cur.key, 'dismiss')}
+              onApply={applyStep} onSkip={skipStep}
             />
           ) : reviewLoading && workspace ? (
             <ReviewScanning workspace={workspace} />
@@ -748,13 +748,13 @@ function CategoryButton({ icon: Icon, color, iconBg, label, sub, onClick }: { ic
 // ─── Wizard step ────────────────────────────────────────────────────
 
 function WizardStep({
-  step, idx, total, draft, draftLoading, onDraft, onRewrite, onReveal, onBack, onApply, onSkip, onDismiss,
+  step, idx, total, draft, draftLoading, onDraft, onRewrite, onReveal, onBack, onApply, onSkip,
 }: {
   step: Step; idx: number; total: number
   draft: string; draftLoading: boolean
   onDraft: (v: string) => void; onRewrite: () => void; onReveal?: () => void
   onBack?: () => void
-  onApply: () => void; onSkip: () => void; onDismiss: () => void
+  onApply: () => void; onSkip: () => void
 }) {
   const cm = CAT[step.cat]
   const CatIcon = cm.icon
@@ -781,7 +781,7 @@ function WizardStep({
 
       {step.type === 'fix'
         ? <FixCard key={step.key} gap={step.gap} draft={draft} draftLoading={draftLoading} onDraft={onDraft} onRewrite={onRewrite} onReveal={onReveal} onApply={onApply} onSkip={onSkip} />
-        : <FindingCardStep key={step.key} finding={step.finding} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onDismiss={onDismiss} />}
+        : <FindingCardStep key={step.key} finding={step.finding} onReveal={onReveal} onApply={onApply} onSkip={onSkip} />}
     </div>
   )
 }
@@ -821,13 +821,13 @@ function FixCard({ gap, draft, draftLoading, onDraft, onRewrite, onReveal, onApp
           style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', opacity: draft.trim() ? 1 : 0.55 }}>
           <Check size={16} /> Add to batch
         </button>
-        <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Not now</button>
+        <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>
       </div>
     </div>
   )
 }
 
-function FindingCardStep({ finding, onReveal, onApply, onSkip, onDismiss }: { finding: ReviewFinding; onReveal?: () => void; onApply: () => void; onSkip: () => void; onDismiss: () => void }) {
+function FindingCardStep({ finding, onReveal, onApply, onSkip }: { finding: ReviewFinding; onReveal?: () => void; onApply: () => void; onSkip: () => void }) {
   const sev = SEV[finding.severity]
   const actionable = isActionable(finding)
   return (
@@ -852,10 +852,7 @@ function FindingCardStep({ finding, onReveal, onApply, onSkip, onDismiss }: { fi
             <Check size={16} /> Add fix to batch
           </button>
         )}
-        <div style={{ display: 'flex', gap: 9 }}>
-          <button onClick={onDismiss} className="c4ai-ghost" style={wizSecBtn}>{actionable ? 'Dismiss' : 'Got it'}</button>
-          {actionable && <button onClick={onSkip} className="c4ai-ghost" style={wizSecBtn}>Decide later</button>}
-        </div>
+        <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>
       </div>
     </div>
   )
