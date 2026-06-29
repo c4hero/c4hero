@@ -4,7 +4,7 @@ import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
-  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Trophy, Star, RotateCw, type LucideIcon,
+  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Trophy, Star, RotateCw, Undo2, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
@@ -21,10 +21,10 @@ import {
   scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
   sortedFindings, isActionable, classifyScope,
-  missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp,
+  missingInfoGaps, modelHealthPercent, gapToOp, captureRestores, type Restore,
   type MissingGap, type GapKind,
   type AiProvider, type EditActions,
-  type EditPlan, type AiFeatureId, type AiChatTurn,
+  type EditPlan, type EditOp, type AiFeatureId, type AiChatTurn,
   type ReviewFinding, type ReviewSeverity, type RepoScanResult, type PlanScope,
 } from '@/lib/ai'
 import { MicButton } from './dictation'
@@ -231,14 +231,14 @@ function clampPanelPos(p: PanelPos, viewportW: number, viewportH: number): Panel
 // inherently conversational / folder-driven — are reachable from the dashboard
 // as their own focused flows (existing InterviewBody / RepoBody).
 
-type SweepView = 'home' | 'wizard' | 'review' | 'committed' | 'describe' | 'interview' | 'repo' | 'adr'
+type SweepView = 'home' | 'wizard' | 'describe' | 'interview' | 'repo' | 'adr'
 
 const FEATURE_TO_VIEW: Record<AiFeatureId, SweepView> = {
   compose: 'describe', interview: 'interview', review: 'wizard', repo: 'repo', adr: 'adr',
 }
 
 const VIEW_TITLE: Partial<Record<SweepView, string>> = {
-  wizard: 'Guided cleanup', review: 'Guided cleanup', committed: 'Cleanup applied',
+  wizard: 'Guided cleanup',
   describe: 'Describe', interview: 'Interview', repo: 'From your code', adr: 'Draft ADR',
 }
 
@@ -270,6 +270,12 @@ type StepStatus = 'apply' | 'skip' | 'dismiss'
 interface FixStep { type: 'fix'; key: string; cat: 'missing'; gap: MissingGap }
 interface FindingStep { type: 'finding'; key: string; cat: 'review'; finding: ReviewFinding }
 type Step = FixStep | FindingStep
+type StepCat = Step['cat']
+
+// One applied change in the guided flow's revert ledger. `restores` puts back the
+// fields an update overwrote; the delete lists remove anything an add created.
+// Together they reverse the step exactly, independent of the other entries.
+interface LedgerEntry { key: string; label: string; detail: string; cat: StepCat; restores: Restore[]; deleteElements: string[]; deleteRelationships: string[] }
 
 function AppView({
   provider, workspace, model, initialFeature, onOpenSettings, onClose,
@@ -294,12 +300,13 @@ function AppView({
   const [curIdx, setCurIdx] = usePersistentState('sweep.curIdx', 0)
   const [decisions, setDecisions] = usePersistentState<Record<string, StepStatus>>('sweep.decisions', {})
   const [drafts, setDrafts] = usePersistentState<Record<string, string>>('sweep.drafts', {})
+  // Apply-as-you-go ledger: each approved step is applied to the model immediately
+  // and recorded here so it can be reverted individually (or all at once).
+  const [ledger, setLedger] = usePersistentState<LedgerEntry[]>('sweep.ledger', [])
   // Transient (in-flight) flags — not worth persisting.
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [committing, setCommitting] = useState(false)
-  const [appliedCount, setAppliedCount] = useState(0)
 
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
@@ -354,7 +361,7 @@ function AppView({
     }
   }
 
-  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setError(null) }
+  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setLedger([]); setError(null) }
 
   function startSweep(cats: CatId[]) {
     if (!workspace) return
@@ -404,10 +411,53 @@ function AppView({
   }
   function applyStep() {
     if (!cur) return
-    // Mirror the disabled "add to batch" button: a fix needs a non-empty draft.
+    // Mirror the disabled apply button: a fix needs a non-empty draft.
     if (cur.type === 'fix' && !(drafts[cur.key] ?? '').trim()) return
     if (cur.type === 'finding' && !isActionable(cur.finding)) { advance(cur.key, 'dismiss'); return }
+    // Revisiting an already-applied step (via Back): undo it first so the re-apply
+    // captures the true original state, keeping its revert accurate.
+    const prior = ledger.find((e) => e.key === cur.key)
+    if (prior) applyReverts([prior])
+    const entry = applyStepLive(cur, drafts[cur.key] ?? '')
+    setLedger((l) => (entry ? [entry, ...l.filter((e) => e.key !== cur.key)] : l.filter((e) => e.key !== cur.key)))
     advance(cur.key, 'apply')
+  }
+  // Apply a single step to the model NOW and return its revert ledger entry. Reads
+  // the live store (not the render-time `workspace` prop) so a revert-then-reapply
+  // sees current state.
+  function applyStepLive(step: Step, draft: string): LedgerEntry | null {
+    const ws = useWorkspaceStore.getState().workspace
+    if (!ws) return null
+    const ops: EditOp[] = step.type === 'fix'
+      ? (draft.trim() ? [gapToOp(step.gap, draft.trim())] : [])
+      : (step.finding.operations ?? [])
+    if (!ops.length) return null
+    const restores = captureRestores(ws, ops)
+    const beforeEl = new Set(flattenElements(ws).map((e) => e.id))
+    const beforeRel = new Set(ws.model.relationships.map((r) => r.id))
+    applyPlanToStore({ operations: ops }, ws)
+    const after = useWorkspaceStore.getState().workspace
+    const deleteElements = after ? flattenElements(after).filter((e) => !beforeEl.has(e.id)).map((e) => e.id) : []
+    const deleteRelationships = after ? after.model.relationships.filter((r) => !beforeRel.has(r.id)).map((r) => r.id) : []
+    return {
+      key: step.key,
+      label: step.type === 'fix' ? step.gap.label : step.finding.title,
+      detail: step.type === 'fix' ? (draft.trim() || '(cleared)') : step.finding.suggestion,
+      cat: step.cat, restores, deleteElements, deleteRelationships,
+    }
+  }
+  function revertEntry(key: string) {
+    const entry = ledger.find((e) => e.key === key)
+    if (!entry) return
+    applyReverts([entry])
+    setLedger((l) => l.filter((e) => e.key !== key))
+    setDecisions((d) => { const n = { ...d }; delete n[key]; return n })
+  }
+  function revertAll() {
+    if (!ledger.length) return
+    applyReverts(ledger)
+    setDecisions((d) => { const n = { ...d }; for (const e of ledger) delete n[e.key]; return n })
+    setLedger([])
   }
   function skipStep() { if (cur) advance(cur.key, cur.type === 'finding' && !isActionable(cur.finding) ? 'dismiss' : 'skip') }
   // Step back to the previous question to revisit/change a decision. Drafts and
@@ -432,43 +482,9 @@ function AppView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, cur])
 
-  // ── batch / commit ──
-  const stagedKeys = useMemo(() => queue.filter((s) => decisions[s.key] === 'apply'), [queue, decisions])
-  const stagedFixKeys = useMemo(() => new Set(stagedKeys.filter((s) => s.type === 'fix').map((s) => s.key)), [stagedKeys])
-
-  function commit() {
-    if (!workspace || committing) return
-    const ws = workspace
-    const ops: EditPlan['operations'] = []
-    for (const s of queue) {
-      if (decisions[s.key] !== 'apply') continue
-      if (s.type === 'fix') { const v = (drafts[s.key] ?? '').trim(); if (v) ops.push(gapToOp(s.gap, v)) }
-      else if (s.type === 'finding' && s.finding.operations?.length) ops.push(...s.finding.operations)
-    }
-    setCommitting(true)
-    try {
-      // Count the operations the store actually applied (a finding can carry
-      // several ops, a blank-draft fix carries none), not the staged-step count.
-      const result = ops.length ? applyPlanToStore({ operations: ops }, ws) : null
-      // (The create actions no longer close the panel during a batch apply, so
-      // no re-open bandaid is needed here.)
-      setAppliedCount(result?.appliedCount ?? 0)
-      setView('committed')
-      // The sweep is consumed — drop its cached resume state so reopening lands
-      // on Home, not a stale "committed"/wizard screen. (React keeps this render
-      // on the committed screen; only the persistence cache is cleared.)
-      clearAiSession('sweep')
-    } finally {
-      setCommitting(false)
-    }
-  }
-
   // Memoized — AppView re-renders on every wizard keystroke; without this each
   // one would re-walk the whole model tree via modelHealthPercent.
   const completePct = useMemo(() => (workspace ? modelHealthPercent(workspace) : 100), [workspace])
-  // Memoized like completePct — recomputing on every staged-checkbox toggle
-  // would re-walk the whole model tree twice (healthCounts + missingInfoGaps).
-  const projectedPct = useMemo(() => (workspace ? projectedHealthPercent(workspace, stagedFixKeys) : completePct), [workspace, stagedFixKeys, completePct])
 
   // A key that changes on every screen / wizard sub-state change (but NOT between
   // wizard steps — those animate per-card). Drives the body entrance animation so
@@ -517,34 +533,33 @@ function AppView({
 
         {view === 'wizard' && (
           cur ? (
-            <WizardStep
-              step={cur} idx={curIdx} total={queue.length}
-              draft={drafts[cur.key] ?? ''} draftLoading={draftsLoading && (drafts[cur.key] ?? '') === ''}
-              onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
-              onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
-              onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace)) : undefined}
-              onBack={curIdx > 0 ? goBack : undefined}
-              onApply={applyStep} onSkip={skipStep}
-            />
+            <>
+              <WizardStep
+                step={cur} idx={curIdx} total={queue.length}
+                draft={drafts[cur.key] ?? ''} draftLoading={draftsLoading && (drafts[cur.key] ?? '') === ''}
+                applied={!!ledger.find((e) => e.key === cur.key)}
+                onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
+                onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
+                onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace)) : undefined}
+                onBack={curIdx > 0 ? goBack : undefined}
+                onApply={applyStep} onSkip={skipStep} onRevert={() => revertEntry(cur.key)}
+              />
+              {ledger.length > 0 && (
+                <AppliedBar n={ledger.length} pct={completePct} onReview={() => setCurIdx(queue.length)} />
+              )}
+            </>
           ) : reviewLoading && workspace ? (
             <ReviewScanning workspace={workspace} />
           ) : (
-            <ReviewScreen
-              queue={queue} decisions={decisions} drafts={drafts}
-              completePct={completePct} projectedPct={projectedPct}
-              committing={committing}
-              onRemove={(key) => setDecisions((d) => ({ ...d, [key]: 'skip' }))}
-              onRestore={(key) => setDecisions((d) => ({ ...d, [key]: 'apply' }))}
-              onCommit={commit} onDiscard={goHome}
+            <SweepSummary
+              completePct={completePct} ledger={ledger}
+              onRevert={revertEntry} onRevertAll={revertAll}
               onBack={queue.length > 0 ? () => setCurIdx(queue.length - 1) : undefined}
+              onDone={goHome}
             />
           )
         )}
         {view === 'wizard' && <ErrorLine error={error} />}
-
-        {view === 'committed' && (
-          <CommittedScreen count={appliedCount} completePct={completePct} onHome={goHome} />
-        )}
 
         {view === 'describe' && <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />}
         {view === 'interview' && (workspace ? <InterviewBody provider={provider} onClose={onClose} /> : <Empty>Open or create a workspace to start an interview.</Empty>)}
@@ -748,13 +763,13 @@ function CategoryButton({ icon: Icon, color, iconBg, label, sub, onClick }: { ic
 // ─── Wizard step ────────────────────────────────────────────────────
 
 function WizardStep({
-  step, idx, total, draft, draftLoading, onDraft, onRewrite, onReveal, onBack, onApply, onSkip,
+  step, idx, total, draft, draftLoading, applied, onDraft, onRewrite, onReveal, onBack, onApply, onSkip, onRevert,
 }: {
   step: Step; idx: number; total: number
-  draft: string; draftLoading: boolean
+  draft: string; draftLoading: boolean; applied: boolean
   onDraft: (v: string) => void; onRewrite: () => void; onReveal?: () => void
   onBack?: () => void
-  onApply: () => void; onSkip: () => void
+  onApply: () => void; onSkip: () => void; onRevert: () => void
 }) {
   const cm = CAT[step.cat]
   const CatIcon = cm.icon
@@ -780,15 +795,15 @@ function WizardStep({
       </div>
 
       {step.type === 'fix'
-        ? <FixCard key={step.key} gap={step.gap} draft={draft} draftLoading={draftLoading} onDraft={onDraft} onRewrite={onRewrite} onReveal={onReveal} onApply={onApply} onSkip={onSkip} />
-        : <FindingCardStep key={step.key} finding={step.finding} onReveal={onReveal} onApply={onApply} onSkip={onSkip} />}
+        ? <FixCard key={step.key} gap={step.gap} draft={draft} draftLoading={draftLoading} applied={applied} onDraft={onDraft} onRewrite={onRewrite} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onRevert={onRevert} />
+        : <FindingCardStep key={step.key} finding={step.finding} applied={applied} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onRevert={onRevert} />}
     </div>
   )
 }
 
-function FixCard({ gap, draft, draftLoading, onDraft, onRewrite, onReveal, onApply, onSkip }: {
-  gap: MissingGap; draft: string; draftLoading: boolean
-  onDraft: (v: string) => void; onRewrite: () => void | Promise<void>; onReveal?: () => void; onApply: () => void; onSkip: () => void
+function FixCard({ gap, draft, draftLoading, applied, onDraft, onRewrite, onReveal, onApply, onSkip, onRevert }: {
+  gap: MissingGap; draft: string; draftLoading: boolean; applied: boolean
+  onDraft: (v: string) => void; onRewrite: () => void | Promise<void>; onReveal?: () => void; onApply: () => void; onSkip: () => void; onRevert: () => void
 }) {
   const k = KIND[gap.kind]
   const Icon = k.icon
@@ -818,16 +833,18 @@ function FixCard({ gap, draft, draftLoading, onDraft, onRewrite, onReveal, onApp
       {onReveal && <div><RevealLink onClick={onReveal} /></div>}
       <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
         <button onClick={onApply} disabled={!draft.trim()} className="c4ai-pri"
-          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', opacity: draft.trim() ? 1 : 0.55 }}>
-          <Check size={16} /> Add to batch
+          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: applied ? C.green : C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', opacity: draft.trim() ? 1 : 0.55 }}>
+          <Check size={16} /> {applied ? 'Applied · update' : 'Apply'}
         </button>
-        <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>
+        {applied
+          ? <button onClick={onRevert} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%', color: C.dangerText }}>Revert</button>
+          : <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>}
       </div>
     </div>
   )
 }
 
-function FindingCardStep({ finding, onReveal, onApply, onSkip }: { finding: ReviewFinding; onReveal?: () => void; onApply: () => void; onSkip: () => void }) {
+function FindingCardStep({ finding, applied, onReveal, onApply, onSkip, onRevert }: { finding: ReviewFinding; applied: boolean; onReveal?: () => void; onApply: () => void; onSkip: () => void; onRevert: () => void }) {
   const sev = SEV[finding.severity]
   const actionable = isActionable(finding)
   return (
@@ -848,11 +865,13 @@ function FindingCardStep({ finding, onReveal, onApply, onSkip }: { finding: Revi
       <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
         {actionable && (
           <button onClick={onApply} className="c4ai-pri"
-            style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
-            <Check size={16} /> Add fix to batch
+            style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: applied ? C.green : C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
+            <Check size={16} /> {applied ? 'Applied' : 'Apply fix'}
           </button>
         )}
-        <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>
+        {applied
+          ? <button onClick={onRevert} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%', color: C.dangerText }}>Revert</button>
+          : <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>}
       </div>
     </div>
   )
@@ -860,23 +879,27 @@ function FindingCardStep({ finding, onReveal, onApply, onSkip }: { finding: Revi
 
 // ─── Review (batch) screen ──────────────────────────────────────────
 
-function ReviewScreen({
-  queue, decisions, drafts, completePct, projectedPct, committing, onRemove, onRestore, onCommit, onDiscard, onBack,
-}: {
-  queue: Step[]; decisions: Record<string, StepStatus>; drafts: Record<string, string>
-  completePct: number; projectedPct: number; committing: boolean
-  onRemove: (key: string) => void; onRestore: (key: string) => void; onCommit: () => void; onDiscard: () => void
-  onBack?: () => void
+// Compact "applied so far" bar shown under each wizard step once changes start
+// landing. Reflects live model health and jumps to the summary/revert ledger.
+function AppliedBar({ n, pct, onReview }: { n: number; pct: number; onReview: () => void }) {
+  return (
+    <button onClick={onReview}
+      style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '9px 12px', borderRadius: 11, border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.06)', color: C.text2, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+      <CheckCircle2 size={15} color={C.green} style={{ flex: 'none' }} />
+      <span style={{ flex: 1, textAlign: 'left' }}>{plural(n, 'change', 'changes')} applied · health {pct}%</span>
+      <span style={{ color: C.accent }}>Review</span>
+    </button>
+  )
+}
+
+// End-of-flow summary for the apply-as-you-go guided sweep. Changes are already
+// live in the model; this is the revert ledger — undo any single one, or all.
+function SweepSummary({ completePct, ledger, onRevert, onRevertAll, onBack, onDone }: {
+  completePct: number; ledger: LedgerEntry[]
+  onRevert: (key: string) => void; onRevertAll: () => void
+  onBack?: () => void; onDone: () => void
 }) {
-  const staged = queue.filter((s) => decisions[s.key] === 'apply')
-  const skipped = queue.filter((s) => decisions[s.key] === 'skip' || decisions[s.key] === 'dismiss')
-  const applyN = staged.length
-
-  const rowOf = (s: Step): { label: string; value: string } =>
-    s.type === 'fix' ? { label: s.gap.label, value: (drafts[s.key] ?? '').trim() || '(empty)' }
-      : { label: s.finding.title, value: s.finding.suggestion }
-  const labelOf = (s: Step) => (s.type === 'fix' ? s.gap.label : s.finding.title)
-
+  const n = ledger.length
   return (
     <div>
       {onBack && (
@@ -885,72 +908,42 @@ function ReviewScreen({
         </button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-        <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}><Layers size={20} /></span>
+        <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, background: n > 0 ? 'rgba(34,197,94,0.14)' : 'rgba(88,166,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: n > 0 ? C.green : C.accent, animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}>{n > 0 ? <CheckCircle2 size={20} /> : <Layers size={20} />}</span>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>{applyN > 0 ? `Review ${plural(applyN, 'change', 'changes')}` : 'Nothing staged yet'}</div>
-          <div style={{ fontSize: 12.5, color: C.muted2, marginTop: 1 }}>Health {completePct}% → <span style={{ color: '#7dd3fc', fontWeight: 600 }}>{projectedPct}%</span> once applied</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>{n > 0 ? `${plural(n, 'change', 'changes')} applied` : 'No changes applied'}</div>
+          <div style={{ fontSize: 12.5, color: C.muted2, marginTop: 1 }}>Model health is now <span style={{ color: '#7dd3fc', fontWeight: 600 }}>{completePct}%</span></div>
         </div>
       </div>
 
-      {applyN > 0 ? (
+      {n > 0 ? (
         <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {staged.map((s, i) => {
-            const r = rowOf(s)
-            const cm = CAT[s.cat]
+          {ledger.map((e, i) => {
+            const cm = CAT[e.cat]
             return (
-              <div key={s.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 12px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-stagger .4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.08 + i * 0.05}s` }}>
+              <div key={e.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 12px', borderRadius: 11, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-stagger .4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.06 + i * 0.05}s` }}>
                 <span style={{ flex: 'none', marginTop: 1, fontSize: 9, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 5, background: cm.bg, color: cm.color }}>{cm.label}</span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text }}>{r.label}</span>
-                  <span style={{ display: 'block', fontSize: 12, color: '#9aa3ad', lineHeight: 1.45, marginTop: 2 }}>{r.value}</span>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text }}>{e.label}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: '#9aa3ad', lineHeight: 1.45, marginTop: 2 }}>{e.detail}</span>
                 </span>
-                <button onClick={() => onRemove(s.key)} aria-label="Remove from batch" className="c4ai-ghost" style={{ flex: 'none', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: 'none', background: 'transparent', color: C.muted3, cursor: 'pointer' }}><X size={14} /></button>
+                <button onClick={() => onRevert(e.key)} aria-label="Revert this change" className="c4ai-ghost" style={{ flex: 'none', height: 24, padding: '0 8px', display: 'inline-flex', alignItems: 'center', gap: 4, borderRadius: 7, border: 'none', background: 'transparent', color: C.muted3, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}><Undo2 size={13} /> Revert</button>
               </div>
             )
           })}
         </div>
       ) : (
         <div style={{ marginTop: 16, padding: 18, borderRadius: 12, border: '1px dashed rgba(88,166,255,0.2)', background: C.card, textAlign: 'center', fontSize: 12.5, color: C.muted2, lineHeight: 1.5 }}>
-          {skipped.length > 0
-            ? 'You skipped everything this run. Restore an item below, or head back to the dashboard.'
-            : 'Nothing to review — your model’s in good shape.'}
+          Nothing applied this run. Step back to revisit a question, or head back to the dashboard.
         </div>
       )}
 
-      {skipped.length > 0 && (
-        <>
-          <div style={{ marginTop: 18, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>Skipped · {skipped.length}</div>
-          <div style={{ marginTop: 9, display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {skipped.map((s) => (
-              <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(88,166,255,0.1)' }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{labelOf(s)}</span>
-                {decisions[s.key] === 'skip' && <button onClick={() => onRestore(s.key)} className="c4ai-sec" style={{ flex: 'none', height: 26, padding: '0 11px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.text2, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>Restore</button>}
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
       <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 9 }}>
-        <button onClick={onCommit} disabled={applyN === 0 || committing} className="c4ai-pri"
-          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: 13, border: 'none', background: applyN > 0 ? C.accent : 'rgba(88,166,255,0.16)', color: applyN > 0 ? C.ink : C.muted3, fontSize: 15, fontWeight: 700, cursor: applyN > 0 ? 'pointer' : 'default' }}>
-          {committing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {applyN > 0 ? `Apply ${plural(applyN, 'change', 'changes')}` : 'Nothing to apply'}
+        <button onClick={onDone} className="c4ai-pri"
+          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: 13, border: 'none', background: C.accent, color: C.ink, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+          <Check size={16} /> Done
         </button>
-        <button onClick={onDiscard} className="c4ai-ghost" style={{ width: '100%', height: 40, borderRadius: 11, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>Discard &amp; back to dashboard</button>
+        {n > 0 && <button onClick={onRevertAll} className="c4ai-ghost" style={{ width: '100%', height: 40, borderRadius: 11, border: `1px solid ${C.border}`, background: 'transparent', color: C.dangerText, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>Undo all changes</button>}
       </div>
-    </div>
-  )
-}
-
-function CommittedScreen({ count, completePct, onHome }: { count: number; completePct: number; onHome: () => void }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '34px 12px' }}>
-      <span style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(34,197,94,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.green, animation: 'c4ai-pop .4s ease' }}><CheckCircle2 size={34} /></span>
-      <h2 style={{ margin: '18px 0 0', fontSize: 19, fontWeight: 700, color: C.text }}>Cleanup applied</h2>
-      <p style={{ margin: '9px 0 0', fontSize: 13.5, lineHeight: 1.55, color: C.muted2, maxWidth: 290 }}>
-        Committed {plural(count, 'change', 'changes')} to the model. Model health is now <strong style={{ color: '#7dd3fc' }}>{completePct}%</strong>.
-      </p>
-      <button onClick={onHome} className="c4ai-pri" style={{ marginTop: 20, height: 42, padding: '0 22px', borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Back to dashboard</button>
     </div>
   )
 }
@@ -2101,6 +2094,26 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
   const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []
   if (newIds.length) useWorkspaceStore.getState().focusViewForElements(newIds)
   return result
+}
+
+// Reverse one or more applied ledger entries against the live store as a SINGLE
+// undo entry: restore overwritten fields first, then delete anything created.
+function applyReverts(entries: LedgerEntry[]): void {
+  if (!entries.length) return
+  const store = useWorkspaceStore.getState()
+  store.setBatchApplying(true)
+  try {
+    for (const entry of entries) {
+      for (const r of entry.restores) {
+        if (r.kind === 'element') store.updateElement(r.id, r.patch)
+        else store.updateRelationship(r.id, r.patch)
+      }
+      for (const id of entry.deleteRelationships) store.deleteRelationship(id)
+      for (const id of entry.deleteElements) store.deleteElement(id)
+    }
+  } finally {
+    store.setBatchApplying(false)
+  }
 }
 
 function summarize(ws: Workspace): string {

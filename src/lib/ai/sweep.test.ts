@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp, type MissingGap } from './sweep'
+import { missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp, captureRestores, type MissingGap } from './sweep'
 import { makeWorkspace } from './testFixture'
 import type { Workspace } from '@/types/model'
 
@@ -127,5 +127,37 @@ describe('gapToOp', () => {
     expect(gapToOp({ key: 'tech:e', kind: 'tech', targetId: 'e', ...base }, 'Go')).toEqual({ op: 'updateElement', id: 'e', technology: 'Go' })
     expect(gapToOp({ key: 'title:e', kind: 'title', targetId: 'e', ...base }, 'Name')).toEqual({ op: 'updateElement', id: 'e', name: 'Name' })
     expect(gapToOp({ key: 'rel:r', kind: 'rel', targetId: 'r', targetKind: 'relationship', label: 'A → B' }, 'calls')).toEqual({ op: 'updateRelationship', id: 'r', description: 'calls' })
+  })
+})
+
+describe('captureRestores', () => {
+  it('captures the empty prior value of a missing field (so revert clears it)', () => {
+    const restores = captureRestores(makeWorkspace(), [
+      { op: 'updateElement', id: 'cart', description: 'A shopping cart', technology: 'TypeScript' },
+    ])
+    expect(restores).toEqual([{ kind: 'element', id: 'cart', patch: { description: '', technology: '' } }])
+  })
+
+  it('captures the existing prior value of an overwritten field', () => {
+    const restores = captureRestores(makeWorkspace(), [
+      { op: 'updateElement', id: 'web', name: 'Frontend', technology: 'Vue' },
+    ])
+    // Only the fields the op touches are captured; description is left alone.
+    expect(restores).toEqual([{ kind: 'element', id: 'web', patch: { name: 'Web App', technology: 'React' } }])
+  })
+
+  it('captures relationship descriptions, empty and existing', () => {
+    const ws = makeWorkspace()
+    expect(captureRestores(ws, [{ op: 'updateRelationship', id: 'r2', description: 'Reads from' }]))
+      .toEqual([{ kind: 'relationship', id: 'r2', patch: { description: '' } }])
+    expect(captureRestores(ws, [{ op: 'updateRelationship', id: 'r1', description: 'x' }]))
+      .toEqual([{ kind: 'relationship', id: 'r1', patch: { description: 'Browses' } }])
+  })
+
+  it('ignores add-ops and unknown ids (they revert by delete, not restore)', () => {
+    expect(captureRestores(makeWorkspace(), [
+      { op: 'addRelationship', source: 'web', destination: 'db' },
+      { op: 'updateElement', id: 'ghost', description: 'x' },
+    ])).toEqual([])
   })
 })

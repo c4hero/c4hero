@@ -128,3 +128,35 @@ export function gapToOp(gap: MissingGap, value: string): EditOp {
     case 'rel': return { op: 'updateRelationship', id: gap.targetId, description: v }
   }
 }
+
+/** The pre-change value of one field an update-op will overwrite, so apply-as-you-go
+ *  changes can be reverted exactly. */
+export interface Restore { kind: 'element' | 'relationship'; id: string; patch: { name?: string; description?: string; technology?: string } }
+
+/** Read the current value of every field the given update-ops would overwrite, so
+ *  a later revert can put each back. Add-ops contribute nothing here — they revert
+ *  by deleting what they created (their ids are captured after the apply, not here).
+ *  Call this BEFORE applying the ops. */
+export function captureRestores(ws: Workspace, ops: EditOp[]): Restore[] {
+  const flat = flattenElements(ws)
+  const out: Restore[] = []
+  for (const op of ops) {
+    if (op.op === 'updateElement') {
+      const el = flat.find((e) => e.id === op.id)
+      if (!el) continue
+      const patch: Restore['patch'] = {}
+      if (op.name !== undefined) patch.name = el.name ?? ''
+      if (op.description !== undefined) patch.description = el.description ?? ''
+      if (op.technology !== undefined) patch.technology = el.technology ?? ''
+      out.push({ kind: 'element', id: op.id, patch })
+    } else if (op.op === 'updateRelationship') {
+      const r = ws.model.relationships.find((x) => x.id === op.id)
+      if (!r) continue
+      const patch: Restore['patch'] = {}
+      if (op.description !== undefined) patch.description = r.description ?? ''
+      if (op.technology !== undefined) patch.technology = r.technology ?? ''
+      out.push({ kind: 'relationship', id: op.id, patch })
+    }
+  }
+  return out
+}
