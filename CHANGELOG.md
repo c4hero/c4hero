@@ -22,8 +22,9 @@ to the provider you choose — c4hero never sees your key or your model data.
 - **Model health** — an instant, deterministic readout of how complete your model
   is (descriptions, technologies, untyped relationships), with click-to-fix gaps
   and a 100% celebration.
-- **Guided cleanup** — a step-by-step wizard over the instant missing-info fixes,
-  reviewed as a batch (with projected model health) before anything is applied.
+- **Guided cleanup** — a step-by-step wizard over the instant missing-info fixes.
+  Each change applies as you approve it (model health climbs live), with a revert
+  ledger to undo any single change or all of them.
 - **Deep review** — an AI architecture review that surfaces orphans, untyped
   links, naming and boundary issues as triageable, one-click-fixable findings.
 - **Interview** — a focused, view-scoped Q&A that turns your answers into model
