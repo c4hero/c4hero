@@ -66,6 +66,9 @@ data the app handles, where it lives, and what is sent over the network.
   feature (for example, your prompt plus a text summary of elements and
   relationships for Review, Edit, Auto-describe, and ADR drafting). Review your
   provider's privacy terms to understand how they handle that data.
+- If you use repo scanning, c4hero reads the selected folder in your browser,
+  redacts secret-looking values from key manifest/config excerpts, then sends
+  the file tree plus those redacted excerpts to your chosen AI provider.
 - No AI request is made unless you explicitly trigger a feature. Disabling AI in
   settings hides the assistant; clearing site data removes the stored key.
 - **Voice-to-text** dictation (the mic button on AI text boxes) uses your

@@ -29,7 +29,7 @@ Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
 Referrer-Policy: strict-origin-when-cross-origin
-Permissions-Policy: camera=(), microphone=(), geolocation=()
+Permissions-Policy: camera=(), microphone=(self), geolocation=(), payment=()
 ```
 
 `vercel.json` is the canonical copy for the hosted app. Keep this sample aligned with it when the production policy changes.

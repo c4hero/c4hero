@@ -24,6 +24,60 @@ export function isKeyFile(name: string): boolean {
   return KEY_FILE_RE.test(name)
 }
 
+const REDACTED = '<redacted>'
+const SECRET_KEY_PART = [
+  'api[-_]?key',
+  'access[-_]?key',
+  'auth[-_]?token',
+  'bearer',
+  'client[-_]?secret',
+  'connection[-_]?string',
+  'credential',
+  'database[-_]?url',
+  'db[-_]?url',
+  'dsn',
+  'jdbc[-_]?url',
+  'mongo(?:db)?[-_]?(?:uri|url)',
+  'pass(?:word|wd)?',
+  'private[-_]?key',
+  'refresh[-_]?token',
+  'redis[-_]?url',
+  'secret',
+  'token',
+].join('|')
+
+const SECRET_KEY_RE = new RegExp(`(?:^|[._-])(?:${SECRET_KEY_PART})(?:$|[._-])`, 'i')
+const ASSIGNMENT_RE = /^([ \t-]*(?:export[ \t]+)?["']?)([\w.-]+)(["']?[ \t]*[:=][ \t]*)([^\r\n]*)/gim
+const PRIVATE_KEY_BLOCK_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))/g
+const ASSIGNED_PRIVATE_KEY_BLOCK_RE = /^([ \t-]*(?:export[ \t]+)?["']?[\w.-]*private[-_]?key[\w.-]*["']?[ \t]*[:=][ \t]*)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))/gim
+
+function redactAssignmentValue(prefix: string, rawValue: string): string {
+  const leading = rawValue.match(/^\s*/)?.[0] ?? ''
+  const trimmed = rawValue.trim()
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return `${prefix}${rawValue}`
+
+  const comma = trimmed.endsWith(',') ? ',' : ''
+  const quote = trimmed[0] === '"' || trimmed[0] === '\'' ? trimmed[0] : ''
+  return `${prefix}${leading}${quote}${REDACTED}${quote}${comma}`
+}
+
+/** Strip secret-looking values from config excerpts before they leave the
+ *  browser. Keeps the keys and surrounding architecture hints, but removes
+ *  credentials, tokens, private keys, and URL passwords. */
+export function redactSensitiveContent(content: string): string {
+  return content
+    .replace(ASSIGNED_PRIVATE_KEY_BLOCK_RE, (_m, prefix: string) => `${prefix}${REDACTED}`)
+    .replace(PRIVATE_KEY_BLOCK_RE, `-----BEGIN PRIVATE KEY-----\n${REDACTED}\n-----END PRIVATE KEY-----`)
+    .replace(ASSIGNMENT_RE, (match, start: string, key: string, sep: string, rawValue: string) => (
+      SECRET_KEY_RE.test(key) ? redactAssignmentValue(`${start}${key}${sep}`, rawValue) : match
+    ))
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+):([^@\s/]+)@/gi, `$1$2:${REDACTED}@`)
+    .replace(/\b(AKIA|ASIA)[A-Z0-9]{16}\b/g, REDACTED)
+    .replace(/\bAIza[0-9A-Za-z_-]{35}\b/g, REDACTED)
+    .replace(/\bgh[pousr]_[0-9A-Za-z_]{36,}\b/g, REDACTED)
+    .replace(/\bsk-[A-Za-z0-9_-]{20,}\b/g, REDACTED)
+}
+
 export interface ReadRepoOptions {
   maxFiles?: number
   maxFileBytes?: number
@@ -100,7 +154,7 @@ export async function readRepoFiles(
     try {
       const file = await getFile()
       if (file.size <= maxRawFileBytes) {
-        files.push({ path, content: (await file.text()).slice(0, maxFileBytes) })
+        files.push({ path, content: redactSensitiveContent(await file.text()).slice(0, maxFileBytes) })
         onProgress?.({ files: walked, keyFiles: files.length, keyFile: path })
       }
     } catch {
@@ -119,7 +173,7 @@ export function buildRepoBundle(snapshot: RepoSnapshot, maxChars = 24_000): stri
   let out = lines.join('\n')
 
   for (const f of snapshot.files) {
-    const block = `\n\n=== ${f.path} ===\n${f.content}`
+    const block = `\n\n=== ${f.path} ===\n${redactSensitiveContent(f.content)}`
     if (out.length + block.length > maxChars) {
       out += `\n\n(${snapshot.files.length} key files found; remaining omitted to fit the budget)`
       break

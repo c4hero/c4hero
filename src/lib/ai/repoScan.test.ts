@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isKeyFile, isIgnoredDir, buildRepoBundle, mergeRepoProposals } from './repoScan'
+import { isKeyFile, isIgnoredDir, buildRepoBundle, mergeRepoProposals, redactSensitiveContent } from './repoScan'
 import type { RepoSnapshot, RepoProposal } from './types'
 
 describe('isIgnoredDir', () => {
@@ -53,6 +53,69 @@ describe('buildRepoBundle', () => {
   it('honors the character budget', () => {
     const big: RepoSnapshot = { repoName: 'x', tree: [], files: [{ path: 'a', content: 'z'.repeat(5000) }] }
     expect(buildRepoBundle(big, 500).length).toBeLessThanOrEqual(500)
+  })
+
+  it('redacts sensitive values before bundling key files', () => {
+    const out = buildRepoBundle({
+      repoName: 'orders',
+      tree: ['application.yml'],
+      files: [{
+        path: 'application.yml',
+        content: [
+          'database_url: postgres://orders:hunter2@db/orders',
+          'apiKey: "AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"',
+          'service_url: https://orders.example.com',
+        ].join('\n'),
+      }],
+    })
+    expect(out).not.toContain('hunter2')
+    expect(out).not.toContain('AIzaSy')
+    expect(out).toContain('database_url: <redacted>')
+    expect(out).toContain('apiKey: "<redacted>"')
+    expect(out).toContain('service_url: https://orders.example.com')
+  })
+})
+
+describe('redactSensitiveContent', () => {
+  it('redacts common secret assignment formats and private keys', () => {
+    const out = redactSensitiveContent([
+      'OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456',
+      'spring.datasource.password=swordfish',
+      'clientSecret: very-secret',
+      'token = "ghp_abcdefghijklmnopqrstuvwxyz1234567890abcd"',
+      'private_key = -----BEGIN PRIVATE KEY-----',
+      'abc',
+      '-----END PRIVATE KEY-----',
+    ].join('\n'))
+
+    expect(out).not.toContain('sk-abcdefghijklmnopqrstuvwxyz123456')
+    expect(out).not.toContain('swordfish')
+    expect(out).not.toContain('very-secret')
+    expect(out).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz1234567890abcd')
+    expect(out).not.toContain('\nabc\n')
+    expect(out).toContain('OPENAI_API_KEY=<redacted>')
+    expect(out).toContain('spring.datasource.password=<redacted>')
+    expect(out).toContain('clientSecret: <redacted>')
+    expect(out).toContain('token = "<redacted>"')
+  })
+
+  it('redacts private key blocks even when the excerpt is truncated', () => {
+    const out = redactSensitiveContent([
+      'private_key: |',
+      '-----BEGIN PRIVATE KEY-----',
+      'still-secret-key-material',
+    ].join('\n'))
+    expect(out).not.toContain('still-secret-key-material')
+    expect(out).toContain('private_key: <redacted>')
+  })
+
+  it('keeps ordinary architecture metadata intact', () => {
+    const input = [
+      '"jsonwebtoken": "^9.0.0",',
+      'service_url: https://orders.example.com',
+      'name: orders-api',
+    ].join('\n')
+    expect(redactSensitiveContent(input)).toBe(input)
   })
 })
 

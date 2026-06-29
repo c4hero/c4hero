@@ -4,7 +4,7 @@ import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
-  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Trophy, Star, type LucideIcon,
+  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Trophy, Star, RotateCw, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
@@ -410,6 +410,9 @@ function AppView({
     advance(cur.key, 'apply')
   }
   function skipStep() { if (cur) advance(cur.key, cur.type === 'finding' && !isActionable(cur.finding) ? 'dismiss' : 'skip') }
+  // Step back to the previous question to revisit/change a decision. Drafts and
+  // decisions are kept, so the earlier step shows exactly what you left.
+  function goBack() { setCurIdx((i) => Math.max(0, i - 1)) }
 
   // ⌘↵ apply · esc skip, while stepping through the wizard.
   useEffect(() => {
@@ -520,6 +523,7 @@ function AppView({
               onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
               onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
               onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace)) : undefined}
+              onBack={curIdx > 0 ? goBack : undefined}
               onApply={applyStep} onSkip={skipStep} onDismiss={() => advance(cur.key, 'dismiss')}
             />
           ) : reviewLoading && workspace ? (
@@ -532,6 +536,7 @@ function AppView({
               onRemove={(key) => setDecisions((d) => ({ ...d, [key]: 'skip' }))}
               onRestore={(key) => setDecisions((d) => ({ ...d, [key]: 'apply' }))}
               onCommit={commit} onDiscard={goHome}
+              onBack={queue.length > 0 ? () => setCurIdx(queue.length - 1) : undefined}
             />
           )
         )}
@@ -743,11 +748,12 @@ function CategoryButton({ icon: Icon, color, iconBg, label, sub, onClick }: { ic
 // ─── Wizard step ────────────────────────────────────────────────────
 
 function WizardStep({
-  step, idx, total, draft, draftLoading, onDraft, onRewrite, onReveal, onApply, onSkip, onDismiss,
+  step, idx, total, draft, draftLoading, onDraft, onRewrite, onReveal, onBack, onApply, onSkip, onDismiss,
 }: {
   step: Step; idx: number; total: number
   draft: string; draftLoading: boolean
   onDraft: (v: string) => void; onRewrite: () => void; onReveal?: () => void
+  onBack?: () => void
   onApply: () => void; onSkip: () => void; onDismiss: () => void
 }) {
   const cm = CAT[step.cat]
@@ -762,17 +768,20 @@ function WizardStep({
       </div>
       <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 999, background: cm.bg, color: cm.color }}><CatIcon size={12} /> {cm.label}</span>
-        <span style={{ fontSize: 12, color: C.muted2 }}>Step {Math.min(idx + 1, total)} of {total}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          {onBack && (
+            <button onClick={onBack} className="c4ai-ghost" aria-label="Previous question" title="Previous question"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, border: 'none', background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+              <ArrowLeft size={13} /> Back
+            </button>
+          )}
+          <span style={{ fontSize: 12, color: C.muted2 }}>Step {Math.min(idx + 1, total)} of {total}</span>
+        </span>
       </div>
 
       {step.type === 'fix'
         ? <FixCard key={step.key} gap={step.gap} draft={draft} draftLoading={draftLoading} onDraft={onDraft} onRewrite={onRewrite} onReveal={onReveal} onApply={onApply} onSkip={onSkip} />
         : <FindingCardStep key={step.key} finding={step.finding} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onDismiss={onDismiss} />}
-
-      {/* keyboard tips — kept at the bottom, out of the way */}
-      <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 10.5, color: '#4d555e' }}>
-        <span style={kbd}>⌘ ↵</span> apply <span style={{ color: '#30363d' }}>·</span> <span style={kbd}>esc</span> skip
-      </div>
     </div>
   )
 }
@@ -799,7 +808,9 @@ function FixCard({ gap, draft, draftLoading, onDraft, onRewrite, onReveal, onApp
       </div>
       <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>
         <Sparkles size={13} color={C.accent} /> Suggested {k.label}
-        {draftLoading && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 'auto', letterSpacing: 0, textTransform: 'none', fontWeight: 500, color: C.muted2 }}><Loader2 size={12} className="animate-spin" /> Drafting…</span>}
+        {(draftLoading || regen)
+          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 'auto', letterSpacing: 0, textTransform: 'none', fontWeight: 500, color: C.muted2 }}><Loader2 size={12} className="animate-spin" /> Drafting…</span>
+          : <button onClick={rewrite} aria-label="Rewrite suggestion" title="Rewrite suggestion" className="c4ai-ghost" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', color: C.muted2, cursor: 'pointer', padding: 2 }}><RotateCw size={13} /></button>}
       </div>
       <textarea value={draft} onChange={(e) => onDraft(e.target.value)}
         placeholder={draftLoading ? 'Drafting a suggestion…' : `Type a ${k.label}…`}
@@ -808,14 +819,9 @@ function FixCard({ gap, draft, draftLoading, onDraft, onRewrite, onReveal, onApp
       <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
         <button onClick={onApply} disabled={!draft.trim()} className="c4ai-pri"
           style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', opacity: draft.trim() ? 1 : 0.55 }}>
-          <Check size={16} /> Looks good — add to batch
+          <Check size={16} /> Add to batch
         </button>
-        <div style={{ display: 'flex', gap: 9 }}>
-          <button onClick={onSkip} className="c4ai-ghost" style={wizSecBtn}>Skip</button>
-          <button onClick={rewrite} disabled={regen} className="c4ai-sec" style={{ ...wizSecBtn, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, color: C.text2 }}>
-            {regen ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Rewrite
-          </button>
-        </div>
+        <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Not now</button>
       </div>
     </div>
   )
@@ -858,11 +864,12 @@ function FindingCardStep({ finding, onReveal, onApply, onSkip, onDismiss }: { fi
 // ─── Review (batch) screen ──────────────────────────────────────────
 
 function ReviewScreen({
-  queue, decisions, drafts, completePct, projectedPct, committing, onRemove, onRestore, onCommit, onDiscard,
+  queue, decisions, drafts, completePct, projectedPct, committing, onRemove, onRestore, onCommit, onDiscard, onBack,
 }: {
   queue: Step[]; decisions: Record<string, StepStatus>; drafts: Record<string, string>
   completePct: number; projectedPct: number; committing: boolean
   onRemove: (key: string) => void; onRestore: (key: string) => void; onCommit: () => void; onDiscard: () => void
+  onBack?: () => void
 }) {
   const staged = queue.filter((s) => decisions[s.key] === 'apply')
   const skipped = queue.filter((s) => decisions[s.key] === 'skip' || decisions[s.key] === 'dismiss')
@@ -875,6 +882,11 @@ function ReviewScreen({
 
   return (
     <div>
+      {onBack && (
+        <button onClick={onBack} className="c4ai-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginBottom: 12, border: 'none', background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+          <ArrowLeft size={13} /> Back to questions
+        </button>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
         <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}><Layers size={20} /></span>
         <div>
@@ -1698,7 +1710,7 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
       <ErrorLine error={error} />
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '11px 13px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
         <ShieldCheck size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
-        <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Files are read in your browser. Only the file tree and key manifest/config files are sent to your AI provider with your key — c4hero has no server.</span>
+        <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Files are read in your browser. Secret-looking values are redacted, then only the file tree and key manifest/config excerpts are sent to your AI provider with your key — c4hero has no server.</span>
       </div>
     </div>
   )
@@ -2116,7 +2128,6 @@ const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, lette
 const wizSecBtn: React.CSSProperties = { flex: 1, height: 40, borderRadius: 11, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }
 const describeBtn: React.CSSProperties = { width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 13, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }
 const describeIcon: React.CSSProperties = { width: 38, height: 38, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }
-const kbd: React.CSSProperties = { fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(88,166,255,0.18)', color: C.muted3 }
 const iconBtn: React.CSSProperties = { width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer' }
 const blurb: React.CSSProperties = { fontSize: 12, color: C.muted2, margin: '0 0 12px' }
 const kicker: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2 }
