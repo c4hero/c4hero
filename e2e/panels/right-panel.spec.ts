@@ -34,7 +34,7 @@ test.describe('Right Panel', () => {
   test('inspector stays hidden when nothing is selected', async ({ workspace }) => {
     await workspace.loadSample()
     await workspace.page.locator('.react-flow__pane').click({ position: { x: 10, y: 10 } })
-    await expect(workspace.page.getByLabel('Element properties')).toHaveCSS('pointer-events', 'none')
+    await expect(workspace.page.getByLabel('Element properties')).toHaveCount(0)
   })
 
   test('multi-select mode hides the inspector until it is turned off', async ({ workspace }) => {
