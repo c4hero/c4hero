@@ -19,14 +19,19 @@ export default function FloatingInspector() {
   const hasRelationship = !!workspace && selectedRelId !== null && getRelationshipById(workspace, selectedRelId) !== undefined
   const hasGroup = !!workspace && selectedGroupId !== null && workspace.model.groups.some(g => g.id === selectedGroupId)
 
-  // Only render when a node, relationship, or group is explicitly selected
+  // Only render when a node, relationship, or group is explicitly selected.
   const visible = hasElement || hasRelationship || hasGroup
+  // The single rendered/active condition — the outside-click effect must match it
+  // exactly, or its document listener stays attached while the inspector div is
+  // unmounted (e.g. the assistant is open) and dismisses selections from clicks
+  // inside the panel.
+  const shown = !!workspace && !multiSelectMode && !aiOpen && visible
 
   // Dismiss on outside click. Clicks on canvas nodes/edges run their own
   // selection logic synchronously after this mousedown clears, so they end
   // up selected and the inspector re-shows with the new target.
   useEffect(() => {
-    if (!visible) return
+    if (!shown) return
     function onDocPointer(e: MouseEvent | TouchEvent) {
       const target = e.target as Node | null
       if (!target) return
@@ -43,9 +48,9 @@ export default function FloatingInspector() {
       document.removeEventListener('mousedown', onDocPointer)
       document.removeEventListener('touchstart', onDocPointer)
     }
-  }, [visible, clearSelection])
+  }, [shown, clearSelection])
 
-  if (!workspace || multiSelectMode || aiOpen || !visible) return null
+  if (!shown) return null
 
   return (
     <div

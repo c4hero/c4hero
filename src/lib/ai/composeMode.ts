@@ -22,11 +22,10 @@ export function detectComposeMode(text: string): 'new' | 'change' {
     /\b(from scratch|greenfield|start over|start fresh|start again)\b/.test(t)
     // "replace the/my model", "replace everything", …
     || new RegExp(`\\breplace\\b[^.!?\\n]*\\b(model|diagram|workspace|architecture|everything)\\b`).test(t)
-    // "build/create/design a new model", "generate a new architecture", …
-    // (deliberately excludes "update"/"model" as verbs so "update my model to a
-    // new architecture" stays a change.)
+    // "build/create/design a new model", "generate a new workspace", …
+    // Requires a BUILD verb so additive phrasing like "add a new model for auth"
+    // (leading verb "add") stays a change. Deliberately excludes "update"/"model"
+    // as verbs so "update my model to a new model" stays a change too.
     || new RegExp(`\\b(build|create|generate|make|design)\\b[^.!?\\n]*\\bnew\\b[^.!?\\n]*\\b${MODEL_NOUN}\\b`).test(t)
-    // "a new model for …", "new diagram of …"
-    || new RegExp(`\\bnew\\b[^.!?\\n]*\\b${MODEL_NOUN}\\b[^.!?\\n]*\\b(for|of)\\b`).test(t)
   return replace ? 'new' : 'change'
 }

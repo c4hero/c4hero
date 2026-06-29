@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { clearSelectionDraft } from '../workspace-helpers'
+import { pushUndoSnapshot } from '../internals'
 
 /** Pure UI state: panel/dialog open flags, canvas-mode toggles, and the
  *  pending-delete confirmation. Holds no workspace data. */
@@ -82,7 +83,13 @@ export const createUiSlice: StateCreator<
   // without closing the panel, so a stale feature can't fire again later.
   clearAiPanelFeature: () => set({ aiPanelFeature: null }),
   setAiPanelBusy: (busy) => set({ aiPanelBusy: busy }),
-  setBatchApplying: (on) => set({ batchApplying: on }),
+  setBatchApplying: (on) => set((s) => {
+    // Snapshot the pre-apply state once when the batch begins (while batchApplying
+    // is still false, so the push isn't suppressed); the per-op snapshots are then
+    // skipped, making the whole AI apply a single, fully-reversible undo entry.
+    if (on && !s.batchApplying) pushUndoSnapshot(s)
+    s.batchApplying = on
+  }),
   setCanvasGuideOpen: (open) => set({ canvasGuideOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
   setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),

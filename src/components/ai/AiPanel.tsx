@@ -2088,14 +2088,15 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
   }
   // Apply in batch mode so the per-op addContainer/addComponent don't jump the
   // canvas to each created view; then navigate ONCE to where the new elements are.
-  // Diff against the LIVE store (not the possibly-stale `ws` prop snapshot) so the
-  // new-element set — and thus the view we navigate to — is accurate.
+  // Validate and diff against the LIVE store (not the possibly-stale `ws` prop
+  // snapshot) so the applier doesn't skip edits to elements added since the panel
+  // rendered, and the navigation target is accurate.
   const liveBefore = s.workspace ?? ws
   const before = new Set(flattenElements(liveBefore).map((e) => e.id))
   s.setBatchApplying(true)
   let result
   try {
-    result = applyEditPlan(plan, actions, ws)
+    result = applyEditPlan(plan, actions, liveBefore)
   } finally {
     s.setBatchApplying(false)
   }

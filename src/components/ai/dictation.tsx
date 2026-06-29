@@ -19,7 +19,14 @@ export function MicButton({
   style?: React.CSSProperties
 }) {
   const valueRef = useLatest(value)
-  const dictation = useDictation((text) => onChange(appendDictation(valueRef.current, text)))
+  const dictation = useDictation((text) => {
+    // Update the ref synchronously: a single recognition event can fire this more
+    // than once, and reading the render-synced ref each time would overwrite all
+    // but the last segment. Appending to (and re-storing) the ref accumulates them.
+    const next = appendDictation(valueRef.current, text)
+    valueRef.current = next
+    onChange(next)
+  })
 
   if (!dictation.supported) return null
 

@@ -63,7 +63,7 @@ export function aiErrorMessage(err: unknown): string {
   if (err instanceof AiError) {
     switch (err.kind) {
       case 'auth':
-        return 'Invalid API key. Check your Anthropic key in AI settings.'
+        return 'Invalid API key. Check your key for the selected provider in AI settings.'
       case 'rate-limit':
         return 'Rate limited by the AI provider. Wait a moment and try again.'
       case 'connection':

@@ -270,6 +270,24 @@ describe('Relationship and container mutations', () => {
     expect(cv!.elements.some((e) => e.id === cid)).toBe(true)
   })
 
+  it('coalesces a batch apply into a single, fully-reversible undo entry', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().setBatchApplying(true)
+    useWorkspaceStore.getState().addSoftwareSystem('Billing')
+    useWorkspaceStore.getState().addSoftwareSystem('Shipping')
+    useWorkspaceStore.getState().addSoftwareSystem('Inventory')
+    useWorkspaceStore.getState().setBatchApplying(false)
+    // Exactly ONE snapshot was pushed for the whole batch (not one per op).
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+    const created = useWorkspaceStore.getState().workspace!.model.softwareSystems.map((s) => s.name)
+    expect(created).toEqual(expect.arrayContaining(['Billing', 'Shipping', 'Inventory']))
+    // A single undo reverts the entire batch.
+    useWorkspaceStore.getState().undo()
+    const names = useWorkspaceStore.getState().workspace!.model.softwareSystems.map((s) => s.name)
+    expect(names).not.toContain('Billing')
+    expect(names).not.toContain('Inventory')
+  })
+
   it('focusViewForElements navigates to the view containing the most of them', () => {
     const cid = useWorkspaceStore.getState().addContainer('api', 'Web') // creates + switches to api container view
     const apiView = useWorkspaceStore.getState().activeViewKey!

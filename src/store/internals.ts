@@ -30,6 +30,10 @@ export function undoSnapshot(s: WorkspaceState): Workspace | null {
  *  returns the pre-produce ref, so position within the producer doesn't
  *  matter. */
 export function pushUndoSnapshot(s: WorkspaceState): void {
+  // During an AI batch apply the per-op snapshots are suppressed — the batch
+  // pushes ONE snapshot up front (see setBatchApplying) so the whole apply is a
+  // single undo entry and the pre-apply state can't be trimmed off the stack.
+  if (s.batchApplying) return
   const snapshot = undoSnapshot(s)
   if (!snapshot) return
   s.undoStack.push(snapshot)

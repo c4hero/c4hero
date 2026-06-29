@@ -63,9 +63,9 @@ export const createRelationshipSlice: StateCreator<
       s.selectedElementIds = []
       s.selectedGroupId = null
       // Match the add-node methods: opening the inspector for the new
-      // relationship closes the assistant — but not during an AI batch apply,
-      // which keeps the panel open to show its results.
-      if (!s.batchApplying) { s.aiPanelOpen = false; s.aiSettingsOpen = false }
+      // relationship closes the assistant — but not during an AI batch apply
+      // (keep it for the results) or while the assistant is mid-flow (aiPanelBusy).
+      if (!s.batchApplying && !s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false }
     })
     return created ? id : ''
   },

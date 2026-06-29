@@ -191,17 +191,19 @@ export function clearSelectionDraft(
 }
 
 /** Select a just-created element and close the assistant so the inspector shows
- *  — EXCEPT during an AI batch apply, which keeps the panel to show its results.
- *  Centralizes the selection-reset + panel-close that every create action shares. */
+ *  — EXCEPT during an AI batch apply (keep the panel to show its results) or while
+ *  the assistant is mid-flow (aiPanelBusy: interview/wizard/sweep — don't yank it
+ *  out from under the user). Centralizes the selection-reset + panel-close that
+ *  every create action shares, matching the selection-slice guard. */
 export function selectCreated(
-  s: { batchApplying: boolean; aiPanelOpen: boolean; aiSettingsOpen: boolean; focusElementId: string | null; selectedElementIds: string[]; selectedRelationshipId: string | null; selectedGroupId: string | null },
+  s: { batchApplying: boolean; aiPanelBusy: boolean; aiPanelOpen: boolean; aiSettingsOpen: boolean; focusElementId: string | null; selectedElementIds: string[]; selectedRelationshipId: string | null; selectedGroupId: string | null },
   id: string,
 ): void {
   s.focusElementId = id
   s.selectedElementIds = [id]
   s.selectedRelationshipId = null
   s.selectedGroupId = null
-  if (!s.batchApplying) { s.aiPanelOpen = false; s.aiSettingsOpen = false }
+  if (!s.batchApplying && !s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false }
 }
 
 
