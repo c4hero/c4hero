@@ -141,6 +141,8 @@ export interface UpdateElementOp {
   name?: string
   description?: string
   technology?: string
+  /** Internal vs external — applies to people and software systems only. */
+  location?: 'Internal' | 'External'
 }
 
 export interface UpdateRelationshipOp {

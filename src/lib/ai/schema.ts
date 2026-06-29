@@ -54,6 +54,7 @@ const opSchema = {
     source: { type: 'string' },
     destination: { type: 'string' },
     external: { type: 'boolean' },
+    location: { type: 'string', enum: ['Internal', 'External'] },
   },
   required: ['op'],
 }

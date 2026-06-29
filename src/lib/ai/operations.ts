@@ -13,7 +13,7 @@ export interface EditActions {
   addContainer: (systemId: string, name: string) => string
   addComponent: (containerId: string, name: string) => string
   addRelationship: (sourceId: string, destinationId: string, description?: string, technology?: string) => string
-  updateElement: (id: string, patch: { name?: string; description?: string; technology?: string }) => void
+  updateElement: (id: string, patch: { name?: string; description?: string; technology?: string; location?: 'Internal' | 'External' }) => void
   updateRelationship: (id: string, patch: { description?: string; technology?: string }) => void
   deleteElement: (id: string) => void
 }
@@ -176,6 +176,9 @@ export function applyEditPlan(
           name: op.name?.trim() || undefined,
           description: op.description?.trim() || undefined,
           technology: op.technology?.trim() || undefined,
+          // Guard the value — isEditOp doesn't type-check it, so a bogus string
+          // from the model must not reach the store.
+          location: op.location === 'External' || op.location === 'Internal' ? op.location : undefined,
         })
         ok(op)
         break
@@ -228,7 +231,7 @@ export function describeOps(plan: EditPlan, ws: Workspace | null): string[] {
       case 'addRelationship':
         return `Connect ${label(op.source)} → ${label(op.destination)}${op.description ? ` (“${op.description}”)` : ''}`
       case 'updateElement':
-        return `Update ${label(op.id)}${op.name ? ` → rename “${op.name}”` : ''}${op.description ? ' (description)' : ''}${op.technology ? ` (tech: ${op.technology})` : ''}`
+        return `Update ${label(op.id)}${op.name ? ` → rename “${op.name}”` : ''}${op.description ? ' (description)' : ''}${op.technology ? ` (tech: ${op.technology})` : ''}${op.location ? ` (${op.location.toLowerCase()})` : ''}`
       case 'updateRelationship':
         return `Update relationship ${op.id}${op.description ? ` (“${op.description}”)` : ''}`
       case 'deleteElement':

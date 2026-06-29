@@ -282,9 +282,11 @@ function AppView({
   onClose: () => void
 }) {
   // Drop any cached flow from a different workspace before restoring below.
-  // Key the resume cache on the diagram ROUTE, not the workspace name — names
-  // aren't unique (two "Untitled" diagrams would share a flow otherwise).
-  ensureSessionForWorkspace(typeof window !== 'undefined' ? window.location.pathname : null)
+  // Key the resume cache on the diagram identity (collection/workspace), not the
+  // workspace name (not unique) nor the full path (it includes the active view
+  // key — `/collection/:c/:ws/:view` — so a view switch would wrongly clear the
+  // in-progress flow). Take the first three path segments only.
+  ensureSessionForWorkspace(typeof window !== 'undefined' ? window.location.pathname.split('/').slice(0, 4).join('/') : null)
   const [view, setView] = usePersistentState<SweepView>('sweep.view', initialFeature ? FEATURE_TO_VIEW[initialFeature] : 'home')
 
   // Sweep state — persisted across close→reopen so an in-progress wizard resumes.
@@ -1888,10 +1890,17 @@ function ByokWelcome({ onClose }: { onClose: () => void }) {
 }
 
 function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () => void }) {
-  const { enabled, provider, apiKeys, models, update, setApiKey, setModel } = useAiSettingsStore()
+  const { enabled, provider, apiKeys, models, update, setApiKey } = useAiSettingsStore()
   const meta = AI_PROVIDER_META[provider]
   const [reveal, setReveal] = useState(false)
   const [edit, setEdit] = useState(false)
+  // Edit mode works on a LOCAL draft so changes only persist on Save — Cancel
+  // (or closing) must not leave a half-typed key/provider written to the store.
+  const [draft, setDraft] = useState<{ provider: AiProviderId; apiKeys: Record<AiProviderId, string>; models: Record<AiProviderId, string> } | null>(null)
+  const editMeta = AI_PROVIDER_META[draft?.provider ?? provider]
+  function startEdit() { setDraft({ provider, apiKeys: { ...apiKeys }, models: { ...models } }); setReveal(false); setEdit(true) }
+  function cancelEdit() { setDraft(null); setEdit(false) }
+  function saveEdit() { if (draft) update({ provider: draft.provider, apiKeys: draft.apiKeys, models: draft.models }); setDraft(null); setEdit(false) }
   const key = apiKeys[provider] ?? ''
   const maskedKey = key.length > 10 ? `${key.slice(0, 6)}····${key.slice(-3)}` : (key ? '••••••' : '—')
   const providerName = meta.label.replace(/ \(Claude\)$/, '')
@@ -1927,7 +1936,7 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
                 ))}
               </div>
             </div>
-            <button className="c4ai-sec" onClick={() => setEdit(true)} style={{ height: 36, borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Change key or provider</button>
+            <button className="c4ai-sec" onClick={startEdit} style={{ height: 36, borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Change key or provider</button>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
               <div><div style={fieldLabel}>Enable AI features</div><div style={{ fontSize: 12, color: C.muted2, marginTop: 2 }}>Show the AI assistant and its commands.</div></div>
@@ -1942,26 +1951,26 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={fieldLabel}>Provider</div>
-              <ProviderPicker value={provider} onPick={(id) => update({ provider: id })} />
+              <ProviderPicker value={draft?.provider ?? provider} onPick={(id) => setDraft((d) => (d ? { ...d, provider: id } : d))} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ ...fieldLabel, whiteSpace: 'nowrap' }}>API key</div>
-                <a href={meta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent, whiteSpace: 'nowrap' }}>Get a key <ExternalLink size={11} /></a>
+                <a href={editMeta.keyHelpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent, whiteSpace: 'nowrap' }}>Get a key <ExternalLink size={11} /></a>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input type={reveal ? 'text' : 'password'} value={apiKeys[provider] ?? ''} onChange={(e) => setApiKey(e.target.value)} placeholder={meta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
+                <input type={reveal ? 'text' : 'password'} value={draft ? (draft.apiKeys[draft.provider] ?? '') : ''} onChange={(e) => setDraft((d) => (d ? { ...d, apiKeys: { ...d.apiKeys, [d.provider]: e.target.value } } : d))} placeholder={editMeta.keyPlaceholder} autoComplete="off" spellCheck={false} style={keyInput} />
                 <button className="c4ai-sec" onClick={() => setReveal((r) => !r)} style={{ ...secondaryBtn, height: 38, padding: '0 12px' }}>{reveal ? 'Hide' : 'Show'}</button>
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={fieldLabel}>Model</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {meta.models.map((m) => {
-                  const on = (models[provider] || meta.defaultModel) === m.id
-                  const recommended = m.id === meta.defaultModel
+                {editMeta.models.map((m) => {
+                  const on = (draft && (draft.models[draft.provider] || editMeta.defaultModel)) === m.id
+                  const recommended = m.id === editMeta.defaultModel
                   return (
-                    <button key={m.id} onClick={() => setModel(m.id)}
+                    <button key={m.id} onClick={() => setDraft((d) => (d ? { ...d, models: { ...d.models, [d.provider]: m.id } } : d))}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 38, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left', background: on ? 'rgba(88,166,255,0.1)' : C.card, border: `1px solid ${on ? C.borderStrong : C.border}`, color: on ? C.text : C.text2, fontSize: 13, fontWeight: on ? 600 : 500 }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</span>
@@ -1975,8 +1984,8 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
             </div>
             <SecurityNote />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="c4ai-sec" onClick={() => setEdit(false)} style={{ ...secondaryBtn, height: 34 }}>Cancel</button>
-              <button className="c4ai-pri" onClick={() => setEdit(false)} style={{ ...primaryBtn, height: 34 }}>Save</button>
+              <button className="c4ai-sec" onClick={cancelEdit} style={{ ...secondaryBtn, height: 34 }}>Cancel</button>
+              <button className="c4ai-pri" onClick={saveEdit} style={{ ...primaryBtn, height: 34 }}>Save</button>
             </div>
           </>
         )}

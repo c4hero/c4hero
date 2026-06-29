@@ -45,7 +45,7 @@ export default function FloatingInspector() {
     }
   }, [visible, clearSelection])
 
-  if (!workspace || multiSelectMode || aiOpen) return null
+  if (!workspace || multiSelectMode || aiOpen || !visible) return null
 
   return (
     <div
@@ -66,9 +66,9 @@ export default function FloatingInspector() {
         backdropFilter: 'blur(var(--glass-blur))',
         WebkitBackdropFilter: 'blur(var(--glass-blur))',
         boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0)' : 'translateY(-8px)',
-        pointerEvents: visible ? 'auto' : 'none',
+        opacity: 1,
+        transform: 'translateY(0)',
+        pointerEvents: 'auto',
         transition: 'opacity 0.18s ease, transform 0.18s ease',
       }}
       aria-label="Element properties"

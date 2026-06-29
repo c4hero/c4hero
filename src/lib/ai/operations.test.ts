@@ -223,6 +223,17 @@ describe('applyEditPlan — parent-type and existence guards', () => {
     expect(actions.addRelationship).toHaveBeenCalledWith('cust', 'web', undefined, undefined)
   })
 
+  it('forwards a valid updateElement location and drops a bogus one', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'shop', location: 'External' },
+      { op: 'updateElement', id: 'web', location: 'sideways' as 'External' },
+    ] }, actions, ws)
+    expect(actions.updateElement).toHaveBeenCalledWith('shop', expect.objectContaining({ location: 'External' }))
+    expect(actions.updateElement).toHaveBeenCalledWith('web', expect.objectContaining({ location: undefined }))
+  })
+
   it('skips updateRelationship for an unknown relationship id', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()
