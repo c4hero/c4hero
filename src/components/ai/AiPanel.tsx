@@ -3,7 +3,7 @@ import { clearAiSession, ensureSessionForWorkspace, usePersistentState } from '.
 import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
-  Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
+  Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, ChevronDown, HelpCircle,
   Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
@@ -581,10 +581,10 @@ function AppView({
         {view === 'home' && (
           <HomeDashboard
             workspace={workspace} completePct={completePct}
-            scope={improveScope} onScope={setImproveScope}
+            scope={improveScope} viewName={activeView ? viewLabel(activeView) : null}
+            onScope={setImproveScope}
             onImprove={startImprove}
             onDescribe={() => setView('describe')}
-            onInterview={() => setView('interview')}
             onRepo={() => setView('repo')}
           />
         )}
@@ -695,19 +695,21 @@ function RevealLink({ onClick }: { onClick: () => void }) {
 // ─── Home dashboard ─────────────────────────────────────────────────
 
 function HomeDashboard({
-  workspace, completePct, scope, onScope, onImprove, onDescribe, onInterview, onRepo,
+  workspace, completePct, scope, viewName, onScope, onImprove, onDescribe, onRepo,
 }: {
   workspace: Workspace | null
   completePct: number
   scope: 'view' | 'model'
+  viewName: string | null
   onScope: (s: 'view' | 'model') => void
   onImprove: (s: 'view' | 'model') => void
   onDescribe: () => void
-  onInterview: () => void
   onRepo: () => void
 }) {
   const missingCount = useMemo(() => (workspace ? missingInfoGaps(workspace).length : 0), [workspace])
   const allClear = missingCount === 0
+  const [scopeMenuOpen, setScopeMenuOpen] = useState(false)
+  const scopeContext = scope === 'view' ? (viewName ? `this view · ${viewName}` : 'this view') : 'whole model'
 
   if (!workspace) {
     return (
@@ -727,11 +729,14 @@ function HomeDashboard({
 
   return (
     <>
-      {/* Model health */}
+      {/* Health */}
       <div style={{ padding: '12px 14px', borderRadius: 13, border: `1px solid ${C.border}`, background: 'linear-gradient(165deg, #1a222e, #161b22)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: C.text2 }}><Activity size={14} color={C.accent} /> Model health</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 20, fontWeight: 800, color: allClear ? '#facc15' : C.text, letterSpacing: '-.02em' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div style={{ minWidth: 0 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: C.text2 }}><Activity size={14} color={C.accent} /> Health</span>
+            <span style={{ display: 'block', marginTop: 2, fontSize: 11, color: C.muted3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scopeContext}</span>
+          </div>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none', fontSize: 22, fontWeight: 800, color: allClear ? '#facc15' : C.text, letterSpacing: '-.02em' }}>
             {allClear && <Star size={15} fill="#facc15" color="#facc15" />}
             {completePct}<span style={{ fontSize: 12, color: allClear ? '#facc15' : C.muted, fontWeight: 600 }}>%</span>
           </span>
@@ -746,24 +751,37 @@ function HomeDashboard({
         </div>
       </div>
 
-      {/* Scope toggle — grounds the review + interview on the active view or whole model. */}
-      <div style={{ marginTop: 10, display: 'flex', gap: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 11, padding: 5 }}>
-        {(['view', 'model'] as const).map((sc) => (
-          <button key={sc} onClick={() => onScope(sc)}
-            style={{ flex: 1, border: scope === sc ? `1px solid ${C.borderStrong}` : '1px solid transparent', background: scope === sc ? 'rgba(88,166,255,0.14)' : 'transparent', color: scope === sc ? C.text : C.muted, borderRadius: 8, padding: '8px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-            {sc === 'view' ? 'This view' : 'Whole model'}
+      {/* The unified entry — scope lives INSIDE the button; the split caret swaps it. */}
+      <div style={{ position: 'relative', marginTop: 12 }}>
+        <div style={{ display: 'flex', height: 50, borderRadius: 13, overflow: 'hidden', boxShadow: '0 8px 22px rgba(79,151,240,0.28)' }}>
+          <button onClick={() => onImprove(scope)} className="c4ai-pri"
+            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9, border: 'none', background: C.accent, color: C.ink, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+            <Wand2 size={17} /> Improve {scope === 'view' ? 'this view' : 'the whole model'}
           </button>
-        ))}
+          <div style={{ width: 1, background: 'rgba(13,17,23,0.25)' }} />
+          <button onClick={() => setScopeMenuOpen((o) => !o)} aria-label="Change scope" aria-haspopup="menu" aria-expanded={scopeMenuOpen}
+            style={{ width: 46, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: C.accent, color: C.ink, cursor: 'pointer' }}>
+            <ChevronDown size={18} style={{ transform: scopeMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }} />
+          </button>
+        </div>
+        {scopeMenuOpen && (
+          <>
+            <div onClick={() => setScopeMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
+            <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 10, minWidth: 200, borderRadius: 11, border: `1px solid ${C.borderStrong}`, background: '#1a222e', boxShadow: '0 14px 32px rgba(0,0,0,0.55)', padding: 5, animation: 'c4ai-fade .14s ease' }}>
+              {(['view', 'model'] as const).map((sc) => (
+                <button key={sc} role="menuitemradio" aria-checked={scope === sc} onClick={() => { onScope(sc); setScopeMenuOpen(false) }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '9px 11px', borderRadius: 8, border: 'none', background: scope === sc ? 'rgba(88,166,255,0.12)' : 'transparent', color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  {scope === sc ? <Check size={14} color={C.accent} /> : <span style={{ width: 14, flex: 'none' }} />}
+                  {sc === 'view' ? 'This view' : 'Whole model'}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
-
-      {/* The unified entry. */}
-      <button onClick={() => onImprove(scope)} className="c4ai-pri"
-        style={{ width: '100%', marginTop: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
-        <Wand2 size={16} /><span>Improve my model</span><ArrowRight size={15} />
-      </button>
       <div style={{ marginTop: 7, display: 'flex', alignItems: 'flex-start', gap: 7, padding: '0 2px', fontSize: 11.5, color: C.muted2, lineHeight: 1.45 }}>
         <CornerDownRight size={13} style={{ flex: 'none', marginTop: 1 }} />
-        <span>{allClear ? 'Instant checks all pass — I’ll review the structure and ask about anything I can’t tell.' : 'Fixes what it can, reviews the rest, and asks you only when it can’t work it out.'}</span>
+        <span>Fixes what it can, reviews the rest, and asks you only when it can’t work it out.</span>
       </div>
 
       {/* Other ways in — different inputs, kept separate. */}
@@ -779,11 +797,6 @@ function HomeDashboard({
         </button>
         <CategoryButton icon={GitBranch} color={C.green} iconBg="rgba(34,197,94,0.1)" label="From your code" sub="Point at a local repo — propose updates" onClick={onRepo} />
       </div>
-
-      <button onClick={onInterview} className="c4ai-ghost"
-        style={{ marginTop: 4, width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 34, border: 'none', background: 'transparent', color: '#a78bfa', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-        <MessagesSquare size={14} /> Talk it through
-      </button>
     </>
   )
 }
