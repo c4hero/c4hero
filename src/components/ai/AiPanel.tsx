@@ -4,7 +4,7 @@ import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, HelpCircle,
-  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Trophy, Star, RotateCw, Undo2, type LucideIcon,
+  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
@@ -243,10 +243,11 @@ const VIEW_TITLE: Partial<Record<SweepView, string>> = {
 }
 
 // Per-category presentation (matches the imported design's palette).
-type CatId = 'missing' | 'review'
+type CatId = 'missing' | 'review' | 'interview'
 const CAT: Record<CatId, { label: string; sub: string; icon: LucideIcon; color: string; bg: string; iconBg: string }> = {
   missing: { label: 'Missing info', sub: 'Titles, descriptions and technologies', icon: Wand2, color: C.accent, bg: 'rgba(88,166,255,0.16)', iconBg: 'rgba(88,166,255,0.1)' },
   review: { label: 'Deep review', sub: 'Orphans, untyped links, naming', icon: Stethoscope, color: C.warn, bg: 'rgba(249,115,22,0.16)', iconBg: 'rgba(249,115,22,0.1)' },
+  interview: { label: 'Your answers', sub: 'From the interview questions', icon: MessagesSquare, color: '#a78bfa', bg: 'rgba(168,85,247,0.16)', iconBg: 'rgba(168,85,247,0.1)' },
 }
 
 // Icon + label per missing-info kind.
@@ -270,12 +271,11 @@ type StepStatus = 'apply' | 'skip' | 'dismiss'
 interface FixStep { type: 'fix'; key: string; cat: 'missing'; gap: MissingGap }
 interface FindingStep { type: 'finding'; key: string; cat: 'review'; finding: ReviewFinding }
 type Step = FixStep | FindingStep
-type StepCat = Step['cat']
 
 // One applied change in the guided flow's revert ledger. We store the forward ops
 // (not an inverse): revert rebuilds the model by replaying the kept entries' ops on
 // top of the pre-sweep baseline, so reversal is always exact regardless of op kind.
-interface LedgerEntry { key: string; label: string; detail: string; cat: StepCat; ops: EditOp[] }
+interface LedgerEntry { key: string; label: string; detail: string; cat: CatId; ops: EditOp[] }
 
 function AppView({
   provider, workspace, model, initialFeature, onOpenSettings, onClose,
@@ -306,6 +306,12 @@ function AppView({
   // revert replays the kept entries' ops on top of it.
   const [ledger, setLedger] = usePersistentState<LedgerEntry[]>('sweep.ledger', [])
   const [baseline, setBaseline] = usePersistentState<Workspace | null>('sweep.baseline', null)
+  // Unified "Improve my model" flow: missing fixes + review findings, then an
+  // interview tail. `improveScope` grounds review/interview on the active view or
+  // the whole model; `interviewOn` arms the tail; `ivApplied` marks it consumed.
+  const [improveScope, setImproveScope] = usePersistentState<'view' | 'model'>('sweep.scope', 'view')
+  const [interviewOn, setInterviewOn] = usePersistentState('sweep.interview', false)
+  const [ivApplied, setIvApplied] = usePersistentState('sweep.ivApplied', false)
   // Transient (in-flight) flags — not worth persisting.
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
@@ -350,11 +356,12 @@ function AppView({
     }
   }
 
-  // Run the architecture review and append its findings to the live queue.
-  async function loadReview(ws: Workspace) {
+  // Run the architecture review and append its findings to the live queue. Scope
+  // 'view' grounds the review on the active view; 'model' reviews the whole model.
+  async function loadReview(ws: Workspace, scope: 'view' | 'model' = 'view') {
     setReviewLoading(true); setError(null)
     try {
-      const result = await reviewArchitecture(provider, ws, activeView ?? null)
+      const result = await reviewArchitecture(provider, ws, scope === 'view' ? (activeView ?? null) : null)
       const steps: FindingStep[] = sortedFindings(result).map((finding, i) => ({ type: 'finding', key: `f:${i}`, cat: 'review', finding }))
       setQueue((q) => [...q, ...steps])
     } catch (err) {
@@ -364,7 +371,7 @@ function AppView({
     }
   }
 
-  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setLedger([]); setBaseline(null); setError(null) }
+  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setError(null) }
 
   function startSweep(cats: CatId[]) {
     if (!workspace) return
@@ -376,6 +383,37 @@ function AppView({
     setView('wizard')
     if (cats.includes('missing') && initial.length) loadMissingDrafts(ws, initial.map((s) => s.gap))
     if (cats.includes('review')) loadReview(ws)
+  }
+
+  // The unified entry: instant missing-info fixes + an AI deep review, then an
+  // interview tail — all in one stepped flow, applied as you go.
+  function startImprove(scope: 'view' | 'model') {
+    if (!workspace) return
+    resetSweep()
+    setImproveScope(scope)
+    setInterviewOn(true)
+    const ws = workspace
+    const initial = missingSteps(ws)
+    setQueue(initial)
+    setCurIdx(0)
+    setView('wizard')
+    if (initial.length) loadMissingDrafts(ws, initial.map((s) => s.gap))
+    loadReview(ws, scope)
+  }
+
+  // Apply the interview tail's synthesized plan through the same ledger so it's
+  // revertable alongside the fixes and findings, then end the flow.
+  function applyInterviewPlan(plan: EditPlan) {
+    const ws = useWorkspaceStore.getState().workspace
+    if (ws) {
+      if (!baseline) setBaseline(ws)
+      applyPlanToStore(plan, ws)
+      if (plan.operations.length) {
+        setLedger((l) => [...l, { key: 'interview', label: 'From your answers', detail: plural(plan.operations.length, 'update', 'updates'), cat: 'interview', ops: plan.operations }])
+      }
+    }
+    setIvApplied(true)
+    clearAiSession('interview')
   }
 
   function goHome() { resetSweep(); setView('home') }
@@ -543,8 +581,8 @@ function AppView({
         {view === 'home' && (
           <HomeDashboard
             workspace={workspace} completePct={completePct}
-            onStartAll={() => startSweep(['missing'])}
-            onStartCat={(c) => startSweep([c])}
+            scope={improveScope} onScope={setImproveScope}
+            onImprove={startImprove}
             onDescribe={() => setView('describe')}
             onInterview={() => setView('interview')}
             onRepo={() => setView('repo')}
@@ -570,6 +608,11 @@ function AppView({
             </>
           ) : reviewLoading && workspace ? (
             <ReviewScanning workspace={workspace} />
+          ) : interviewOn && !ivApplied && workspace ? (
+            // Interview tail: once the instant fixes and review findings are done,
+            // fold in the conversational interview, applying its plan via the ledger.
+            <InterviewBody provider={provider} onClose={onClose} embedded
+              onApply={applyInterviewPlan} onSkipQuestions={() => setIvApplied(true)} />
           ) : (
             <SweepSummary
               completePct={completePct} ledger={ledger}
@@ -652,12 +695,13 @@ function RevealLink({ onClick }: { onClick: () => void }) {
 // ─── Home dashboard ─────────────────────────────────────────────────
 
 function HomeDashboard({
-  workspace, completePct, onStartAll, onStartCat, onDescribe, onInterview, onRepo,
+  workspace, completePct, scope, onScope, onImprove, onDescribe, onInterview, onRepo,
 }: {
   workspace: Workspace | null
   completePct: number
-  onStartAll: () => void
-  onStartCat: (c: CatId) => void
+  scope: 'view' | 'model'
+  onScope: (s: 'view' | 'model') => void
+  onImprove: (s: 'view' | 'model') => void
   onDescribe: () => void
   onInterview: () => void
   onRepo: () => void
@@ -697,74 +741,53 @@ function HomeDashboard({
         </div>
         <div style={{ marginTop: 8, fontSize: 12, color: C.muted2, lineHeight: 1.4 }}>
           {allClear
-            ? <>All instant checks pass.</>
-            : <><span style={{ color: C.text, fontWeight: 700 }}>{plural(missingCount, 'quick fix', 'quick fixes')}</span> ready — I can walk you through them. Run a deep review for deeper issues.</>}
+            ? <>All instant checks pass — Improve runs a deeper review and a few questions.</>
+            : <><span style={{ color: C.text, fontWeight: 700 }}>{plural(missingCount, 'quick fix', 'quick fixes')}</span> ready — Improve walks you through these, then a deeper review.</>}
         </div>
       </div>
 
-      {/* Start guided cleanup — or, when there's nothing to fix, a little win. */}
-      {allClear ? (
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 11, padding: '13px 14px', borderRadius: 11, border: '1px solid rgba(250,204,21,0.3)', background: 'linear-gradient(165deg, rgba(250,204,21,0.1), rgba(245,158,11,0.04))' }}>
-          <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 10, background: 'rgba(250,204,21,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#facc15' }}><Trophy size={20} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Nicely done — 100% complete</div>
-            <div style={{ fontSize: 12, color: C.muted2, marginTop: 2, lineHeight: 1.4 }}>Every element is described, typed and labelled. Run a deep review for deeper issues.</div>
-          </div>
-        </div>
-      ) : (
-        <>
-          <button onClick={onStartAll}
-            style={{ width: '100%', marginTop: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 42, borderRadius: 11, border: 'none', background: C.accent, color: C.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer' }} className="c4ai-pri">
-            <Wand2 size={16} /><span>Start guided cleanup</span><ArrowRight size={15} />
+      {/* Scope toggle — grounds the review + interview on the active view or whole model. */}
+      <div style={{ marginTop: 10, display: 'flex', gap: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 11, padding: 5 }}>
+        {(['view', 'model'] as const).map((sc) => (
+          <button key={sc} onClick={() => onScope(sc)}
+            style={{ flex: 1, border: scope === sc ? `1px solid ${C.borderStrong}` : '1px solid transparent', background: scope === sc ? 'rgba(88,166,255,0.14)' : 'transparent', color: scope === sc ? C.text : C.muted, borderRadius: 8, padding: '8px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+            {sc === 'view' ? 'This view' : 'Whole model'}
           </button>
-          <div style={{ marginTop: 6, textAlign: 'center', fontSize: 11, color: C.muted3 }}>One step at a time — review everything before it’s applied.</div>
-        </>
-      )}
+        ))}
+      </div>
 
-      {/* Categories */}
-      <div style={sectionLabel}>Or jump to a category</div>
+      {/* The unified entry. */}
+      <button onClick={() => onImprove(scope)} className="c4ai-pri"
+        style={{ width: '100%', marginTop: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
+        <Wand2 size={16} /><span>Improve my model</span><ArrowRight size={15} />
+      </button>
+      <div style={{ marginTop: 7, display: 'flex', alignItems: 'flex-start', gap: 7, padding: '0 2px', fontSize: 11.5, color: C.muted2, lineHeight: 1.45 }}>
+        <CornerDownRight size={13} style={{ flex: 'none', marginTop: 1 }} />
+        <span>{allClear ? 'Instant checks all pass — I’ll review the structure and ask about anything I can’t tell.' : 'Fixes what it can, reviews the rest, and asks you only when it can’t work it out.'}</span>
+      </div>
+
+      {/* Other ways in — different inputs, kept separate. */}
+      <div style={sectionLabel}>Or start from</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        <CategoryRow cat="review" onClick={() => onStartCat('review')} actionLabel="Scan" />
-        <CategoryButton icon={MessagesSquare} color="#a78bfa" iconBg="rgba(168,85,247,0.1)" label="Interview" sub="Answer questions to enrich this view" onClick={onInterview} />
+        <button onClick={onDescribe} className="c4ai-card" style={describeBtn}>
+          <span style={describeIcon}><Sparkles size={19} /></span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>Describe a change</span>
+            <span style={{ display: 'block', fontSize: 12, color: C.muted2, marginTop: 2 }}>Build or edit the model in plain English</span>
+          </span>
+          <ArrowRight size={16} color={C.muted3} style={{ flex: 'none' }} />
+        </button>
         <CategoryButton icon={GitBranch} color={C.green} iconBg="rgba(34,197,94,0.1)" label="From your code" sub="Point at a local repo — propose updates" onClick={onRepo} />
       </div>
 
-      {/* Build something */}
-      <div style={sectionLabel}>Build something</div>
-      <button onClick={onDescribe} className="c4ai-card" style={describeBtn}>
-        <span style={describeIcon}><Sparkles size={19} /></span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>Describe a change</span>
-          <span style={{ display: 'block', fontSize: 12, color: C.muted2, marginTop: 2 }}>Build or edit the model in plain English</span>
-        </span>
-        <ArrowRight size={16} color={C.muted3} style={{ flex: 'none' }} />
+      <button onClick={onInterview} className="c4ai-ghost"
+        style={{ marginTop: 4, width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 34, border: 'none', background: 'transparent', color: '#a78bfa', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+        <MessagesSquare size={14} /> Talk it through
       </button>
     </>
   )
 }
 
-function CategoryRow({ cat, count, actionLabel, onClick }: { cat: CatId; count?: number; actionLabel?: string; onClick: () => void }) {
-  const m = CAT[cat]
-  const Icon = m.icon
-  const done = count === 0
-  return (
-    <button onClick={onClick} disabled={done} className="c4ai-card"
-      style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 13, border: `1px solid ${done ? 'rgba(34,197,94,0.2)' : C.border}`, background: C.card, cursor: done ? 'default' : 'pointer', opacity: done ? 0.7 : 1 }}>
-      <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.iconBg, color: m.color }}><Icon size={19} /></span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>{m.label}</span>
-        <span style={{ display: 'block', fontSize: 12, color: C.muted2, marginTop: 2 }}>{m.sub}</span>
-      </span>
-      {done ? (
-        <span style={{ flex: 'none', width: 26, height: 26, borderRadius: '50%', background: 'rgba(34,197,94,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.greenText }}><Check size={15} /></span>
-      ) : count != null ? (
-        <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 24, height: 24, padding: '0 8px', borderRadius: 999, background: m.bg, color: m.color, fontSize: 12, fontWeight: 700 }}>{count}</span>
-      ) : (
-        <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: m.color }}>{actionLabel} <ArrowRight size={13} /></span>
-      )}
-    </button>
-  )
-}
 
 function CategoryButton({ icon: Icon, color, iconBg, label, sub, onClick }: { icon: LucideIcon; color: string; iconBg: string; label: string; sub: string; onClick: () => void }) {
   return (
@@ -1195,7 +1218,12 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
 // open-ended; "Keep going" adds another round).
 const INTERVIEW_TARGET = 5
 
-function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: () => void }) {
+function InterviewBody({ provider, onClose, embedded, onApply, onSkipQuestions }: {
+  provider: AiProvider; onClose: () => void
+  /** Rendered as the tail of the Improve flow: auto-start, apply via the ledger
+   *  (onApply) instead of the standalone preview, and offer a skip-out. */
+  embedded?: boolean; onApply?: (plan: EditPlan) => void; onSkipQuestions?: () => void
+}) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
 
@@ -1232,6 +1260,13 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
     // it — selecting opens the inspector, which closes this panel.
     useWorkspaceStore.setState({ focusElementId: mentioned[0].id })
   }, [mentioned])
+
+  // Embedded (Improve-flow tail): kick the first question off automatically so the
+  // interview begins without a separate "Start" screen.
+  useEffect(() => {
+    if (embedded && workspace && view && !started && !plan && !run.loading) start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, workspace, view, started])
 
   if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
   const ws = workspace
@@ -1293,6 +1328,18 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
         </div>
       )}
       {!started && !plan ? (
+        embedded ? (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 4px', fontSize: 13, color: C.muted2 }}>
+              {run.error
+                ? <span>Couldn’t start the questions.</span>
+                : <><Loader2 size={15} className="animate-spin" color="#c4b5fd" /> Preparing a few questions about <span style={{ color: C.text2 }}>{viewLabel(v)}</span>…</>}
+            </div>
+            {onSkipQuestions && (
+              <button onClick={onSkipQuestions} className="c4ai-ghost" style={{ marginTop: 6, width: '100%', height: 34, borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>Skip the questions →</button>
+            )}
+          </div>
+        ) : (
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '6px 0 2px' }}>
             <span style={{ position: 'relative', width: 60, height: 60, borderRadius: 16, background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c4b5fd', animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}>
@@ -1316,6 +1363,7 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
             {run.loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} {run.loading ? 'Starting…' : 'Start interview'} {!run.loading && <ArrowRight size={15} />}
           </button>
         </div>
+        )
       ) : (
         <p style={blurb}>Filling in <span style={{ color: '#7dd3fc' }}>{viewLabel(v)}</span>. Answer a few questions; c4hero turns them into model updates.</p>
       )}
@@ -1358,7 +1406,10 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
               </button>
             </div>
           </div>
-          {qa.length > 0 && <PlanPreviewBar provider={provider} ws={ws} view={v} history={history} />}
+          {embedded && onSkipQuestions && (
+            <button onClick={onSkipQuestions} className="c4ai-ghost" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>Skip the questions →</button>
+          )}
+          {qa.length > 0 && !embedded && <PlanPreviewBar provider={provider} ws={ws} view={v} history={history} />}
         </>
       )}
 
@@ -1380,7 +1431,10 @@ function InterviewBody({ provider, onClose }: { provider: AiProvider; onClose: (
           <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{planLines.length} proposed change(s) from your answers</div>
           <PlanList lines={planLines} />
           <Actions>
-            <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length} onClick={() => { applyPlanToStore(plan, ws); clearAiSession('interview'); onClose() }}>Apply changes</button>
+            <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length}
+              onClick={() => { if (onApply) onApply(plan); else { applyPlanToStore(plan, ws); clearAiSession('interview'); onClose() } }}>
+              {onApply ? 'Apply & finish' : 'Apply changes'}
+            </button>
             <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Back</button>
           </Actions>
         </Card>

@@ -60,13 +60,13 @@ it with the `I` shortcut.
 - **Model health** — an instant, deterministic readout of how complete the model
   is (missing descriptions, technologies, untyped relationships), with
   click-to-fix gaps and a 100% celebration. No AI call required.
-- **Guided cleanup** — step through the instant fixes one at a time, editing each
-  suggestion, then apply the whole batch at once (with projected health) — nothing
-  is written until you confirm.
-- **Deep review** — an AI architecture review surfacing orphans, untyped links,
-  naming and boundary issues as triageable, one-click-fixable findings.
-- **Interview** — a focused, view-scoped Q&A that turns your answers into model
-  updates; an in-progress interview is pinned to its view and resumes on reopen.
+- **Improve my model** — one guided flow that combines three things in a single
+  stepper: the instant missing-info fixes, an AI **deep review** (orphans, untyped
+  links, naming/boundary issues), and an **interview** that asks about anything the
+  model can't reveal on its own. A scope toggle grounds the review and questions on
+  the active view or the whole model. Each change applies the moment you approve it
+  (model health climbs live), and a revert ledger undoes any single change — or all
+  of them. A "Talk it through" side-door opens the interview on its own.
 - **From your code** — scan a local repository (File System Access API) and propose
   elements and relationships, asking about anything ambiguous.
 - **Describe a change** — build a new model or edit the current one from a plain-
