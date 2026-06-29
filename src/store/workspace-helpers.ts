@@ -190,6 +190,13 @@ export function clearSelectionDraft(
   s.selectedGroupId = null
 }
 
+/** Close both AI surfaces (assistant + settings) so the inspector can take the
+ *  shared slot. Callers own the guard (selection vs create differ on batchApplying). */
+export function closeAiSurfaces(s: { aiPanelOpen: boolean; aiSettingsOpen: boolean }): void {
+  s.aiPanelOpen = false
+  s.aiSettingsOpen = false
+}
+
 /** Select a just-created element and close the assistant so the inspector shows
  *  — EXCEPT during an AI batch apply (keep the panel to show its results) or while
  *  the assistant is mid-flow (aiPanelBusy: interview/wizard/sweep — don't yank it
@@ -203,7 +210,7 @@ export function selectCreated(
   s.selectedElementIds = [id]
   s.selectedRelationshipId = null
   s.selectedGroupId = null
-  if (!s.batchApplying && !s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false }
+  if (!s.batchApplying && !s.aiPanelBusy) closeAiSurfaces(s)
 }
 
 

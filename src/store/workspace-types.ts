@@ -173,6 +173,11 @@ export interface WorkspaceState extends UndoState {
   redo: () => void
   canUndo: () => boolean
   canRedo: () => boolean
+  /** Replace the whole workspace in place WITHOUT pushing an undo snapshot, fixing
+   *  up active view / selection / scope. For batched rebuilds (e.g. the AI sweep's
+   *  replay-from-baseline revert) where the surrounding batch owns the single undo
+   *  entry. Not for general use — prefer mutators that record undo. */
+  resetWorkspaceTo: (workspace: Workspace) => void
 
   // View element management
   toggleElementInView: (viewKey: string, elementId: string) => void

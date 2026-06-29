@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
+import { closeAiSurfaces } from '../workspace-helpers'
 
 /** Selection state: which element(s), relationship, or group is currently
  *  highlighted in the canvas / inspector. Selecting any canvas object closes
@@ -30,19 +31,19 @@ export const createSelectionSlice: StateCreator<
     // while the assistant is mid-flow (aiPanelBusy) — an interview even invites
     // you to click highlighted nodes — where closing it would discard the work;
     // there the panel stays and App suppresses the inspector behind it.
-    if (ids.length > 0) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false } }
+    if (ids.length > 0) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) closeAiSurfaces(s) }
   }),
   selectRelationship: (id) => set((s) => {
     s.selectedRelationshipId = id
     s.selectedElementIds = []
     s.selectedGroupId = null
-    if (id) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false } }
+    if (id) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) closeAiSurfaces(s) }
   }),
   selectGroup: (id) => set((s) => {
     s.selectedGroupId = id
     s.selectedElementIds = []
     s.selectedRelationshipId = null
-    if (id) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) { s.aiPanelOpen = false; s.aiSettingsOpen = false } }
+    if (id) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) closeAiSurfaces(s) }
   }),
   clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 })

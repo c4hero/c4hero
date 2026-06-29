@@ -288,6 +288,30 @@ describe('Relationship and container mutations', () => {
     expect(names).not.toContain('Inventory')
   })
 
+  it('a no-op batch leaves the undo and redo stacks untouched', () => {
+    // Build a redo entry: mutate then undo.
+    useWorkspaceStore.getState().addSoftwareSystem('Temp')
+    useWorkspaceStore.getState().undo()
+    const undoLen = useWorkspaceStore.getState().undoStack.length
+    const redoLen = useWorkspaceStore.getState().redoStack.length
+    expect(redoLen).toBeGreaterThan(0)
+    // A batch that changes nothing must not push a phantom undo entry or clear redo.
+    useWorkspaceStore.getState().setBatchApplying(true)
+    useWorkspaceStore.getState().setBatchApplying(false)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoLen)
+    expect(useWorkspaceStore.getState().redoStack.length).toBe(redoLen)
+  })
+
+  it('resetWorkspaceTo replaces the model without pushing an undo entry', () => {
+    const undoLen = useWorkspaceStore.getState().undoStack.length
+    const target: Workspace = { ...makeWorkspace(), name: 'Replaced' }
+    target.model.softwareSystems = [...target.model.softwareSystems, { id: 'extra', type: 'softwareSystem', name: 'Extra', tags: [], properties: {}, containers: [] }]
+    useWorkspaceStore.getState().resetWorkspaceTo(target)
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.softwareSystems.some((s) => s.id === 'extra')).toBe(true)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoLen)
+  })
+
   it('focusViewForElements navigates to the view containing the most of them', () => {
     const cid = useWorkspaceStore.getState().addContainer('api', 'Web') // creates + switches to api container view
     const apiView = useWorkspaceStore.getState().activeViewKey!

@@ -16,8 +16,8 @@ export { AiError, aiErrorMessage } from './types'
 export { findingsToMarkdown, sortedFindings, isActionable } from './review'
 export { classifyScope, type PlanScope } from './planScope'
 export {
-  missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp, captureRestores,
-  type MissingGap, type GapKind, type Restore,
+  missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp,
+  type MissingGap, type GapKind,
 } from './sweep'
 export { readRepoFiles, buildRepoBundle, canScanRepo, isKeyFile, isIgnoredDir, mergeRepoProposals } from './repoScan'
 

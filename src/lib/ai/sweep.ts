@@ -1,6 +1,6 @@
 import type { Workspace, ModelElement } from '@/types/model'
 import type { EditOp } from './types'
-import { flattenElements, relationshipsMissingDescription } from './context'
+import { flattenElements, relationshipsMissingDescription, isBlank } from './context'
 
 // Pure, deterministic logic for the Guided Sweep's "Missing info" category and
 // the instant model-health readout. No AI, no store access — unit-tested in
@@ -23,10 +23,6 @@ export interface MissingGap {
   elementType?: ModelElement['type']
 }
 
-function blank(value?: string): boolean {
-  return !value || value.trim().length === 0
-}
-
 /**
  * Every instantly-detectable missing-info gap, in sweep order: titles first
  * (most glaring), then descriptions, technologies, and untyped relationships.
@@ -40,21 +36,21 @@ export function missingInfoGaps(ws: Workspace): MissingGap[] {
 
   // title — element with an empty/whitespace name (rare; no auto-placeholders).
   for (const el of els) {
-    if (blank(el.name)) {
+    if (isBlank(el.name)) {
       gaps.push({ key: `title:${el.id}`, kind: 'title', targetId: el.id, targetKind: 'element', label: '(unnamed element)', elementType: el.type })
     }
   }
 
   // desc — any element with no description.
   for (const el of els) {
-    if (blank(el.description)) {
+    if (isBlank(el.description)) {
       gaps.push({ key: `desc:${el.id}`, kind: 'desc', targetId: el.id, targetKind: 'element', label: el.name || '(unnamed element)', elementType: el.type })
     }
   }
 
   // tech — containers/components with no technology.
   for (const el of els) {
-    if ((el.type === 'container' || el.type === 'component') && blank(el.technology)) {
+    if ((el.type === 'container' || el.type === 'component') && isBlank(el.technology)) {
       gaps.push({ key: `tech:${el.id}`, kind: 'tech', targetId: el.id, targetKind: 'element', label: el.name || '(unnamed element)', elementType: el.type })
     }
   }
@@ -89,11 +85,11 @@ function healthCounts(ws: Workspace): HealthCounts {
   const rels = ws.model.relationships ?? []
 
   const descSlots = els.length
-  const descFilled = els.filter((e) => !blank(e.description)).length
+  const descFilled = els.filter((e) => !isBlank(e.description)).length
   const techSlots = techBearing.length
-  const techFilled = techBearing.filter((e) => !blank(e.technology)).length
+  const techFilled = techBearing.filter((e) => !isBlank(e.technology)).length
   const relSlots = rels.length
-  const relFilled = rels.filter((r) => !blank(r.description)).length
+  const relFilled = rels.filter((r) => !isBlank(r.description)).length
 
   return { checkable: descSlots + techSlots + relSlots, filled: descFilled + techFilled + relFilled }
 }
@@ -129,34 +125,3 @@ export function gapToOp(gap: MissingGap, value: string): EditOp {
   }
 }
 
-/** The pre-change value of one field an update-op will overwrite, so apply-as-you-go
- *  changes can be reverted exactly. */
-export interface Restore { kind: 'element' | 'relationship'; id: string; patch: { name?: string; description?: string; technology?: string } }
-
-/** Read the current value of every field the given update-ops would overwrite, so
- *  a later revert can put each back. Add-ops contribute nothing here — they revert
- *  by deleting what they created (their ids are captured after the apply, not here).
- *  Call this BEFORE applying the ops. */
-export function captureRestores(ws: Workspace, ops: EditOp[]): Restore[] {
-  const flat = flattenElements(ws)
-  const out: Restore[] = []
-  for (const op of ops) {
-    if (op.op === 'updateElement') {
-      const el = flat.find((e) => e.id === op.id)
-      if (!el) continue
-      const patch: Restore['patch'] = {}
-      if (op.name !== undefined) patch.name = el.name ?? ''
-      if (op.description !== undefined) patch.description = el.description ?? ''
-      if (op.technology !== undefined) patch.technology = el.technology ?? ''
-      out.push({ kind: 'element', id: op.id, patch })
-    } else if (op.op === 'updateRelationship') {
-      const r = ws.model.relationships.find((x) => x.id === op.id)
-      if (!r) continue
-      const patch: Restore['patch'] = {}
-      if (op.description !== undefined) patch.description = r.description ?? ''
-      if (op.technology !== undefined) patch.technology = r.technology ?? ''
-      out.push({ kind: 'relationship', id: op.id, patch })
-    }
-  }
-  return out
-}

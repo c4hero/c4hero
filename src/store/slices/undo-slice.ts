@@ -10,7 +10,7 @@ import { getFirstViewKey } from '../workspace-selectors'
  *  pushUndoSnapshot; the actual stack mechanics live here. */
 export type UndoSlice = Pick<WorkspaceState,
   | 'undoStack' | 'redoStack'
-  | 'undo' | 'redo' | 'canUndo' | 'canRedo'
+  | 'undo' | 'redo' | 'canUndo' | 'canRedo' | 'resetWorkspaceTo'
   | 'lastSavedUndoLength' | 'setLastSavedUndoLength'
 >
 
@@ -70,4 +70,18 @@ export const createUndoSlice: StateCreator<
 
   canUndo: () => get().undoStack.length > 0,
   canRedo: () => get().redoStack.length > 0,
+
+  resetWorkspaceTo: (ws) => set((s) => {
+    // Wholesale workspace replacement with the same view/selection/scope fixups as
+    // undo(), but WITHOUT touching the undo/redo stacks — the caller's batch owns
+    // the single undo entry. Used by the AI sweep's replay-from-baseline revert.
+    s.workspace = ws
+    const activeStillExists = s.activeViewKey ? !!findViewHelper(ws, s.activeViewKey) : false
+    s.activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(ws)
+    s.viewHistory = s.viewHistory.filter(k => !!findViewHelper(ws, k))
+    s.selectedElementIds = []
+    s.selectedRelationshipId = null
+    s.selectedGroupId = null
+    s.scopeViolations = validateScope(ws)
+  }),
 })

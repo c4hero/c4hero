@@ -53,18 +53,19 @@ export function elementIdSet(ws: Workspace): Set<string> {
   return new Set(flattenElements(ws).map((el) => el.id))
 }
 
-function hasNoDescription(value?: string): boolean {
+/** True for an absent or whitespace-only string (missing name/description/tech). */
+export function isBlank(value?: string): boolean {
   return !value || value.trim().length === 0
 }
 
 /** Elements whose description is empty. */
 export function elementsMissingDescription(ws: Workspace): FlatElement[] {
-  return flattenElements(ws).filter((el) => hasNoDescription(el.description))
+  return flattenElements(ws).filter((el) => isBlank(el.description))
 }
 
 /** Relationships whose description is empty. */
 export function relationshipsMissingDescription(ws: Workspace): Relationship[] {
-  return ws.model.relationships.filter((r) => hasNoDescription(r.description))
+  return ws.model.relationships.filter((r) => isBlank(r.description))
 }
 
 /** Compact, human/LLM-readable snapshot of the model. Every line is id-tagged so

@@ -21,7 +21,7 @@ import {
   scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
   sortedFindings, isActionable, classifyScope,
-  missingInfoGaps, modelHealthPercent, gapToOp, captureRestores, type Restore,
+  missingInfoGaps, modelHealthPercent, gapToOp,
   type MissingGap, type GapKind,
   type AiProvider, type EditActions,
   type EditPlan, type EditOp, type AiFeatureId, type AiChatTurn,
@@ -272,10 +272,10 @@ interface FindingStep { type: 'finding'; key: string; cat: 'review'; finding: Re
 type Step = FixStep | FindingStep
 type StepCat = Step['cat']
 
-// One applied change in the guided flow's revert ledger. `restores` puts back the
-// fields an update overwrote; the delete lists remove anything an add created.
-// Together they reverse the step exactly, independent of the other entries.
-interface LedgerEntry { key: string; label: string; detail: string; cat: StepCat; restores: Restore[]; deleteElements: string[]; deleteRelationships: string[] }
+// One applied change in the guided flow's revert ledger. We store the forward ops
+// (not an inverse): revert rebuilds the model by replaying the kept entries' ops on
+// top of the pre-sweep baseline, so reversal is always exact regardless of op kind.
+interface LedgerEntry { key: string; label: string; detail: string; cat: StepCat; ops: EditOp[] }
 
 function AppView({
   provider, workspace, model, initialFeature, onOpenSettings, onClose,
@@ -300,9 +300,12 @@ function AppView({
   const [curIdx, setCurIdx] = usePersistentState('sweep.curIdx', 0)
   const [decisions, setDecisions] = usePersistentState<Record<string, StepStatus>>('sweep.decisions', {})
   const [drafts, setDrafts] = usePersistentState<Record<string, string>>('sweep.drafts', {})
-  // Apply-as-you-go ledger: each approved step is applied to the model immediately
-  // and recorded here so it can be reverted individually (or all at once).
+  // Apply-as-you-go ledger (chronological): each approved step is applied to the
+  // model immediately and recorded here so it can be reverted individually or all
+  // at once. `baseline` is the model snapshot before the sweep's first apply —
+  // revert replays the kept entries' ops on top of it.
   const [ledger, setLedger] = usePersistentState<LedgerEntry[]>('sweep.ledger', [])
+  const [baseline, setBaseline] = usePersistentState<Workspace | null>('sweep.baseline', null)
   // Transient (in-flight) flags — not worth persisting.
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
@@ -361,7 +364,7 @@ function AppView({
     }
   }
 
-  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setLedger([]); setError(null) }
+  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setLedger([]); setBaseline(null); setError(null) }
 
   function startSweep(cats: CatId[]) {
     if (!workspace) return
@@ -409,53 +412,70 @@ function AppView({
     while (i < queue.length && next[queue[i].key]) i++
     setCurIdx(i)
   }
+  // The forward ops a step applies — a fix's single update, or a finding's ops.
+  function stepOps(step: Step, draft: string): EditOp[] {
+    return step.type === 'fix'
+      ? (draft.trim() ? [gapToOp(step.gap, draft.trim())] : [])
+      : (step.finding.operations ?? [])
+  }
+  function entryFor(step: Step, draft: string, ops: EditOp[]): LedgerEntry {
+    return {
+      key: step.key,
+      label: step.type === 'fix' ? step.gap.label : step.finding.title,
+      detail: step.type === 'fix' ? (draft.trim() || '(cleared)') : step.finding.suggestion,
+      cat: step.cat, ops,
+    }
+  }
   function applyStep() {
     if (!cur) return
     // Mirror the disabled apply button: a fix needs a non-empty draft.
     if (cur.type === 'fix' && !(drafts[cur.key] ?? '').trim()) return
     if (cur.type === 'finding' && !isActionable(cur.finding)) { advance(cur.key, 'dismiss'); return }
-    // Revisiting an already-applied step (via Back): undo it first so the re-apply
-    // captures the true original state, keeping its revert accurate.
-    const prior = ledger.find((e) => e.key === cur.key)
-    if (prior) applyReverts([prior])
-    const entry = applyStepLive(cur, drafts[cur.key] ?? '')
-    setLedger((l) => (entry ? [entry, ...l.filter((e) => e.key !== cur.key)] : l.filter((e) => e.key !== cur.key)))
+    const ops = stepOps(cur, drafts[cur.key] ?? '')
+    if (!ops.length) { advance(cur.key, 'apply'); return }
+    const entry = entryFor(cur, drafts[cur.key] ?? '', ops)
+    if (ledger.some((e) => e.key === cur.key)) {
+      // Re-applying a revisited step: rebuild from baseline with this entry swapped
+      // in, so the old effect is undone and the new one applied as ONE undo entry.
+      const next = ledger.map((e) => (e.key === cur.key ? entry : e))
+      rebuildFromBaseline(next)
+      setLedger(next)
+    } else {
+      // First apply of this step — capture the pre-sweep baseline once, then apply
+      // just this step incrementally (cheap; no full rebuild on the hot path).
+      const ws = useWorkspaceStore.getState().workspace
+      if (ws && !baseline) setBaseline(ws)
+      if (ws) applyPlanToStore({ operations: ops }, ws)
+      setLedger((l) => [...l, entry])
+    }
     advance(cur.key, 'apply')
   }
-  // Apply a single step to the model NOW and return its revert ledger entry. Reads
-  // the live store (not the render-time `workspace` prop) so a revert-then-reapply
-  // sees current state.
-  function applyStepLive(step: Step, draft: string): LedgerEntry | null {
-    const ws = useWorkspaceStore.getState().workspace
-    if (!ws) return null
-    const ops: EditOp[] = step.type === 'fix'
-      ? (draft.trim() ? [gapToOp(step.gap, draft.trim())] : [])
-      : (step.finding.operations ?? [])
-    if (!ops.length) return null
-    const restores = captureRestores(ws, ops)
-    const beforeEl = new Set(flattenElements(ws).map((e) => e.id))
-    const beforeRel = new Set(ws.model.relationships.map((r) => r.id))
-    applyPlanToStore({ operations: ops }, ws)
-    const after = useWorkspaceStore.getState().workspace
-    const deleteElements = after ? flattenElements(after).filter((e) => !beforeEl.has(e.id)).map((e) => e.id) : []
-    const deleteRelationships = after ? after.model.relationships.filter((r) => !beforeRel.has(r.id)).map((r) => r.id) : []
-    return {
-      key: step.key,
-      label: step.type === 'fix' ? step.gap.label : step.finding.title,
-      detail: step.type === 'fix' ? (draft.trim() || '(cleared)') : step.finding.suggestion,
-      cat: step.cat, restores, deleteElements, deleteRelationships,
+  // Revert is replay-from-baseline: reset the model to the pre-sweep snapshot and
+  // re-apply the kept entries' forward ops as ONE undo entry. Rebuilding the exact
+  // "as if only these were applied" state correctly reverses deletes, auto-created
+  // views, and system-context node injections without per-op inverse bookkeeping.
+  function rebuildFromBaseline(keptEntries: LedgerEntry[]) {
+    const base = baseline
+    if (!base) return
+    const store = useWorkspaceStore.getState()
+    store.setBatchApplying(true)
+    try {
+      store.resetWorkspaceTo(base)
+      const ops = keptEntries.flatMap((e) => e.ops)
+      if (ops.length) applyEditPlan({ operations: ops }, storeEditActions(), base)
+    } finally {
+      store.setBatchApplying(false)
     }
   }
   function revertEntry(key: string) {
-    const entry = ledger.find((e) => e.key === key)
-    if (!entry) return
-    applyReverts([entry])
-    setLedger((l) => l.filter((e) => e.key !== key))
+    const next = ledger.filter((e) => e.key !== key)
+    rebuildFromBaseline(next)
+    setLedger(next)
     setDecisions((d) => { const n = { ...d }; delete n[key]; return n })
   }
   function revertAll() {
     if (!ledger.length) return
-    applyReverts(ledger)
+    rebuildFromBaseline([])
     setDecisions((d) => { const n = { ...d }; for (const e of ledger) delete n[e.key]; return n })
     setLedger([])
   }
@@ -2064,9 +2084,10 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 // ─── apply / format helpers ─────────────────────────────────────────
 
-function applyPlanToStore(plan: EditPlan, ws: Workspace) {
+// EditActions bound to the live store — the seam applyEditPlan drives.
+function storeEditActions(): EditActions {
   const s = useWorkspaceStore.getState()
-  const actions: EditActions = {
+  return {
     addPerson: (name) => s.addPerson(name),
     addSoftwareSystem: (name, external) => s.addSoftwareSystem(name, undefined, external ? 'External' : undefined),
     addContainer: (systemId, name) => s.addContainer(systemId, name),
@@ -2076,6 +2097,10 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
     updateRelationship: (id, patch) => s.updateRelationship(id, patch),
     deleteElement: (id) => s.deleteElement(id),
   }
+}
+
+function applyPlanToStore(plan: EditPlan, ws: Workspace) {
+  const s = useWorkspaceStore.getState()
   // Apply in batch mode so the per-op addContainer/addComponent don't jump the
   // canvas to each created view; then navigate ONCE to where the new elements are.
   // Validate and diff against the LIVE store (not the possibly-stale `ws` prop
@@ -2086,7 +2111,7 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
   s.setBatchApplying(true)
   let result
   try {
-    result = applyEditPlan(plan, actions, liveBefore)
+    result = applyEditPlan(plan, storeEditActions(), liveBefore)
   } finally {
     s.setBatchApplying(false)
   }
@@ -2094,26 +2119,6 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace) {
   const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []
   if (newIds.length) useWorkspaceStore.getState().focusViewForElements(newIds)
   return result
-}
-
-// Reverse one or more applied ledger entries against the live store as a SINGLE
-// undo entry: restore overwritten fields first, then delete anything created.
-function applyReverts(entries: LedgerEntry[]): void {
-  if (!entries.length) return
-  const store = useWorkspaceStore.getState()
-  store.setBatchApplying(true)
-  try {
-    for (const entry of entries) {
-      for (const r of entry.restores) {
-        if (r.kind === 'element') store.updateElement(r.id, r.patch)
-        else store.updateRelationship(r.id, r.patch)
-      }
-      for (const id of entry.deleteRelationships) store.deleteRelationship(id)
-      for (const id of entry.deleteElements) store.deleteElement(id)
-    }
-  } finally {
-    store.setBatchApplying(false)
-  }
 }
 
 function summarize(ws: Workspace): string {

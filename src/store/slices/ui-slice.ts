@@ -1,7 +1,13 @@
 import type { StateCreator } from 'zustand'
+import type { Workspace } from '@/types/model'
 import type { WorkspaceState } from '../workspace-types'
 import { clearSelectionDraft } from '../workspace-helpers'
 import { pushUndoSnapshot } from '../internals'
+
+// Per-batch bookkeeping for setBatchApplying's no-op guard (single store instance).
+let batchBaseWs: Workspace | null = null
+let batchRedo: Workspace[] = []
+let batchPushed = false
 
 /** Pure UI state: panel/dialog open flags, canvas-mode toggles, and the
  *  pending-delete confirmation. Holds no workspace data. */
@@ -29,7 +35,7 @@ export const createUiSlice: StateCreator<
   [['zustand/immer', never]],
   [],
   UiSlice
-> = (set) => ({
+> = (set, get) => ({
   leftPanelOpen: true,
   rightPanelOpen: true,
   searchOpen: false,
@@ -83,13 +89,29 @@ export const createUiSlice: StateCreator<
   // without closing the panel, so a stale feature can't fire again later.
   clearAiPanelFeature: () => set({ aiPanelFeature: null }),
   setAiPanelBusy: (busy) => set({ aiPanelBusy: busy }),
-  setBatchApplying: (on) => set((s) => {
-    // Snapshot the pre-apply state once when the batch begins (while batchApplying
-    // is still false, so the push isn't suppressed); the per-op snapshots are then
-    // skipped, making the whole AI apply a single, fully-reversible undo entry.
-    if (on && !s.batchApplying) pushUndoSnapshot(s)
-    s.batchApplying = on
-  }),
+  setBatchApplying: (on) => {
+    // Compare FINALIZED workspace refs across the batch (captured via get(), not
+    // immer drafts — those are revoked between produce calls).
+    if (on && !get().batchApplying) {
+      // Snapshot the pre-apply state once when the batch begins; per-op snapshots
+      // are then skipped, making the whole AI apply a single, reversible undo entry.
+      batchBaseWs = get().workspace ?? null
+      batchRedo = get().redoStack.slice()
+      set((s) => { const before = s.undoStack.length; pushUndoSnapshot(s); batchPushed = s.undoStack.length > before; s.batchApplying = true })
+    } else if (!on && get().batchApplying) {
+      // If the batch changed nothing (all ops were no-ops/invalid), drop the
+      // snapshot we pushed and restore redo — otherwise an AI apply or revert that
+      // did nothing leaves a phantom undo entry and clears redo.
+      const unchanged = batchPushed && get().workspace === batchBaseWs
+      set((s) => {
+        if (unchanged) { s.undoStack.pop(); s.redoStack = batchRedo }
+        s.batchApplying = false
+      })
+      batchBaseWs = null; batchRedo = []; batchPushed = false
+    } else {
+      set((s) => { s.batchApplying = on })
+    }
+  },
   setCanvasGuideOpen: (open) => set({ canvasGuideOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
   setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),
