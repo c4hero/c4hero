@@ -33,6 +33,18 @@ describe('missingInfoGaps', () => {
     expect(gapOf(gaps, 'rel:r2')?.targetKind).toBe('relationship')
   })
 
+  it('limits gaps and health to the given view scope ids', () => {
+    const ws = makeWorkspace()
+    const ids = new Set(['web', 'db']) // web is fully filled; db is missing desc + tech
+    const keys = missingInfoGaps(ws, ids).map((g) => g.key)
+    expect(keys).toEqual(expect.arrayContaining(['desc:db', 'tech:db']))
+    expect(keys).not.toContain('desc:cart') // out of scope
+    expect(keys).not.toContain('desc:admin')
+    expect(keys).not.toContain('rel:r2') // relationship not in scope
+    // Over {web, db}: web desc+tech filled, db both empty → 2 of 4 slots = 50%.
+    expect(modelHealthPercent(ws, ids)).toBe(50)
+  })
+
   it('flags an element with a blank name as a title gap', () => {
     const ws: Workspace = {
       name: 'T',

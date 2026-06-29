@@ -277,6 +277,13 @@ type Step = FixStep | FindingStep
 // top of the pre-sweep baseline, so reversal is always exact regardless of op kind.
 interface LedgerEntry { key: string; label: string; detail: string; cat: CatId; ops: EditOp[] }
 
+/** The element + relationship ids a view shows — the scope set for "this view".
+ *  `undefined` when there's no view (treated as whole-model). */
+function viewScopeIds(view: View | undefined): ReadonlySet<string> | undefined {
+  if (!view) return undefined
+  return new Set<string>([...view.elements.map((e) => e.id), ...view.relationships.map((r) => r.id)])
+}
+
 function AppView({
   provider, workspace, model, initialFeature, onOpenSettings, onClose,
 }: {
@@ -319,10 +326,16 @@ function AppView({
 
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
+  // The element + relationship ids the active view shows — the scope set for
+  // "this view". `undefined` means whole-model (the 'model' scope).
+  const scopeIds = useMemo(
+    () => (improveScope === 'view' ? viewScopeIds(activeView) : undefined),
+    [improveScope, activeView],
+  )
 
-  // Build the missing-info steps for the current workspace.
-  function missingSteps(ws: Workspace): FixStep[] {
-    return missingInfoGaps(ws).map((gap) => ({ type: 'fix', key: gap.key, cat: 'missing', gap }))
+  // Build the missing-info steps, optionally limited to a view's ids.
+  function missingSteps(ws: Workspace, ids?: ReadonlySet<string>): FixStep[] {
+    return missingInfoGaps(ws, ids).map((gap) => ({ type: 'fix', key: gap.key, cat: 'missing', gap }))
   }
 
   // Lazily draft suggested values for the missing-info gaps (descriptions via
@@ -393,7 +406,10 @@ function AppView({
     setImproveScope(scope)
     setInterviewOn(true)
     const ws = workspace
-    const initial = missingSteps(ws)
+    // Derive the scope ids from the chosen scope NOW (setImproveScope is async, so
+    // the scopeIds memo isn't updated yet this tick).
+    const ids = scope === 'view' ? viewScopeIds(activeView) : undefined
+    const initial = missingSteps(ws, ids)
     setQueue(initial)
     setCurIdx(0)
     setView('wizard')
@@ -542,7 +558,7 @@ function AppView({
 
   // Memoized — AppView re-renders on every wizard keystroke; without this each
   // one would re-walk the whole model tree via modelHealthPercent.
-  const completePct = useMemo(() => (workspace ? modelHealthPercent(workspace) : 100), [workspace])
+  const completePct = useMemo(() => (workspace ? modelHealthPercent(workspace, scopeIds) : 100), [workspace, scopeIds])
 
   // A key that changes on every screen / wizard sub-state change (but NOT between
   // wizard steps — those animate per-card). Drives the body entrance animation so
@@ -581,7 +597,7 @@ function AppView({
         {view === 'home' && (
           <HomeDashboard
             workspace={workspace} completePct={completePct}
-            scope={improveScope} viewName={activeView ? viewLabel(activeView) : null}
+            scope={improveScope} scopeIds={scopeIds} viewName={activeView ? viewLabel(activeView) : null}
             onScope={setImproveScope}
             onImprove={startImprove}
             onDescribe={() => setView('describe')}
@@ -695,18 +711,19 @@ function RevealLink({ onClick }: { onClick: () => void }) {
 // ─── Home dashboard ─────────────────────────────────────────────────
 
 function HomeDashboard({
-  workspace, completePct, scope, viewName, onScope, onImprove, onDescribe, onRepo,
+  workspace, completePct, scope, scopeIds, viewName, onScope, onImprove, onDescribe, onRepo,
 }: {
   workspace: Workspace | null
   completePct: number
   scope: 'view' | 'model'
+  scopeIds: ReadonlySet<string> | undefined
   viewName: string | null
   onScope: (s: 'view' | 'model') => void
   onImprove: (s: 'view' | 'model') => void
   onDescribe: () => void
   onRepo: () => void
 }) {
-  const missingCount = useMemo(() => (workspace ? missingInfoGaps(workspace).length : 0), [workspace])
+  const missingCount = useMemo(() => (workspace ? missingInfoGaps(workspace, scopeIds).length : 0), [workspace, scopeIds])
   const allClear = missingCount === 0
   const [scopeMenuOpen, setScopeMenuOpen] = useState(false)
   const scopeContext = scope === 'view' ? (viewName ? `this view · ${viewName}` : 'this view') : 'whole model'

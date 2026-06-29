@@ -26,13 +26,16 @@ export interface MissingGap {
 /**
  * Every instantly-detectable missing-info gap, in sweep order: titles first
  * (most glaring), then descriptions, technologies, and untyped relationships.
+ * When `scopeIds` is given (the element + relationship ids shown in a view), only
+ * gaps for those targets are returned — so "Improve this view" stays in-view.
  */
-export function missingInfoGaps(ws: Workspace): MissingGap[] {
+export function missingInfoGaps(ws: Workspace, scopeIds?: ReadonlySet<string>): MissingGap[] {
   const gaps: MissingGap[] = []
   // Flatten the model ONCE and reuse it for desc/tech gaps and the name map
   // (these loops previously re-walked the whole tree three times).
-  const els = flattenElements(ws)
-  const names = new Map(els.map((el) => [el.id, el.name]))
+  const all = flattenElements(ws)
+  const names = new Map(all.map((el) => [el.id, el.name]))
+  const els = scopeIds ? all.filter((el) => scopeIds.has(el.id)) : all
 
   // title — element with an empty/whitespace name (rare; no auto-placeholders).
   for (const el of els) {
@@ -57,6 +60,7 @@ export function missingInfoGaps(ws: Workspace): MissingGap[] {
 
   // rel — relationships with no description (untyped links).
   for (const r of relationshipsMissingDescription(ws)) {
+    if (scopeIds && !scopeIds.has(r.id)) continue
     const label = `${names.get(r.sourceId) ?? r.sourceId} → ${names.get(r.destinationId) ?? r.destinationId}`
     gaps.push({ key: `rel:${r.id}`, kind: 'rel', targetId: r.id, targetKind: 'relationship', label })
   }
@@ -79,10 +83,11 @@ interface HealthCounts {
  * excluded — names are effectively always present, so they'd only pad the
  * denominator with always-filled slots.
  */
-function healthCounts(ws: Workspace): HealthCounts {
-  const els = flattenElements(ws)
+function healthCounts(ws: Workspace, scopeIds?: ReadonlySet<string>): HealthCounts {
+  const all = flattenElements(ws)
+  const els = scopeIds ? all.filter((e) => scopeIds.has(e.id)) : all
   const techBearing = els.filter((e) => e.type === 'container' || e.type === 'component')
-  const rels = ws.model.relationships ?? []
+  const rels = (ws.model.relationships ?? []).filter((r) => !scopeIds || scopeIds.has(r.id))
 
   const descSlots = els.length
   const descFilled = els.filter((e) => !isBlank(e.description)).length
@@ -94,9 +99,10 @@ function healthCounts(ws: Workspace): HealthCounts {
   return { checkable: descSlots + techSlots + relSlots, filled: descFilled + techFilled + relFilled }
 }
 
-/** Instant model-health percentage (0–100). 100 for an empty model. */
-export function modelHealthPercent(ws: Workspace): number {
-  const { checkable, filled } = healthCounts(ws)
+/** Instant model-health percentage (0–100). 100 for an empty model. Pass
+ *  `scopeIds` to measure only a view's elements/relationships. */
+export function modelHealthPercent(ws: Workspace, scopeIds?: ReadonlySet<string>): number {
+  const { checkable, filled } = healthCounts(ws, scopeIds)
   if (checkable === 0) return 100
   return Math.round((filled / checkable) * 100)
 }
