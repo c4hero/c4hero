@@ -694,9 +694,10 @@ function revealInDiagram(ws: Workspace, ids: string[]) {
   const s = useWorkspaceStore.getState()
   const view = allViewsOf(ws).find((v) => v.elements.some((e) => real.includes(e.id)))
   if (view) s.setActiveView(view.key)
-  // Pan to the element rather than select it, so the AI panel stays open
-  // (selecting opens the inspector, which now closes the panel).
-  useWorkspaceStore.setState({ focusElementId: real[0] })
+  // Pan AND zoom in on the element rather than select it, so the AI panel stays
+  // open (selecting opens the inspector, which now closes the panel). focusZoom
+  // tells the canvas to zoom-to-fit the node (capped) instead of merely panning.
+  useWorkspaceStore.setState({ focusElementId: real[0], focusZoom: 1.4 })
 }
 
 function RevealLink({ onClick }: { onClick: () => void }) {
@@ -902,7 +903,7 @@ function FixCard({ gap, draft, draftLoading, applied, onDraft, onRewrite, onReve
       </div>
       <textarea value={draft} onChange={(e) => onDraft(e.target.value)}
         placeholder={draftLoading ? 'Drafting a suggestion…' : `Type a ${k.label}…`}
-        style={{ width: '100%', marginTop: 9, resize: 'vertical', minHeight: gap.kind === 'desc' ? 92 : 52, padding: '13px 15px', borderRadius: 12, border: `1px solid ${C.borderStrong}`, background: C.card, color: C.text, fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit' }} />
+        style={{ width: '100%', marginTop: 9, resize: 'vertical', minHeight: gap.kind === 'desc' ? 128 : gap.kind === 'rel' ? 112 : 60, padding: '13px 15px', borderRadius: 12, border: `1px solid ${C.borderStrong}`, background: C.card, color: C.text, fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit' }} />
       {onReveal && <div><RevealLink onClick={onReveal} /></div>}
       <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
         <button onClick={onApply} disabled={!draft.trim()} className="c4ai-pri"
@@ -1152,12 +1153,13 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 13 }}>
-        <span style={{ width: 40, height: 40, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><SquarePen size={19} /></span>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Describe a change</div>
-          <div style={{ fontSize: 12, color: C.muted2, marginTop: 1 }}>Plain English — I’ll detect build vs. change for you.</div>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '6px 0 2px', marginBottom: 13 }}>
+        <span style={{ position: 'relative', width: 60, height: 60, borderRadius: 16, background: 'rgba(88,166,255,0.12)', border: '1px solid rgba(88,166,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7dd3fc', animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}>
+          <SquarePen size={26} />
+          <span style={{ position: 'absolute', inset: -1, borderRadius: 16, border: '1px solid rgba(88,166,255,0.35)', animation: 'c4ai-ringpulse 2.4s ease-out infinite' }} />
+        </span>
+        <h2 style={{ margin: '16px 0 0', fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>Describe <span style={{ color: '#7dd3fc' }}>a change</span></h2>
+        <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 300 }}>Tell me in plain English what to build or change. I’ll detect whether it’s a new model or an edit to this one, then show you a preview first.</p>
       </div>
 
       {!done && !text.trim() && (

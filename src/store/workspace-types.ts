@@ -72,8 +72,12 @@ export interface WorkspaceState extends UndoState {
   lastSavedUndoLength: number
   setLastSavedUndoLength: (n: number) => void
 
-  // Focus request — set to an element ID to center the canvas on it, then cleared
+  // Focus request — set to an element ID to center the canvas on it, then cleared.
+  // `focusZoom`, when set, makes the canvas zoom-to-fit that node (capped at this
+  // maxZoom) instead of merely panning at the current zoom — used by "Show in
+  // diagram" so the revealed element is brought up close, not just centered.
   focusElementId: string | null
+  focusZoom: number | null
   clearFocusElement: () => void
 
   // Canvas settings

@@ -40,6 +40,7 @@ export const createLifecycleSlice: StateCreator<
       selectedRelationshipId: null,
       selectedGroupId: null,
       focusElementId: null, // prevent stale scroll-to signal from a previous workspace
+      focusZoom: null,
       pendingDelete: null,  // dismiss any in-flight delete confirmation from a previous workspace
       pendingZoomConfirm: null,
       createViewDefaults: null,
@@ -66,6 +67,7 @@ export const createLifecycleSlice: StateCreator<
       selectedRelationshipId: null,
       selectedGroupId: null,
       focusElementId: null,
+      focusZoom: null,
       pendingDelete: null, // dismiss any in-flight delete confirmation dialog
       pendingZoomConfirm: null,
       createViewDefaults: null,

@@ -645,14 +645,21 @@ export default function Canvas() {
 
   // Center view on newly created element
   const focusElementId = useWorkspaceStore((s) => s.focusElementId)
+  const focusZoom = useWorkspaceStore((s) => s.focusZoom)
   const clearFocusElement = useWorkspaceStore((s) => s.clearFocusElement)
   useEffect(() => {
     if (!focusElementId) return
+    const zoom = focusZoom
     clearFocusElement()
     // Wait a frame for React Flow to render the new node
     requestAnimationFrame(() => {
       const node = reactFlowInstance.getNode(focusElementId)
-      if (node) {
+      if (!node) return
+      if (zoom != null) {
+        // Reveal ("Show in diagram"): zoom in to frame the node, not just pan.
+        reactFlowInstance.fitView({ nodes: [{ id: focusElementId }], duration: 300, maxZoom: zoom, padding: 0.6 })
+      } else {
+        // New-element focus: center but keep the current zoom level.
         reactFlowInstance.setCenter(
           node.position.x + (node.measured?.width ?? 200) / 2,
           node.position.y + (node.measured?.height ?? 100) / 2,
@@ -660,7 +667,7 @@ export default function Canvas() {
         )
       }
     })
-  }, [focusElementId, clearFocusElement, reactFlowInstance])
+  }, [focusElementId, focusZoom, clearFocusElement, reactFlowInstance])
 
   // Suppress inspector opening during drag (works on touch too).
   // onSelectionChange fires at touch-start before any movement, so we schedule
