@@ -118,4 +118,31 @@ describe('fitViewport', () => {
       { duration: 0 },
     )
   })
+
+  it('ignores an unmeasured boundary node so its stale 200×100 fallback cannot skew the fit', () => {
+    const canvas = document.createElement('div')
+    canvas.className = 'react-flow'
+    document.body.append(canvas)
+    setElementRect(canvas, rect(0, 0, 1000, 800))
+
+    // An UNMEASURED boundary sitting at the origin (no measured dims): if it were
+    // counted, getNodeBounds would assume a 200×100 box at (0,0) and pull the fit
+    // bounds toward the corner. It must be skipped; the fit should frame only the
+    // measured content node.
+    const unmeasuredBoundary = { id: '__scope_boundary__', position: { x: 0, y: 0 }, data: {} } as Node
+    const reactFlow = {
+      getNodes: () => [makeNode('content', 600, 400, 100, 100), unmeasuredBoundary],
+      setViewport: vi.fn(),
+    } as unknown as ReactFlowInstance
+
+    fitContentNodesToViewport(reactFlow, { duration: 0, padding: 0, maxZoom: 10 })
+
+    // Bounds are exactly the content node (centerX 650, centerY 450), not stretched
+    // back to the origin by the phantom boundary box. usableCenter = (500, 392)
+    // (1000 wide, 800−16 bottom-floor tall).
+    const [viewport] = vi.mocked(reactFlow.setViewport).mock.calls[0]
+    const zoom = viewport.zoom
+    expect(viewport.x).toBeCloseTo(500 - 650 * zoom)
+    expect(viewport.y).toBeCloseTo(392 - 450 * zoom)
+  })
 })

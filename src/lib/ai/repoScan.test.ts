@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { isKeyFile, isIgnoredDir, buildRepoBundle, mergeRepoProposals, redactSensitiveContent } from './repoScan'
-import type { RepoSnapshot, RepoProposal } from './types'
+import { isKeyFile, isIgnoredDir, buildRepoBundle, mergeRepoProposals, redactSensitiveContent, resolvePassRefsToNames } from './repoScan'
+import type { RepoSnapshot, RepoProposal, EditOp } from './types'
 
 describe('isIgnoredDir', () => {
   it('skips dependency/build folders and dotdirs', () => {
@@ -117,6 +117,20 @@ describe('redactSensitiveContent', () => {
     ].join('\n')
     expect(redactSensitiveContent(input)).toBe(input)
   })
+
+  it('redacts secrets whose key is NOT line-leading (inline / minified)', () => {
+    const out = redactSensitiveContent([
+      '{ "password": "hunter2" }',
+      'db: { password: hunter2plus }',
+      '{"a":"keep","token":"sk-zzzzzzzzzzzzzzzzzzzzzzzz"}',
+    ].join('\n'))
+    expect(out).not.toContain('hunter2')
+    expect(out).not.toContain('hunter2plus')
+    expect(out).not.toContain('sk-zzzzzzzzzzzzzzzzzzzzzzzz')
+    expect(out).toContain('<redacted>')
+    // Non-secret neighbours on the same line survive.
+    expect(out).toContain('"a":"keep"')
+  })
 })
 
 describe('mergeRepoProposals', () => {
@@ -148,5 +162,44 @@ describe('mergeRepoProposals', () => {
     // Feed them out of order (component first); merge must reorder.
     const ranks = mergeRepoProposals([comp, link, cont, sys]).map((p) => p.op.op)
     expect(ranks).toEqual(['addSoftwareSystem', 'addContainer', 'addComponent', 'addRelationship'])
+  })
+})
+
+describe('resolvePassRefsToNames', () => {
+  // Two passes that BOTH numbered their system "s1" and container "c1": the
+  // container parents must resolve to their own pass's system name, not collide.
+  const passA: RepoProposal[] = [
+    { op: { op: 'addSoftwareSystem', ref: 's1', name: 'Auth Service' }, src: 'a', label: 'Auth' },
+    { op: { op: 'addContainer', ref: 'c1', parent: 's1', name: 'Auth API' }, src: 'a', label: 'Auth API' },
+  ]
+  const passB: RepoProposal[] = [
+    { op: { op: 'addSoftwareSystem', ref: 's1', name: 'Billing Service' }, src: 'b', label: 'Billing' },
+    { op: { op: 'addContainer', ref: 'c1', parent: 's1', name: 'Billing Worker' }, src: 'b', label: 'Billing Worker' },
+  ]
+
+  it('rewrites in-pass parent refs to the referenced element name', () => {
+    const out = resolvePassRefsToNames(passA)
+    const container = out.find((p) => p.op.op === 'addContainer')!.op as Extract<EditOp, { op: 'addContainer' }>
+    expect(container.parent).toBe('Auth Service')
+  })
+
+  it('keeps each pass\'s container parented to its own system after merge', () => {
+    const merged = mergeRepoProposals([
+      ...resolvePassRefsToNames(passA),
+      ...resolvePassRefsToNames(passB),
+    ])
+    const parents = merged
+      .filter((p): p is RepoProposal & { op: Extract<EditOp, { op: 'addContainer' }> } => p.op.op === 'addContainer')
+      .reduce<Record<string, string>>((acc, p) => { acc[p.op.name] = p.op.parent; return acc }, {})
+    expect(parents['Auth API']).toBe('Auth Service')
+    expect(parents['Billing Worker']).toBe('Billing Service')
+  })
+
+  it('leaves tokens that are not an in-pass ref untouched (existing ids/names)', () => {
+    const props: RepoProposal[] = [
+      { op: { op: 'addContainer', ref: 'c1', parent: 'sys-existing-id', name: 'API' }, src: 'x', label: 'API' },
+    ]
+    const out = resolvePassRefsToNames(props)
+    expect((out[0].op as Extract<EditOp, { op: 'addContainer' }>).parent).toBe('sys-existing-id')
   })
 })

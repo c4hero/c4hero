@@ -34,7 +34,10 @@ export interface ApplyResult {
 // Dependency order: a parent/endpoint must be created before whatever references
 // it. People+systems, then containers, then components, then relationships, then
 // updates, then deletes (last, so nothing a relationship needs is gone first).
-function opRank(op: EditOp): number {
+// Exported so repo-scan's proposal merge sorts by the SAME order applyEditPlan
+// applies in — otherwise the two paths could disagree and drop children whose
+// parent resolves in one ordering but not the other.
+export function editOpRank(op: EditOp): number {
   switch (op.op) {
     case 'addPerson':
     case 'addSoftwareSystem': return 0
@@ -111,7 +114,7 @@ export function applyEditPlan(
   // unlike repoScan isn't pre-sorted — may emit a child before its parent; in
   // emitted order resolve() wouldn't find the parent and the child would be
   // dropped as "unknown parent". Stable sort preserves order within a rank.
-  const ordered = [...plan.operations].sort((a, b) => opRank(a) - opRank(b))
+  const ordered = [...plan.operations].sort((a, b) => editOpRank(a) - editOpRank(b))
   for (const op of ordered) {
     switch (op.op) {
       case 'addPerson': {

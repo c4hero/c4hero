@@ -1959,6 +1959,36 @@ body {
   filter: drop-shadow(0 0 4px color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 55%, transparent));
 }
 
+/* Reveal pulse — "Show in diagram" briefly draws a glowing overlay along the
+   revealed relationship, fading out so the eye lands on the edge that was just
+   framed. Distinct from the static highlight above (which is the tech filter). */
+@keyframes c4-edge-reveal-pulse {
+  0%   { opacity: 0; stroke-width: 9; }
+  15%  { opacity: 1; }
+  100% { opacity: 0; stroke-width: 4; }
+}
+.c4-edge-reveal {
+  stroke: var(--canvas-selection, var(--color-accent));
+  stroke-width: 6;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 75%, transparent));
+  animation: c4-edge-reveal-pulse 1.8s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .c4-edge-reveal { animation-duration: 0.01ms; opacity: 0; }
+}
+
+/* Inspector entrance — the floating inspector mounts/unmounts (its outside-click
+   listener must match the rendered condition), so a style transition can't fire;
+   animate the show on mount instead. */
+@keyframes inspector-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes inspector-in { from { opacity: 1; } to { opacity: 1; } }
+}
+
 /* Highlighted node — bright ring around the node body so matches POP against
    dimmed neighbors. We target the INNER .c4-node div (descendant of the
    React Flow wrapper that carries .c4-node-highlighted) so the box-shadow

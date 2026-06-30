@@ -19,13 +19,31 @@ export type PlanScope = 'view' | 'context' | 'component' | 'model'
  *   though the element doesn't exist in `ws` yet. Use {@link classifyPlanScopes}
  *   to classify a whole plan with this wired up.
  */
-export function classifyScope(op: EditOp, ws: Workspace, view: View, viewRefs?: ReadonlySet<string>): PlanScope {
-  const viewIds = new Set(view.elements.map((e) => e.id))
-  const flat = flattenElements(ws)
+// Precomputed lookups for a (ws, view) pair. Built once per plan and reused
+// across every op, so classifying an N-op plan is a single model walk instead
+// of O(N) walks with a linear find per token.
+interface ScopeCtx {
+  viewIds: Set<string>
+  ids: Set<string>
+  nameToId: Map<string, string>
+}
+
+function buildScopeCtx(ws: Workspace, view: View): ScopeCtx {
+  const ids = new Set<string>()
+  const nameToId = new Map<string, string>()
+  for (const e of flattenElements(ws)) {
+    ids.add(e.id)
+    const k = e.name.trim().toLowerCase()
+    if (k && !nameToId.has(k)) nameToId.set(k, e.id)
+  }
+  return { viewIds: new Set(view.elements.map((e) => e.id)), ids, nameToId }
+}
+
+function classifyWithCtx(op: EditOp, view: View, ctx: ScopeCtx, viewRefs?: ReadonlySet<string>): PlanScope {
+  const { viewIds, ids, nameToId } = ctx
   const idForToken = (token: string): string | undefined => {
-    if (viewIds.has(token)) return token
-    const el = flat.find((e) => e.id === token || e.name.trim().toLowerCase() === token.trim().toLowerCase())
-    return el?.id
+    if (viewIds.has(token) || ids.has(token)) return token
+    return nameToId.get(token.trim().toLowerCase())
   }
   const inView = (token: string): boolean => {
     if (viewRefs?.has(token)) return true
@@ -55,16 +73,21 @@ export function classifyScope(op: EditOp, ws: Workspace, view: View, viewRefs?: 
   }
 }
 
+export function classifyScope(op: EditOp, ws: Workspace, view: View, viewRefs?: ReadonlySet<string>): PlanScope {
+  return classifyWithCtx(op, view, buildScopeCtx(ws, view), viewRefs)
+}
+
 /** Classify every op in a plan, resolving in-plan-created refs: an op that
  *  references an element added earlier in the same plan (which lands on this
  *  view) is correctly tagged 'view' rather than 'model'. */
 export function classifyPlanScopes(plan: EditPlan, ws: Workspace, view: View): PlanScope[] {
+  const ctx = buildScopeCtx(ws, view)
   const viewRefs = new Set<string>()
   for (const op of plan.operations) {
     if ((op.op === 'addPerson' || op.op === 'addSoftwareSystem' || op.op === 'addContainer' || op.op === 'addComponent')
-      && classifyScope(op, ws, view) === 'view') {
+      && classifyWithCtx(op, view, ctx) === 'view') {
       viewRefs.add(op.ref)
     }
   }
-  return plan.operations.map((op) => classifyScope(op, ws, view, viewRefs))
+  return plan.operations.map((op) => classifyWithCtx(op, view, ctx, viewRefs))
 }

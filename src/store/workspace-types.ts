@@ -78,6 +78,10 @@ export interface WorkspaceState extends UndoState {
   // diagram" so the revealed element is brought up close, not just centered.
   focusElementId: string | null
   focusZoom: number | null
+  // Relationship reveal — set to a relationship id so "Show in diagram" frames
+  // BOTH of its endpoints (centering the edge between them) and pulses a
+  // highlight on the edge. Auto-cleared by the canvas after the pulse.
+  focusRelationshipId: string | null
   clearFocusElement: () => void
 
   // Canvas settings

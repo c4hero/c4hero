@@ -636,7 +636,7 @@ function AppView({
                 applied={!!ledger.find((e) => e.key === cur.key)}
                 onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
                 onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
-                onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace)) : undefined}
+                onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace), stepRelationshipId(cur)) : undefined}
                 onBack={curIdx > 0 ? goBack : undefined}
                 onApply={applyStep} onSkip={skipStep} onRevert={() => revertEntry(cur.key)}
                 choice={findingChoice[cur.key]} onChoice={(c) => setFindingChoice((m) => ({ ...m, [cur.key]: c }))}
@@ -709,19 +709,31 @@ function stepElementIds(step: Step, ws: Workspace): string[] {
   return [g.targetId]
 }
 
-// Switch to a view that shows the element(s) and select them — the same reveal
-// the search dialog uses. Keeps the AI panel open (selection alone never closes
-// it; only adding elements does).
-function revealInDiagram(ws: Workspace, ids: string[]) {
+// The relationship a step points at (if any), so reveal can frame the edge
+// itself, not just one endpoint.
+function stepRelationshipId(step: Step): string | null {
+  return step.type === 'fix' && step.gap.kind === 'rel' ? step.gap.targetId : null
+}
+
+// Switch to a view that shows the element(s) and zoom in on them — the same
+// reveal the search dialog uses. Keeps the AI panel open (selection alone never
+// closes it; only adding elements does). For a relationship, `ids` are its two
+// endpoints and `relationshipId` is set: the canvas then frames both endpoints
+// (centering the edge between them) and pulses a highlight on the edge.
+function revealInDiagram(ws: Workspace, ids: string[], relationshipId: string | null = null) {
   const real = ids.filter(Boolean)
   if (!real.length) return
   const s = useWorkspaceStore.getState()
-  const view = allViewsOf(ws).find((v) => v.elements.some((e) => real.includes(e.id)))
+  // Prefer a view that contains ALL the ids (so a relationship's edge is
+  // actually drawn), falling back to any view that contains at least one.
+  const views = allViewsOf(ws)
+  const view = views.find((v) => real.every((id) => v.elements.some((e) => e.id === id)))
+    ?? views.find((v) => v.elements.some((e) => real.includes(e.id)))
   if (view) s.setActiveView(view.key)
-  // Pan AND zoom in on the element rather than select it, so the AI panel stays
-  // open (selecting opens the inspector, which now closes the panel). focusZoom
-  // tells the canvas to zoom-to-fit the node (capped) instead of merely panning.
-  useWorkspaceStore.setState({ focusElementId: real[0], focusZoom: 1.4 })
+  // Pan AND zoom in rather than select, so the AI panel stays open (selecting
+  // opens the inspector, which now closes the panel). focusZoom tells the canvas
+  // to zoom-to-fit (capped) instead of merely panning.
+  useWorkspaceStore.setState({ focusElementId: real[0], focusZoom: 1.4, focusRelationshipId: relationshipId })
 }
 
 function RevealLink({ onClick }: { onClick: () => void }) {
@@ -917,7 +929,7 @@ function FixCard({ gap, draft, draftLoading, applied, onDraft, onRewrite, onReve
       <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
         <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 12, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7dd3fc' }}><Icon size={23} /></span>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{gap.label}</div>
+          <div title={gap.label} style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em', lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{gap.label}</div>
           <div style={{ fontSize: 13, color: C.muted2, marginTop: 2 }}>{k.prompt}</div>
         </div>
       </div>
@@ -1566,8 +1578,10 @@ function PlanPreviewBar({ provider, ws, view, history }: { provider: AiProvider;
   const run = useAiRun()
   const [plan, setPlan] = useState<EditPlan | null>(null)
   const [open, setOpen] = useState(false)
-  const lines = plan ? describeOps(plan, ws) : []
-  const scopes = plan ? classifyPlanScopes(plan, ws, view) : []
+  // Both walk the whole model; memoize so toggling open/loading doesn't re-walk
+  // it every render (plan/ws/view are the only inputs that change the result).
+  const lines = useMemo(() => (plan ? describeOps(plan, ws) : []), [plan, ws])
+  const scopes = useMemo(() => (plan ? classifyPlanScopes(plan, ws, view) : []), [plan, ws, view])
   const offCount = scopes.filter((s) => s === 'context' || s === 'component').length
 
   function toggle() {

@@ -47,9 +47,18 @@ export function fitContentNodesToViewport(
   options: FitOptions = {},
 ): boolean {
   if (!reactFlow) return false
-  // Fit every visible node — content, group boundaries AND the focal scope
-  // boundary — so no outline or boundary label gets clipped behind the chrome.
-  return fitNodesToViewport(reactFlow, reactFlow.getNodes(), options)
+  // Fit content PLUS group/scope boundaries so no outline or boundary label gets
+  // clipped behind the chrome — but drop overlay (boundary/group) nodes that
+  // aren't measured yet. Those carry no intrinsic size, so getNodeBounds would
+  // fall back to a 200×100 box at their (often stale/origin) position and skew or
+  // off-center the fit. Content nodes always count: they keep layout dimensions
+  // even before React Flow remeasures, so the diagram still frames correctly.
+  // (This differs intentionally from the canvas's on-view-change auto-fit, which
+  // frames content tightly; "Fit to screen" deliberately also shows boundaries.)
+  const nodes = reactFlow.getNodes().filter(
+    (n) => isContentFitNode(n) || (n.measured?.width != null && n.measured?.height != null),
+  )
+  return fitNodesToViewport(reactFlow, nodes, options)
 }
 
 export function fitNodesToViewport(

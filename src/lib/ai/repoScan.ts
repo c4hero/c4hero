@@ -1,4 +1,5 @@
 import type { RepoFile, RepoSnapshot, RepoProposal } from './types'
+import { editOpRank } from './operations'
 
 // Read a local repository through the File System Access API and reduce it to a
 // compact, architecture-revealing snapshot: the file tree plus the contents of
@@ -47,7 +48,13 @@ const SECRET_KEY_PART = [
 ].join('|')
 
 const SECRET_KEY_RE = new RegExp(`(?:^|[._-])(?:${SECRET_KEY_PART})(?:$|[._-])`, 'i')
-const ASSIGNMENT_RE = /^([ \t-]*(?:export[ \t]+)?["']?)([\w.-]+)(["']?[ \t]*[:=][ \t]*)([^\r\n]*)/gim
+// Match `key = value` / `key: value` anywhere on a line, not just line-leading —
+// inline and minified secrets (`{ "password": "x" }`, `a: b, token: y`) have a
+// non-key token before the key, so an `^`-anchored pattern missed them and let
+// the credential through. `lead` is the delimiter before the key (start-of-line,
+// whitespace, `{`, or `,`); the value stops at a quote close or the next
+// structural delimiter so we don't over-consume an unrelated trailing pair.
+const ASSIGNMENT_RE = /(^|[\s{,])((?:export[ \t]+)?["']?)([\w.-]+)(["']?[ \t]*[:=][ \t]*)("(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)*'|[^\s,}\])\r\n]*)/gim
 const PRIVATE_KEY_BLOCK_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))/g
 const ASSIGNED_PRIVATE_KEY_BLOCK_RE = /^([ \t-]*(?:export[ \t]+)?["']?[\w.-]*private[-_]?key[\w.-]*["']?[ \t]*[:=][ \t]*)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))/gim
 
@@ -68,8 +75,8 @@ export function redactSensitiveContent(content: string): string {
   return content
     .replace(ASSIGNED_PRIVATE_KEY_BLOCK_RE, (_m, prefix: string) => `${prefix}${REDACTED}`)
     .replace(PRIVATE_KEY_BLOCK_RE, `-----BEGIN PRIVATE KEY-----\n${REDACTED}\n-----END PRIVATE KEY-----`)
-    .replace(ASSIGNMENT_RE, (match, start: string, key: string, sep: string, rawValue: string) => (
-      SECRET_KEY_RE.test(key) ? redactAssignmentValue(`${start}${key}${sep}`, rawValue) : match
+    .replace(ASSIGNMENT_RE, (match, lead: string, start: string, key: string, sep: string, rawValue: string) => (
+      SECRET_KEY_RE.test(key) ? `${lead}${redactAssignmentValue(`${start}${key}${sep}`, rawValue)}` : match
     ))
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+):([^@\s/]+)@/gi, `$1$2:${REDACTED}@`)
     .replace(/\b(AKIA|ASIA)[A-Z0-9]{16}\b/g, REDACTED)
@@ -209,20 +216,28 @@ function proposalKey(p: RepoProposal): string {
   }
 }
 
-// Apply order rank: a parent must exist before its child resolves. People and
-// systems first, then containers, then components, then relationships (which
-// reference elements), then everything else. applyEditPlan processes proposals
-// in this order, so emitting a component before its parent system would leave
-// the parent unresolvable and the child silently dropped.
-function opRank(p: RepoProposal): number {
-  switch (p.op.op) {
-    case 'addPerson':
-    case 'addSoftwareSystem': return 0
-    case 'addContainer': return 1
-    case 'addComponent': return 2
-    case 'addRelationship': return 3
-    default: return 4
+/** Within one scan pass, rewrite each container/component parent (and each
+ *  relationship endpoint) that points at a temporary ref to the referenced
+ *  element's NAME instead. Each pass numbers its refs independently ("s1", "c1",
+ *  …), so carrying raw refs across the merge lets two passes' "s1" collide in
+ *  applyEditPlan's refMap — every later op resolves to whichever system was
+ *  registered last, parenting containers onto the wrong system (or dropping
+ *  them). Names are stable across passes, dedupe correctly in proposalKey, and
+ *  resolve back to the right element by name. Tokens that aren't a ref defined
+ *  in THIS pass (real ids, plain names) are left untouched. */
+export function resolvePassRefsToNames(proposals: RepoProposal[]): RepoProposal[] {
+  const refName = new Map<string, string>()
+  for (const { op } of proposals) {
+    if ('ref' in op && op.ref && 'name' in op && op.name) refName.set(op.ref, op.name)
   }
+  if (!refName.size) return proposals
+  const deref = (t: string): string => refName.get(t) ?? t
+  return proposals.map((p) => {
+    const op = { ...p.op }
+    if (op.op === 'addContainer' || op.op === 'addComponent') op.parent = deref(op.parent)
+    else if (op.op === 'addRelationship') { op.source = deref(op.source); op.destination = deref(op.destination) }
+    return { ...p, op }
+  })
 }
 
 /** Merge proposals from one or more scan passes into a deduped, deterministically
@@ -236,7 +251,7 @@ export function mergeRepoProposals(proposals: RepoProposal[]): RepoProposal[] {
     if (!byKey.has(k)) byKey.set(k, p)
   }
   return [...byKey.values()].sort((a, b) => {
-    const r = opRank(a) - opRank(b)
+    const r = editOpRank(a.op) - editOpRank(b.op)
     if (r !== 0) return r
     // Stable tie-break within a rank for deterministic output.
     const ka = proposalKey(a)

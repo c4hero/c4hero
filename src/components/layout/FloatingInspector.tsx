@@ -71,10 +71,10 @@ export default function FloatingInspector() {
         backdropFilter: 'blur(var(--glass-blur))',
         WebkitBackdropFilter: 'blur(var(--glass-blur))',
         boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
-        opacity: 1,
-        transform: 'translateY(0)',
-        pointerEvents: 'auto',
-        transition: 'opacity 0.18s ease, transform 0.18s ease',
+        // The panel mounts/unmounts (it must — the outside-click listener has to
+        // match the rendered condition exactly, see `shown`), so a CSS transition
+        // on style values never fires. Animate the entrance on mount instead.
+        animation: 'inspector-in 0.18s ease both',
       }}
       aria-label="Element properties"
     >

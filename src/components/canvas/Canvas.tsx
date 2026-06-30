@@ -649,15 +649,33 @@ export default function Canvas() {
   const clearFocusElement = useWorkspaceStore((s) => s.clearFocusElement)
   useEffect(() => {
     if (!focusElementId) return
+    const targetId = focusElementId
     const zoom = focusZoom
-    clearFocusElement()
-    // Wait a frame for React Flow to render the new node
-    requestAnimationFrame(() => {
-      const node = reactFlowInstance.getNode(focusElementId)
-      if (!node) return
+    const relId = useWorkspaceStore.getState().focusRelationshipId
+    // Reveal often switches the active view first, which remounts the canvas
+    // nodes — so the target may not exist for several frames. Poll a bounded
+    // number of frames instead of giving up after one, or the view changes but
+    // the canvas never frames the element (left off-screen). Clear the one-shot
+    // focus only once we've acted (or exhausted attempts), not up front.
+    let raf = 0
+    let attempts = 0
+    const run = () => {
+      const node = reactFlowInstance.getNode(targetId)
+      if (!node) {
+        if (attempts++ < 60) { raf = requestAnimationFrame(run); return }
+        clearFocusElement()
+        return
+      }
       if (zoom != null) {
-        // Reveal ("Show in diagram"): zoom in to frame the node, not just pan.
-        reactFlowInstance.fitView({ nodes: [{ id: focusElementId }], duration: 300, maxZoom: zoom, padding: 0.6 })
+        // Reveal ("Show in diagram"): zoom in to frame the target, not just pan.
+        // For a relationship, frame BOTH endpoints so the edge is centered
+        // between them; fall back to the single node if the edge isn't on this
+        // view (only one endpoint present).
+        const edge = relId ? reactFlowInstance.getEdge(relId) : null
+        const frame = edge && reactFlowInstance.getNode(edge.source) && reactFlowInstance.getNode(edge.target)
+          ? [{ id: edge.source }, { id: edge.target }]
+          : [{ id: targetId }]
+        reactFlowInstance.fitView({ nodes: frame, duration: 300, maxZoom: zoom, padding: 0.6 })
       } else {
         // New-element focus: center but keep the current zoom level.
         reactFlowInstance.setCenter(
@@ -666,8 +684,25 @@ export default function Canvas() {
           { duration: 300, zoom: reactFlowInstance.getZoom() },
         )
       }
-    })
+      clearFocusElement()
+    }
+    raf = requestAnimationFrame(run)
+    return () => cancelAnimationFrame(raf)
   }, [focusElementId, focusZoom, clearFocusElement, reactFlowInstance])
+
+  // Relationship reveal highlight: the edge pulses while focusRelationshipId is
+  // set, then we clear it (matching the CSS pulse duration). Guard the clear so
+  // a newer reveal isn't clobbered by an older timer.
+  const focusRelationshipId = useWorkspaceStore((s) => s.focusRelationshipId)
+  useEffect(() => {
+    if (!focusRelationshipId) return
+    const t = setTimeout(() => {
+      if (useWorkspaceStore.getState().focusRelationshipId === focusRelationshipId) {
+        useWorkspaceStore.setState({ focusRelationshipId: null })
+      }
+    }, 1800)
+    return () => clearTimeout(t)
+  }, [focusRelationshipId])
 
   // Suppress inspector opening during drag (works on touch too).
   // onSelectionChange fires at touch-start before any movement, so we schedule

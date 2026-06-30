@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useWorkspaceStore, getBreadcrumb, getCreatableTypes, buildElementMap, buildRelationshipMap, canDrillInto, getRelationshipById, getSelectedElement } from './workspace'
+import { MAX_UNDO } from './workspace-types'
 import type { Workspace } from '@/types/model'
 
 function makeWorkspace(): Workspace {
@@ -315,6 +316,22 @@ describe('Relationship and container mutations', () => {
     useWorkspaceStore.getState().setBatchApplying(false)
     expect(useWorkspaceStore.getState().undoStack.length).toBe(undoLen)
     expect(useWorkspaceStore.getState().redoStack.length).toBe(redoLen)
+  })
+
+  it('a no-op batch at MAX_UNDO does not silently drop the oldest undo step', () => {
+    // Fill the undo stack past its cap so the up-front batch snapshot would
+    // push + trim (leaving length unchanged — the case the old length check
+    // missed). Each add pushes one snapshot.
+    for (let i = 0; i < MAX_UNDO + 5; i++) useWorkspaceStore.getState().addSoftwareSystem(`Sys${i}`)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(MAX_UNDO)
+    const stackBefore = useWorkspaceStore.getState().undoStack.slice()
+    // A batch that changes nothing must restore the stack exactly — same length
+    // AND same oldest entry (not trimmed away).
+    useWorkspaceStore.getState().setBatchApplying(true)
+    useWorkspaceStore.getState().setBatchApplying(false)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(MAX_UNDO)
+    expect(useWorkspaceStore.getState().undoStack[0]).toBe(stackBefore[0])
+    expect(useWorkspaceStore.getState().undoStack).toEqual(stackBefore)
   })
 
   it('resetWorkspaceTo replaces the model without pushing an undo entry', () => {

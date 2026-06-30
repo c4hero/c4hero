@@ -10,6 +10,7 @@ import {
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
+import { useWorkspaceStore } from '@/store/workspace'
 
 interface RelationshipEdgeData {
   relationship: Relationship
@@ -51,6 +52,9 @@ function RelationshipEdge({
 }: EdgeProps & { data?: RelationshipEdgeData }) {
   const relationship = data?.relationship
   const relStyle = data?.relationshipStyle
+  // "Show in diagram" reveal: briefly emphasize + pulse this edge.
+  const revealed = useWorkspaceStore((s) => s.focusRelationshipId === id)
+  const emphasized = !!selected || revealed
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
 
@@ -81,10 +85,10 @@ function RelationshipEdge({
   }
 
   // Apply style from RelationshipStyle if available
-  const strokeColor = selected
+  const strokeColor = emphasized
     ? 'var(--canvas-selection, var(--color-accent))'
     : (relStyle?.color ?? 'var(--canvas-edge, var(--color-edge))')
-  const strokeWidth = selected ? 2 : (relStyle?.thickness ?? 1.5)
+  const strokeWidth = emphasized ? 2 : (relStyle?.thickness ?? 1.5)
   const isDashed = isAsync || (relStyle?.dashed ?? false)
 
   const [hovered, setHovered] = useState(false)
@@ -100,7 +104,7 @@ function RelationshipEdge({
     targetY,
     description: relationship?.description,
     technologies: technologyTokens,
-    selected: !!selected,
+    selected: emphasized,
     hovered,
   })
   const compactTechnologyTokens = technologyTokens.slice(0, COMPACT_TECH_CHIP_LIMIT)
@@ -124,6 +128,11 @@ function RelationshipEdge({
         onMouseLeave={() => setHovered(false)}
         style={{ pointerEvents: 'stroke' }}
       />
+      {/* Reveal pulse: a glowing overlay that fades out, drawing the eye to the
+          relationship just framed by "Show in diagram". */}
+      {revealed && (
+        <path d={edgePath} className="c4-edge-reveal" fill="none" style={{ pointerEvents: 'none' }} />
+      )}
       <BaseEdge
         id={id}
         path={edgePath}
@@ -134,8 +143,8 @@ function RelationshipEdge({
           opacity: relStyle?.opacity,
           ...edgeStyle,
         }}
-        markerStart={selected ? 'url(#c4-dot-selected)' : 'url(#c4-dot)'}
-        markerEnd={selected ? 'url(#c4-arrow-selected)' : 'url(#c4-arrow)'}
+        markerStart={emphasized ? 'url(#c4-dot-selected)' : 'url(#c4-dot)'}
+        markerEnd={emphasized ? 'url(#c4-arrow-selected)' : 'url(#c4-arrow)'}
       />
       {/* Label — shown when either description or technology is present */}
       {(relationship?.description || relationship?.technology) && (

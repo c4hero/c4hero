@@ -58,20 +58,22 @@ describe('FloatingInspector', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('is visible (opacity 1) when element is selected', () => {
+  it('renders (with the entrance animation) when element is selected', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     useWorkspaceStore.getState().selectElements(['alice'])
     const { container } = render(<FloatingInspector />)
     const wrapper = container.firstChild as HTMLElement
-    expect(wrapper.style.opacity).toBe('1')
+    expect(wrapper).not.toBeNull()
+    expect(wrapper.style.animation).toContain('inspector-in')
   })
 
-  it('is visible (opacity 1) when relationship is selected', () => {
+  it('renders (with the entrance animation) when relationship is selected', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     useWorkspaceStore.getState().selectRelationship('rel1')
     const { container } = render(<FloatingInspector />)
     const wrapper = container.firstChild as HTMLElement
-    expect(wrapper.style.opacity).toBe('1')
+    expect(wrapper).not.toBeNull()
+    expect(wrapper.style.animation).toContain('inspector-in')
   })
 
   it('has aria-label "Element properties"', () => {
