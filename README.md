@@ -48,6 +48,7 @@ You never have to write that by hand — but you can. Already have a `.dsl` file
 - **Structurizr-compatible.** Read and write the same DSL the official Structurizr tools use — c4hero is one option in an interoperable ecosystem, not a fork.
 - **Fast.** Code-split bundle, idle-scheduled autosave, dagre auto-layout, no network round-trips during editing.
 - **Accessible.** Focus-trap dialogs, ARIA-labeled canvas, keyboard shortcuts for every common action, `prefers-reduced-motion` support.
+- **Optional AI, bring-your-own-key.** An opt-in assistant shows an instant **model-health** readout, walks you through **guided cleanup** of missing descriptions/technologies/links, runs a **deep review** of your architecture, **interviews** you to fill in a view, scans a **local repo** to propose elements, builds or edits the model from a **plain-English** prompt, and auto-suggests inspector fields — all reviewed before anything is applied. Every text box also supports **voice-to-text** dictation. Bring your own **Anthropic, OpenAI, or Google Gemini** API key (the provider layer is pluggable for adding more). Your key is stored only in your browser and sent only to that provider — c4hero never sees it, and nothing runs until you opt in. Open it from the tool rail, the menu, or the command palette ("AI: …").
 
 A more detailed feature catalogue lives in [`docs/FEATURES.md`](docs/FEATURES.md).
 

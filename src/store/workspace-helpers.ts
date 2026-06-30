@@ -146,17 +146,71 @@ export function uniqueElementName(base: string, ws: Workspace): string {
 
 /** Add an element to the active view (no-op if no view is active or the
  *  element is already present). */
+/** Which element types each C4 view kind may show — a higher-level view never
+ *  shows lower-level internals (a System Landscape never shows containers, etc.),
+ *  though deeper views may show higher-level elements as external/boundary nodes. */
+const VIEW_ELEMENT_TYPES: Record<View['type'], ReadonlySet<ModelElement['type']>> = {
+  systemLandscape: new Set<ModelElement['type']>(['person', 'softwareSystem']),
+  systemContext: new Set<ModelElement['type']>(['person', 'softwareSystem']),
+  container: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container']),
+  component: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container', 'component']),
+}
+
+/** True when a view of `viewType` is allowed to display an element of `elementType`. */
+export function viewAllowsElementType(viewType: View['type'], elementType: ModelElement['type']): boolean {
+  return VIEW_ELEMENT_TYPES[viewType].has(elementType)
+}
+
 export function addToCurrentView(
   ws: Workspace,
   activeViewKey: string | null,
   elementId: string,
   position?: { x: number; y: number },
+  elementType?: ModelElement['type'],
 ): void {
   if (!activeViewKey) return
   const view = findViewHelper(ws, activeViewKey)
-  if (view && !view.elements.some((e) => e.id === elementId)) {
+  if (!view) return
+  // Don't drop an element into a view that can't hold its type (e.g. a container
+  // onto a System Landscape view). The element still lives in the model and is
+  // added to the appropriate scoped views by the caller.
+  if (elementType && !viewAllowsElementType(view.type, elementType)) return
+  if (!view.elements.some((e) => e.id === elementId)) {
     view.elements.push({ id: elementId, x: position?.x, y: position?.y })
   }
+}
+
+/** Reset the element/relationship/group selection on the draft. One place to
+ *  change if selection ever gains another field. */
+export function clearSelectionDraft(
+  s: { selectedElementIds: string[]; selectedRelationshipId: string | null; selectedGroupId: string | null },
+): void {
+  s.selectedElementIds = []
+  s.selectedRelationshipId = null
+  s.selectedGroupId = null
+}
+
+/** Close both AI surfaces (assistant + settings) so the inspector can take the
+ *  shared slot. Callers own the guard (selection vs create differ on batchApplying). */
+export function closeAiSurfaces(s: { aiPanelOpen: boolean; aiSettingsOpen: boolean }): void {
+  s.aiPanelOpen = false
+  s.aiSettingsOpen = false
+}
+
+/** Select a just-created element and close the assistant so the inspector shows
+ *  — EXCEPT during an AI batch apply (keep the panel to show its results) or while
+ *  the assistant is mid-flow (aiPanelBusy: interview/wizard/sweep — don't yank it
+ *  out from under the user). Centralizes the selection-reset + panel-close that
+ *  every create action shares, matching the selection-slice guard. */
+export function selectCreated(
+  s: { batchApplying: boolean; aiPanelBusy: boolean; aiPanelOpen: boolean; aiSettingsOpen: boolean; focusElementId: string | null; selectedElementIds: string[]; selectedRelationshipId: string | null; selectedGroupId: string | null },
+  id: string,
+): void {
+  s.focusElementId = id
+  s.selectedElementIds = [id]
+  s.selectedRelationshipId = null
+  s.selectedGroupId = null
+  if (!s.batchApplying && !s.aiPanelBusy) closeAiSurfaces(s)
 }
 
 
@@ -275,6 +329,37 @@ export function buildInitialViewContent(
     .map((r) => ({ id: r.id }))
 
   return { elements, relationships }
+}
+
+/** Build a scoped view (initial content + the standard shape) and push it onto
+ *  the matching view array of the (draft) workspace, returning the new view.
+ *  Centralizes the View construction shared by addView, addContainer and
+ *  addComponent — caller owns selection/active-view/undo handling. */
+export function appendScopedView(
+  ws: Workspace,
+  type: ViewType,
+  scopeId: string | undefined,
+  title: string,
+  key: string,
+): View {
+  const { elements, relationships } = buildInitialViewContent(ws.model, type, scopeId)
+  const view: View = {
+    type,
+    key,
+    title,
+    elements,
+    relationships,
+    autoLayout: { direction: 'TB' },
+    softwareSystemId: (type === 'systemContext' || type === 'container') ? scopeId : undefined,
+    containerId: type === 'component' ? scopeId : undefined,
+  }
+  switch (type) {
+    case 'systemLandscape': ws.views.systemLandscapeViews.push(view); break
+    case 'systemContext': ws.views.systemContextViews.push(view); break
+    case 'container': ws.views.containerViews.push(view); break
+    case 'component': ws.views.componentViews.push(view); break
+  }
+  return view
 }
 
 /**

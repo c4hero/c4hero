@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useWorkspaceStore, getBreadcrumb, getCreatableTypes, buildElementMap, buildRelationshipMap, canDrillInto, getRelationshipById, getSelectedElement } from './workspace'
+import { MAX_UNDO } from './workspace-types'
 import type { Workspace } from '@/types/model'
 
 function makeWorkspace(): Workspace {
@@ -209,6 +210,162 @@ describe('Group store actions', () => {
 describe('Relationship and container mutations', () => {
   beforeEach(() => {
     useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('addContainer on a view that cannot hold it creates a scoped container view so it is not stranded', () => {
+    const land = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(land)
+    const cid = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const ws = useWorkspaceStore.getState().workspace!
+    // A container view for 'api' now exists and shows the new container…
+    const cv = ws.views.containerViews.find((v) => v.softwareSystemId === 'api')
+    expect(cv).toBeDefined()
+    expect(cv!.elements.some((e) => e.id === cid)).toBe(true)
+    // …it became active, and the landscape view never received the container.
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(cv!.key)
+    expect(ws.views.systemLandscapeViews.find((v) => v.key === land)!.elements.some((e) => e.id === cid)).toBe(false)
+  })
+
+  it('addContainer reuses an existing scoped container view instead of creating another', () => {
+    const cvKey = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    const land = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(land)
+    const before = useWorkspaceStore.getState().workspace!.views.containerViews.length
+    const cid = useWorkspaceStore.getState().addContainer('api', 'Web')
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.containerViews.length).toBe(before) // no extra view created
+    expect(ws.views.containerViews.find((v) => v.key === cvKey)!.elements.some((e) => e.id === cid)).toBe(true)
+  })
+
+  it('selecting an element closes BOTH the AI panel and AI settings (no stacking over the inspector)', () => {
+    useWorkspaceStore.getState().setAiSettingsOpen(true)
+    useWorkspaceStore.getState().selectElements(['alice'])
+    expect(useWorkspaceStore.getState().aiSettingsOpen).toBe(false)
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
+  })
+
+  it('opening AI settings clears the selection (mirror direction — no inspector stacking)', () => {
+    useWorkspaceStore.getState().selectElements(['alice'])
+    useWorkspaceStore.getState().setAiSettingsOpen(true)
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual([])
+  })
+
+  it('selecting a node while the assistant is busy keeps the panel open (no lost interview)', () => {
+    useWorkspaceStore.getState().setAiPanelOpen(true)
+    useWorkspaceStore.getState().setAiPanelBusy(true)
+    useWorkspaceStore.getState().selectElements(['alice'])
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(true) // survives the click
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual(['alice'])
+    useWorkspaceStore.getState().setAiPanelBusy(false)
+  })
+
+  it('addContainer during a batch apply does not jump the active view', () => {
+    const land = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(land)
+    useWorkspaceStore.getState().setBatchApplying(true)
+    const cid = useWorkspaceStore.getState().addContainer('api', 'Web')
+    useWorkspaceStore.getState().setBatchApplying(false)
+    // Scoped view created, but the canvas stayed put (panel navigates once after).
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(land)
+    const cv = useWorkspaceStore.getState().workspace!.views.containerViews.find((v) => v.softwareSystemId === 'api')
+    expect(cv!.elements.some((e) => e.id === cid)).toBe(true)
+  })
+
+  it('coalesces a batch apply into a single, fully-reversible undo entry', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().setBatchApplying(true)
+    useWorkspaceStore.getState().addSoftwareSystem('Billing')
+    useWorkspaceStore.getState().addSoftwareSystem('Shipping')
+    useWorkspaceStore.getState().addSoftwareSystem('Inventory')
+    useWorkspaceStore.getState().setBatchApplying(false)
+    // Exactly ONE snapshot was pushed for the whole batch (not one per op).
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+    const created = useWorkspaceStore.getState().workspace!.model.softwareSystems.map((s) => s.name)
+    expect(created).toEqual(expect.arrayContaining(['Billing', 'Shipping', 'Inventory']))
+    // A single undo reverts the entire batch.
+    useWorkspaceStore.getState().undo()
+    const names = useWorkspaceStore.getState().workspace!.model.softwareSystems.map((s) => s.name)
+    expect(names).not.toContain('Billing')
+    expect(names).not.toContain('Inventory')
+  })
+
+  it('coalesces element creation AND view mutations in one batch (repo-scan import shape)', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().setBatchApplying(true)
+    const sysId = useWorkspaceStore.getState().addSoftwareSystem('Imported')
+    const viewKey = useWorkspaceStore.getState().addView('systemContext', sysId, 'Imported — Context')
+    useWorkspaceStore.getState().removeElementsFromView(viewKey, [sysId])
+    useWorkspaceStore.getState().setBatchApplying(false)
+    // The plan apply + addView + removeElementsFromView are ONE undo entry, not three.
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+    // A single undo reverts the whole import: system gone, its view gone.
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().workspace!.model.softwareSystems.map((s) => s.name)).not.toContain('Imported')
+    expect(useWorkspaceStore.getState().workspace!.views.systemContextViews.some((v) => v.key === viewKey)).toBe(false)
+  })
+
+  it('a no-op batch leaves the undo and redo stacks untouched', () => {
+    // Build a redo entry: mutate then undo.
+    useWorkspaceStore.getState().addSoftwareSystem('Temp')
+    useWorkspaceStore.getState().undo()
+    const undoLen = useWorkspaceStore.getState().undoStack.length
+    const redoLen = useWorkspaceStore.getState().redoStack.length
+    expect(redoLen).toBeGreaterThan(0)
+    // A batch that changes nothing must not push a phantom undo entry or clear redo.
+    useWorkspaceStore.getState().setBatchApplying(true)
+    useWorkspaceStore.getState().setBatchApplying(false)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoLen)
+    expect(useWorkspaceStore.getState().redoStack.length).toBe(redoLen)
+  })
+
+  it('a no-op batch at MAX_UNDO does not silently drop the oldest undo step', () => {
+    // Fill the undo stack past its cap so the up-front batch snapshot would
+    // push + trim (leaving length unchanged — the case the old length check
+    // missed). Each add pushes one snapshot.
+    for (let i = 0; i < MAX_UNDO + 5; i++) useWorkspaceStore.getState().addSoftwareSystem(`Sys${i}`)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(MAX_UNDO)
+    const stackBefore = useWorkspaceStore.getState().undoStack.slice()
+    // A batch that changes nothing must restore the stack exactly — same length
+    // AND same oldest entry (not trimmed away).
+    useWorkspaceStore.getState().setBatchApplying(true)
+    useWorkspaceStore.getState().setBatchApplying(false)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(MAX_UNDO)
+    expect(useWorkspaceStore.getState().undoStack[0]).toBe(stackBefore[0])
+    expect(useWorkspaceStore.getState().undoStack).toEqual(stackBefore)
+  })
+
+  it('resetWorkspaceTo replaces the model without pushing an undo entry', () => {
+    const undoLen = useWorkspaceStore.getState().undoStack.length
+    const target: Workspace = { ...makeWorkspace(), name: 'Replaced' }
+    target.model.softwareSystems = [...target.model.softwareSystems, { id: 'extra', type: 'softwareSystem', name: 'Extra', tags: [], properties: {}, containers: [] }]
+    useWorkspaceStore.getState().resetWorkspaceTo(target)
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.softwareSystems.some((s) => s.id === 'extra')).toBe(true)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoLen)
+  })
+
+  it('focusViewForElements navigates to the view containing the most of them', () => {
+    const cid = useWorkspaceStore.getState().addContainer('api', 'Web') // creates + switches to api container view
+    const apiView = useWorkspaceStore.getState().activeViewKey!
+    const land = useWorkspaceStore.getState().addView('systemLandscape')
+    useWorkspaceStore.getState().setActiveView(land)
+    useWorkspaceStore.getState().focusViewForElements([cid])
+    expect(useWorkspaceStore.getState().activeViewKey).toBe(apiView)
+  })
+
+  it('addContainer never leaks a container into another system\'s active view', () => {
+    const sysB = useWorkspaceStore.getState().addSoftwareSystem('Billing')
+    const apiView = useWorkspaceStore.getState().addView('container', 'api', 'API Containers')
+    useWorkspaceStore.getState().setActiveView(apiView)
+    // Create a container in system B while viewing system A's container view.
+    const cid = useWorkspaceStore.getState().addContainer(sysB, 'Invoices')
+    const ws = useWorkspaceStore.getState().workspace!
+    // It must NOT land in system A's view…
+    expect(ws.views.containerViews.find((v) => v.key === apiView)!.elements.some((e) => e.id === cid)).toBe(false)
+    // …it goes into a container view scoped to system B (auto-created).
+    const bView = ws.views.containerViews.find((v) => v.softwareSystemId === sysB)
+    expect(bView).toBeDefined()
+    expect(bView!.elements.some((e) => e.id === cid)).toBe(true)
   })
 
   it('addRelationship creates a relationship with correct fields', () => {

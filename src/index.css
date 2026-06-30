@@ -1153,11 +1153,16 @@ body {
   /* Floating tool rail: collapse to a horizontal strip near the top edge
      instead of a vertical column on the left. Vertical orientation eats
      too much horizontal space on narrow viewports. */
-  [data-canvas-chrome="tool-rail"] {
+  /* The AI button + tool rail share a positioned wrapper; on phones it docks to
+     the bottom centre as a row (AI button beside the tool row). */
+  [data-canvas-chrome="tool-rail-wrap"] {
     top: auto !important;
     bottom: 14px !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
+    flex-direction: row !important;
+  }
+  [data-canvas-chrome="tool-rail"] {
     flex-direction: row !important;
     padding: 0 8px !important;
   }
@@ -1304,6 +1309,31 @@ body {
 }
 
 /* ─── Glass panels ─────────────────────────────────────────── */
+
+/* While dragging the canvas, fade the floating chrome (toolbars, panels, HUD)
+   so the diagram stays visible; it restores smoothly when the drag stops. */
+.glass-panel,
+.glass-panel-solid,
+.glass-flyout,
+[data-canvas-chrome],
+.c4ai {
+  transition: opacity 0.16s ease;
+}
+[data-canvas-panning] .glass-panel,
+[data-canvas-panning] .glass-panel-solid,
+[data-canvas-panning] .glass-flyout,
+[data-canvas-panning] [data-canvas-chrome],
+[data-canvas-panning] .c4ai {
+  opacity: 0.4 !important;
+  pointer-events: none !important;
+  /* Drop borders/shadows AND the backdrop blur while faded — a partially
+     transparent element that still blurs the canvas behind it leaves a hard
+     blur-boundary edge that reads as a thin line floating over the diagram. */
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 
 .glass-panel {
   background: var(--glass-bg);
@@ -1927,6 +1957,36 @@ body {
   stroke: var(--canvas-selection, var(--color-accent)) !important;
   stroke-width: 2.6 !important;
   filter: drop-shadow(0 0 4px color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 55%, transparent));
+}
+
+/* Reveal pulse — "Show in diagram" briefly draws a glowing overlay along the
+   revealed relationship, fading out so the eye lands on the edge that was just
+   framed. Distinct from the static highlight above (which is the tech filter). */
+@keyframes c4-edge-reveal-pulse {
+  0%   { opacity: 0; stroke-width: 9; }
+  15%  { opacity: 1; }
+  100% { opacity: 0; stroke-width: 4; }
+}
+.c4-edge-reveal {
+  stroke: var(--canvas-selection, var(--color-accent));
+  stroke-width: 6;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 75%, transparent));
+  animation: c4-edge-reveal-pulse 1.8s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .c4-edge-reveal { animation-duration: 0.01ms; opacity: 0; }
+}
+
+/* Inspector entrance — the floating inspector mounts/unmounts (its outside-click
+   listener must match the rendered condition), so a style transition can't fire;
+   animate the show on mount instead. */
+@keyframes inspector-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes inspector-in { from { opacity: 1; } to { opacity: 1; } }
 }
 
 /* Highlighted node — bright ring around the node body so matches POP against

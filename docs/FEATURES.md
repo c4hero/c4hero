@@ -46,6 +46,42 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 - **DSL** export (Save As) writes a clean `.dsl` plus its sidecar JSON.
 - Exports are deterministic — same workspace, same bytes — so they diff cleanly in pull requests.
 
+## AI assistant (BYOK)
+
+Optional and opt-in. The assistant is inert until you add your own provider key
+in AI settings; the key is stored only in this browser and requests go directly
+to the provider you choose — c4hero never sees your key or your model data.
+Open it from the tool rail, the menu, or the command palette (`AI: …`), or toggle
+it with the `I` shortcut.
+
+- **Bring your own key** — **Anthropic**, **OpenAI**, or **Google Gemini**, with a
+  recommended balanced-tier model per provider (and any model you prefer). The
+  provider layer is pluggable for adding more.
+- **Model health** — an instant, deterministic readout of how complete the model
+  is (missing descriptions, technologies, untyped relationships), with
+  click-to-fix gaps and a 100% celebration. No AI call required.
+- **Improve my model** — one guided flow that combines three things in a single
+  stepper: the instant missing-info fixes, an AI **deep review** (orphans, untyped
+  links, naming/boundary issues), and an **interview** that asks about anything the
+  model can't reveal on its own. The scope lives inside the Improve button (a split
+  caret) and grounds the review and questions on the active view or the whole
+  model; review of a view leaves another system's elements shown as external
+  context alone. Each review fix offers a couple of distinct approaches to pick
+  from — or an **Other** box to describe your own, applied through the same edit
+  engine. Every change applies the moment you approve it (model health climbs
+  live), and a revert ledger undoes any single change — or all of them.
+- **From your code** — scan a local repository (File System Access API) and propose
+  elements and relationships, asking about anything ambiguous.
+- **Describe a change** — build a new model or edit the current one from a plain-
+  English prompt; replacing an existing model always asks first.
+- **Inspector assist** — per-field auto-suggestions for empty descriptions and
+  technologies, plus tag suggestions constrained to your existing vocabulary.
+- **Voice dictation** — speak into assistant inputs where the browser supports the
+  Web Speech API.
+
+Every AI-proposed change is shown as a reviewable plan and applied through the
+same edit pipeline as manual edits, so it's a single undo entry.
+
 ## Accessibility
 
 - ARIA labels on every canvas node and panel.

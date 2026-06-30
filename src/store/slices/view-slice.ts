@@ -3,7 +3,7 @@ import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { findViewHelper, VIEW_ARRAY_KEYS, buildInitialViewContent } from '../workspace-helpers'
+import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 
 /** View management: create / delete / rename / duplicate views, plus the
@@ -30,24 +30,7 @@ export const createViewSlice: StateCreator<
     set((s) => {
       if (!s.workspace) return
       pushUndoSnapshot(s)
-      const ws = s.workspace
-      const { elements, relationships } = buildInitialViewContent(ws.model, type, scopeId)
-      const view: View = {
-        type,
-        key,
-        title: title ?? `New ${type} view`,
-        elements,
-        relationships,
-        autoLayout: { direction: 'TB' },
-        softwareSystemId: (type === 'systemContext' || type === 'container') ? scopeId : undefined,
-        containerId: type === 'component' ? scopeId : undefined,
-      }
-      switch (type) {
-        case 'systemLandscape': ws.views.systemLandscapeViews.push(view); break
-        case 'systemContext': ws.views.systemContextViews.push(view); break
-        case 'container': ws.views.containerViews.push(view); break
-        case 'component': ws.views.componentViews.push(view); break
-      }
+      appendScopedView(s.workspace, type, scopeId, title ?? `New ${type} view`, key)
       s.activeViewKey = key
       s.selectedElementIds = []
       s.selectedRelationshipId = null

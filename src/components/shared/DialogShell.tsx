@@ -5,8 +5,11 @@ import { useFocusTrap } from '@/hooks/useFocusTrap'
  *  - "center" — classic centered modal (default; backdrop covers viewport)
  *  - "shade"  — slide-down panel anchored to the top pill (no backdrop;
  *               clicking outside dismisses via an invisible click catcher,
- *               matching the existing `.shade-panel` CSS class) */
-type DialogPosition = 'center' | 'shade'
+ *               matching the existing `.shade-panel` CSS class)
+ *  - "docked" — right-edge rail, full height, non-modal (no backdrop; the canvas
+ *               stays visible and interactive). Closes via Escape or the panel's
+ *               own close button — there is no click-away catcher. */
+type DialogPosition = 'center' | 'shade' | 'docked'
 
 interface DialogShellProps {
   onClose: () => void
@@ -68,6 +71,24 @@ export default function DialogShell({
           {children}
         </div>
       </>
+    )
+  }
+
+  if (position === 'docked') {
+    // Non-modal right-edge rail: no backdrop, so the canvas stays visible and
+    // clickable. Escape (global listener above) and the panel's close button
+    // dismiss it.
+    return (
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-label={ariaLabel}
+        className={className}
+        style={{ position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 60, ...style }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
     )
   }
 

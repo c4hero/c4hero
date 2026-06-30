@@ -143,6 +143,21 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   'a': (store) => {
     if (store.workspace) store.setAddElementPanelOpen(!store.addElementPanelOpen)
   },
+  'i': (store) => {
+    // The AI panel only renders on a diagram route (see App.tsx `onCanvas`).
+    // Toggling it elsewhere would clear the selection and pop the panel open
+    // later when a diagram is finally opened, so gate it on the same condition.
+    if (!store.workspace) return
+    if (!/\/collection\/[^/]+\/[^/]+/.test(window.location.pathname)) return
+    // The assistant renders on aiPanelOpen OR aiSettingsOpen, so toggle based on
+    // either being open — otherwise "i" can't dismiss a settings-opened panel.
+    if (store.aiPanelOpen || store.aiSettingsOpen) {
+      store.setAiPanelOpen(false)
+      store.setAiSettingsOpen(false)
+    } else {
+      store.setAiPanelOpen(true)
+    }
+  },
   'h': (store) => {
     if (store.workspace) store.setHighlighterOpenFacet(store.highlighterOpenFacet ? null : 'tags')
   },

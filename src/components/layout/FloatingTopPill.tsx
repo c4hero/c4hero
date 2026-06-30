@@ -19,7 +19,7 @@ import {
   Plus,
   FolderSymlink,
   LayoutGrid,
-
+  Sparkles,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 
@@ -340,6 +340,8 @@ export default function FloatingTopPill() {
               </>
             )}
 
+            {/* AI assistant now lives in the canvas tool rail (left) */}
+
             {/* Export */}
             <button
               onClick={() => { setExportDialogOpen(o => !o); useWorkspaceStore.getState().setCommandPaletteOpen(false); setViewDropdownOpen(false); setWsPickerOpen(false) }}
@@ -396,6 +398,8 @@ export default function FloatingTopPill() {
             }}
           >
             <MenuItemRow icon={FolderSymlink} label="Workspaces…" onClick={() => { setHamburgerOpen(false); openWsPicker() }} />
+            <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+            <MenuItemRow icon={Sparkles} label="AI assistant…" onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setAiPanelOpen(true) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />

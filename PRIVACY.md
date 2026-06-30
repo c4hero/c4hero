@@ -53,6 +53,34 @@ data the app handles, where it lives, and what is sent over the network.
   to your CSP `connect-src` policy and document the destination for your
   users.
 
+## AI features (bring-your-own-key)
+
+- The optional AI assistant is **opt-in** and **bring-your-own-key (BYOK)**. It
+  is inert until you enter your own API key in AI settings. You choose the
+  provider — currently **Anthropic**, **OpenAI**, or **Google Gemini**.
+- Your API key(s) are stored only in this browser's `localStorage` (key
+  `c4hero.ai.json`) and are never sent to any c4hero server — there isn't one.
+- When you run an AI feature, requests go **directly from your browser to your
+  chosen provider** (`api.anthropic.com`, `api.openai.com`, or `generativelanguage.googleapis.com`).
+  The contents of those requests include the parts of your model needed for the
+  feature (for example, your prompt plus a text summary of elements and
+  relationships for Review, Edit, Auto-describe, and ADR drafting). Review your
+  provider's privacy terms to understand how they handle that data.
+- If you use repo scanning, c4hero reads the selected folder in your browser,
+  redacts secret-looking values from key manifest/config excerpts, then sends
+  the file tree plus those redacted excerpts to your chosen AI provider.
+- No AI request is made unless you explicitly trigger a feature. Disabling AI in
+  settings hides the assistant; clearing site data removes the stored key.
+- **Voice-to-text** dictation (the mic button on AI text boxes) uses your
+  browser's built-in Web Speech API. The audio is handled by the browser, not by
+  c4hero — and in some browsers (e.g. Chrome) the browser sends that audio to the
+  browser vendor's speech-recognition service for transcription. This only
+  happens while you are actively dictating, and the recognized text stays in the
+  text box until you choose to run an AI feature with it. If you prefer not to
+  use it, simply type instead; the button does nothing unless you press it.
+- Anyone with access to this browser profile can read the stored key, the same
+  as any other site credential kept in `localStorage`. Use a scoped key.
+
 ## Cookies
 
 c4hero does not set cookies.
@@ -64,6 +92,7 @@ c4hero does not set cookies.
 | Active workspace (crash recovery) | `localStorage` | Clearing site data; loading a different workspace |
 | Recent file/folder handles | `IndexedDB` | Clearing site data; revoking handle in the browser |
 | Settings (theme, panel state) | `localStorage` | Clearing site data |
+| AI settings + API key (BYOK) | `localStorage` (`c4hero.ai.json`) | Clearing site data; clearing the key in AI settings |
 | Workspace files (`.dsl`, `.c4hero.json` sidecar) | Filesystem (your machine) | Deleting the files |
 
 ## Reporting

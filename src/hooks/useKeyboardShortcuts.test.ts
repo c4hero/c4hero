@@ -202,3 +202,97 @@ describe('shouldSuppressBackspaceNavigation', () => {
     })
   })
 })
+
+describe('useKeyboardShortcuts — global shortcut coverage', () => {
+  function setup() {
+    // The "i" shortcut is gated on a diagram route, so put us on one.
+    window.history.pushState({}, '', '/collection/team/diagram')
+    const s = useWorkspaceStore.getState()
+    s.loadWorkspace(makeWs())
+    s.setActiveView('land')
+    // UI flags aren't reset by closeWorkspace, so clear the ones these tests
+    // assert on to keep each case order-independent.
+    s.setAiPanelOpen(false)
+    s.setAddElementPanelOpen(false)
+    s.setMultiSelectMode(false)
+    s.setPresentationMode(false)
+    s.setCommandPaletteOpen(false)
+    s.setHighlighterOpenFacet(null)
+    s.clearSelection()
+    renderHook(() => useKeyboardShortcuts())
+  }
+
+  it('"i" toggles the AI assistant', () => {
+    setup()
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
+    press('i')
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(true)
+    press('i')
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
+  })
+
+  it('"a" toggles the add-element panel', () => {
+    setup()
+    press('a')
+    expect(useWorkspaceStore.getState().addElementPanelOpen).toBe(true)
+  })
+
+  it('"m" toggles multi-select mode', () => {
+    setup()
+    press('m')
+    expect(useWorkspaceStore.getState().multiSelectMode).toBe(true)
+  })
+
+  it('"p" toggles presentation mode', () => {
+    setup()
+    press('p')
+    expect(useWorkspaceStore.getState().presentationMode).toBe(true)
+  })
+
+  it('"h" toggles the tag highlighter facet', () => {
+    setup()
+    press('h')
+    expect(useWorkspaceStore.getState().highlighterOpenFacet).toBe('tags')
+    press('h')
+    expect(useWorkspaceStore.getState().highlighterOpenFacet).toBeNull()
+  })
+
+  it('"?" opens the command palette', () => {
+    setup()
+    press('?')
+    expect(useWorkspaceStore.getState().commandPaletteOpen).toBe(true)
+  })
+
+  it('Escape closes the command palette, then clears selection', () => {
+    setup()
+    useWorkspaceStore.getState().setCommandPaletteOpen(true)
+    press('Escape')
+    expect(useWorkspaceStore.getState().commandPaletteOpen).toBe(false)
+    useWorkspaceStore.getState().selectElements(['sys'])
+    press('Escape')
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual([])
+  })
+
+  it('Shift+S adds a software system', () => {
+    setup()
+    const before = useWorkspaceStore.getState().workspace!.model.softwareSystems.length
+    press('S', { shift: true })
+    expect(useWorkspaceStore.getState().workspace!.model.softwareSystems.length).toBe(before + 1)
+  })
+
+  it('Enter on a single selection drills in without error', () => {
+    setup()
+    useWorkspaceStore.getState().selectElements(['sys'])
+    press('Enter')
+    expect(useWorkspaceStore.getState().workspace).toBeTruthy()
+  })
+
+  it('ignores plain shortcuts while typing in an input', () => {
+    setup()
+    const input = document.createElement('input')
+    document.body.append(input)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }))
+    expect(useWorkspaceStore.getState().addElementPanelOpen).toBe(false)
+    input.remove()
+  })
+})

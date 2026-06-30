@@ -28,15 +28,9 @@ export interface AppSettings {
   canvasGuideDismissed: boolean
 }
 
-function isMobile(): boolean {
-  if (typeof window === 'undefined') return false
-  const mediaMatches = window.matchMedia?.('(max-width: 768px)')?.matches ?? false
-  const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent
-  return mediaMatches || /Mobi|Android/i.test(userAgent)
-}
-
 const DEFAULTS: AppSettings = {
-  minimapMode: isMobile() ? 'never' : 'auto',
+  // Minimap is off by default; users can switch it to Auto/Always in canvas settings.
+  minimapMode: 'never',
   showUndoRedo: false,
   showZoomControls: false,
   snapToGrid: false,

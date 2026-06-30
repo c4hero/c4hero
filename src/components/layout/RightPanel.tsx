@@ -2,12 +2,14 @@ import { useState, useCallback, useMemo } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
-import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
-import { X, Plus, ArrowRight, ExternalLink, Eye, EyeOff, ChevronRight, Trash2 } from 'lucide-react'
+import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location, Workspace } from '@/types/model'
+import { X, Plus, ArrowRight, ArrowUpRight, ArrowDownLeft, ExternalLink, Eye, EyeOff, ChevronRight, Trash2, Sparkles, Loader2 } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
+import { useAiProvider } from '@/store/ai-settings'
+import { autoDescribe, planEdit, suggestTags } from '@/lib/ai'
 
 const STATUS_OPTIONS: { value: ElementStatus | undefined; label: string; color: string | null }[] = [
   { value: undefined, label: 'Not set', color: null },
@@ -52,7 +54,7 @@ export default function RightPanel() {
   const group = selectedGroupId ? workspace.model.groups.find(g => g.id === selectedGroupId) : undefined
 
   return (
-    <div className="glass-panel-solid flex h-full w-full flex-col overflow-hidden rounded-xl border shadow-lg shadow-black/20">
+    <div className="flex h-full w-full flex-col overflow-hidden">
       {element ? (
         <ElementProperties element={element} onClose={clearSelection} />
       ) : relationship ? (
@@ -61,6 +63,48 @@ export default function RightPanel() {
         <GroupProperties group={group} onClose={clearSelection} />
       ) : null}
     </div>
+  )
+}
+
+// ─── AI auto-suggest helpers ─────────────────────────────────────────
+
+const TECH_SUGGEST_INSTRUCTION = 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.'
+
+// Structural type tags are implicit and not part of the user's taxonomy.
+const STRUCTURAL_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component', 'Relationship'])
+
+/** Distinct custom tags already used across the model — the vocabulary AI tag
+ *  suggestions are constrained to (keeps tagging consistent). */
+function modelTagVocabulary(ws: Workspace): string[] {
+  const set = new Set<string>()
+  const add = (tags?: string[]) => { for (const t of tags ?? []) { const v = t.trim(); if (v && !STRUCTURAL_TAGS.has(v)) set.add(v) } }
+  for (const p of ws.model.people) add(p.tags)
+  for (const s of ws.model.softwareSystems) { add(s.tags); for (const c of s.containers) { add(c.tags); for (const cmp of c.components) add(cmp.tags) } }
+  for (const r of ws.model.relationships) add(r.tags)
+  return Array.from(set).sort()
+}
+
+/** Small sparkle button overlaid on an empty field to fill it via AI. */
+function SuggestButton({ onClick, busy, multiline, title }: { onClick: () => void; busy: boolean; multiline?: boolean; title: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title={title}
+      aria-label={title}
+      style={{
+        position: 'absolute',
+        right: 7,
+        top: multiline ? 7 : '50%',
+        transform: multiline ? 'none' : 'translateY(-50%)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 24, height: 24, borderRadius: 7, border: '1px solid var(--color-border)',
+        background: 'var(--color-surface-3)', color: 'var(--color-accent)', cursor: busy ? 'default' : 'pointer',
+      }}
+    >
+      {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+    </button>
   )
 }
 
@@ -87,6 +131,38 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const typeColor = TYPE_COLORS[element.type] ?? 'var(--color-accent)'
   const safeUrl = element.url ? normalizeSafeExternalUrl(element.url) : null
 
+  // AI auto-suggest: fill empty description / technology fields. Only available
+  // when a key is set and AI is enabled.
+  const { ready: aiReady, provider } = useAiProvider()
+  const [busyField, setBusyField] = useState<string | null>(null)
+  const missingDesc = !element.description?.trim()
+  const missingTech = hasTech && !tech?.trim()
+  const missingTags = element.tags.every((t) => STRUCTURAL_TAGS.has(t))
+  const hasMissing = missingDesc || missingTech || missingTags
+
+  async function suggest(fields: ('description' | 'technology' | 'tags')[]) {
+    if (!provider || !workspace || busyField) return
+    setBusyField(fields.length > 1 ? 'all' : fields[0])
+    try {
+      if (fields.includes('description') && missingDesc) {
+        const r = await autoDescribe(provider, workspace)
+        const hit = r.elements.find((p) => p.id === element.id)
+        if (hit?.description?.trim()) updateElement(element.id, { description: hit.description.trim() })
+      }
+      if (fields.includes('technology') && missingTech) {
+        const plan = await planEdit(provider, workspace, TECH_SUGGEST_INSTRUCTION)
+        const op = plan.operations.find((o) => o.op === 'updateElement' && o.id === element.id && o.technology?.trim())
+        if (op && op.op === 'updateElement' && op.technology) updateTech(element.id, op.technology.trim())
+      }
+      if (fields.includes('tags') && missingTags) {
+        const tags = await suggestTags(provider, { name: element.name, type: element.type, description: element.description, technology: tech }, modelTagVocabulary(workspace))
+        if (tags.length) updateElement(element.id, { tags: Array.from(new Set([...element.tags, ...tags])) })
+      }
+    } catch { /* leave the field empty on failure */ } finally {
+      setBusyField(null)
+    }
+  }
+
   // Find which views contain this element
   const appearsInViews = workspace ? getAllViews(workspace).filter(v =>
     v.elements.some(e => e.id === element.id)
@@ -98,15 +174,28 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   return (
     <div className="flex flex-1 flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'rgba(88,166,255,0.16)' }}>
         <div>
           <div className="text-sm font-semibold">{element.name}</div>
           <div className="text-[11px]" style={{ color: typeColor }}>{getElementTypeLabel(element)}</div>
         </div>
         <div className="flex items-center gap-1">
-          {/* Remove from view — touch-friendly parity with Backspace; hidden on the
-             focal-scope element (can't unproject the element a view is defined by)
-             and when the element isn't actually in the active view. */}
+          {/* When AI is configured + enabled, an "auto-fill missing fields" action
+             is added. The "remove from view" control stays regardless (touch-
+             friendly parity with Backspace; hidden on the focal-scope element and
+             when the element isn't in the active view) so AI users don't lose it. */}
+          {aiReady && (
+            <button
+              onClick={() => suggest(['description', 'technology', 'tags'])}
+              disabled={busyField === 'all' || !hasMissing}
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              aria-label="Auto-fill missing fields with AI"
+              title={hasMissing ? 'Auto-fill missing fields with AI' : 'All fields filled'}
+              style={{ color: 'var(--color-accent)', opacity: hasMissing ? 1 : 0.45 }}
+            >
+              {busyField === 'all' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            </button>
+          )}
           {!isFocal && activeViewKey && appearsInActiveView && (
             <button
               onClick={() => {
@@ -166,7 +255,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
       )}
 
       {/* Tabs */}
-      <div className="flex border-b px-1" style={{ borderColor: 'var(--color-border)' }} role="tablist" aria-label="Element details">
+      <div className="flex border-b px-1" style={{ borderColor: 'rgba(88,166,255,0.16)' }} role="tablist" aria-label="Element details">
         {PANEL_TABS.map(({ id, label }) => (
           <button
             key={id}
@@ -225,12 +314,18 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             {hasTech && (
               <div>
                 <FieldLabel>Technology</FieldLabel>
-                <TechnologyField value={tech ?? ''} scope="element" placeholder="e.g. React, PostgreSQL..." aria-label="Technology" onLiveChange={(v) => updateElementLive(element.id, { technology: v })} onCommit={(v) => updateTech(element.id, v)} />
+                <div style={{ position: 'relative' }}>
+                  <TechnologyField value={tech ?? ''} scope="element" placeholder="e.g. React, PostgreSQL..." aria-label="Technology" onLiveChange={(v) => updateElementLive(element.id, { technology: v })} onCommit={(v) => updateTech(element.id, v)} />
+                  {aiReady && missingTech && <SuggestButton onClick={() => suggest(['technology'])} busy={busyField === 'technology'} title="Suggest a technology with AI" />}
+                </div>
               </div>
             )}
             <div>
               <FieldLabel>Description</FieldLabel>
-              <EditableField value={element.description ?? ''} placeholder="Describe this element..." aria-label="Description" onLiveChange={(v) => updateElementLive(element.id, { description: v || undefined })} onCommit={(v) => updateElement(element.id, { description: v || undefined })} multiline />
+              <div style={{ position: 'relative' }}>
+                <EditableField value={element.description ?? ''} placeholder="Describe this element..." aria-label="Description" onLiveChange={(v) => updateElementLive(element.id, { description: v || undefined })} onCommit={(v) => updateElement(element.id, { description: v || undefined })} multiline />
+                {aiReady && missingDesc && <SuggestButton onClick={() => suggest(['description'])} busy={busyField === 'description'} multiline title="Write a description with AI" />}
+              </div>
             </div>
 
             {/* Status */}
@@ -324,7 +419,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
 
         {activeTab === 'relations' && <ElementRelationsTab elementId={element.id} />}
 
-        {activeTab === 'tags' && <TagsTab tags={element.tags} onUpdate={(tags) => updateElement(element.id, { tags })} />}
+        {activeTab === 'tags' && <TagsTab tags={element.tags} onUpdate={(tags) => updateElement(element.id, { tags })} suggest={aiReady ? { run: () => suggest(['tags']), busy: busyField === 'tags' } : undefined} />}
       </div>
     </div>
   )
@@ -564,41 +659,49 @@ function ElementRelationsTab({ elementId }: { elementId: string }) {
   )
 
   if (rels.length === 0) {
-    return <div className="text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>No relationships</div>
+    return <div className="py-4 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>No relationships yet</div>
   }
 
+  const outgoing = rels.filter((r) => r.sourceId === elementId)
+  // A self-loop (source === destination === this element) matches both filters;
+  // keep it only under Outgoing so it isn't listed (and counted) twice.
+  const incoming = rels.filter((r) => r.destinationId === elementId && r.sourceId !== elementId)
+
+  const row = (rel: Relationship, isSource: boolean) => {
+    const otherId = isSource ? rel.destinationId : rel.sourceId
+    const other = elementMap.get(otherId)
+    const typeColor = other ? (TYPE_COLORS[other.type] ?? 'var(--color-accent)') : 'var(--color-text-muted)'
+    const meta = [rel.description?.trim(), rel.technology?.trim()].filter(Boolean).join(' · ')
+    return (
+      <button
+        key={rel.id}
+        onClick={() => selectRelationship(rel.id)}
+        className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--color-surface-2)]"
+        style={{ border: '1px solid var(--color-border)' }}
+      >
+        <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-surface-2)', color: typeColor }}>
+          {isSource ? <ArrowUpRight size={14} /> : <ArrowDownLeft size={14} />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>{other?.name ?? otherId}</span>
+          <span className="block truncate text-[11px]" style={{ color: 'var(--color-text-muted)', fontStyle: meta ? 'normal' : 'italic' }}>{meta || 'Untyped — no description'}</span>
+        </span>
+        <ChevronRight size={13} className="opacity-0 transition-opacity group-hover:opacity-100" style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+      </button>
+    )
+  }
+
+  const section = (title: string, items: Relationship[], isSource: boolean) => items.length > 0 && (
+    <div>
+      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{title} · {items.length}</div>
+      <div className="space-y-1.5">{items.map((r) => row(r, isSource))}</div>
+    </div>
+  )
+
   return (
-    <div className="space-y-1.5">
-      {rels.map((rel) => {
-        const isSource = rel.sourceId === elementId
-        const otherId = isSource ? rel.destinationId : rel.sourceId
-        const other = elementMap.get(otherId)
-        return (
-          <button
-            key={rel.id}
-            onClick={() => selectRelationship(rel.id)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--color-surface-2)]"
-            style={{ border: '1px solid var(--color-border)' }}
-          >
-            <ArrowRight
-              size={10}
-              style={{
-                color: 'var(--color-text-muted)',
-                flexShrink: 0,
-                transform: isSource ? 'none' : 'rotate(180deg)',
-              }}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                {other?.name ?? otherId}
-              </div>
-              {rel.description && (
-                <div className="truncate" style={{ color: 'var(--color-text-muted)' }}>{rel.description}</div>
-              )}
-            </div>
-          </button>
-        )
-      })}
+    <div className="space-y-3.5">
+      {section('Outgoing', outgoing, true)}
+      {section('Incoming', incoming, false)}
     </div>
   )
 }
@@ -607,8 +710,9 @@ function ElementRelationsTab({ elementId }: { elementId: string }) {
 
 const BUILT_IN_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component', 'Database', 'Relationship'])
 
-function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]) => void }) {
+function TagsTab({ tags, onUpdate, suggest }: { tags: string[]; onUpdate: (tags: string[]) => void; suggest?: { run: () => void; busy: boolean } }) {
   const [newTag, setNewTag] = useState('')
+  const noCustomTags = tags.every((t) => BUILT_IN_TAGS.has(t))
 
   const addTag = useCallback(() => {
     const trimmed = newTag.trim()
@@ -688,6 +792,17 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
           <Plus size={14} />
         </button>
       </div>
+      {suggest && noCustomTags && (
+        <button
+          onClick={suggest.run}
+          disabled={suggest.busy}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold"
+          style={{ borderColor: 'rgba(88,166,255,0.3)', background: 'rgba(88,166,255,0.1)', color: 'var(--color-accent)', cursor: suggest.busy ? 'default' : 'pointer' }}
+        >
+          {suggest.busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+          {suggest.busy ? 'Suggesting…' : 'Suggest tags with AI'}
+        </button>
+      )}
     </div>
   )
 }

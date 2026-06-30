@@ -10,6 +10,8 @@ import {
   duplicateElementsInTree,
   uniqueElementName,
   findViewHelper,
+  appendScopedView,
+  selectCreated,
 } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 
@@ -37,17 +39,14 @@ export const createElementSlice: StateCreator<
       const ws = s.workspace
       const person: Person = { id, type: 'person', name: uniqueElementName(name, ws), tags: ['Element', 'Person'], properties: {}, location: location ?? 'Internal' }
       ws.model.people.push(person)
-      addToCurrentView(ws, s.activeViewKey, id, position)
+      addToCurrentView(ws, s.activeViewKey, id, position, 'person')
       // Auto-add to all system landscape views (they display every person/system)
       for (const v of ws.views.systemLandscapeViews) {
         if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === id)) {
           v.elements.push({ id })
         }
       }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
+      selectCreated(s, id)
     })
     announce('Person created')
     return id
@@ -61,16 +60,13 @@ export const createElementSlice: StateCreator<
       const ws = s.workspace
       const system: SoftwareSystem = { id, type: 'softwareSystem', name: uniqueElementName(name, ws), tags: ['Element', 'Software System'], properties: {}, containers: [], location: location ?? 'Internal' }
       ws.model.softwareSystems.push(system)
-      addToCurrentView(ws, s.activeViewKey, id, position)
+      addToCurrentView(ws, s.activeViewKey, id, position, 'softwareSystem')
       for (const v of ws.views.systemLandscapeViews) {
         if (v.key !== s.activeViewKey && !v.elements.some(e => e.id === id)) {
           v.elements.push({ id })
         }
       }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
+      selectCreated(s, id)
     })
     get().revalidateScope()
     announce('System created')
@@ -89,17 +85,29 @@ export const createElementSlice: StateCreator<
       const tags = extraTag ? ['Element', 'Container', extraTag] : ['Element', 'Container']
       const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
       system.containers.push(container)
-      addToCurrentView(ws, s.activeViewKey, id, position)
-      // Also auto-add to all other container views scoped to the same system
+      // A container belongs ONLY in its own system's container views — never in
+      // the active view if that view is scoped to a different system (that would
+      // render system B's container inside system A's view). Add it to every
+      // container view scoped to THIS system (with the drop position on the
+      // active one); if the system has no container view yet, create and switch
+      // to one so the container isn't stranded invisibly. Matters for AI-applied
+      // ops, which run regardless of the active view.
+      let placed = false
       for (const v of ws.views.containerViews) {
-        if (v.softwareSystemId === systemId && v.key !== s.activeViewKey) {
-          if (!v.elements.some(e => e.id === id)) v.elements.push({ id })
+        if (v.softwareSystemId !== systemId) continue
+        if (!v.elements.some(e => e.id === id)) {
+          v.elements.push(v.key === s.activeViewKey ? { id, x: position?.x, y: position?.y } : { id })
         }
+        placed = true
       }
-      s.focusElementId = id
-      s.selectedElementIds = [id]
-      s.selectedRelationshipId = null
-      s.selectedGroupId = null
+      if (!placed) {
+        const vk = nanoid(8)
+        appendScopedView(ws, 'container', systemId, `${system.name} — Containers`, vk)
+        // During a batch AI apply, don't jump per-op — the panel navigates once
+        // afterwards (focusViewForElements). For a single creation, switch to it.
+        if (!s.batchApplying) s.activeViewKey = vk
+      }
+      selectCreated(s, id)
       added = true
     })
     if (added) {
@@ -121,17 +129,24 @@ export const createElementSlice: StateCreator<
         pushUndoSnapshot(s)
         const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Element', 'Component'], properties: {} }
         container.components.push(comp)
-        addToCurrentView(ws, s.activeViewKey, id, position)
-        // Also auto-add to all other component views scoped to the same container
+        // A component belongs ONLY in its own container's component views (not in
+        // a different container's active view). Add to every component view
+        // scoped to THIS container (position on the active one); if none exists,
+        // create + switch to one so it isn't stranded invisibly (see addContainer).
+        let placed = false
         for (const v of ws.views.componentViews) {
-          if (v.containerId === containerId && v.key !== s.activeViewKey) {
-            if (!v.elements.some(e => e.id === id)) v.elements.push({ id })
+          if (v.containerId !== containerId) continue
+          if (!v.elements.some(e => e.id === id)) {
+            v.elements.push(v.key === s.activeViewKey ? { id, x: position?.x, y: position?.y } : { id })
           }
+          placed = true
         }
-        s.focusElementId = id
-        s.selectedElementIds = [id]
-        s.selectedRelationshipId = null
-        s.selectedGroupId = null
+        if (!placed) {
+          const vk = nanoid(8)
+          appendScopedView(ws, 'component', containerId, `${container.name} — Components`, vk)
+          if (!s.batchApplying) s.activeViewKey = vk
+        }
+        selectCreated(s, id)
         added = true
         return
       }

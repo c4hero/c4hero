@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-29
+
+Adds an optional, bring-your-own-key AI assistant. It stays inert until you enter
+your own provider key; the key never leaves your browser and requests go directly
+to the provider you choose — c4hero never sees your key or your model data.
+
+### Highlights
+
+- **AI assistant (BYOK)** — opt-in, runs entirely against your own key for
+  **Anthropic**, **OpenAI**, or **Google Gemini**. Keys are stored only in this
+  browser and sent only to the chosen provider. See [PRIVACY.md](PRIVACY.md).
+
+### Added
+
+- **Model health** — an instant, deterministic readout of how complete your model
+  is (descriptions, technologies, untyped relationships), with click-to-fix gaps
+  and a 100% celebration.
+- **Improve my model** — one guided flow that fixes the instant missing-info gaps,
+  runs an AI **deep review** (orphans, untyped links, naming/boundary issues), and
+  folds in an **interview** that asks about anything it can't infer. The scope lives
+  in the Improve button (a split caret), grounding the review/questions on the
+  active view or the whole model. Each review fix offers a couple of distinct
+  options to pick from — or write your own — and every change applies as you
+  approve it (model health climbs live), with a revert ledger to undo any single
+  change or all of them.
+- **From your code** — scan a local repository (File System Access API) and
+  propose elements and relationships.
+- **Describe a change** — build or edit the model from a plain-English prompt.
+- **Inspector AI** — per-field auto-suggestions for empty descriptions and
+  technologies, plus vocabulary-constrained tag suggestions.
+- Provider/model settings with sensible balanced-tier defaults and a recommended
+  model per provider; optional voice dictation for assistant inputs where the
+  browser supports the Web Speech API.
+
+### Changed
+
+- The element inspector and the assistant share one screen slot and never overlap
+  — selecting a node closes the assistant, and opening the assistant closes the
+  inspector.
+- The minimap is now off by default.
+- Fit-to-screen now frames group and scope boundaries, not just content.
+
+### Security
+
+- AI is inert until a key is entered; keys live only in `localStorage` and are
+  sent only to the chosen provider's API. The hosted CSP restricts `connect-src`
+  to those three provider domains, and `Permissions-Policy` allows the microphone
+  for the app's own origin only (for dictation).
+
 ## [0.2.0] - 2026-05-19
 
 Initial public release. c4hero is a local-first browser-based visual editor for C4 architecture diagrams that reads and writes Structurizr DSL. Workspaces stay on your device; nothing is uploaded to a c4hero server.
@@ -40,4 +89,5 @@ Initial public release. c4hero is a local-first browser-based visual editor for 
 - Canvas interactions no longer trigger browser-back navigation on Backspace in non-text contexts.
 - Boundary-node E2E selectors now match the per-scope ID format.
 
+[0.3.0]: https://github.com/c4hero/c4hero/releases/tag/v0.3.0
 [0.2.0]: https://github.com/c4hero/c4hero/releases/tag/v0.2.0

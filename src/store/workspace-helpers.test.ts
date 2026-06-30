@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeCascadeImpact } from './workspace-helpers'
+import { computeCascadeImpact, addToCurrentView, viewAllowsElementType } from './workspace-helpers'
 import type { Workspace } from '@/types/model'
 
 function ws(): Workspace {
@@ -95,5 +95,29 @@ describe('computeCascadeImpact', () => {
     expect(impact.elementNames).toHaveLength(0)
     expect(impact.relationships).toBe(0)
     expect(impact.scopedViews).toBe(0)
+  })
+})
+
+describe('view membership rules', () => {
+  it('viewAllowsElementType follows the C4 hierarchy', () => {
+    expect(viewAllowsElementType('systemLandscape', 'container')).toBe(false)
+    expect(viewAllowsElementType('systemLandscape', 'softwareSystem')).toBe(true)
+    expect(viewAllowsElementType('systemContext', 'container')).toBe(false)
+    expect(viewAllowsElementType('container', 'container')).toBe(true)
+    expect(viewAllowsElementType('container', 'component')).toBe(false)
+    expect(viewAllowsElementType('component', 'component')).toBe(true)
+  })
+
+  it('addToCurrentView refuses an element a view cannot hold', () => {
+    const w = ws()
+    // 'land' is a System Landscape view — a container must not be dropped onto it.
+    addToCurrentView(w, 'land', 'c1', undefined, 'container')
+    expect(w.views.systemLandscapeViews[0].elements.some((e) => e.id === 'c1')).toBe(false)
+    // …but a software system is fine.
+    addToCurrentView(w, 'land', 'sysB', undefined, 'softwareSystem')
+    expect(w.views.systemLandscapeViews[0].elements.some((e) => e.id === 'sysB')).toBe(true)
+    // A container view accepts the container.
+    addToCurrentView(w, 'contA', 'c1', undefined, 'container')
+    expect(w.views.containerViews[0].elements.some((e) => e.id === 'c1')).toBe(true)
   })
 })

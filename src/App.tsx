@@ -25,6 +25,7 @@ import { restoreDirHandle, getCurrentDirHandle } from '@/lib/folderIO'
 
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
+const AiPanel = lazy(() => import('@/components/ai/AiPanel'))
 
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -32,6 +33,10 @@ export default function App() {
   const pendingDelete = useWorkspaceStore((s) => s.pendingDelete)
   const cancelDelete = useWorkspaceStore((s) => s.cancelDelete)
   const presentationMode = useWorkspaceStore((s) => s.presentationMode)
+  const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
+  const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
+  const aiSettingsOpen = useWorkspaceStore((s) => s.aiSettingsOpen)
+  const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const navigate = useNavigate()
   const location = useLocation()
@@ -109,6 +114,10 @@ export default function App() {
     )
   }
 
+  // True only when a workspace is open on a canvas route (matches canvasElement's
+  // routes) — used to keep the AI assistant off the welcome/collection screens.
+  const onCanvas = !!workspace && /\/collection\/[^/]+\/[^/]+/.test(location.pathname)
+
   return (
     <>
       <Routes>
@@ -155,6 +164,14 @@ export default function App() {
       {/* Zoom-in confirm — shown when a user clicks zoom on an element with
           no existing child view. Offers fast create or "Customize…" for full control. */}
       <ZoomConfirmDialog />
+
+      {/* BYOK AI assistant — only on the canvas (a workspace open on a canvas
+          route), never on the welcome/collection screens. */}
+      {onCanvas && (aiPanelOpen || aiSettingsOpen) && (
+        <Suspense fallback={<LoadingDot />}>
+          <AiPanel onClose={() => { setAiPanelOpen(false); setAiSettingsOpen(false) }} />
+        </Suspense>
+      )}
     </>
   )
 }
