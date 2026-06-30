@@ -55,6 +55,7 @@ export async function reviewArchitecture(
       title: humanizeIds(f.title, ws),
       detail: humanizeIds(f.detail, ws),
       suggestion: humanizeIds(f.suggestion, ws),
+      options: f.options?.map((o) => ({ ...o, label: humanizeIds(o.label, ws) })),
     }))
     .filter((f) => !isExternalMisplacement(f, internal))
   return { findings }

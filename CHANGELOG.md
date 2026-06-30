@@ -24,11 +24,12 @@ to the provider you choose — c4hero never sees your key or your model data.
   and a 100% celebration.
 - **Improve my model** — one guided flow that fixes the instant missing-info gaps,
   runs an AI **deep review** (orphans, untyped links, naming/boundary issues), and
-  folds in an **interview** that asks about anything it can't infer. A scope toggle
-  grounds the review/questions on the active view or the whole model. Each change
-  applies as you approve it (model health climbs live), with a revert ledger to
-  undo any single change or all of them. (A "Talk it through" side-door keeps the
-  standalone interview.)
+  folds in an **interview** that asks about anything it can't infer. The scope lives
+  in the Improve button (a split caret), grounding the review/questions on the
+  active view or the whole model. Each review fix offers a couple of distinct
+  options to pick from — or write your own — and every change applies as you
+  approve it (model health climbs live), with a revert ledger to undo any single
+  change or all of them.
 - **From your code** — scan a local repository (File System Access API) and
   propose elements and relationships.
 - **Describe a change** — build or edit the model from a plain-English prompt.

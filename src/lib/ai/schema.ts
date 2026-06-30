@@ -1,4 +1,4 @@
-import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding, RepoScanResult, RepoProposal, ScanQuestion, ScanOption } from './types'
+import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding, ReviewFixOption, RepoScanResult, RepoProposal, ScanQuestion, ScanOption } from './types'
 import { isRecord, isStringArray } from '@/lib/guards'
 import { createLogger } from '@/lib/logger'
 
@@ -112,6 +112,16 @@ const findingSchema = {
     suggestion: { type: 'string' },
     // Present only when the finding maps to a concrete model edit.
     operations: { type: 'array', items: opSchema },
+    // A few distinct candidate fixes the user can choose between.
+    options: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { label: { type: 'string' }, operations: { type: 'array', items: opSchema } },
+        required: ['label', 'operations'],
+      },
+    },
   },
   required: ['title', 'detail', 'category', 'severity', 'elementIds', 'suggestion'],
 }
@@ -245,6 +255,14 @@ function toReviewFinding(value: unknown): ReviewFinding | null {
   if (typeof value.title !== 'string' || typeof value.detail !== 'string' || typeof value.suggestion !== 'string') return null
   const severity: ReviewFinding['severity'] = value.severity === 'high' || value.severity === 'low' ? value.severity : 'medium'
   const ops = Array.isArray(value.operations) ? value.operations.filter(isEditOp) : []
+  // Keep only options that have a label and at least one valid operation.
+  const options = Array.isArray(value.options)
+    ? value.options.flatMap((o): ReviewFixOption[] => {
+        if (!isRecord(o) || typeof o.label !== 'string' || !o.label.trim()) return []
+        const oops = Array.isArray(o.operations) ? o.operations.filter(isEditOp) : []
+        return oops.length ? [{ label: o.label, operations: oops }] : []
+      })
+    : []
   return {
     title: value.title,
     detail: value.detail,
@@ -253,6 +271,7 @@ function toReviewFinding(value: unknown): ReviewFinding | null {
     elementIds: isStringArray(value.elementIds) ? value.elementIds : [],
     suggestion: value.suggestion,
     operations: ops.length ? ops : undefined,
+    options: options.length ? options : undefined,
   }
 }
 

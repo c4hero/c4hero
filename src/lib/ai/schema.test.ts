@@ -58,6 +58,21 @@ describe('tolerant sanitizers', () => {
     expect(res.findings[0].operations).toBeUndefined()  // the one bad op was stripped
   })
 
+  it('toReviewResult keeps fix options with a label and at least one valid op', () => {
+    const res = toReviewResult({ findings: [{
+      title: 't', detail: 'd', category: 'boundary', severity: 'high', elementIds: ['e1'], suggestion: 's',
+      operations: [{ op: 'updateElement', id: 'e1', name: 'A' }],
+      options: [
+        { label: 'Make external', operations: [{ op: 'updateElement', id: 'e1', name: 'A' }] },
+        { label: 'No ops here', operations: [{ op: 'bogus' }] },     // dropped — no valid op
+        { label: '', operations: [{ op: 'updateElement', id: 'e1', name: 'B' }] }, // dropped — no label
+      ],
+    }] })
+    expect(res.findings[0].options).toEqual([
+      { label: 'Make external', operations: [{ op: 'updateElement', id: 'e1', name: 'A' }] },
+    ])
+  })
+
   it('toDescribeResult keeps well-formed patches only', () => {
     const res = toDescribeResult({ elements: [{ id: 'a', description: 'x' }, { id: 'b' }], relationships: 'oops' })
     expect(res.elements).toEqual([{ id: 'a', description: 'x' }])

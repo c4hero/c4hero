@@ -63,10 +63,13 @@ it with the `I` shortcut.
 - **Improve my model** — one guided flow that combines three things in a single
   stepper: the instant missing-info fixes, an AI **deep review** (orphans, untyped
   links, naming/boundary issues), and an **interview** that asks about anything the
-  model can't reveal on its own. A scope toggle grounds the review and questions on
-  the active view or the whole model. Each change applies the moment you approve it
-  (model health climbs live), and a revert ledger undoes any single change — or all
-  of them. A "Talk it through" side-door opens the interview on its own.
+  model can't reveal on its own. The scope lives inside the Improve button (a split
+  caret) and grounds the review and questions on the active view or the whole
+  model; review of a view leaves another system's elements shown as external
+  context alone. Each review fix offers a couple of distinct approaches to pick
+  from — or an **Other** box to describe your own, applied through the same edit
+  engine. Every change applies the moment you approve it (model health climbs
+  live), and a revert ledger undoes any single change — or all of them.
 - **From your code** — scan a local repository (File System Access API) and propose
   elements and relationships, asking about anything ambiguous.
 - **Describe a change** — build a new model or edit the current one from a plain-

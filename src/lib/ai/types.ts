@@ -190,6 +190,14 @@ export interface DescribeResult {
 
 export type ReviewSeverity = 'high' | 'medium' | 'low'
 
+/** One concrete way to fix a finding: a short human label plus the operations
+ *  that implement it. A finding may offer a few of these for the user to choose
+ *  between (in addition to a free-text "Other" they can write themselves). */
+export interface ReviewFixOption {
+  label: string
+  operations: EditOp[]
+}
+
 export interface ReviewFinding {
   /** Short summary of the issue. */
   title: string
@@ -206,6 +214,9 @@ export interface ReviewFinding {
   /** Concrete operations that fix this finding, present only when it maps to a
    *  direct model edit. Empty/absent for advisory findings. */
   operations?: EditOp[]
+  /** A few distinct candidate fixes to choose from. When present, the UI shows a
+   *  picker; when absent, `operations` (if any) is treated as the single option. */
+  options?: ReviewFixOption[]
 }
 
 export interface ReviewResult {

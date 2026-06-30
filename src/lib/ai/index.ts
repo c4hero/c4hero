@@ -8,7 +8,7 @@
 export type {
   AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn,
   EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind, AiFeatureId,
-  ReviewResult, ReviewFinding, ReviewSeverity,
+  ReviewResult, ReviewFinding, ReviewFixOption, ReviewSeverity,
   RepoFile, RepoSnapshot, RepoProposal, RepoScanResult, ScanQuestion, ScanOption,
 } from './types'
 export { AiError, aiErrorMessage } from './types'

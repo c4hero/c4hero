@@ -25,7 +25,7 @@ import {
   type MissingGap, type GapKind,
   type AiProvider, type EditActions,
   type EditPlan, type EditOp, type AiFeatureId, type AiChatTurn,
-  type ReviewFinding, type ReviewSeverity, type RepoScanResult, type PlanScope,
+  type ReviewFinding, type ReviewFixOption, type ReviewSeverity, type RepoScanResult, type PlanScope,
 } from '@/lib/ai'
 import { MicButton } from './dictation'
 
@@ -272,6 +272,17 @@ interface FixStep { type: 'fix'; key: string; cat: 'missing'; gap: MissingGap }
 interface FindingStep { type: 'finding'; key: string; cat: 'review'; finding: ReviewFinding }
 type Step = FixStep | FindingStep
 
+/** How the user chose to fix a finding: `idx` indexes its options, or -1 = "Other"
+ *  (a free-text instruction in `other`, run through planEdit at apply time). */
+interface FindingChoice { idx: number; other: string }
+
+/** The candidate fixes for a finding: its explicit `options`, or a single option
+ *  synthesized from its `operations` when the model didn't break out alternatives. */
+function findingOptions(f: ReviewFinding): ReviewFixOption[] {
+  if (f.options?.length) return f.options
+  return f.operations?.length ? [{ label: f.suggestion, operations: f.operations }] : []
+}
+
 // One applied change in the guided flow's revert ledger. We store the forward ops
 // (not an inverse): revert rebuilds the model by replaying the kept entries' ops on
 // top of the pre-sweep baseline, so reversal is always exact regardless of op kind.
@@ -307,6 +318,9 @@ function AppView({
   const [curIdx, setCurIdx] = usePersistentState('sweep.curIdx', 0)
   const [decisions, setDecisions] = usePersistentState<Record<string, StepStatus>>('sweep.decisions', {})
   const [drafts, setDrafts] = usePersistentState<Record<string, string>>('sweep.drafts', {})
+  // Which fix a review finding will apply: an index into its options, or -1 for a
+  // free-text "Other" the user writes. Persisted so a revisited step keeps the pick.
+  const [findingChoice, setFindingChoice] = usePersistentState<Record<string, FindingChoice>>('sweep.findingChoice', {})
   // Apply-as-you-go ledger (chronological): each approved step is applied to the
   // model immediately and recorded here so it can be reverted individually or all
   // at once. `baseline` is the model snapshot before the sweep's first apply —
@@ -322,6 +336,8 @@ function AppView({
   // Transient (in-flight) flags — not worth persisting.
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
+  // True while a finding's free-text "Other" fix is being turned into operations.
+  const [applyBusy, setApplyBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
@@ -384,7 +400,7 @@ function AppView({
     }
   }
 
-  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setError(null) }
+  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setFindingChoice({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setError(null) }
 
   function startSweep(cats: CatId[]) {
     if (!workspace) return
@@ -466,28 +482,40 @@ function AppView({
     while (i < queue.length && next[queue[i].key]) i++
     setCurIdx(i)
   }
-  // The forward ops a step applies — a fix's single update, or a finding's ops.
-  function stepOps(step: Step, draft: string): EditOp[] {
-    return step.type === 'fix'
-      ? (draft.trim() ? [gapToOp(step.gap, draft.trim())] : [])
-      : (step.finding.operations ?? [])
-  }
-  function entryFor(step: Step, draft: string, ops: EditOp[]): LedgerEntry {
-    return {
-      key: step.key,
-      label: step.type === 'fix' ? step.gap.label : step.finding.title,
-      detail: step.type === 'fix' ? (draft.trim() || '(cleared)') : step.finding.suggestion,
-      cat: step.cat, ops,
+  // Resolve the forward ops + ledger detail for the current step. A fix maps its
+  // draft to one update; a finding applies the chosen option's ops, or — for a
+  // free-text "Other" — runs the user's instruction through planEdit. Returns null
+  // when there's nothing to apply (empty draft / empty Other / planEdit failure).
+  async function resolveStep(step: Step): Promise<{ ops: EditOp[]; detail: string } | null> {
+    if (step.type === 'fix') {
+      const v = (drafts[step.key] ?? '').trim()
+      return v ? { ops: [gapToOp(step.gap, v)], detail: v } : null
     }
+    const opts = findingOptions(step.finding)
+    const choice = findingChoice[step.key] ?? { idx: 0, other: '' }
+    if (choice.idx === -1) {
+      const text = choice.other.trim()
+      const ws = useWorkspaceStore.getState().workspace
+      if (!text || !ws) return null
+      setApplyBusy(true)
+      try {
+        const plan = await planEdit(provider, ws, text)
+        return plan.operations.length ? { ops: plan.operations, detail: text } : null
+      } catch (err) { setError(aiErrorMessage(err)); return null }
+      finally { setApplyBusy(false) }
+    }
+    const opt = opts[choice.idx] ?? opts[0]
+    return opt ? { ops: opt.operations, detail: opt.label } : null
   }
-  function applyStep() {
+  async function applyStep() {
     if (!cur) return
     // Mirror the disabled apply button: a fix needs a non-empty draft.
     if (cur.type === 'fix' && !(drafts[cur.key] ?? '').trim()) return
     if (cur.type === 'finding' && !isActionable(cur.finding)) { advance(cur.key, 'dismiss'); return }
-    const ops = stepOps(cur, drafts[cur.key] ?? '')
-    if (!ops.length) { advance(cur.key, 'apply'); return }
-    const entry = entryFor(cur, drafts[cur.key] ?? '', ops)
+    const resolved = await resolveStep(cur)
+    if (!resolved || !resolved.ops.length) { if (resolved) advance(cur.key, 'apply'); return }
+    const { ops, detail } = resolved
+    const entry: LedgerEntry = { key: cur.key, label: cur.type === 'fix' ? cur.gap.label : cur.finding.title, detail, cat: cur.cat, ops }
     if (ledger.some((e) => e.key === cur.key)) {
       // Re-applying a revisited step: rebuild from baseline with this entry swapped
       // in, so the old effect is undone and the new one applied as ONE undo entry.
@@ -617,6 +645,8 @@ function AppView({
                 onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace)) : undefined}
                 onBack={curIdx > 0 ? goBack : undefined}
                 onApply={applyStep} onSkip={skipStep} onRevert={() => revertEntry(cur.key)}
+                choice={findingChoice[cur.key]} onChoice={(c) => setFindingChoice((m) => ({ ...m, [cur.key]: c }))}
+                applyBusy={applyBusy}
               />
               {ledger.length > 0 && (
                 <AppliedBar n={ledger.length} pct={completePct} onReview={() => setCurIdx(queue.length)} />
@@ -838,12 +868,14 @@ function CategoryButton({ icon: Icon, color, iconBg, label, sub, onClick }: { ic
 
 function WizardStep({
   step, idx, total, draft, draftLoading, applied, onDraft, onRewrite, onReveal, onBack, onApply, onSkip, onRevert,
+  choice, onChoice, applyBusy,
 }: {
   step: Step; idx: number; total: number
   draft: string; draftLoading: boolean; applied: boolean
   onDraft: (v: string) => void; onRewrite: () => void; onReveal?: () => void
   onBack?: () => void
   onApply: () => void; onSkip: () => void; onRevert: () => void
+  choice?: FindingChoice; onChoice: (c: FindingChoice) => void; applyBusy: boolean
 }) {
   const cm = CAT[step.cat]
   const CatIcon = cm.icon
@@ -870,7 +902,7 @@ function WizardStep({
 
       {step.type === 'fix'
         ? <FixCard key={step.key} gap={step.gap} draft={draft} draftLoading={draftLoading} applied={applied} onDraft={onDraft} onRewrite={onRewrite} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onRevert={onRevert} />
-        : <FindingCardStep key={step.key} finding={step.finding} applied={applied} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onRevert={onRevert} />}
+        : <FindingCardStep key={step.key} finding={step.finding} applied={applied} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onRevert={onRevert} choice={choice} onChoice={onChoice} applyBusy={applyBusy} />}
     </div>
   )
 }
@@ -918,9 +950,17 @@ function FixCard({ gap, draft, draftLoading, applied, onDraft, onRewrite, onReve
   )
 }
 
-function FindingCardStep({ finding, applied, onReveal, onApply, onSkip, onRevert }: { finding: ReviewFinding; applied: boolean; onReveal?: () => void; onApply: () => void; onSkip: () => void; onRevert: () => void }) {
+function FindingCardStep({ finding, applied, onReveal, onApply, onSkip, onRevert, choice, onChoice, applyBusy }: {
+  finding: ReviewFinding; applied: boolean; onReveal?: () => void
+  onApply: () => void; onSkip: () => void; onRevert: () => void
+  choice?: FindingChoice; onChoice: (c: FindingChoice) => void; applyBusy: boolean
+}) {
   const sev = SEV[finding.severity]
-  const actionable = isActionable(finding)
+  const opts = findingOptions(finding)
+  const actionable = opts.length > 0
+  const sel = choice ?? { idx: 0, other: '' }
+  const otherEmpty = sel.idx === -1 && !sel.other.trim()
+  const pick = (idx: number) => onChoice({ idx, other: sel.other })
   return (
     <div style={{ marginTop: 18, animation: 'c4ai-next .3s cubic-bezier(0.16,1,0.3,1) both' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13 }}>
@@ -931,16 +971,35 @@ function FindingCardStep({ finding, applied, onReveal, onApply, onSkip, onRevert
         </div>
       </div>
       <div style={{ marginTop: 16, fontSize: 14, color: C.text2, lineHeight: 1.55 }}>{finding.detail}</div>
-      <div style={{ marginTop: 14, padding: '13px 15px', borderRadius: 12, background: 'rgba(88,166,255,0.07)', border: '1px solid rgba(88,166,255,0.2)' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>Suggested fix</span>
-        <div style={{ fontSize: 13.5, color: C.text, lineHeight: 1.5, marginTop: 4 }}>{finding.suggestion}</div>
-      </div>
+
+      {actionable ? (
+        <div style={{ marginTop: 14 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>Suggested fix{opts.length > 1 ? ' — pick one' : ''}</span>
+          <div style={{ marginTop: 9, display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {opts.map((o, i) => (
+              <FixOptionRow key={i} label={o.label} selected={sel.idx === i} disabled={applied} onSelect={() => pick(i)} />
+            ))}
+            <FixOptionRow label="Other — describe the fix yourself" selected={sel.idx === -1} disabled={applied} onSelect={() => onChoice({ idx: -1, other: sel.other })} />
+            {sel.idx === -1 && (
+              <textarea value={sel.other} onChange={(e) => onChoice({ idx: -1, other: e.target.value })} disabled={applied}
+                placeholder="e.g. Make ATM an external software system and connect it to the Web App"
+                style={{ width: '100%', resize: 'vertical', minHeight: 80, padding: '11px 13px', borderRadius: 10, border: `1px solid ${C.borderStrong}`, background: C.card, color: C.text, fontSize: 13.5, lineHeight: 1.5, fontFamily: 'inherit' }} />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 14, padding: '13px 15px', borderRadius: 12, background: 'rgba(88,166,255,0.07)', border: '1px solid rgba(88,166,255,0.2)' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>Suggested fix</span>
+          <div style={{ fontSize: 13.5, color: C.text, lineHeight: 1.5, marginTop: 4 }}>{finding.suggestion}</div>
+        </div>
+      )}
+
       {onReveal && <div><RevealLink onClick={onReveal} /></div>}
       <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
         {actionable && (
-          <button onClick={onApply} className="c4ai-pri"
-            style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: applied ? C.green : C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
-            <Check size={16} /> {applied ? 'Applied' : 'Apply fix'}
+          <button onClick={onApply} disabled={applyBusy || (!applied && otherEmpty)} className="c4ai-pri"
+            style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: applied ? C.green : C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: applyBusy || (!applied && otherEmpty) ? 'default' : 'pointer', opacity: applyBusy || (!applied && otherEmpty) ? 0.55 : 1 }}>
+            {applyBusy ? <><Loader2 size={16} className="animate-spin" /> Applying…</> : <><Check size={16} /> {applied ? 'Applied · update' : 'Apply fix'}</>}
           </button>
         )}
         {applied
@@ -948,6 +1007,20 @@ function FindingCardStep({ finding, applied, onReveal, onApply, onSkip, onRevert
           : <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>}
       </div>
     </div>
+  )
+}
+
+/** A single radio-style choice row in a finding's fix picker. */
+function FixOptionRow({ label, selected, disabled, onSelect }: { label: string; selected: boolean; disabled: boolean; onSelect: () => void }) {
+  return (
+    <button onClick={onSelect} disabled={disabled} role="radio" aria-checked={selected}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: disabled ? 'default' : 'pointer',
+        background: selected ? 'rgba(88,166,255,0.1)' : C.card, border: `1px solid ${selected ? C.borderStrong : C.border}`, color: selected ? C.text : C.text2, fontSize: 13, fontWeight: selected ? 600 : 500, opacity: disabled && !selected ? 0.6 : 1 }}>
+      <span style={{ width: 16, height: 16, flex: 'none', borderRadius: '50%', border: `2px solid ${selected ? C.accent : C.muted3}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {selected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.accent }} />}
+      </span>
+      <span style={{ flex: 1, minWidth: 0, lineHeight: 1.4 }}>{label}</span>
+    </button>
   )
 }
 
