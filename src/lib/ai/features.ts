@@ -16,7 +16,7 @@ import {
   toDescribeResult, toEditPlan, toReviewResult, toRepoProposals, toScanQuestions,
 } from './schema'
 import { extractDsl } from './dsl'
-import { mergeRepoProposals, resolvePassRefsToNames } from './repoScan'
+import { mergeRepoProposals, namespacePassRefs } from './repoScan'
 
 // Feature orchestration. Each function takes a provider (injected, so tests use a
 // fake) plus inputs, and returns parsed/validated results. No store access here —
@@ -206,10 +206,11 @@ export async function scanRepo(
     // Every pass failed — surface the real error (auth, connection, …).
     throw (settled[0] as PromiseRejectedResult).reason
   }
-  // Resolve each pass's temporary refs to names BEFORE merging, so two passes'
+  // Namespace each pass's temporary refs BEFORE merging, so two passes'
   // independently-numbered refs (both "s1", "c1", …) can't collide in
-  // applyEditPlan and mis-parent containers onto the wrong system.
-  const elements = mergeRepoProposals(ok.flatMap((s) => resolvePassRefsToNames(s.value)))
+  // applyEditPlan and mis-parent containers. mergeRepoProposals canonicalizes
+  // the namespaced refs as it dedupes.
+  const elements = mergeRepoProposals(ok.flatMap((s, i) => namespacePassRefs(s.value, `p${i}_`)))
 
   // Phase 2 — connections + questions over the discovered elements.
   const conn = await provider.completeJson({

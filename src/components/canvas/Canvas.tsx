@@ -690,19 +690,23 @@ export default function Canvas() {
     return () => cancelAnimationFrame(raf)
   }, [focusElementId, focusZoom, clearFocusElement, reactFlowInstance])
 
-  // Relationship reveal highlight: the edge pulses while focusRelationshipId is
-  // set, then we clear it (matching the CSS pulse duration). Guard the clear so
-  // a newer reveal isn't clobbered by an older timer.
+  // Relationship reveal highlight: the edge clears focusRelationshipId itself
+  // when its pulse animation ends (so timing tracks the actual mount, even after
+  // a view switch). This is only a BACKSTOP — clear it after a generous window
+  // in case the edge never mounts (e.g. the relationship isn't on the resolved
+  // view), so a stale id can't make some other edge pulse later. Keyed on the
+  // nonce too, so a repeat reveal re-arms the backstop.
   const focusRelationshipId = useWorkspaceStore((s) => s.focusRelationshipId)
+  const focusRelationshipNonce = useWorkspaceStore((s) => s.focusRelationshipNonce)
   useEffect(() => {
     if (!focusRelationshipId) return
     const t = setTimeout(() => {
       if (useWorkspaceStore.getState().focusRelationshipId === focusRelationshipId) {
         useWorkspaceStore.setState({ focusRelationshipId: null })
       }
-    }, 1800)
+    }, 4000)
     return () => clearTimeout(t)
-  }, [focusRelationshipId])
+  }, [focusRelationshipId, focusRelationshipNonce])
 
   // Suppress inspector opening during drag (works on touch too).
   // onSelectionChange fires at touch-start before any movement, so we schedule

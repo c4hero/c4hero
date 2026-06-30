@@ -1,4 +1,4 @@
-import type { RepoFile, RepoSnapshot, RepoProposal } from './types'
+import type { RepoFile, RepoSnapshot, RepoProposal, EditOp } from './types'
 import { editOpRank } from './operations'
 
 // Read a local repository through the File System Access API and reduce it to a
@@ -49,12 +49,14 @@ const SECRET_KEY_PART = [
 
 const SECRET_KEY_RE = new RegExp(`(?:^|[._-])(?:${SECRET_KEY_PART})(?:$|[._-])`, 'i')
 // Match `key = value` / `key: value` anywhere on a line, not just line-leading —
-// inline and minified secrets (`{ "password": "x" }`, `a: b, token: y`) have a
-// non-key token before the key, so an `^`-anchored pattern missed them and let
+// inline and minified secrets (`{ "password": "x" }`, `mode=dev;password=y`) have
+// a non-key token before the key, so an `^`-anchored pattern missed them and let
 // the credential through. `lead` is the delimiter before the key (start-of-line,
-// whitespace, `{`, or `,`); the value stops at a quote close or the next
-// structural delimiter so we don't over-consume an unrelated trailing pair.
-const ASSIGNMENT_RE = /(^|[\s{,])((?:export[ \t]+)?["']?)([\w.-]+)(["']?[ \t]*[:=][ \t]*)("(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)*'|[^\s,}\])\r\n]*)/gim
+// whitespace, `{`, `,`, or `;`). The unquoted value runs to the next PAIR
+// separator (`;` `,` `}` `]` `)` newline) — it keeps spaces so a multi-word or
+// unterminated-quote secret is redacted whole, but stops at `;`/`,`/`}` so a
+// non-secret key can't swallow a following secret pair on the same line.
+const ASSIGNMENT_RE = /(^|[\s{,;])((?:export[ \t]+)?["']?)([\w.-]+)(["']?[ \t]*[:=][ \t]*)("(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)*'|[^{};,\])\r\n]*)/gim
 const PRIVATE_KEY_BLOCK_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))/g
 const ASSIGNED_PRIVATE_KEY_BLOCK_RE = /^([ \t-]*(?:export[ \t]+)?["']?[\w.-]*private[-_]?key[\w.-]*["']?[ \t]*[:=][ \t]*)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))/gim
 
@@ -216,46 +218,74 @@ function proposalKey(p: RepoProposal): string {
   }
 }
 
-/** Within one scan pass, rewrite each container/component parent (and each
- *  relationship endpoint) that points at a temporary ref to the referenced
- *  element's NAME instead. Each pass numbers its refs independently ("s1", "c1",
- *  …), so carrying raw refs across the merge lets two passes' "s1" collide in
- *  applyEditPlan's refMap — every later op resolves to whichever system was
- *  registered last, parenting containers onto the wrong system (or dropping
- *  them). Names are stable across passes, dedupe correctly in proposalKey, and
- *  resolve back to the right element by name. Tokens that aren't a ref defined
- *  in THIS pass (real ids, plain names) are left untouched. */
-export function resolvePassRefsToNames(proposals: RepoProposal[]): RepoProposal[] {
-  const refName = new Map<string, string>()
+/** Prefix one scan pass's temporary refs — and the in-pass parent/endpoint refs
+ *  that point at them — so they can't collide with another pass's identically
+ *  numbered refs. Each pass numbers refs independently ("s1", "c1", …); without
+ *  this, two passes' "s1" map to the same applyEditPlan refMap entry and
+ *  mis-parent containers onto whichever system registered last. Tokens that
+ *  aren't a ref defined in THIS pass (real ids, plain names) are left untouched.
+ *  mergeRepoProposals then canonicalizes these namespaced refs as it dedupes, so
+ *  a child whose parent is a duplicate still resolves to the surviving twin —
+ *  and a parent ref always points at the freshly-created element, never at a
+ *  pre-existing same-named one (which by-name resolution would have mis-hit). */
+export function namespacePassRefs(proposals: RepoProposal[], prefix: string): RepoProposal[] {
+  const defined = new Set<string>()
   for (const { op } of proposals) {
-    if ('ref' in op && op.ref && 'name' in op && op.name) refName.set(op.ref, op.name)
+    if ('ref' in op && op.ref) defined.add(op.ref)
   }
-  if (!refName.size) return proposals
-  const deref = (t: string): string => refName.get(t) ?? t
+  if (!defined.size) return proposals
+  const ns = (t: string): string => (defined.has(t) ? `${prefix}${t}` : t)
   return proposals.map((p) => {
     const op = { ...p.op }
-    if (op.op === 'addContainer' || op.op === 'addComponent') op.parent = deref(op.parent)
-    else if (op.op === 'addRelationship') { op.source = deref(op.source); op.destination = deref(op.destination) }
+    if ('ref' in op && op.ref) op.ref = `${prefix}${op.ref}`
+    if (op.op === 'addContainer' || op.op === 'addComponent') op.parent = ns(op.parent)
+    else if (op.op === 'addRelationship') { op.source = ns(op.source); op.destination = ns(op.destination) }
     return { ...p, op }
   })
+}
+
+// Rewrite an op's parent/endpoint ref tokens through the canonical-ref map, so a
+// child whose parent (or a relationship whose endpoint) was deduped away points
+// at the surviving twin instead. Returns the same op object when nothing changes.
+function remapOpRefs(op: EditOp, canonical: Map<string, string>): EditOp {
+  if (!canonical.size) return op
+  const map = (t: string): string => canonical.get(t) ?? t
+  if (op.op === 'addContainer' || op.op === 'addComponent') return { ...op, parent: map(op.parent) }
+  if (op.op === 'addRelationship') return { ...op, source: map(op.source), destination: map(op.destination) }
+  return op
 }
 
 /** Merge proposals from one or more scan passes into a deduped, deterministically
  *  ordered set — the union, so multiple passes converge on a stable, complete
  *  result rather than whatever a single (sampled) pass happened to return.
- *  Ordered parents-before-children so applyEditPlan can resolve every parent. */
+ *  Processed (and emitted) parents-before-children so applyEditPlan can resolve
+ *  every parent, and so a creator op is deduped before its children: when one is
+ *  dropped as a duplicate its ref is aliased to the kept twin and children are
+ *  rewritten onto it. */
 export function mergeRepoProposals(proposals: RepoProposal[]): RepoProposal[] {
-  const byKey = new Map<string, RepoProposal>()
-  for (const p of proposals) {
-    const k = proposalKey(p)
-    if (!byKey.has(k)) byKey.set(k, p)
-  }
-  return [...byKey.values()].sort((a, b) => {
+  // Deterministic processing order: rank, then a stable key — independent of the
+  // input order, so the merge is order-independent. Handling parents (rank 0/1)
+  // before children means `canonical` is populated before a child's parent ref
+  // is remapped and keyed.
+  const ordered = [...proposals].sort((a, b) => {
     const r = editOpRank(a.op) - editOpRank(b.op)
     if (r !== 0) return r
-    // Stable tie-break within a rank for deterministic output.
-    const ka = proposalKey(a)
-    const kb = proposalKey(b)
+    const ka = proposalKey(a), kb = proposalKey(b)
     return ka < kb ? -1 : ka > kb ? 1 : 0
   })
+  const canonical = new Map<string, string>() // deduped ref → kept ref
+  const byKey = new Map<string, RepoProposal>()
+  for (const p of ordered) {
+    const op = remapOpRefs(p.op, canonical)
+    const remapped = op === p.op ? p : { ...p, op }
+    const k = proposalKey(remapped)
+    const kept = byKey.get(k)
+    if (kept) {
+      // Duplicate: alias this op's ref to the kept twin so its children resolve.
+      if ('ref' in op && op.ref && 'ref' in kept.op && kept.op.ref) canonical.set(op.ref, kept.op.ref)
+      continue
+    }
+    byKey.set(k, remapped)
+  }
+  return [...byKey.values()]
 }

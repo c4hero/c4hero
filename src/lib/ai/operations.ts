@@ -51,6 +51,14 @@ export function editOpRank(op: EditOp): number {
   }
 }
 
+// Optional string fields aren't type-checked by isEditOp (the JSON sanitizer only
+// validates ids/refs/names), so a malformed value like `description: 5` would
+// otherwise throw at `.trim()` and abort the ENTIRE apply. Coerce defensively:
+// keep non-empty trimmed strings, drop anything else (number, null, object).
+function optStr(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined
+}
+
 /** Apply each operation in dependency order, resolving refs to real ids. Invalid
  *  ops (unknown parent, missing element, empty name) are skipped, not fatal. */
 export function applyEditPlan(
@@ -121,7 +129,8 @@ export function applyEditPlan(
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addPerson(op.name.trim())
         register(op.ref, id, op.name)
-        if (op.description?.trim()) actions.updateElement(id, { description: op.description.trim() })
+        const desc = optStr(op.description)
+        if (desc) actions.updateElement(id, { description: desc })
         ok(op)
         break
       }
@@ -131,7 +140,8 @@ export function applyEditPlan(
         register(op.ref, id, op.name)
         systemIds.add(id)
         if (op.external) externalSystemIds.add(id)
-        if (op.description?.trim()) actions.updateElement(id, { description: op.description.trim() })
+        const desc = optStr(op.description)
+        if (desc) actions.updateElement(id, { description: desc })
         ok(op)
         break
       }
@@ -144,9 +154,8 @@ export function applyEditPlan(
         const id = actions.addContainer(parentId, op.name.trim())
         register(op.ref, id, op.name)
         containerIds.add(id)
-        if (op.description?.trim() || op.technology?.trim()) {
-          actions.updateElement(id, { description: op.description?.trim(), technology: op.technology?.trim() })
-        }
+        const desc = optStr(op.description), tech = optStr(op.technology)
+        if (desc || tech) actions.updateElement(id, { description: desc, technology: tech })
         ok(op)
         break
       }
@@ -157,9 +166,8 @@ export function applyEditPlan(
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addComponent(parentId, op.name.trim())
         register(op.ref, id, op.name)
-        if (op.description?.trim() || op.technology?.trim()) {
-          actions.updateElement(id, { description: op.description?.trim(), technology: op.technology?.trim() })
-        }
+        const desc = optStr(op.description), tech = optStr(op.technology)
+        if (desc || tech) actions.updateElement(id, { description: desc, technology: tech })
         ok(op)
         break
       }
@@ -176,9 +184,9 @@ export function applyEditPlan(
       case 'updateElement': {
         if (!validIds.has(op.id)) { skip(op, 'element not found'); break }
         actions.updateElement(op.id, {
-          name: op.name?.trim() || undefined,
-          description: op.description?.trim() || undefined,
-          technology: op.technology?.trim() || undefined,
+          name: optStr(op.name),
+          description: optStr(op.description),
+          technology: optStr(op.technology),
           // Guard the value — isEditOp doesn't type-check it, so a bogus string
           // from the model must not reach the store.
           location: op.location === 'External' || op.location === 'Internal' ? op.location : undefined,
@@ -189,8 +197,8 @@ export function applyEditPlan(
       case 'updateRelationship': {
         if (!relIds.has(op.id)) { skip(op, 'relationship not found'); break }
         actions.updateRelationship(op.id, {
-          description: op.description?.trim() || undefined,
-          technology: op.technology?.trim() || undefined,
+          description: optStr(op.description),
+          technology: optStr(op.technology),
         })
         ok(op)
         break

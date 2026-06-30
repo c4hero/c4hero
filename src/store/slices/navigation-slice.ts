@@ -34,7 +34,7 @@ function clearHighlightFiltersWithStash(s: WorkspaceState): boolean {
 export type NavigationSlice = Pick<WorkspaceState,
   | 'activeViewKey' | 'viewHistory'
   | 'pendingZoomConfirm' | 'createViewDefaults'
-  | 'focusElementId' | 'focusZoom' | 'focusRelationshipId' | 'clearFocusElement'
+  | 'focusElementId' | 'focusZoom' | 'focusRelationshipId' | 'focusRelationshipNonce' | 'clearFocusElement'
   | 'setActiveView' | 'drillInto' | 'zoomInto'
   | 'confirmZoomCreate' | 'cancelZoomConfirm' | 'openCreateViewFromZoom'
   | 'setCreateViewDefaults' | 'navigateBack' | 'focusViewForElements'
@@ -53,6 +53,7 @@ export const createNavigationSlice: StateCreator<
   focusElementId: null,
   focusZoom: null,
   focusRelationshipId: null,
+  focusRelationshipNonce: 0,
 
   clearFocusElement: () => set({ focusElementId: null, focusZoom: null }),
 

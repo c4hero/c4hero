@@ -55,10 +55,14 @@ export function fitContentNodesToViewport(
   // even before React Flow remeasures, so the diagram still frames correctly.
   // (This differs intentionally from the canvas's on-view-change auto-fit, which
   // frames content tightly; "Fit to screen" deliberately also shows boundaries.)
-  const nodes = reactFlow.getNodes().filter(
+  const all = reactFlow.getNodes()
+  const nodes = all.filter(
     (n) => isContentFitNode(n) || (n.measured?.width != null && n.measured?.height != null),
   )
-  return fitNodesToViewport(reactFlow, nodes, options)
+  // If filtering left nothing (e.g. an empty scoped view whose only node is a
+  // not-yet-measured boundary), fall back to all nodes so the fit still runs
+  // rather than silently no-op'ing.
+  return fitNodesToViewport(reactFlow, nodes.length ? nodes : all, options)
 }
 
 export function fitNodesToViewport(

@@ -80,8 +80,12 @@ export interface WorkspaceState extends UndoState {
   focusZoom: number | null
   // Relationship reveal — set to a relationship id so "Show in diagram" frames
   // BOTH of its endpoints (centering the edge between them) and pulses a
-  // highlight on the edge. Auto-cleared by the canvas after the pulse.
+  // highlight on the edge. Cleared when the edge's pulse animation ends (with a
+  // canvas backstop). `focusRelationshipNonce` bumps on every reveal so clicking
+  // the SAME relationship again re-triggers the pulse (the id alone wouldn't
+  // change, so nothing would re-fire).
   focusRelationshipId: string | null
+  focusRelationshipNonce: number
   clearFocusElement: () => void
 
   // Canvas settings

@@ -730,10 +730,21 @@ function revealInDiagram(ws: Workspace, ids: string[], relationshipId: string | 
   const view = views.find((v) => real.every((id) => v.elements.some((e) => e.id === id)))
     ?? views.find((v) => v.elements.some((e) => real.includes(e.id)))
   if (view) s.setActiveView(view.key)
+  // Focus an id that is actually ON the chosen view — for a relationship whose
+  // endpoints don't share a view, the fallback view may hold only the
+  // destination, so pinning real[0] (the source) would never resolve and the
+  // canvas would frame nothing. Fall back to real[0] when no view was found.
+  const focusId = (view && real.find((id) => view.elements.some((e) => e.id === id))) ?? real[0]
   // Pan AND zoom in rather than select, so the AI panel stays open (selecting
   // opens the inspector, which now closes the panel). focusZoom tells the canvas
-  // to zoom-to-fit (capped) instead of merely panning.
-  useWorkspaceStore.setState({ focusElementId: real[0], focusZoom: 1.4, focusRelationshipId: relationshipId })
+  // to zoom-to-fit (capped) instead of merely panning. Bump the pulse nonce so a
+  // repeat reveal of the SAME relationship re-triggers its highlight animation.
+  useWorkspaceStore.setState((st) => ({
+    focusElementId: focusId,
+    focusZoom: 1.4,
+    focusRelationshipId: relationshipId,
+    focusRelationshipNonce: relationshipId ? st.focusRelationshipNonce + 1 : st.focusRelationshipNonce,
+  }))
 }
 
 function RevealLink({ onClick }: { onClick: () => void }) {

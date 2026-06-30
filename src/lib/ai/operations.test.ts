@@ -280,3 +280,32 @@ describe('describeOps — every op kind', () => {
     expect(lines[4]).toContain('relationship')
   })
 })
+
+describe('applyEditPlan — malformed optional fields are dropped, not fatal', () => {
+  it('does not throw when an optional string field is a non-string, and skips it', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    // isEditOp only validates the id for updates, so a non-string `description`
+    // can reach the applier. It must not crash the whole apply at `.trim()`.
+    const plan = { operations: [
+      { op: 'updateElement', id: 'web', description: 5, name: 'Renamed' },
+      { op: 'updateElement', id: 'cart', description: 'real description' },
+    ] } as unknown as EditPlan
+    expect(() => applyEditPlan(plan, actions, ws)).not.toThrow()
+    // The bad field is dropped but the valid one (name) still applies.
+    expect(actions.updateElement).toHaveBeenCalledWith('web', expect.objectContaining({ name: 'Renamed', description: undefined }))
+    expect(actions.updateElement).toHaveBeenCalledWith('cart', expect.objectContaining({ description: 'real description' }))
+  })
+
+  it('does not throw when an add op carries a non-string description', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const plan = { operations: [
+      { op: 'addSoftwareSystem', ref: 's', name: 'New Sys', description: { nope: true } },
+    ] } as unknown as EditPlan
+    expect(() => applyEditPlan(plan, actions, ws)).not.toThrow()
+    expect(actions.addSoftwareSystem).toHaveBeenCalledWith('New Sys', undefined)
+    // No description update fired (the bad value was dropped).
+    expect(actions.updateElement).not.toHaveBeenCalled()
+  })
+})

@@ -3,9 +3,14 @@ import type { ReviewResult, ReviewFinding } from './types'
 // Pure helpers for the structured Review result: a markdown rendering (for the
 // Copy/share button) and the actionable-finding check. Unit-tested.
 
-/** True when a finding carries concrete operations that can be applied. */
+/** True when a finding carries concrete operations that can be applied — either
+ *  top-level `operations` or any `options` entry with operations. Must mirror
+ *  findingOptions in the panel: it offers option-based fixes too, so a finding
+ *  with only `options` is still actionable and must not be auto-dismissed. */
 export function isActionable(finding: ReviewFinding): boolean {
-  return Array.isArray(finding.operations) && finding.operations.length > 0
+  if (Array.isArray(finding.operations) && finding.operations.length > 0) return true
+  return Array.isArray(finding.options)
+    && finding.options.some((o) => Array.isArray(o.operations) && o.operations.length > 0)
 }
 
 const SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }

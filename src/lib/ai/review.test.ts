@@ -15,6 +15,14 @@ describe('isActionable', () => {
     expect(isActionable(finding({ operations: [] }))).toBe(false)
     expect(isActionable(finding({}))).toBe(false)
   })
+
+  it('counts option-only findings (options carrying operations) as actionable', () => {
+    // The panel renders fix choices from options even with no top-level
+    // operations, so applyStep must not auto-dismiss these.
+    expect(isActionable(finding({ options: [{ label: 'Fix A', operations: [{ op: 'deleteElement', id: 'x' }] }] }))).toBe(true)
+    // Options present but none carry operations → not actionable.
+    expect(isActionable(finding({ options: [{ label: 'Empty', operations: [] }] }))).toBe(false)
+  })
 })
 
 describe('sortedFindings', () => {
