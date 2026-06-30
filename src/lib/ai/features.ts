@@ -1,5 +1,5 @@
 import type { Workspace, View } from '@/types/model'
-import type { AiProvider, DescribeResult, EditPlan, ReviewResult, RepoScanResult, RepoProposal, AiChatTurn } from './types'
+import type { AiProvider, DescribeResult, EditPlan, ReviewResult, ReviewFinding, RepoScanResult, RepoProposal, AiChatTurn } from './types'
 import {
   generateSystem, generateUser, reviewSystem, reviewUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
@@ -9,6 +9,7 @@ import {
 import { isRecord } from '@/lib/guards'
 import {
   elementsMissingDescription, relationshipsMissingDescription,
+  viewScopeInternalIds, humanizeIds,
 } from './context'
 import {
   describeSchema, editSchema, reviewSchema, repoScanSchema, connectionsSchema,
@@ -44,7 +45,30 @@ export async function reviewArchitecture(
     validate: isRecord,
     maxTokens: 6000,
   })
-  return toReviewResult(raw)
+  // Humanize ids in the prose, and (for a scoped review) drop boundary findings
+  // that only complain about elements which are intentionally external to the
+  // view's scope — another system's container shown as context is valid C4.
+  const internal = view ? viewScopeInternalIds(ws, view) : new Set<string>()
+  const findings = toReviewResult(raw).findings
+    .map((f) => ({
+      ...f,
+      title: humanizeIds(f.title, ws),
+      detail: humanizeIds(f.detail, ws),
+      suggestion: humanizeIds(f.suggestion, ws),
+    }))
+    .filter((f) => !isExternalMisplacement(f, internal))
+  return { findings }
+}
+
+/** A "boundary" finding whose every referenced element is external to the view's
+ *  scope — i.e. it's objecting to an external context element merely being shown.
+ *  That's intentional C4, so we suppress it. Never fires when the scope is empty
+ *  (whole-model review or a landscape view with no boundary). */
+function isExternalMisplacement(f: ReviewFinding, internalIds: Set<string>): boolean {
+  return internalIds.size > 0
+    && f.category === 'boundary'
+    && f.elementIds.length > 0
+    && f.elementIds.every((id) => !internalIds.has(id))
 }
 
 /** Auto-describe → returns validated descriptions for missing-description ids. */

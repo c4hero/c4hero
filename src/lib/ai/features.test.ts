@@ -72,6 +72,36 @@ describe('reviewArchitecture', () => {
     expect(findings[1]).toMatchObject({ severity: 'medium', category: 'other', elementIds: [] })
     expect(findings[1].operations).toBeUndefined()
   })
+
+  it('humanizes raw ids in the prose using element names', async () => {
+    const provider = makeProvider({ json: { findings: [
+      { title: "web ('Web App') is undescribed", detail: 'The db needs a description.', suggestion: 'Describe web', severity: 'low', category: 'description', elementIds: ['web'] },
+    ] } })
+    const { findings } = await reviewArchitecture(provider, makeWorkspace())
+    expect(findings[0].title).toBe('Web App is undescribed')
+    expect(findings[0].detail).toBe('The Database needs a description.')
+    expect(findings[0].suggestion).toBe('Describe Web App')
+  })
+
+  it('drops a boundary finding about an element external to the scoped view', async () => {
+    const view = { type: 'container' as const, key: 'c', softwareSystemId: 'shop', elements: [{ id: 'web' }, { id: 'cust' }], relationships: [] }
+    const provider = makeProvider({ json: { findings: [
+      // 'cust' is external to Shop's scope → this misplacement complaint is suppressed.
+      { title: 'Customer placed wrong', detail: 'd', suggestion: 's', severity: 'high', category: 'boundary', elementIds: ['cust'] },
+      // a boundary finding touching an in-scope element survives.
+      { title: 'Web App boundary', detail: 'd', suggestion: 's', severity: 'high', category: 'boundary', elementIds: ['web'] },
+    ] } })
+    const { findings } = await reviewArchitecture(provider, makeWorkspace(), view)
+    expect(findings.map((f) => f.title)).toEqual(['Web App boundary'])
+  })
+
+  it('keeps boundary findings when reviewing the whole model (no scope)', async () => {
+    const provider = makeProvider({ json: { findings: [
+      { title: 'Customer placed wrong', detail: 'd', suggestion: 's', severity: 'high', category: 'boundary', elementIds: ['cust'] },
+    ] } })
+    const { findings } = await reviewArchitecture(provider, makeWorkspace())
+    expect(findings).toHaveLength(1)
+  })
 })
 
 describe('planEdit', () => {

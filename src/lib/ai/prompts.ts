@@ -58,8 +58,9 @@ export function reviewSystem(): string {
     '- operations: when (and only when) the finding can be fixed by a direct edit to the model,',
     '  include the operations that implement the fix (format below). For advisory findings',
     '  (process, open questions, practices that do not change the diagram), omit operations.',
-    'Order findings by severity (high first). Be specific and reference real element ids. If the',
-    'model looks complete, return an empty findings list.',
+    'Order findings by severity (high first). Put real element ids ONLY in `elementIds` and in',
+    'operations — in `title`, `detail`, and `suggestion`, refer to elements by NAME, never echo a',
+    'raw id. If the model looks complete, return an empty findings list.',
     '',
     'Operation format (used only inside a finding\'s `operations`):',
     editSystem(),
@@ -73,6 +74,8 @@ export function reviewUser(ws: Workspace, view?: View | null): string {
     return [
       `Review only the ${viewLabel(view)} — the elements and relationships shown on this screen.`,
       'Findings and operations should concern this view; do not critique unrelated parts of the model.',
+      'Elements marked EXTERNAL belong to another system/container and are shown only as context;',
+      'their presence here is intentional — do not report them as misplaced or wrongly-parented.',
       '',
       serializeViewContext(ws, view),
     ].join('\n')

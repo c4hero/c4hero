@@ -35,6 +35,7 @@ export {
   serializeContext, serializeViewContext, viewLabel,
   flattenElements, elementIdSet, elementNameMap,
   elementsMissingDescription, relationshipsMissingDescription,
+  viewScopeInternalIds, humanizeIds,
 } from './context'
 
 export { extractDsl, stripCodeFence } from './dsl'

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   flattenElements, elementIdSet, elementNameMap, serializeContext,
   elementsMissingDescription, relationshipsMissingDescription,
-  serializeViewContext, viewLabel,
+  serializeViewContext, viewLabel, viewScopeInternalIds, humanizeIds,
 } from './context'
 import { makeWorkspace } from './testFixture'
 import type { View } from '@/types/model'
@@ -86,5 +86,45 @@ describe('viewLabel / serializeViewContext', () => {
   it('reports an empty view', () => {
     const empty: View = { type: 'systemLandscape', key: 'l', elements: [], relationships: [] }
     expect(serializeViewContext(makeWorkspace(), empty)).toContain('the view is empty')
+  })
+
+  it('marks elements outside the scope as EXTERNAL context', () => {
+    // A container view of Shop that also shows the Customer (external to Shop).
+    const v: View = {
+      type: 'container', key: 'c', softwareSystemId: 'shop',
+      elements: [{ id: 'web' }, { id: 'cust' }], relationships: [],
+    }
+    const text = serializeViewContext(makeWorkspace(), v)
+    expect(text).toContain('NOTE: elements marked EXTERNAL')
+    expect(text).toMatch(/web \| container \| Web App \|.*\| in-scope/)
+    expect(text).toMatch(/cust \| person \| Customer \|.*\| EXTERNAL/)
+  })
+})
+
+describe('viewScopeInternalIds', () => {
+  it('admits the scope system and its descendants, excludes others', () => {
+    const v: View = { type: 'container', key: 'c', softwareSystemId: 'shop', elements: [], relationships: [] }
+    const ids = viewScopeInternalIds(makeWorkspace(), v)
+    expect(ids.has('shop')).toBe(true)
+    expect(ids.has('web')).toBe(true)
+    expect(ids.has('cart')).toBe(true) // component of an in-scope container
+    expect(ids.has('db')).toBe(true)
+    expect(ids.has('cust')).toBe(false) // external person
+  })
+
+  it('is empty for a view with no scope element (no boundary)', () => {
+    const v: View = { type: 'systemLandscape', key: 'l', elements: [], relationships: [] }
+    expect(viewScopeInternalIds(makeWorkspace(), v).size).toBe(0)
+  })
+})
+
+describe('humanizeIds', () => {
+  const ws = makeWorkspace()
+  it('replaces raw ids with names and collapses redundant "Name (Name)" pairs', () => {
+    expect(humanizeIds("web ('Web App') connects to db", ws)).toBe('Web App connects to Database')
+    expect(humanizeIds('The container web is fine', ws)).toBe('The container Web App is fine')
+  })
+  it('does not rewrite ids embedded in ordinary words', () => {
+    expect(humanizeIds('Visit the website for db docs', ws)).toBe('Visit the website for Database docs')
   })
 })

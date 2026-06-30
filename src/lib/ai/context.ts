@@ -48,6 +48,33 @@ export function elementNameMap(ws: Workspace): Map<string, string> {
   return map
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** Rewrite raw element ids in human-readable review text into element names, so
+ *  findings read naturally ("ATM Website" instead of "UuymxwcN ('ATM Website')").
+ *  Replaces standalone id tokens with the name, then collapses the redundant
+ *  "Name ('Name')" pairing the model often emits. Ids are matched on token
+ *  boundaries so they don't rewrite substrings of ordinary words. */
+export function humanizeIds(text: string, ws: Workspace): string {
+  if (!text) return text
+  const entries = [...elementNameMap(ws)]
+    .filter(([id, name]) => id.length > 0 && name.trim().length > 0 && id !== name)
+    // Longest ids first so a longer id isn't shadowed by a shorter one it contains.
+    .sort((a, b) => b[0].length - a[0].length)
+  let out = text
+  for (const [id, name] of entries) {
+    out = out.replace(new RegExp(`(?<![\\w-])${escapeRegExp(id)}(?![\\w-])`, 'g'), name)
+  }
+  // Collapse "Name ('Name')" / "Name (\"Name\")" / "Name (Name)" → "Name".
+  for (const name of new Set(entries.map(([, n]) => n))) {
+    const e = escapeRegExp(name)
+    out = out.replace(new RegExp(`${e}\\s*\\(['"]?${e}['"]?\\)`, 'g'), name)
+  }
+  return out
+}
+
 /** Set of every valid element id in the workspace. */
 export function elementIdSet(ws: Workspace): Set<string> {
   return new Set(flattenElements(ws).map((el) => el.id))
@@ -135,6 +162,23 @@ export function viewLabel(view: View): string {
   return view.title ? `${kind} view “${view.title}”` : `${kind} view`
 }
 
+/** The ids that are *internal* to a view's scope: the scope element (system or
+ *  container) plus its descendants. Everything else shown on the view is external
+ *  context — another system/container drawn in its own boundary. Empty when the
+ *  view has no scope element (a landscape view, where there's no boundary). */
+export function viewScopeInternalIds(ws: Workspace, view: View): Set<string> {
+  const scopeId = view.softwareSystemId ?? view.containerId
+  const internal = new Set<string>()
+  if (!scopeId) return internal
+  internal.add(scopeId)
+  // Two passes so components of in-scope containers are picked up after their
+  // container is admitted (container.parent = system, component.parent = container).
+  const flat = flattenElements(ws)
+  for (const el of flat) if (el.parentId === scopeId) internal.add(el.id)
+  for (const el of flat) if (el.parentId && internal.has(el.parentId)) internal.add(el.id)
+  return internal
+}
+
 /** Focused context for one view: the view itself plus only the elements and
  *  relationships actually shown in it. Used to ground the interview on the
  *  current screen rather than the whole workspace. */
@@ -147,14 +191,26 @@ export function serializeViewContext(ws: Workspace, view: View): string {
   lines.push(`The user is viewing the ${viewLabel(view)} (key: ${view.key}).`)
   const scopeId = view.softwareSystemId ?? view.containerId
   if (scopeId) lines.push(`Scope element: ${names.get(scopeId) ?? scopeId} (${scopeId}).`)
+  const internal = viewScopeInternalIds(ws, view)
+  const hasExternal = scopeId != null && [...viewElementIds].some((id) => !internal.has(id))
+  if (hasExternal) {
+    lines.push('')
+    lines.push('NOTE: elements marked EXTERNAL belong to ANOTHER system/container and are shown')
+    lines.push('only as context (drawn inside their own boundary). This is intentional C4 — do NOT')
+    lines.push('flag EXTERNAL elements as misplaced, mis-parented, orphaned, or recommend moving/')
+    lines.push('removing them from this view; treat them only as the surrounding context.')
+  }
   lines.push('')
-  lines.push('ELEMENTS ON SCREEN (id | type | name | technology | description):')
+  lines.push('ELEMENTS ON SCREEN (id | type | name | technology | description | belongs-to | scope):')
   if (viewElementIds.size === 0) {
     lines.push('  (the view is empty)')
   } else {
     for (const id of viewElementIds) {
       const el = flat.get(id)
-      if (el) lines.push(`  ${el.id} | ${el.type} | ${el.name} | ${el.technology ?? '-'} | ${el.description?.trim() || '(no description)'}`)
+      if (!el) continue
+      const belongsTo = el.parentName ? `part of ${el.parentName}` : '-'
+      const scope = scopeId == null ? '-' : internal.has(id) ? 'in-scope' : 'EXTERNAL'
+      lines.push(`  ${el.id} | ${el.type} | ${el.name} | ${el.technology ?? '-'} | ${el.description?.trim() || '(no description)'} | ${belongsTo} | ${scope}`)
     }
   }
 
