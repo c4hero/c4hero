@@ -288,6 +288,21 @@ describe('Relationship and container mutations', () => {
     expect(names).not.toContain('Inventory')
   })
 
+  it('coalesces element creation AND view mutations in one batch (repo-scan import shape)', () => {
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().setBatchApplying(true)
+    const sysId = useWorkspaceStore.getState().addSoftwareSystem('Imported')
+    const viewKey = useWorkspaceStore.getState().addView('systemContext', sysId, 'Imported — Context')
+    useWorkspaceStore.getState().removeElementsFromView(viewKey, [sysId])
+    useWorkspaceStore.getState().setBatchApplying(false)
+    // The plan apply + addView + removeElementsFromView are ONE undo entry, not three.
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore + 1)
+    // A single undo reverts the whole import: system gone, its view gone.
+    useWorkspaceStore.getState().undo()
+    expect(useWorkspaceStore.getState().workspace!.model.softwareSystems.map((s) => s.name)).not.toContain('Imported')
+    expect(useWorkspaceStore.getState().workspace!.views.systemContextViews.some((v) => v.key === viewKey)).toBe(false)
+  })
+
   it('a no-op batch leaves the undo and redo stacks untouched', () => {
     // Build a redo entry: mutate then undo.
     useWorkspaceStore.getState().addSoftwareSystem('Temp')

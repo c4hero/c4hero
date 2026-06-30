@@ -211,22 +211,26 @@ export function applyEditPlan(
 /** Human-readable, one-line-per-op preview, resolving existing ids to names. */
 export function describeOps(plan: EditPlan, ws: Workspace | null): string[] {
   const names = ws ? elementNameMap(ws) : new Map<string, string>()
+  // Collect every in-plan ref→name up front, so an op that references a ref
+  // defined by a LATER add op (plans aren't pre-sorted) still renders the name,
+  // not the raw ref token.
   const refNames = new Map<string, string>()
+  for (const op of plan.operations) {
+    if (op.op === 'addPerson' || op.op === 'addSoftwareSystem' || op.op === 'addContainer' || op.op === 'addComponent') {
+      refNames.set(op.ref, op.name)
+    }
+  }
   const label = (token: string): string => refNames.get(token) ?? names.get(token) ?? token
 
   return plan.operations.map((op) => {
     switch (op.op) {
       case 'addPerson':
-        refNames.set(op.ref, op.name)
         return `Add person “${op.name}”`
       case 'addSoftwareSystem':
-        refNames.set(op.ref, op.name)
         return `Add software system “${op.name}”`
       case 'addContainer':
-        refNames.set(op.ref, op.name)
         return `Add container “${op.name}”${op.technology ? ` (${op.technology})` : ''} to ${label(op.parent)}`
       case 'addComponent':
-        refNames.set(op.ref, op.name)
         return `Add component “${op.name}”${op.technology ? ` (${op.technology})` : ''} to ${label(op.parent)}`
       case 'addRelationship':
         return `Connect ${label(op.source)} → ${label(op.destination)}${op.description ? ` (“${op.description}”)` : ''}`

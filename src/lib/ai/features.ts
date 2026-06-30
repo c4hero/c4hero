@@ -9,7 +9,7 @@ import {
 import { isRecord } from '@/lib/guards'
 import {
   elementsMissingDescription, relationshipsMissingDescription,
-  viewScopeInternalIds, humanizeIds,
+  viewScopeInternalIds, makeHumanizer,
 } from './context'
 import {
   describeSchema, editSchema, reviewSchema, repoScanSchema, connectionsSchema,
@@ -49,13 +49,14 @@ export async function reviewArchitecture(
   // that only complain about elements which are intentionally external to the
   // view's scope — another system's container shown as context is valid C4.
   const internal = view ? viewScopeInternalIds(ws, view) : new Set<string>()
+  const humanize = makeHumanizer(ws) // compile the id→name map once for the whole review
   const findings = toReviewResult(raw).findings
     .map((f) => ({
       ...f,
-      title: humanizeIds(f.title, ws),
-      detail: humanizeIds(f.detail, ws),
-      suggestion: humanizeIds(f.suggestion, ws),
-      options: f.options?.map((o) => ({ ...o, label: humanizeIds(o.label, ws) })),
+      title: humanize(f.title),
+      detail: humanize(f.detail),
+      suggestion: humanize(f.suggestion),
+      options: f.options?.map((o) => ({ ...o, label: humanize(o.label) })),
     }))
     .filter((f) => !isExternalMisplacement(f, internal))
   return { findings }

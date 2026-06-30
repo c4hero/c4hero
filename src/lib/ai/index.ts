@@ -14,9 +14,9 @@ export type {
 export { AiError, aiErrorMessage } from './types'
 
 export { findingsToMarkdown, sortedFindings, isActionable } from './review'
-export { classifyScope, type PlanScope } from './planScope'
+export { classifyScope, classifyPlanScopes, type PlanScope } from './planScope'
 export {
-  missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp,
+  missingInfoGaps, modelHealthPercent, gapToOp,
   type MissingGap, type GapKind,
 } from './sweep'
 export { readRepoFiles, buildRepoBundle, canScanRepo, isKeyFile, isIgnoredDir, mergeRepoProposals } from './repoScan'
@@ -35,7 +35,7 @@ export {
   serializeContext, serializeViewContext, viewLabel,
   flattenElements, elementIdSet, elementNameMap,
   elementsMissingDescription, relationshipsMissingDescription,
-  viewScopeInternalIds, humanizeIds,
+  viewScopeInternalIds, humanizeIds, makeHumanizer,
 } from './context'
 
 export { extractDsl, stripCodeFence } from './dsl'

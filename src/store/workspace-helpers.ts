@@ -331,6 +331,37 @@ export function buildInitialViewContent(
   return { elements, relationships }
 }
 
+/** Build a scoped view (initial content + the standard shape) and push it onto
+ *  the matching view array of the (draft) workspace, returning the new view.
+ *  Centralizes the View construction shared by addView, addContainer and
+ *  addComponent — caller owns selection/active-view/undo handling. */
+export function appendScopedView(
+  ws: Workspace,
+  type: ViewType,
+  scopeId: string | undefined,
+  title: string,
+  key: string,
+): View {
+  const { elements, relationships } = buildInitialViewContent(ws.model, type, scopeId)
+  const view: View = {
+    type,
+    key,
+    title,
+    elements,
+    relationships,
+    autoLayout: { direction: 'TB' },
+    softwareSystemId: (type === 'systemContext' || type === 'container') ? scopeId : undefined,
+    containerId: type === 'component' ? scopeId : undefined,
+  }
+  switch (type) {
+    case 'systemLandscape': ws.views.systemLandscapeViews.push(view); break
+    case 'systemContext': ws.views.systemContextViews.push(view); break
+    case 'container': ws.views.containerViews.push(view); break
+    case 'component': ws.views.componentViews.push(view); break
+  }
+  return view
+}
+
 /**
  * Duplicate the given elements within the active view. Mutates the workspace in
  * place — clones each model element with a new ID and a "<name> copy" name,

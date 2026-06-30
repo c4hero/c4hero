@@ -78,7 +78,10 @@ export const AI_PROVIDER_META: Record<AiProviderId, AiProviderMeta> = {
   },
 }
 
-export const AI_PROVIDER_IDS: AiProviderId[] = ['anthropic', 'openai', 'gemini']
+// Derived from the metadata map (which is the single source of truth) so adding a
+// provider in one place can't drift from the id list. Object.keys preserves the
+// declaration order of AI_PROVIDER_META.
+export const AI_PROVIDER_IDS = Object.keys(AI_PROVIDER_META) as AiProviderId[]
 
 export function getProviderMeta(id: AiProviderId): AiProviderMeta {
   return AI_PROVIDER_META[id]

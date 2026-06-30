@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { missingInfoGaps, modelHealthPercent, projectedHealthPercent, gapToOp, type MissingGap } from './sweep'
+import { missingInfoGaps, modelHealthPercent, gapToOp, type MissingGap } from './sweep'
 import { makeWorkspace } from './testFixture'
 import type { Workspace } from '@/types/model'
 
@@ -104,31 +104,6 @@ describe('modelHealthPercent', () => {
     // 6 desc slots (3 filled) + 3 tech slots (1 filled) + 2 rel slots (1 filled)
     // = 5/11 ≈ 45%.
     expect(modelHealthPercent(makeWorkspace())).toBe(45)
-  })
-})
-
-describe('projectedHealthPercent', () => {
-  it('rises as missing-info gaps are staged, reaching 100 when all are filled', () => {
-    const ws = makeWorkspace()
-    const base = modelHealthPercent(ws)
-    const coverageGaps = missingInfoGaps(ws).filter((g) => g.kind !== 'title')
-    const all = new Set(coverageGaps.map((g) => g.key))
-    expect(projectedHealthPercent(ws, all)).toBe(100)
-    const one = new Set([coverageGaps[0].key])
-    expect(projectedHealthPercent(ws, one)).toBeGreaterThan(base)
-  })
-
-  it('ignores title gaps (they don\'t affect coverage)', () => {
-    const ws: Workspace = {
-      name: 'T',
-      model: {
-        people: [{ id: 'p', type: 'person', name: '', description: 'x', tags: [], properties: {} }],
-        softwareSystems: [], relationships: [], groups: [],
-      },
-      views: emptyViews(),
-    }
-    // Only a title gap exists; coverage is already 100 (the person has a description, no tech/rel slots).
-    expect(projectedHealthPercent(ws, new Set(['title:p']))).toBe(100)
   })
 })
 

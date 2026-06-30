@@ -135,6 +135,20 @@ describe('describeOps', () => {
     expect(lines[1]).toContain('Web App → Redis')
     expect(lines[2]).toBe('Delete Database')
   })
+
+  it('resolves refs defined by a LATER add op (plans are not pre-sorted)', () => {
+    const ws = makeWorkspace()
+    const plan: EditPlan = {
+      operations: [
+        // relationship emitted BEFORE the systems that define its endpoints
+        { op: 'addRelationship', source: 'r1', destination: 'r2', description: 'Calls' },
+        { op: 'addSoftwareSystem', ref: 'r1', name: 'API' },
+        { op: 'addSoftwareSystem', ref: 'r2', name: 'DB' },
+      ],
+    }
+    const lines = describeOps(plan, ws)
+    expect(lines[0]).toContain('Connect API → DB')
+  })
 })
 
 describe('applyEditPlan — parent-type and existence guards', () => {

@@ -9,18 +9,18 @@ import {
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
 import { allViewsOf } from '@/store/workspace-helpers'
-import { useAiSettingsStore, isAiReady, activeAiConfig, type PanelPos } from '@/store/ai-settings'
+import { useAiSettingsStore, useAiProvider, type PanelPos } from '@/store/ai-settings'
 import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
 import { parseDSL } from '@/lib/dsl'
 import { downloadFile } from '@/lib/exportUtils'
 import type { View, Workspace } from '@/types/model'
 import {
-  createProvider, aiErrorMessage,
+  aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr, detectComposeMode,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
   scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
-  sortedFindings, isActionable, classifyScope,
+  sortedFindings, isActionable, classifyPlanScopes,
   missingInfoGaps, modelHealthPercent, gapToOp,
   type MissingGap, type GapKind,
   type AiProvider, type EditActions,
@@ -79,13 +79,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   const [initialFeature] = useState(() => useWorkspaceStore.getState().aiPanelFeature)
   const [settingsOpen, setSettingsOpen] = useState(() => useWorkspaceStore.getState().aiSettingsOpen)
 
-  const { provider: providerId, apiKey, model } = activeAiConfig(settings)
-  const hasKey = apiKey.trim().length > 0
-  const ready = isAiReady(settings)
-  const provider = useMemo(
-    () => (ready ? createProvider(providerId, { apiKey, model }) : null),
-    [ready, providerId, apiKey, model],
-  )
+  const { provider, hasKey, model } = useAiProvider()
 
   function openSettings() { setSettingsOpen(true); setStoreSettingsOpen(false) }
   function closeSettings() { setSettingsOpen(false); setStoreSettingsOpen(false) }
@@ -1203,6 +1197,8 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
   const [plan, setPlan] = useState<EditPlan | null>(null)
   const [confirmReplace, setConfirmReplace] = useState(false)
   const parsed = useMemo(() => (dsl ? parseDSL(dsl) : null), [dsl])
+  // Flatten the parsed preview once (the chip row read it three times per render).
+  const parsedElements = useMemo(() => (parsed ? flattenElements(parsed.workspace) : []), [parsed])
   const planLines = plan && workspace ? describeOps(plan, workspace) : []
 
   // Auto-detect intent. Without a workspace there's nothing to change → "new".
@@ -1267,8 +1263,8 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
           </div>
           <div style={{ ...kicker, marginTop: 14 }}>Elements</div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 8 }}>
-            {flattenElements(parsed.workspace).slice(0, 6).map((el) => <span key={el.id} style={chipBlue}>{el.name}</span>)}
-            {flattenElements(parsed.workspace).length > 6 && <span style={{ ...chipBlue, color: C.muted, borderColor: C.border, background: 'rgba(255,255,255,0.04)' }}>+{flattenElements(parsed.workspace).length - 6} more</span>}
+            {parsedElements.slice(0, 6).map((el) => <span key={el.id} style={chipBlue}>{el.name}</span>)}
+            {parsedElements.length > 6 && <span style={{ ...chipBlue, color: C.muted, borderColor: C.border, background: 'rgba(255,255,255,0.04)' }}>+{parsedElements.length - 6} more</span>}
           </div>
           {parsed.errors.length > 0 && <div style={{ marginTop: 10, fontSize: 12, color: C.warnText }}>{parsed.errors.length} parser warning(s) — the diagram may be partial.</div>}
 
@@ -1571,7 +1567,7 @@ function PlanPreviewBar({ provider, ws, view, history }: { provider: AiProvider;
   const [plan, setPlan] = useState<EditPlan | null>(null)
   const [open, setOpen] = useState(false)
   const lines = plan ? describeOps(plan, ws) : []
-  const scopes = plan ? plan.operations.map((op) => classifyScope(op, ws, view)) : []
+  const scopes = plan ? classifyPlanScopes(plan, ws, view) : []
   const offCount = scopes.filter((s) => s === 'context' || s === 'component').length
 
   function toggle() {
@@ -1702,37 +1698,47 @@ function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; work
     const beforeViewIds = new Set(cleanScope ? cleanScope.elements.map((e) => e.id) : [])
     const beforeSystemIds = new Set(before.workspace!.model.softwareSystems.map((s) => s.id))
 
-    applyPlanToStore({ operations: ops }, workspace)
+    // One undo batch spans the plan apply AND the follow-up view cleanup/creation,
+    // so a single Ctrl+Z reverts the whole import (not piecemeal through broken
+    // half-imported states). The view mutators skip their own undo snapshots while
+    // batchApplying is set; applyPlanToStore({ batched: true }) defers to this batch.
+    const store = useWorkspaceStore.getState()
+    store.setBatchApplying(true)
+    try {
+      applyPlanToStore({ operations: ops }, workspace, { batched: true })
 
-    const after = useWorkspaceStore.getState()
-    const ws1 = after.workspace!
+      const after = useWorkspaceStore.getState()
+      const ws1 = after.workspace!
 
-    // Keep the scan from polluting the view you were on: drop newly-added
-    // elements that don't belong to this view's own scope (a new system's
-    // containers, external boxes, …), while keeping additions to *this* system.
-    if (cleanScope && activeKey) {
-      const view = getActiveView(ws1, activeKey)
-      const added = view ? view.elements.map((e) => e.id).filter((id) => !beforeViewIds.has(id)) : []
-      const belongs = getScopeMemberIds(ws1, cleanScope)
-      const foreign = added.filter((id) => !belongs.has(id))
-      if (foreign.length) after.removeElementsFromView(activeKey, foreign)
+      // Keep the scan from polluting the view you were on: drop newly-added
+      // elements that don't belong to this view's own scope (a new system's
+      // containers, external boxes, …), while keeping additions to *this* system.
+      if (cleanScope && activeKey) {
+        const view = getActiveView(ws1, activeKey)
+        const added = view ? view.elements.map((e) => e.id).filter((id) => !beforeViewIds.has(id)) : []
+        const belongs = getScopeMemberIds(ws1, cleanScope)
+        const foreign = added.filter((id) => !belongs.has(id))
+        if (foreign.length) after.removeElementsFromView(activeKey, foreign)
+      }
+
+      // Give each newly-imported *internal* system its own container (L2) view, and
+      // open the largest. External systems are black boxes — no view for them.
+      // applyPlanToStore's addContainer already auto-creates a scoped container
+      // view for systems that gained containers, so reuse it rather than making a
+      // duplicate; only create one for systems that don't have one yet.
+      const newSystems = ws1.model.softwareSystems
+        .filter((s) => !beforeSystemIds.has(s.id) && s.location !== 'External')
+        .sort((a, b) => b.containers.length - a.containers.length)
+      let primaryKey: string | null = null
+      for (const sys of newSystems) {
+        const existing = ws1.views.containerViews.find((v) => v.softwareSystemId === sys.id)
+        const key = existing ? existing.key : after.addView('container', sys.id, `${sys.name} — Containers`)
+        if (!primaryKey) primaryKey = key
+      }
+      if (primaryKey) after.setActiveView(primaryKey)
+    } finally {
+      store.setBatchApplying(false)
     }
-
-    // Give each newly-imported *internal* system its own container (L2) view, and
-    // open the largest. External systems are black boxes — no view for them.
-    // applyPlanToStore's addContainer already auto-creates a scoped container
-    // view for systems that gained containers, so reuse it rather than making a
-    // duplicate; only create one for systems that don't have one yet.
-    const newSystems = ws1.model.softwareSystems
-      .filter((s) => !beforeSystemIds.has(s.id) && s.location !== 'External')
-      .sort((a, b) => b.containers.length - a.containers.length)
-    let primaryKey: string | null = null
-    for (const sys of newSystems) {
-      const existing = ws1.views.containerViews.find((v) => v.softwareSystemId === sys.id)
-      const key = existing ? existing.key : after.addView('container', sys.id, `${sys.name} — Containers`)
-      if (!primaryKey) primaryKey = key
-    }
-    if (primaryKey) after.setActiveView(primaryKey)
     onClose()
   }
 
@@ -2262,21 +2268,24 @@ function storeEditActions(): EditActions {
   }
 }
 
-function applyPlanToStore(plan: EditPlan, ws: Workspace) {
+function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched?: boolean }) {
   const s = useWorkspaceStore.getState()
   // Apply in batch mode so the per-op addContainer/addComponent don't jump the
   // canvas to each created view; then navigate ONCE to where the new elements are.
   // Validate and diff against the LIVE store (not the possibly-stale `ws` prop
   // snapshot) so the applier doesn't skip edits to elements added since the panel
   // rendered, and the navigation target is accurate.
+  // When `batched`, the CALLER already opened the undo batch (so post-apply view
+  // mutations coalesce into the same single undo entry) — don't toggle it here.
   const liveBefore = s.workspace ?? ws
   const before = new Set(flattenElements(liveBefore).map((e) => e.id))
-  s.setBatchApplying(true)
+  const ownBatch = !opts?.batched
+  if (ownBatch) s.setBatchApplying(true)
   let result
   try {
     result = applyEditPlan(plan, storeEditActions(), liveBefore)
   } finally {
-    s.setBatchApplying(false)
+    if (ownBatch) s.setBatchApplying(false)
   }
   const updated = useWorkspaceStore.getState().workspace
   const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []

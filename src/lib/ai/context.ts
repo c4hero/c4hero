@@ -52,27 +52,35 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/** Rewrite raw element ids in human-readable review text into element names, so
- *  findings read naturally ("ATM Website" instead of "UuymxwcN ('ATM Website')").
- *  Replaces standalone id tokens with the name, then collapses the redundant
- *  "Name ('Name')" pairing the model often emits. Ids are matched on token
- *  boundaries so they don't rewrite substrings of ordinary words. */
-export function humanizeIds(text: string, ws: Workspace): string {
-  if (!text) return text
+/** Build a reusable id→name rewriter for a workspace. Compiles the element-name
+ *  map and per-element RegExps ONCE; callers that humanize many strings (a whole
+ *  review's findings) should make one humanizer and reuse it rather than calling
+ *  {@link humanizeIds} per string (which rebuilds everything each time). */
+export function makeHumanizer(ws: Workspace): (text: string) => string {
   const entries = [...elementNameMap(ws)]
     .filter(([id, name]) => id.length > 0 && name.trim().length > 0 && id !== name)
     // Longest ids first so a longer id isn't shadowed by a shorter one it contains.
     .sort((a, b) => b[0].length - a[0].length)
-  let out = text
-  for (const [id, name] of entries) {
-    out = out.replace(new RegExp(`(?<![\\w-])${escapeRegExp(id)}(?![\\w-])`, 'g'), name)
-  }
+  const idRes = entries.map(([id, name]) => [new RegExp(`(?<![\\w-])${escapeRegExp(id)}(?![\\w-])`, 'g'), name] as const)
   // Collapse "Name ('Name')" / "Name (\"Name\")" / "Name (Name)" → "Name".
-  for (const name of new Set(entries.map(([, n]) => n))) {
+  const nameRes = [...new Set(entries.map(([, n]) => n))].map((name) => {
     const e = escapeRegExp(name)
-    out = out.replace(new RegExp(`${e}\\s*\\(['"]?${e}['"]?\\)`, 'g'), name)
+    return [new RegExp(`${e}\\s*\\(['"]?${e}['"]?\\)`, 'g'), name] as const
+  })
+  return (text: string): string => {
+    if (!text) return text
+    let out = text
+    for (const [re, name] of idRes) out = out.replace(re, name)
+    for (const [re, name] of nameRes) out = out.replace(re, name)
+    return out
   }
-  return out
+}
+
+/** Rewrite raw element ids in human-readable review text into element names, so
+ *  findings read naturally ("ATM Website" instead of "UuymxwcN ('ATM Website')").
+ *  For many strings over the same workspace, prefer {@link makeHumanizer}. */
+export function humanizeIds(text: string, ws: Workspace): string {
+  return makeHumanizer(ws)(text)
 }
 
 /** Set of every valid element id in the workspace. */

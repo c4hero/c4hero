@@ -107,17 +107,6 @@ export function modelHealthPercent(ws: Workspace, scopeIds?: ReadonlySet<string>
   return Math.round((filled / checkable) * 100)
 }
 
-/**
- * Health % projected once the given staged missing-info gaps are applied.
- * Title gaps don't move coverage, so they're ignored here.
- */
-export function projectedHealthPercent(ws: Workspace, stagedKeys: ReadonlySet<string>): number {
-  const { checkable, filled } = healthCounts(ws)
-  if (checkable === 0) return 100
-  const add = missingInfoGaps(ws).filter((g) => g.kind !== 'title' && stagedKeys.has(g.key)).length
-  return Math.round((Math.min(filled + add, checkable) / checkable) * 100)
-}
-
 // ─── Gap → edit operation ───────────────────────────────────────────
 
 /** Turn a gap and its (possibly user-edited) draft value into an edit op. */

@@ -1,5 +1,5 @@
 import type { Workspace, View } from '@/types/model'
-import type { EditOp } from './types'
+import type { EditOp, EditPlan } from './types'
 import { flattenElements } from './context'
 
 // Classify where a proposed operation lands relative to the view the user is on,
@@ -13,7 +13,13 @@ import { flattenElements } from './context'
 
 export type PlanScope = 'view' | 'context' | 'component' | 'model'
 
-export function classifyScope(op: EditOp, ws: Workspace, view: View): PlanScope {
+/**
+ * @param viewRefs refs of elements created earlier in the SAME plan that land on
+ *   this view, so a later op referencing such a ref resolves as in-view even
+ *   though the element doesn't exist in `ws` yet. Use {@link classifyPlanScopes}
+ *   to classify a whole plan with this wired up.
+ */
+export function classifyScope(op: EditOp, ws: Workspace, view: View, viewRefs?: ReadonlySet<string>): PlanScope {
   const viewIds = new Set(view.elements.map((e) => e.id))
   const flat = flattenElements(ws)
   const idForToken = (token: string): string | undefined => {
@@ -22,6 +28,7 @@ export function classifyScope(op: EditOp, ws: Workspace, view: View): PlanScope 
     return el?.id
   }
   const inView = (token: string): boolean => {
+    if (viewRefs?.has(token)) return true
     const id = idForToken(token)
     return id !== undefined && viewIds.has(id)
   }
@@ -31,9 +38,11 @@ export function classifyScope(op: EditOp, ws: Workspace, view: View): PlanScope 
     case 'addSoftwareSystem':
       return view.type === 'systemLandscape' || view.type === 'systemContext' ? 'view' : 'context'
     case 'addContainer':
-      return view.type === 'container' ? 'view' : 'model'
+      // Only lands on THIS container view when added to the view's own system.
+      return view.type === 'container' && idForToken(op.parent) === view.softwareSystemId ? 'view' : 'model'
     case 'addComponent':
-      return view.type === 'component' ? 'view' : 'component'
+      // Only lands on THIS component view when added to the view's own container.
+      return view.type === 'component' && idForToken(op.parent) === view.containerId ? 'view' : 'component'
     case 'addRelationship':
       return inView(op.source) && inView(op.destination) ? 'view' : 'model'
     case 'updateElement':
@@ -44,4 +53,18 @@ export function classifyScope(op: EditOp, ws: Workspace, view: View): PlanScope 
     default:
       return 'model'
   }
+}
+
+/** Classify every op in a plan, resolving in-plan-created refs: an op that
+ *  references an element added earlier in the same plan (which lands on this
+ *  view) is correctly tagged 'view' rather than 'model'. */
+export function classifyPlanScopes(plan: EditPlan, ws: Workspace, view: View): PlanScope[] {
+  const viewRefs = new Set<string>()
+  for (const op of plan.operations) {
+    if ((op.op === 'addPerson' || op.op === 'addSoftwareSystem' || op.op === 'addContainer' || op.op === 'addComponent')
+      && classifyScope(op, ws, view) === 'view') {
+      viewRefs.add(op.ref)
+    }
+  }
+  return plan.operations.map((op) => classifyScope(op, ws, view, viewRefs))
 }

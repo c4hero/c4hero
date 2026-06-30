@@ -1,6 +1,8 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { isRecord } from '@/lib/guards'
 import { readJSON, writeJSON } from '@/lib/safeStorage'
+import { createProvider, type AiProvider } from '@/lib/ai'
 import {
   AI_PROVIDER_IDS, AI_PROVIDER_META, isAiProviderId, type AiProviderId,
 } from '@/lib/ai/providerMeta'
@@ -144,4 +146,25 @@ function persistFrom(get: () => AiSettingsState) {
   const { update: _u, setApiKey: _k, setModel: _m, ...rest } = get()
   void _u; void _k; void _m
   persist(rest as AiSettings)
+}
+
+/** Build an AI provider from the current settings — null until a key is set and
+ *  AI is enabled. Returns the resolved config too, for BYOK gating UI. The single
+ *  source of truth for provider construction across the assistant surfaces. */
+export function useAiProvider(): {
+  ready: boolean
+  hasKey: boolean
+  provider: AiProvider | null
+  providerId: AiProviderId
+  apiKey: string
+  model: string
+} {
+  const settings = useAiSettingsStore()
+  const ready = isAiReady(settings)
+  const { provider: providerId, apiKey, model } = activeAiConfig(settings)
+  const provider = useMemo(
+    () => (ready ? createProvider(providerId, { apiKey, model }) : null),
+    [ready, providerId, apiKey, model],
+  )
+  return { ready, hasKey: apiKey.trim().length > 0, provider, providerId, apiKey, model }
 }

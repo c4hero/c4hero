@@ -8,8 +8,8 @@ import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
-import { useAiSettingsStore, isAiReady, activeAiConfig } from '@/store/ai-settings'
-import { createProvider, autoDescribe, planEdit, suggestTags } from '@/lib/ai'
+import { useAiProvider } from '@/store/ai-settings'
+import { autoDescribe, planEdit, suggestTags } from '@/lib/ai'
 
 const STATUS_OPTIONS: { value: ElementStatus | undefined; label: string; color: string | null }[] = [
   { value: undefined, label: 'Not set', color: null },
@@ -82,15 +82,6 @@ function modelTagVocabulary(ws: Workspace): string[] {
   for (const s of ws.model.softwareSystems) { add(s.tags); for (const c of s.containers) { add(c.tags); for (const cmp of c.components) add(cmp.tags) } }
   for (const r of ws.model.relationships) add(r.tags)
   return Array.from(set).sort()
-}
-
-/** Build an AI provider when a key is set and AI is enabled (else null). */
-function useAiProvider() {
-  const settings = useAiSettingsStore()
-  const ready = isAiReady(settings)
-  const { provider: providerId, apiKey, model } = activeAiConfig(settings)
-  const provider = useMemo(() => (ready ? createProvider(providerId, { apiKey, model }) : null), [ready, providerId, apiKey, model])
-  return { ready, provider }
 }
 
 /** Small sparkle button overlaid on an empty field to fill it via AI. */

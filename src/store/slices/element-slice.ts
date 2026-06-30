@@ -10,7 +10,7 @@ import {
   duplicateElementsInTree,
   uniqueElementName,
   findViewHelper,
-  buildInitialViewContent,
+  appendScopedView,
   selectCreated,
 } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
@@ -102,8 +102,7 @@ export const createElementSlice: StateCreator<
       }
       if (!placed) {
         const vk = nanoid(8)
-        const { elements, relationships } = buildInitialViewContent(ws.model, 'container', systemId)
-        ws.views.containerViews.push({ type: 'container', key: vk, title: `${system.name} — Containers`, elements, relationships, autoLayout: { direction: 'TB' }, softwareSystemId: systemId })
+        appendScopedView(ws, 'container', systemId, `${system.name} — Containers`, vk)
         // During a batch AI apply, don't jump per-op — the panel navigates once
         // afterwards (focusViewForElements). For a single creation, switch to it.
         if (!s.batchApplying) s.activeViewKey = vk
@@ -144,8 +143,7 @@ export const createElementSlice: StateCreator<
         }
         if (!placed) {
           const vk = nanoid(8)
-          const { elements, relationships } = buildInitialViewContent(ws.model, 'component', containerId)
-          ws.views.componentViews.push({ type: 'component', key: vk, title: `${container.name} — Components`, elements, relationships, autoLayout: { direction: 'TB' }, containerId })
+          appendScopedView(ws, 'component', containerId, `${container.name} — Components`, vk)
           if (!s.batchApplying) s.activeViewKey = vk
         }
         selectCreated(s, id)
