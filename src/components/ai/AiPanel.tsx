@@ -623,7 +623,7 @@ function AppView({
               )}
             </>
           ) : reviewLoading && workspace ? (
-            <ReviewScanning workspace={workspace} />
+            <ReviewScanning workspace={workspace} scopeIds={scopeIds} scopeLabel={improveScope === 'view' ? 'this view' : null} />
           ) : interviewOn && !ivApplied && workspace ? (
             // Interview tail: once the instant fixes and review findings are done,
             // fold in the conversational interview, applying its plan via the ledger.
@@ -1025,12 +1025,16 @@ function SweepSummary({ completePct, ledger, onRevert, onRevertAll, onBack, onDo
 // live checklist of the model's *real* elements, relationships and the quality
 // aspects being audited — each ticks green as the "beam" passes it. Grounds the
 // wait in what's actually being looked at, then settles on "Synthesizing…".
-function ReviewScanning({ workspace }: { workspace: Workspace }) {
+// `scopeIds` (when given) limits the checklist to the in-view targets so the
+// animation matches the scoped review — not a misleading whole-model sweep.
+function ReviewScanning({ workspace, scopeIds, scopeLabel }: { workspace: Workspace; scopeIds?: ReadonlySet<string>; scopeLabel?: string | null }) {
   const items = useMemo(() => {
     const out: { label: string; icon: LucideIcon }[] = []
-    for (const e of flattenElements(workspace)) out.push({ label: e.name?.trim() || '(unnamed element)', icon: Box })
+    const els = flattenElements(workspace).filter((e) => !scopeIds || scopeIds.has(e.id))
+    for (const e of els) out.push({ label: e.name?.trim() || '(unnamed element)', icon: Box })
     const names = elementNameMap(workspace)
-    for (const r of (workspace.model.relationships ?? []).slice(0, 8)) {
+    const rels = (workspace.model.relationships ?? []).filter((r) => !scopeIds || scopeIds.has(r.id))
+    for (const r of rels.slice(0, 8)) {
       out.push({ label: `${names.get(r.sourceId) ?? '?'} → ${names.get(r.destinationId) ?? '?'}`, icon: Link2 })
     }
     out.push(
@@ -1039,7 +1043,7 @@ function ReviewScanning({ workspace }: { workspace: Workspace }) {
       { label: 'Boundaries & scope', icon: Layers },
     )
     return out
-  }, [workspace])
+  }, [workspace, scopeIds])
 
   const [idx, setIdx] = useState(0)
   useEffect(() => {
@@ -1071,7 +1075,7 @@ function ReviewScanning({ workspace }: { workspace: Workspace }) {
         </span>
       </div>
       <div style={{ marginTop: 10, fontSize: 13.5, fontWeight: 700, color: C.text }}>
-        {done ? 'Synthesizing findings…' : `Reviewing ${workspace.name || 'your model'}…`}
+        {done ? 'Synthesizing findings…' : `Reviewing ${scopeLabel || workspace.name || 'your model'}…`}
       </div>
       <div style={{ marginTop: 4, fontSize: 11.5, color: C.muted }}>
         {done ? 'Cross-checking everything once more' : `Evaluating ${Math.min(idx + 1, total)} of ${total}`}
