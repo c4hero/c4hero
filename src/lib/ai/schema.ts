@@ -1,4 +1,4 @@
-import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding, ReviewFixOption, RepoScanResult, RepoProposal, ScanQuestion, ScanOption } from './types'
+import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding, ReviewFixOption } from './types'
 import { isRecord, isStringArray } from '@/lib/guards'
 import { createLogger } from '@/lib/logger'
 
@@ -135,57 +135,6 @@ export const reviewSchema = {
   required: ['findings'],
 }
 
-// ─── Repo scan ──────────────────────────────────────────────────────
-
-const proposalSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    op: opSchema,
-    src: { type: 'string' },
-    label: { type: 'string' },
-  },
-  required: ['op', 'src', 'label'],
-}
-
-export const repoScanSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    proposals: { type: 'array', items: proposalSchema },
-  },
-  required: ['proposals'],
-}
-
-const optionSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: { label: { type: 'string' }, op: opSchema },
-  required: ['label'],
-}
-
-const questionSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    text: { type: 'string' },
-    options: { type: 'array', items: optionSchema },
-  },
-  required: ['text', 'options'],
-}
-
-/** Phase 2 (connections): relationships the scan is confident about, plus
- *  questions for anything it's unsure of. */
-export const connectionsSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    relationships: { type: 'array', items: proposalSchema },
-    questions: { type: 'array', items: questionSchema },
-  },
-  required: ['relationships', 'questions'],
-}
-
 // ─── Tolerant sanitizers ────────────────────────────────────────────
 //
 // Models occasionally return a batch where one item is malformed. Rather than
@@ -205,49 +154,6 @@ export function toEditPlan(value: unknown): EditPlan {
   const operations = ops.filter(isEditOp)
   dropLog('operations', operations.length, ops.length)
   return { operations }
-}
-
-/** Filter an array of proposals, keeping those with a valid op and coercing
- *  missing provenance to empty strings. */
-export function toRepoProposals(value: unknown): RepoProposal[] {
-  const raw = Array.isArray(value) ? value : []
-  const proposals: RepoProposal[] = []
-  for (const p of raw) {
-    if (isRecord(p) && isEditOp(p.op)) {
-      proposals.push({
-        op: p.op,
-        src: typeof p.src === 'string' ? p.src : '',
-        label: typeof p.label === 'string' ? p.label : '',
-      })
-    }
-  }
-  dropLog('proposals', proposals.length, raw.length)
-  return proposals
-}
-
-/** Filter an array of scan questions: keep those with text and ≥1 labelled
- *  option, dropping options whose op is malformed (a "none" option has no op). */
-export function toScanQuestions(value: unknown): ScanQuestion[] {
-  const raw = Array.isArray(value) ? value : []
-  const questions: ScanQuestion[] = []
-  for (const q of raw) {
-    if (!isRecord(q) || typeof q.text !== 'string') continue
-    const opts = Array.isArray(q.options) ? q.options : []
-    const options: ScanOption[] = []
-    for (const o of opts) {
-      if (isRecord(o) && typeof o.label === 'string') {
-        options.push({ label: o.label, op: isEditOp(o.op) ? o.op : undefined })
-      }
-    }
-    if (options.length) questions.push({ text: q.text, options })
-  }
-  return questions
-}
-
-/** Filter a `{ proposals, questions }` envelope into a full scan result. */
-export function toRepoScanResult(value: unknown): RepoScanResult {
-  const v = isRecord(value) ? value : {}
-  return { proposals: toRepoProposals(v.proposals), questions: toScanQuestions(v.questions) }
 }
 
 function toReviewFinding(value: unknown): ReviewFinding | null {

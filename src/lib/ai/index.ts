@@ -9,7 +9,6 @@ export type {
   AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn,
   EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind, AiFeatureId,
   ReviewResult, ReviewFinding, ReviewFixOption, ReviewSeverity,
-  RepoFile, RepoSnapshot, RepoProposal, RepoScanResult, ScanQuestion, ScanOption,
 } from './types'
 export { AiError, aiErrorMessage } from './types'
 
@@ -19,8 +18,6 @@ export {
   missingInfoGaps, modelHealthPercent, gapToOp,
   type MissingGap, type GapKind,
 } from './sweep'
-export { readRepoFiles, buildRepoBundle, canScanRepo, isKeyFile, isIgnoredDir, mergeRepoProposals } from './repoScan'
-
 export type { AiProviderId, AiProviderMeta, AiModelOption } from './providerMeta'
 export { AI_PROVIDER_META, AI_PROVIDER_IDS, getProviderMeta, isAiProviderId } from './providerMeta'
 
@@ -28,7 +25,7 @@ export { createProvider } from './providers'
 
 export {
   generateDiagram, reviewArchitecture, autoDescribe, planEdit, draftAdr,
-  interviewAsk, interviewKickoffMessage, interviewBuildPlan, scanRepo, suggestTags,
+  interviewAsk, interviewKickoffMessage, interviewBuildPlan, suggestTags,
 } from './features'
 
 export {

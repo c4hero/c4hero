@@ -70,8 +70,6 @@ it with the `I` shortcut.
   from — or an **Other** box to describe your own, applied through the same edit
   engine. Every change applies the moment you approve it (model health climbs
   live), and a revert ledger undoes any single change — or all of them.
-- **From your code** — scan a local repository (File System Access API) and propose
-  elements and relationships, asking about anything ambiguous.
 - **Describe a change** — build a new model or edit the current one from a plain-
   English prompt; replacing an existing model always asks first.
 - **Inspector assist** — per-field auto-suggestions for empty descriptions and

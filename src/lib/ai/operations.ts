@@ -118,8 +118,7 @@ export function applyEditPlan(
   const ok = (op: EditOp) => applied.push({ op, ok: true })
 
   // Apply parents before children (and relationships/updates after the elements
-  // they reference, deletes last). A model — especially planEdit/interview, which
-  // unlike repoScan isn't pre-sorted — may emit a child before its parent; in
+  // they reference, deletes last). A model may emit a child before its parent; in
   // emitted order resolve() wouldn't find the parent and the child would be
   // dropped as "unknown parent". Stable sort preserves order within a rank.
   const ordered = [...plan.operations].sort((a, b) => editOpRank(a) - editOpRank(b))

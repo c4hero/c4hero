@@ -3,11 +3,11 @@ import { clearAiSession, ensureSessionForWorkspace, usePersistentState } from '.
 import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
-  Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, ChevronDown, HelpCircle,
+  Pencil, Layers, Wand2, ChevronRight, ChevronDown, HelpCircle,
   Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
-import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { allViewsOf } from '@/store/workspace-helpers'
 import { useAiSettingsStore, useAiProvider } from '@/store/ai-settings'
 import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
@@ -18,14 +18,13 @@ import {
   aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr, detectComposeMode,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
-  scanRepo, canScanRepo, readRepoFiles, buildRepoBundle,
   applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
   sortedFindings, isActionable, classifyPlanScopes,
   missingInfoGaps, modelHealthPercent, gapToOp,
   type MissingGap, type GapKind,
   type AiProvider, type EditActions,
   type EditPlan, type EditOp, type AiFeatureId, type AiChatTurn,
-  type ReviewFinding, type ReviewFixOption, type ReviewSeverity, type RepoScanResult, type PlanScope,
+  type ReviewFinding, type ReviewFixOption, type ReviewSeverity, type PlanScope,
 } from '@/lib/ai'
 import { MicButton } from './dictation'
 
@@ -159,15 +158,15 @@ function escapeRegExp(s: string): string {
 // inherently conversational / folder-driven — are reachable from the dashboard
 // as their own focused flows (existing InterviewBody / RepoBody).
 
-type SweepView = 'home' | 'wizard' | 'describe' | 'interview' | 'repo' | 'adr'
+type SweepView = 'home' | 'wizard' | 'describe' | 'interview' | 'adr'
 
 const FEATURE_TO_VIEW: Record<AiFeatureId, SweepView> = {
-  compose: 'describe', interview: 'interview', review: 'wizard', repo: 'repo', adr: 'adr',
+  compose: 'describe', interview: 'interview', review: 'wizard', adr: 'adr',
 }
 
 const VIEW_TITLE: Partial<Record<SweepView, string>> = {
   wizard: 'Guided cleanup',
-  describe: 'Describe', interview: 'Interview', repo: 'From your code', adr: 'Draft ADR',
+  describe: 'Describe', interview: 'Interview', adr: 'Draft ADR',
 }
 
 // Per-category presentation (matches the imported design's palette).
@@ -565,7 +564,6 @@ function AppView({
             onScope={setImproveScope}
             onImprove={startImprove}
             onDescribe={() => setView('describe')}
-            onRepo={() => setView('repo')}
           />
         )}
 
@@ -608,7 +606,6 @@ function AppView({
 
         {view === 'describe' && <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />}
         {view === 'interview' && (workspace ? <InterviewBody provider={provider} onClose={onClose} /> : <Empty>Open or create a workspace to start an interview.</Empty>)}
-        {view === 'repo' && <RepoBody provider={provider} workspace={workspace} onClose={onClose} />}
         {view === 'adr' && <AdrBody provider={provider} workspace={workspace} />}
         </div>
       </div>
@@ -701,7 +698,7 @@ function RevealLink({ onClick }: { onClick: () => void }) {
 // ─── Home dashboard ─────────────────────────────────────────────────
 
 function HomeDashboard({
-  workspace, completePct, scope, scopeIds, viewName, onScope, onImprove, onDescribe, onRepo,
+  workspace, completePct, scope, scopeIds, viewName, onScope, onImprove, onDescribe,
 }: {
   workspace: Workspace | null
   completePct: number
@@ -711,7 +708,6 @@ function HomeDashboard({
   onScope: (s: 'view' | 'model') => void
   onImprove: (s: 'view' | 'model') => void
   onDescribe: () => void
-  onRepo: () => void
 }) {
   const missingCount = useMemo(() => (workspace ? missingInfoGaps(workspace, scopeIds).length : 0), [workspace, scopeIds])
   const allClear = missingCount === 0
@@ -803,24 +799,8 @@ function HomeDashboard({
           </span>
           <ArrowRight size={16} color={C.muted3} style={{ flex: 'none' }} />
         </button>
-        <CategoryButton icon={GitBranch} color={C.green} iconBg="rgba(34,197,94,0.1)" label="From your code" sub="Point at a local repo — propose updates" onClick={onRepo} />
       </div>
     </>
-  )
-}
-
-
-function CategoryButton({ icon: Icon, color, iconBg, label, sub, onClick }: { icon: LucideIcon; color: string; iconBg: string; label: string; sub: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="c4ai-card"
-      style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 13, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }}>
-      <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: iconBg, color }}><Icon size={19} /></span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.text }}>{label}</span>
-        <span style={{ display: 'block', fontSize: 12, color: C.muted2, marginTop: 2 }}>{sub}</span>
-      </span>
-      <ArrowRight size={16} color={C.muted3} style={{ flex: 'none' }} />
-    </button>
   )
 }
 
@@ -1597,373 +1577,6 @@ function AdrBody({ provider, workspace }: { provider: AiProvider; workspace: Wor
         </Card>
       )}
     </>
-  )
-}
-
-// ─── Scan repo ──────────────────────────────────────────────────────
-
-type RepoStage = 'idle' | 'scanning' | 'done'
-
-function RepoBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
-  const [stage, setStage] = useState<RepoStage>('idle')
-  const [phase, setPhase] = useState<'reading' | 'analyzing'>('reading')
-  const [counts, setCounts] = useState({ files: 0, keyFiles: 0 })
-  const [found, setFound] = useState<string[]>([])
-  const [repoName, setRepoName] = useState('')
-  const [result, setResult] = useState<RepoScanResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [removed, setRemoved] = useState<Set<number>>(new Set())
-  const [answers, setAnswers] = useState<Record<number, number>>({})
-  const supported = canScanRepo()
-
-  async function choose() {
-    setError(null)
-    let dir: FileSystemDirectoryHandle
-    try {
-      dir = await window.showDirectoryPicker({ mode: 'read' })
-    } catch {
-      return // user cancelled the picker
-    }
-    setStage('scanning'); setPhase('reading'); setRepoName(dir.name)
-    setResult(null); setRemoved(new Set()); setAnswers({}); setCounts({ files: 0, keyFiles: 0 }); setFound([])
-    try {
-      const snapshot = await readRepoFiles(dir, {}, (p) => {
-        setCounts({ files: p.files, keyFiles: p.keyFiles })
-        if (p.keyFile) setFound((prev) => [p.keyFile!.split('/').pop() ?? p.keyFile!, ...prev].slice(0, 6))
-      })
-      setPhase('analyzing')
-      const res = await scanRepo(provider, workspace, buildRepoBundle(snapshot))
-      setResult(res); setStage('done')
-    } catch (err) {
-      setError(aiErrorMessage(err)); setStage('idle')
-    }
-  }
-
-  function apply() {
-    if (!result || !workspace) return
-    const ops = [
-      ...result.proposals.filter((_, i) => !removed.has(i)).map((p) => p.op),
-      // ops chosen by answering the scan's questions
-      ...result.questions.flatMap((q, i) => {
-        const op = answers[i] != null ? q.options[answers[i]]?.op : undefined
-        return op ? [op] : []
-      }),
-    ]
-    if (!ops.length) { onClose(); return }
-
-    const before = useWorkspaceStore.getState()
-    const activeKey = before.activeViewKey
-    const activeView = activeKey ? getActiveView(before.workspace!, activeKey) : undefined
-    // On an L2/L3 we'll later strip out imported elements that don't belong here.
-    const cleanScope = activeView && (activeView.type === 'container' || activeView.type === 'component') ? activeView : undefined
-    const beforeViewIds = new Set(cleanScope ? cleanScope.elements.map((e) => e.id) : [])
-    const beforeSystemIds = new Set(before.workspace!.model.softwareSystems.map((s) => s.id))
-
-    // One undo batch spans the plan apply AND the follow-up view cleanup/creation,
-    // so a single Ctrl+Z reverts the whole import (not piecemeal through broken
-    // half-imported states). The view mutators skip their own undo snapshots while
-    // batchApplying is set; applyPlanToStore({ batched: true }) defers to this batch.
-    const store = useWorkspaceStore.getState()
-    store.setBatchApplying(true)
-    try {
-      applyPlanToStore({ operations: ops }, workspace, { batched: true })
-
-      const after = useWorkspaceStore.getState()
-      const ws1 = after.workspace!
-
-      // Keep the scan from polluting the view you were on: drop newly-added
-      // elements that don't belong to this view's own scope (a new system's
-      // containers, external boxes, …), while keeping additions to *this* system.
-      if (cleanScope && activeKey) {
-        const view = getActiveView(ws1, activeKey)
-        const added = view ? view.elements.map((e) => e.id).filter((id) => !beforeViewIds.has(id)) : []
-        const belongs = getScopeMemberIds(ws1, cleanScope)
-        const foreign = added.filter((id) => !belongs.has(id))
-        if (foreign.length) after.removeElementsFromView(activeKey, foreign)
-      }
-
-      // Give each newly-imported *internal* system its own container (L2) view, and
-      // open the largest. External systems are black boxes — no view for them.
-      // applyPlanToStore's addContainer already auto-creates a scoped container
-      // view for systems that gained containers, so reuse it rather than making a
-      // duplicate; only create one for systems that don't have one yet.
-      const newSystems = ws1.model.softwareSystems
-        .filter((s) => !beforeSystemIds.has(s.id) && s.location !== 'External')
-        .sort((a, b) => b.containers.length - a.containers.length)
-      let primaryKey: string | null = null
-      for (const sys of newSystems) {
-        const existing = ws1.views.containerViews.find((v) => v.softwareSystemId === sys.id)
-        const key = existing ? existing.key : after.addView('container', sys.id, `${sys.name} — Containers`)
-        if (!primaryKey) primaryKey = key
-      }
-      if (primaryKey) after.setActiveView(primaryKey)
-    } finally {
-      store.setBatchApplying(false)
-    }
-    onClose()
-  }
-
-  if (!supported) {
-    return <Empty>Repo scanning needs the File System Access API — available in Chromium browsers (Chrome, Edge, Brave, Arc).</Empty>
-  }
-
-  if (stage === 'scanning') {
-    return <ScanningView phase={phase} repoName={repoName} counts={counts} found={found} />
-  }
-
-  if (stage === 'done' && result) {
-    const kept = result.proposals.filter((_, i) => !removed.has(i)).length
-    const answeredOps = result.questions.reduce((n, q, i) => n + (answers[i] != null && q.options[answers[i]]?.op ? 1 : 0), 0)
-    const applyCount = kept + answeredOps
-    const nothing = result.proposals.length === 0 && result.questions.length === 0
-    const entries = result.proposals.map((p, i) => ({ p, i }))
-    const elementEntries = entries.filter((e) => e.p.op.op !== 'addRelationship')
-    const connEntries = entries.filter((e) => e.p.op.op === 'addRelationship')
-
-    const proposalGroup = (title: string, group: { p: typeof result.proposals[number]; i: number }[]) => (
-      <div style={{ marginTop: 14, animation: 'c4ai-fade .25s ease' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.muted, marginBottom: 7 }}>{title}</div>
-        <div style={{ borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, overflow: 'hidden' }}>
-          <ul style={{ margin: 0, padding: 8, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {group.map(({ p, i }) => {
-              const gone = removed.has(i)
-              const rel = p.op.op === 'addRelationship'
-              const add = p.op.op.startsWith('add')
-              const tag = rel ? 'Link' : add ? 'Add' : 'Update'
-              return (
-                <li key={i} style={{ padding: 8, opacity: gone ? 0.4 : 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-                    <span style={{ marginTop: 1, flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: rel ? 'rgba(167,139,250,0.16)' : add ? 'rgba(34,197,94,0.14)' : 'rgba(88,166,255,0.14)', color: rel ? '#c4b5fd' : add ? C.greenText : '#7dd3fc' }}>{tag}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: C.text2, textDecoration: gone ? 'line-through' : 'none', wordBreak: 'break-word' }}>{p.label}</span>
-                    <button onClick={() => setRemoved((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })}
-                      className="c4ai-ghost" title={gone ? 'Restore' : 'Skip'} style={{ ...iconBtn, width: 22, height: 22, flex: 'none' }}>
-                      {gone ? <ArrowRight size={12} /> : <X size={12} />}
-                    </button>
-                  </div>
-                  {p.src && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, paddingLeft: 38 }}>
-                      <FileCode size={11} color={C.muted3} style={{ flex: 'none' }} />
-                      <span style={{ fontSize: 11, color: C.muted3, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all' }}>{p.src}</span>
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      </div>
-    )
-
-    return (
-      <>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, fontWeight: 600, color: C.text }}><GitBranch size={15} color="#7dd3fc" /> {repoName}</span>
-          <button className="c4ai-sec" style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted }} onClick={() => { setStage('idle'); setResult(null) }}><Folder size={12} /> Scan another</button>
-        </div>
-        <p style={{ ...blurb, margin: '10px 0 0' }}>
-          {nothing
-            ? 'The model already matches what the code shows — nothing to propose.'
-            : <>From the code, c4hero proposes <strong style={{ color: C.text }}>{result.proposals.length} update{result.proposals.length === 1 ? '' : 's'}</strong>{result.questions.length > 0 && <> and has <strong style={{ color: C.text }}>{result.questions.length} question{result.questions.length === 1 ? '' : 's'}</strong></>}.</>}
-        </p>
-
-        {elementEntries.length > 0 && proposalGroup('Elements', elementEntries)}
-        {connEntries.length > 0 && proposalGroup('Connections', connEntries)}
-
-        {result.questions.length > 0 && (
-          <div style={{ marginTop: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 9 }}>
-              <HelpCircle size={14} color="#fdba74" /> A few things I wasn’t sure about
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {result.questions.map((q, qi) => (
-                <div key={qi} style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, padding: '12px 13px' }}>
-                  <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.text, fontWeight: 500 }}>{q.text}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-                    {q.options.map((o, oi) => {
-                      const sel = answers[qi] === oi
-                      return (
-                        <button key={oi} onClick={() => setAnswers((a) => ({ ...a, [qi]: a[qi] === oi ? -1 : oi }))}
-                          style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left', padding: '9px 11px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${sel ? C.accent : C.border}`, background: sel ? 'rgba(88,166,255,0.12)' : 'transparent' }}>
-                          <span style={{ width: 15, height: 15, flex: 'none', marginTop: 1, borderRadius: '50%', border: `1.5px solid ${sel ? C.accent : C.muted3}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {sel && <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.accent }} />}
-                          </span>
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45, color: sel ? C.text : C.text2, wordBreak: 'break-word' }}>{o.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ ...blurb, marginTop: 9 }}>Pick an answer to apply it; unanswered questions are skipped.</div>
-          </div>
-        )}
-
-        {!nothing && (
-          <>
-            <Actions>
-              <button className="c4ai-pri" style={{ ...primaryBtn, height: 34 }} disabled={applyCount === 0 || !workspace} onClick={apply}>Apply {applyCount} update{applyCount === 1 ? '' : 's'}</button>
-              <button className="c4ai-sec" style={secondaryBtn} onClick={() => { setStage('idle'); setResult(null) }}>Discard</button>
-            </Actions>
-            {!workspace && <div style={{ ...blurb, marginTop: 8 }}>Open a workspace to apply these.</div>}
-          </>
-        )}
-      </>
-    )
-  }
-
-  // idle
-  const looksFor: { icon: LucideIcon; t: string; s: string }[] = [
-    { icon: FileCode, t: 'Manifests & configs', s: 'package.json, pom.xml, go.mod, application.yml…' },
-    { icon: Box, t: 'Services & containers', s: 'apps and modules, and how they’re wired together' },
-    { icon: Link2, t: 'External dependencies', s: 'databases, queues, Stripe, SendGrid…' },
-  ]
-  return (
-    <div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '6px 0 2px' }}>
-        <span style={{ position: 'relative', width: 60, height: 60, borderRadius: 16, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#86efac', animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}>
-          <GitBranch size={27} />
-          <span style={{ position: 'absolute', inset: -1, borderRadius: 16, border: '1px solid rgba(34,197,94,0.35)', animation: 'c4ai-ringpulse 2.4s ease-out infinite' }} />
-        </span>
-        <h2 style={{ margin: '16px 0 0', fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>Build the model <span style={{ color: '#86efac' }}>from your code</span></h2>
-        <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 300 }}>Point me at a local repo. I read it on your machine and propose containers, services and connections — each tagged with the file it came from.</p>
-      </div>
-      <div style={{ marginTop: 18, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>What I look for</div>
-      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {looksFor.map((r, i) => {
-          const I = r.icon
-          return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-stagger .4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.1 + i * 0.07}s` }}>
-              <span style={{ width: 26, height: 26, flex: 'none', borderRadius: 7, background: 'rgba(34,197,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#86efac' }}><I size={14} /></span>
-              <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.text }}>{r.t}</span>
-                <span style={{ display: 'block', fontSize: 11.5, color: C.muted2, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.s}</span>
-              </span>
-            </div>
-          )
-        })}
-      </div>
-      <button onClick={choose} className="c4ai-pri"
-        style={{ width: '100%', marginTop: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
-        <Folder size={16} /> Choose a folder…
-      </button>
-      <ErrorLine error={error} />
-      <div style={{ marginTop: 14, display: 'flex', alignItems: 'flex-start', gap: 8, padding: '11px 13px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)' }}>
-        <ShieldCheck size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
-        <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Files are read in your browser. Secret-looking values are redacted, then only the file tree and key manifest/config excerpts are sent to your AI provider with your key — c4hero has no server.</span>
-      </div>
-    </div>
-  )
-}
-
-const ANALYZE_MESSAGES = [
-  'Inferring systems and services…',
-  'Detecting technologies and frameworks…',
-  'Mapping relationships between components…',
-  'Spotting external systems and integrations…',
-  'Drafting model proposals…',
-]
-
-function ScanningView({ phase, repoName, counts, found }: {
-  phase: 'reading' | 'analyzing'
-  repoName: string
-  counts: { files: number; keyFiles: number }
-  found: string[]
-}) {
-  const [msg, setMsg] = useState(0)
-  useEffect(() => {
-    if (phase !== 'analyzing') return
-    const t = setInterval(() => setMsg((m) => (m + 1) % ANALYZE_MESSAGES.length), 1900)
-    return () => clearInterval(t)
-  }, [phase])
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '8px 0', animation: 'c4ai-fade .25s ease' }}>
-      <ScanGraph />
-      <div style={{ marginTop: 16, fontSize: 13, fontWeight: 600, color: C.text }}>
-        <span key={phase === 'reading' ? 'reading' : msg} style={{ display: 'inline-block', animation: 'c4ai-fade .3s ease' }}>
-          {phase === 'reading' ? `Reading ${repoName}…` : ANALYZE_MESSAGES[msg]}
-        </span>
-      </div>
-      <div style={{ marginTop: 6, fontSize: 12, color: C.muted }}>
-        {phase === 'reading'
-          ? `${counts.files} file${counts.files === 1 ? '' : 's'} · ${counts.keyFiles} key file${counts.keyFiles === 1 ? '' : 's'} found`
-          : 'Analyzing with your model — this can take a moment'}
-      </div>
-      {found.length > 0 && (
-        <div style={{ marginTop: 16, width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {found.map((f, i) => (
-            <div key={`${f}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: C.muted2, animation: 'c4ai-fade .25s ease' }}>
-              <FileCode size={12} color="#7dd3fc" style={{ flex: 'none' }} />
-              <span style={{ fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// A radar sweeping over an architecture graph that assembles itself: the hub
-// and its nodes pop in and "ping" as the beam crosses them, edges stream data,
-// concentric rings breathe — a thematic stand-in for the model being inferred.
-const SWEEP_PERIOD = 3.2 // seconds per revolution; node pings are synced to it
-const CX = 100
-const CY = 100
-const RADAR_R = 78
-
-function ScanGraph() {
-  // Six satellites evenly around the hub, plus the hub itself.
-  const sats = [0, 1, 2, 3, 4, 5].map((i) => {
-    const deg = i * 60 - 90 // start at 12 o'clock, clockwise
-    const a = (deg * Math.PI) / 180
-    const r = 58
-    return { x: CX + r * Math.cos(a), y: CY + r * Math.sin(a), deg: (deg + 360) % 360 }
-  })
-  const ringEdges: [number, number][] = [[0, 2], [2, 4], [4, 0]] // a faint triangle between satellites
-
-  return (
-    <div style={{ position: 'relative', width: 200, height: 200, animation: 'c4ai-float 4s ease-in-out infinite' }}>
-      {/* rotating radar beam (conic wedge) */}
-      <div style={{
-        position: 'absolute', left: '50%', top: '50%', width: RADAR_R * 2, height: RADAR_R * 2,
-        marginLeft: -RADAR_R, marginTop: -RADAR_R, borderRadius: '50%',
-        background: 'conic-gradient(from -90deg, rgba(88,166,255,0) 0deg, rgba(88,166,255,0) 290deg, rgba(88,166,255,0.18) 340deg, rgba(125,211,252,0.55) 360deg)',
-        animation: `c4ai-radar ${SWEEP_PERIOD}s linear infinite`,
-      }} />
-      <svg viewBox="0 0 200 200" width="200" height="200" style={{ position: 'absolute', inset: 0 }}>
-        {/* concentric range rings + crosshairs */}
-        {[28, 52, RADAR_R].map((r) => (
-          <circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke="rgba(88,166,255,0.14)" strokeWidth="1" />
-        ))}
-        <line x1={CX - RADAR_R} y1={CY} x2={CX + RADAR_R} y2={CY} stroke="rgba(88,166,255,0.1)" strokeWidth="1" />
-        <line x1={CX} y1={CY - RADAR_R} x2={CX} y2={CY + RADAR_R} stroke="rgba(88,166,255,0.1)" strokeWidth="1" />
-
-        {/* edges: hub → each satellite, plus a faint triangle */}
-        {sats.map((s, i) => (
-          <line key={`h${i}`} x1={CX} y1={CY} x2={s.x} y2={s.y} stroke="rgba(88,166,255,0.45)" strokeWidth="1.5" className="c4ai-edge" style={{ animationDelay: `${i * 0.14}s` }} />
-        ))}
-        {ringEdges.map(([a, b], i) => (
-          <line key={`r${i}`} x1={sats[a].x} y1={sats[a].y} x2={sats[b].x} y2={sats[b].y} stroke="rgba(88,166,255,0.18)" strokeWidth="1" />
-        ))}
-
-        {/* satellites: halo + dot, popping in then pinging in time with the beam */}
-        {sats.map((s, i) => {
-          const pingDelay = (s.deg / 360) * SWEEP_PERIOD
-          return (
-            <g key={i} className="c4ai-pop" style={{ animationDelay: `${0.15 + i * 0.09}s` }}>
-              <circle cx={s.x} cy={s.y} r={11} fill="rgba(125,211,252,0.12)" className="c4ai-ping" style={{ animationDelay: `${pingDelay}s` }} />
-              <circle cx={s.x} cy={s.y} r={5.5} fill="#7dd3fc" className="c4ai-ping" style={{ animationDelay: `${pingDelay}s` }} />
-            </g>
-          )
-        })}
-
-        {/* hub: steady glowing core with an expanding pulse ring */}
-        <circle cx={CX} cy={CY} r={13} fill="none" stroke="rgba(88,166,255,0.5)" strokeWidth="1.5" style={{ transformBox: 'fill-box', transformOrigin: 'center', animation: 'c4ai-ringpulse 2.2s ease-out infinite' }} />
-        <circle cx={CX} cy={CY} r={9} fill="rgba(88,166,255,0.18)" />
-        <circle cx={CX} cy={CY} r={5.5} fill={C.accent} />
-      </svg>
-    </div>
   )
 }
 

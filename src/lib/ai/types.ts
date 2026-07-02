@@ -1,7 +1,7 @@
 /** The BYOK AI features / panel modes. `compose` merges generate + edit;
- *  auto-describe is folded into `review`; `repo` scans a local repository;
- *  `adr` is reachable from the command palette only. */
-export type AiFeatureId = 'compose' | 'interview' | 'review' | 'repo' | 'adr'
+ *  auto-describe is folded into `review`; `adr` is reachable from the command
+ *  palette only. */
+export type AiFeatureId = 'compose' | 'interview' | 'review' | 'adr'
 
 // ─── Provider abstraction ───────────────────────────────────────────
 //
@@ -221,50 +221,4 @@ export interface ReviewFinding {
 
 export interface ReviewResult {
   findings: ReviewFinding[]
-}
-
-// ─── Repo scan ──────────────────────────────────────────────────────
-
-/** One file read from a local repository (content may be truncated). */
-export interface RepoFile {
-  path: string
-  content: string
-}
-
-/** A compact snapshot of a repo sent to the model: its file tree plus the
- *  contents of high-signal manifest/config files. */
-export interface RepoSnapshot {
-  repoName: string
-  tree: string[]
-  files: RepoFile[]
-}
-
-/** A proposed model edit inferred from the code, with its source file. */
-export interface RepoProposal {
-  op: EditOp
-  /** Repo file path that justifies the proposal (provenance). */
-  src: string
-  /** Short human-readable description of the change. */
-  label: string
-}
-
-/** One answer choice for a scan question. Choosing it applies `op` (omitted for
- *  a "no / none" choice). */
-export interface ScanOption {
-  label: string
-  op?: EditOp
-}
-
-/** A point the scan was unsure about (an ambiguous connection, or whether an
- *  element is external/internal/distinct), surfaced for the user to resolve. */
-export interface ScanQuestion {
-  text: string
-  options: ScanOption[]
-}
-
-export interface RepoScanResult {
-  /** Confident elements + relationships, applied by default. */
-  proposals: RepoProposal[]
-  /** Things the scan wasn't sure about, for the user to answer. */
-  questions: ScanQuestion[]
 }

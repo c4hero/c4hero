@@ -7,8 +7,7 @@ import { interviewAsk, interviewKickoffMessage, interviewBuildPlan } from './fea
 import {
   generateSystem, generateUser, reviewSystem, reviewUser, describeSystem, describeUser,
   editSystem, editUser, adrSystem, adrUser, interviewSystem, interviewKickoff,
-  interviewPlanSystem, interviewPlanUser, repoElementsSystem, repoElementsUser,
-  repoConnectionsSystem, repoConnectionsUser,
+  interviewPlanSystem, interviewPlanUser,
 } from './prompts'
 
 const ws = makeWorkspace()
@@ -57,12 +56,6 @@ describe('prompt builders', () => {
     expect(interviewSystem(ws, view)).toBeTruthy()
     expect(interviewPlanSystem(ws, view)).toBeTruthy()
     expect(interviewPlanUser()).toBeTruthy()
-    expect(repoElementsSystem(null)).toBeTruthy()
-    expect(repoElementsSystem(ws)).toBeTruthy()
-    expect(repoElementsUser('FILE BUNDLE')).toContain('FILE BUNDLE')
-    expect(repoConnectionsSystem(null)).toBeTruthy()
-    expect(repoConnectionsSystem(ws)).toBeTruthy()
-    expect(repoConnectionsUser('BUNDLE', '- A\n- B')).toBeTruthy()
   })
 
   it('labels each view type, with and without a title', () => {

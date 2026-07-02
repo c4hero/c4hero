@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toEditPlan, toRepoScanResult, toReviewResult, toDescribeResult } from './schema'
+import { toEditPlan, toReviewResult, toDescribeResult } from './schema'
 
 describe('tolerant sanitizers', () => {
   it('toEditPlan keeps valid operations and drops malformed ones', () => {
@@ -16,37 +16,6 @@ describe('tolerant sanitizers', () => {
   it('toEditPlan tolerates a non-array / missing envelope', () => {
     expect(toEditPlan({}).operations).toEqual([])
     expect(toEditPlan(null).operations).toEqual([])
-  })
-
-  it('toRepoScanResult keeps proposals with a valid op, coercing missing provenance', () => {
-    const res = toRepoScanResult({ proposals: [
-      { op: { op: 'addContainer', ref: 'c', parent: 'sys', name: 'payments' }, src: 'package.json', label: 'Add payments' },
-      { op: { op: 'addRelationship', source: 'a' } },     // missing destination → dropped
-      { op: { op: 'updateElement', id: 'x', technology: 'Java' } },  // no src/label → kept, coerced
-    ] })
-    expect(res.proposals).toHaveLength(2)
-    expect(res.proposals[1]).toMatchObject({ src: '', label: '' })
-    expect(res.questions).toEqual([])
-  })
-
-  it('toRepoScanResult keeps well-formed questions and drops bad option ops', () => {
-    const res = toRepoScanResult({
-      proposals: [],
-      questions: [
-        { text: 'Orders → Payments?', options: [
-          { label: 'Sync HTTP', op: { op: 'addRelationship', source: 'Orders', destination: 'Payments' } },
-          { label: 'No connection' },                                  // valid "none" option
-          { label: 'broken', op: { op: 'addRelationship', source: 'x' } }, // bad op → kept as none
-        ] },
-        { text: 'no options', options: [] },                            // dropped (no options)
-        { options: [{ label: 'x' }] },                                  // dropped (no text)
-      ],
-    })
-    expect(res.questions).toHaveLength(1)
-    expect(res.questions[0].options).toHaveLength(3)
-    expect(res.questions[0].options[0].op).toBeTruthy()
-    expect(res.questions[0].options[1].op).toBeUndefined()
-    expect(res.questions[0].options[2].op).toBeUndefined()
   })
 
   it('toReviewResult keeps valid findings and strips malformed operations', () => {

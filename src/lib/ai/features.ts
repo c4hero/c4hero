@@ -1,10 +1,9 @@
 import type { Workspace, View } from '@/types/model'
-import type { AiProvider, DescribeResult, EditPlan, ReviewResult, ReviewFinding, RepoScanResult, RepoProposal, AiChatTurn } from './types'
+import type { AiProvider, DescribeResult, EditPlan, ReviewResult, ReviewFinding, AiChatTurn } from './types'
 import {
   generateSystem, generateUser, reviewSystem, reviewUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
   interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
-  repoElementsSystem, repoElementsUser, repoConnectionsSystem, repoConnectionsUser,
 } from './prompts'
 import { isRecord } from '@/lib/guards'
 import {
@@ -12,11 +11,10 @@ import {
   viewScopeInternalIds, makeHumanizer,
 } from './context'
 import {
-  describeSchema, editSchema, reviewSchema, repoScanSchema, connectionsSchema,
-  toDescribeResult, toEditPlan, toReviewResult, toRepoProposals, toScanQuestions,
+  describeSchema, editSchema, reviewSchema,
+  toDescribeResult, toEditPlan, toReviewResult,
 } from './schema'
 import { extractDsl } from './dsl'
-import { mergeRepoProposals, namespacePassRefs } from './repoScan'
 
 // Feature orchestration. Each function takes a provider (injected, so tests use a
 // fake) plus inputs, and returns parsed/validated results. No store access here —
@@ -180,72 +178,3 @@ export async function interviewBuildPlan(
   return toEditPlan(raw)
 }
 
-/** Analyze a repo snapshot in two phases — discover elements, then re-evaluate
- *  the connections between them — and surface questions for anything ambiguous.
- *
- *  Phase 1 runs several passes in parallel and merges their union (the model
- *  samples, so one pass is inconsistent; the snapshot is deterministic and Claude
- *  no longer accepts a temperature override, so merging is the remaining lever).
- *  Phase 2 reasons about connections over the full, fixed element list — which is
- *  far more accurate than inferring elements and links at once. */
-export async function scanRepo(
-  provider: AiProvider, ws: Workspace | null, bundle: string, passes = SCAN_PASSES,
-): Promise<RepoScanResult> {
-  // Phase 1 — elements only.
-  const elementsPass = () => provider.completeJson({
-    system: repoElementsSystem(ws),
-    user: repoElementsUser(bundle),
-    schema: repoScanSchema,
-    validate: isRecord,
-    maxTokens: 8000,
-  }).then((r) => toRepoProposals(r.proposals))
-
-  const settled = await Promise.allSettled(Array.from({ length: Math.max(1, passes) }, elementsPass))
-  const ok = settled.filter((s): s is PromiseFulfilledResult<RepoProposal[]> => s.status === 'fulfilled')
-  if (ok.length === 0) {
-    // Every pass failed — surface the real error (auth, connection, …).
-    throw (settled[0] as PromiseRejectedResult).reason
-  }
-  // Namespace each pass's temporary refs BEFORE merging, so two passes'
-  // independently-numbered refs (both "s1", "c1", …) can't collide in
-  // applyEditPlan and mis-parent containers. mergeRepoProposals canonicalizes
-  // the namespaced refs as it dedupes.
-  const elements = mergeRepoProposals(ok.flatMap((s, i) => namespacePassRefs(s.value, `p${i}_`)))
-
-  // Phase 2 — connections + questions over the discovered elements.
-  const conn = await provider.completeJson({
-    system: repoConnectionsSystem(ws),
-    user: repoConnectionsUser(bundle, listScanElements(elements)),
-    schema: connectionsSchema,
-    validate: isRecord,
-    maxTokens: 6000,
-  })
-
-  return {
-    proposals: [...elements, ...toRepoProposals(conn.relationships)],
-    questions: toScanQuestions(conn.questions),
-  }
-}
-
-/** How many parallel element passes a scan runs; their union is used. */
-export const SCAN_PASSES = 3
-
-/** A readable element list for the connections prompt. Parents are addressed by
- *  (namespaced) ref after the merge, so resolve them back to the parent's NAME —
- *  otherwise the prompt reads "(container in p0_s1)" and the model can't tell
- *  which system a container belongs to. */
-export function listScanElements(proposals: RepoProposal[]): string {
-  const nameByRef = new Map<string, string>()
-  for (const { op } of proposals) {
-    if ('ref' in op && op.ref && 'name' in op && op.name) nameByRef.set(op.ref, op.name)
-  }
-  const parentName = (ref: string): string => nameByRef.get(ref) ?? ref
-  const lines: string[] = []
-  for (const { op } of proposals) {
-    if (op.op === 'addSoftwareSystem') lines.push(`- ${op.name}${op.external ? ' (external system)' : ' (software system)'}`)
-    else if (op.op === 'addContainer') lines.push(`- ${op.name} (container in ${parentName(op.parent)})`)
-    else if (op.op === 'addComponent') lines.push(`- ${op.name} (component in ${parentName(op.parent)})`)
-    else if (op.op === 'addPerson') lines.push(`- ${op.name} (person)`)
-  }
-  return lines.join('\n')
-}

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import type { AiProvider, RepoProposal } from './types'
+import type { AiProvider } from './types'
 import {
   suggestTags, generateDiagram, draftAdr,
-  reviewArchitecture, planEdit, autoDescribe, scanRepo, listScanElements,
+  reviewArchitecture, planEdit, autoDescribe,
 } from './features'
 import { makeWorkspace } from './testFixture'
 
@@ -127,46 +127,3 @@ describe('autoDescribe', () => {
   })
 })
 
-describe('scanRepo', () => {
-  const scanJson = {
-    proposals: [
-      { op: { op: 'addSoftwareSystem', ref: 'billing', name: 'Billing', external: true }, src: 'a.ts', label: 'Billing' },
-      { op: { op: 'addSoftwareSystem', ref: 'core', name: 'Core' }, src: 'b.ts', label: 'Core' },
-      { op: { op: 'addContainer', ref: 'api', name: 'API', parent: 'Core' }, src: 'c.ts' },
-      { op: { op: 'addComponent', ref: 'svc', name: 'Service', parent: 'API' } },
-      { op: { op: 'addPerson', ref: 'user', name: 'User' } },
-    ],
-    relationships: [{ op: { op: 'addRelationship', source: 'user', destination: 'api' } }],
-    questions: [{ text: 'Which datastore?', options: [{ label: 'Postgres', op: { op: 'updateElement', id: 'api' } }, { label: 'Not sure' }] }],
-  }
-
-  it('discovers elements, then connections and questions', async () => {
-    const result = await scanRepo(makeProvider({ json: scanJson }), null, 'file bundle', 2)
-    // 5 distinct elements (deduped across passes) + 1 relationship.
-    expect(result.proposals.length).toBeGreaterThanOrEqual(6)
-    expect(result.questions).toHaveLength(1)
-    expect(result.questions[0].options).toHaveLength(2)
-    expect(result.questions[0].options[1].op).toBeUndefined()
-  })
-
-  it('throws when every element pass fails', async () => {
-    const failing: AiProvider = {
-      async complete() { throw new Error('down') },
-      async completeJson<T>(): Promise<T> { throw new Error('down') },
-    }
-    await expect(scanRepo(failing, null, 'bundle', 2)).rejects.toThrow(/down/)
-  })
-})
-
-describe('listScanElements', () => {
-  it('resolves namespaced parent refs to the parent element NAME', () => {
-    // After merge, parents are addressed by (namespaced) ref, not name.
-    const proposals: RepoProposal[] = [
-      { op: { op: 'addSoftwareSystem', ref: 'p0_s1', name: 'Auth Service' }, src: 'a', label: 'Auth' },
-      { op: { op: 'addContainer', ref: 'p0_c1', parent: 'p0_s1', name: 'Auth API' }, src: 'a', label: 'Auth API' },
-    ]
-    const out = listScanElements(proposals)
-    expect(out).toContain('Auth API (container in Auth Service)')
-    expect(out).not.toContain('p0_s1')
-  })
-})
