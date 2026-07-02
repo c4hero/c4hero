@@ -1,7 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { Workspace } from '@/types/model'
 import type { WorkspaceState } from '../workspace-types'
-import { clearSelectionDraft } from '../workspace-helpers'
 import { pushUndoSnapshot } from '../internals'
 
 // Per-batch bookkeeping for setBatchApplying's no-op guard (single store instance).
@@ -70,20 +69,16 @@ export const createUiSlice: StateCreator<
   setSearchOpen: (open) => set({ searchOpen: open, commandPaletteOpen: false }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open, searchOpen: false }),
   setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
+  // The assistant lives in the bottom-left dock now, so opening it no longer
+  // clears the selection / closes the inspector (they sit in different corners).
   setAiPanelOpen: (open, feature) => set((s) => {
     s.aiPanelOpen = open
     s.aiPanelFeature = open ? (feature ?? null) : null
     s.commandPaletteOpen = false
-    // Opening the assistant closes the inspector (clears selection) so the two
-    // side panels never stack — mirrors selection closing the assistant.
-    if (open) clearSelectionDraft(s)
   }),
   setAiSettingsOpen: (open) => set((s) => {
     s.aiSettingsOpen = open
     s.commandPaletteOpen = false
-    // Opening AI settings closes the inspector too (App.tsx renders the panel on
-    // aiPanelOpen || aiSettingsOpen, so a live selection would stack behind it).
-    if (open) clearSelectionDraft(s)
   }),
   // Consume the one-shot deep-link feature (after the panel routes to it)
   // without closing the panel, so a stale feature can't fire again later.

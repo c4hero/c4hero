@@ -237,26 +237,26 @@ describe('Relationship and container mutations', () => {
     expect(ws.views.containerViews.find((v) => v.key === cvKey)!.elements.some((e) => e.id === cid)).toBe(true)
   })
 
-  it('selecting an element closes BOTH the AI panel and AI settings (no stacking over the inspector)', () => {
+  it('selecting an element leaves the AI panel and settings open (bottom-left dock — no shared slot)', () => {
     useWorkspaceStore.getState().setAiSettingsOpen(true)
-    useWorkspaceStore.getState().selectElements(['alice'])
-    expect(useWorkspaceStore.getState().aiSettingsOpen).toBe(false)
-    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
-  })
-
-  it('opening AI settings clears the selection (mirror direction — no inspector stacking)', () => {
-    useWorkspaceStore.getState().selectElements(['alice'])
-    useWorkspaceStore.getState().setAiSettingsOpen(true)
-    expect(useWorkspaceStore.getState().selectedElementIds).toEqual([])
-  })
-
-  it('selecting a node while the assistant is busy keeps the panel open (no lost interview)', () => {
     useWorkspaceStore.getState().setAiPanelOpen(true)
-    useWorkspaceStore.getState().setAiPanelBusy(true)
+    useWorkspaceStore.getState().selectElements(['alice'])
+    expect(useWorkspaceStore.getState().aiSettingsOpen).toBe(true)
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(true)
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual(['alice'])
+  })
+
+  it('opening AI settings keeps the current selection (inspector and assistant are independent)', () => {
+    useWorkspaceStore.getState().selectElements(['alice'])
+    useWorkspaceStore.getState().setAiSettingsOpen(true)
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual(['alice'])
+  })
+
+  it('selecting a node while the assistant is open keeps the panel open', () => {
+    useWorkspaceStore.getState().setAiPanelOpen(true)
     useWorkspaceStore.getState().selectElements(['alice'])
     expect(useWorkspaceStore.getState().aiPanelOpen).toBe(true) // survives the click
     expect(useWorkspaceStore.getState().selectedElementIds).toEqual(['alice'])
-    useWorkspaceStore.getState().setAiPanelBusy(false)
   })
 
   it('addContainer during a batch apply does not jump the active view', () => {

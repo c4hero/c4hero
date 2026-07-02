@@ -52,11 +52,15 @@ const SECRET_KEY_RE = new RegExp(`(?:^|[._-])(?:${SECRET_KEY_PART})(?:$|[._-])`,
 // inline and minified secrets (`{ "password": "x" }`, `mode=dev;password=y`) have
 // a non-key token before the key, so an `^`-anchored pattern missed them and let
 // the credential through. `lead` is the delimiter before the key (start-of-line,
-// whitespace, `{`, `,`, or `;`). The unquoted value runs to the next PAIR
-// separator (`;` `,` `}` `]` `)` newline) — it keeps spaces so a multi-word or
-// unterminated-quote secret is redacted whole, but stops at `;`/`,`/`}` so a
-// non-secret key can't swallow a following secret pair on the same line.
-const ASSIGNMENT_RE = /(^|[\s{,;])((?:export[ \t]+)?["']?)([\w.-]+)(["']?[ \t]*[:=][ \t]*)("(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)*'|[^{};,\])\r\n]*)/gim
+// whitespace, `{`, `,`, or `;`).
+//
+// The unquoted value keeps spaces (so a multi-word or unterminated-quote secret
+// is redacted whole) BUT stops at: a structural separator (`;` `,` `{` `}` `]`
+// `)` newline), or a space that begins another `key=`/`key:` assignment. That
+// last lookahead is what stops a non-secret leading key from swallowing a
+// following secret on a space-separated line (Dockerfile `ENV A=1 PASSWORD=x`,
+// shell `export A=1 TOKEN=y`) while still capturing genuine multi-word values.
+const ASSIGNMENT_RE = /(^|[\s{,;])((?:export[ \t]+)?["']?)([\w.-]+)(["']?[ \t]*[:=][ \t]*)("(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)*'|(?:[^\s{};,\])\r\n]|[ \t](?![\w.-]+["']?[ \t]*[:=]))*)/gim
 const PRIVATE_KEY_BLOCK_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))/g
 const ASSIGNED_PRIVATE_KEY_BLOCK_RE = /^([ \t-]*(?:export[ \t]+)?["']?[\w.-]*private[-_]?key[\w.-]*["']?[ \t]*[:=][ \t]*)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))/gim
 

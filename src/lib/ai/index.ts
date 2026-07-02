@@ -13,7 +13,7 @@ export type {
 } from './types'
 export { AiError, aiErrorMessage } from './types'
 
-export { findingsToMarkdown, sortedFindings, isActionable } from './review'
+export { findingsToMarkdown, sortedFindings, isActionable, findingOptions } from './review'
 export { classifyScope, classifyPlanScopes, type PlanScope } from './planScope'
 export {
   missingInfoGaps, modelHealthPercent, gapToOp,

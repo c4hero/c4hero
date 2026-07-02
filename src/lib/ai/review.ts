@@ -1,16 +1,20 @@
-import type { ReviewResult, ReviewFinding } from './types'
+import type { ReviewResult, ReviewFinding, ReviewFixOption } from './types'
 
 // Pure helpers for the structured Review result: a markdown rendering (for the
 // Copy/share button) and the actionable-finding check. Unit-tested.
 
-/** True when a finding carries concrete operations that can be applied — either
- *  top-level `operations` or any `options` entry with operations. Must mirror
- *  findingOptions in the panel: it offers option-based fixes too, so a finding
- *  with only `options` is still actionable and must not be auto-dismissed. */
+/** The candidate fixes for a finding: its explicit `options`, or a single option
+ *  synthesized from `operations` when the model didn't break out alternatives.
+ *  The panel renders these; isActionable derives from the same source so the two
+ *  can never disagree (rendering a fix the apply step would silently dismiss). */
+export function findingOptions(f: ReviewFinding): ReviewFixOption[] {
+  if (f.options?.length) return f.options
+  return f.operations?.length ? [{ label: f.suggestion, operations: f.operations }] : []
+}
+
+/** True when a finding carries a concrete, applicable fix. */
 export function isActionable(finding: ReviewFinding): boolean {
-  if (Array.isArray(finding.operations) && finding.operations.length > 0) return true
-  return Array.isArray(finding.options)
-    && finding.options.some((o) => Array.isArray(o.operations) && o.operations.length > 0)
+  return findingOptions(finding).some((o) => !!o.operations?.length)
 }
 
 const SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }

@@ -176,7 +176,7 @@ export function applyEditPlan(
         const destination = resolve(op.destination)
         if (!source || !destination) { skip(op, 'unknown source or destination'); break }
         if (source === destination) { skip(op, 'self-relationship'); break }
-        const id = actions.addRelationship(source, destination, op.description?.trim() || undefined, op.technology?.trim() || undefined)
+        const id = actions.addRelationship(source, destination, optStr(op.description), optStr(op.technology))
         if (!id) { skip(op, 'could not create relationship'); break }
         ok(op)
         break

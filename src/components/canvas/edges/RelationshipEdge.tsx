@@ -55,8 +55,10 @@ function RelationshipEdge({
   // "Show in diagram" reveal: briefly emphasize + pulse this edge. The nonce is
   // the pulse path's key so a repeat reveal of the same edge remounts it and
   // replays the animation; on animation end the edge clears the reveal itself.
+  // Select the nonce ONLY for the revealed edge (else a stable 0), so a reveal
+  // re-renders just that edge, not every edge in the diagram.
   const revealed = useWorkspaceStore((s) => s.focusRelationshipId === id)
-  const pulseNonce = useWorkspaceStore((s) => s.focusRelationshipNonce)
+  const pulseNonce = useWorkspaceStore((s) => (s.focusRelationshipId === id ? s.focusRelationshipNonce : 0))
   const emphasized = !!selected || revealed
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle

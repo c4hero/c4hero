@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useAiSettingsStore, isAiReady } from '@/store/ai-settings'
+import { missingInfoGaps } from '@/lib/ai'
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
@@ -49,8 +50,18 @@ export default function FloatingToolRail() {
   const aiOpen = useWorkspaceStore((s) => s.aiPanelOpen || s.aiSettingsOpen)
   const aiReady = useAiSettingsStore(isAiReady)
   const [aiHover, setAiHover] = useState(false)
-
-
+  // Pending quick-fixes the assistant can resolve — surfaced as a count badge on
+  // the AI button so the work waiting inside is visible without opening it.
+  // Scoped to the *current view* (matching the assistant's default "this view"
+  // scope), not the whole model.
+  const pendingCount = useMemo(() => {
+    if (!aiReady || !workspace) return 0
+    const v = activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
+    const ids = v
+      ? new Set<string>([...v.elements.map((e) => e.id), ...v.relationships.map((r) => r.id)])
+      : undefined
+    return missingInfoGaps(workspace, ids).length
+  }, [aiReady, workspace, activeViewKey])
 
   const reactFlow = useReactFlow()
   const breakpoint = useBreakpoint()
@@ -151,7 +162,7 @@ export default function FloatingToolRail() {
         type="button"
         className="glass-panel"
         title={aiOpen ? 'Hide AI assistant (I)' : aiReady ? 'AI assistant (I)' : 'AI assistant — set up your key (I)'}
-        aria-label="AI assistant"
+        aria-label={pendingCount > 0 ? `AI assistant — ${pendingCount} pending` : 'AI assistant'}
         aria-pressed={aiOpen}
         data-active={aiOpen ? 'true' : undefined}
         onClick={() => {
@@ -183,7 +194,13 @@ export default function FloatingToolRail() {
         }}
       >
         <Sparkles size={18} style={{ pointerEvents: 'none' }} />
-        <span style={{ pointerEvents: 'none', position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: '50%', background: aiReady ? '#22c55e' : 'var(--color-text-muted)', border: `2px solid ${aiOpen ? 'var(--color-accent)' : 'var(--glass-bg-heavy)'}` }} />
+        {aiReady && pendingCount > 0 && !aiOpen ? (
+          <span style={{ pointerEvents: 'none', position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 4px', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#22c55e', color: '#05300f', fontSize: 11, fontWeight: 800, lineHeight: 1, border: '2px solid var(--color-bg-primary)' }}>
+            {pendingCount > 9 ? '9+' : pendingCount}
+          </span>
+        ) : (
+          <span style={{ pointerEvents: 'none', position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: '50%', background: aiReady ? '#22c55e' : 'var(--color-text-muted)', border: `2px solid ${aiOpen ? 'var(--color-accent)' : 'var(--glass-bg-heavy)'}` }} />
+        )}
       </button>
 
     <div

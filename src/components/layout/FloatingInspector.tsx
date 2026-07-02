@@ -9,10 +9,6 @@ export default function FloatingInspector() {
   const selectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
-  // The assistant and inspector share the same top-right slot. While the
-  // assistant is open it owns the slot, so the inspector yields — this lets a
-  // mid-flow assistant survive a canvas selection without the two overlapping.
-  const aiOpen = useWorkspaceStore((s) => s.aiPanelOpen || s.aiSettingsOpen)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const hasElement = !!workspace && selectedIds.length > 0 && getSelectedElement(workspace, selectedIds) !== undefined
@@ -23,9 +19,9 @@ export default function FloatingInspector() {
   const visible = hasElement || hasRelationship || hasGroup
   // The single rendered/active condition — the outside-click effect must match it
   // exactly, or its document listener stays attached while the inspector div is
-  // unmounted (e.g. the assistant is open) and dismisses selections from clicks
-  // inside the panel.
-  const shown = !!workspace && !multiSelectMode && !aiOpen && visible
+  // unmounted and dismisses selections from clicks inside the panel. The assistant
+  // now lives in the bottom-left dock, so it no longer hides the inspector.
+  const shown = !!workspace && !multiSelectMode && visible
 
   // Dismiss on outside click. Clicks on canvas nodes/edges run their own
   // selection logic synchronously after this mousedown clears, so they end

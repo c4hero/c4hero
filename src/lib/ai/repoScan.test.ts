@@ -149,6 +149,20 @@ describe('redactSensitiveContent', () => {
     expect(out).not.toContain('backup3')
     expect(out).not.toContain('secret value here')
   })
+
+  it('redacts a space-separated secret pair after a non-secret one (Dockerfile ENV / shell export)', () => {
+    const out = redactSensitiveContent([
+      'ENV NODE_ENV=production DATABASE_PASSWORD=s3cr3t',
+      'export FOO=bar TOKEN=xyz123abc',
+    ].join('\n'))
+    expect(out).not.toContain('s3cr3t')
+    expect(out).not.toContain('xyz123abc')
+    // The non-secret leading pairs survive.
+    expect(out).toContain('NODE_ENV=production')
+    expect(out).toContain('FOO=bar')
+    expect(out).toContain('DATABASE_PASSWORD=<redacted>')
+    expect(out).toContain('TOKEN=<redacted>')
+  })
 })
 
 describe('mergeRepoProposals', () => {

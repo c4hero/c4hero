@@ -308,4 +308,15 @@ describe('applyEditPlan — malformed optional fields are dropped, not fatal', (
     // No description update fired (the bad value was dropped).
     expect(actions.updateElement).not.toHaveBeenCalled()
   })
+
+  it('does not throw when addRelationship carries a non-string description', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const plan = { operations: [
+      { op: 'addRelationship', source: 'cust', destination: 'web', description: 7 },
+    ] } as unknown as EditPlan
+    expect(() => applyEditPlan(plan, actions, ws)).not.toThrow()
+    // Created, with the bad description coerced to undefined.
+    expect(actions.addRelationship).toHaveBeenCalledWith('cust', 'web', undefined, undefined)
+  })
 })

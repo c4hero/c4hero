@@ -230,13 +230,21 @@ export async function scanRepo(
 /** How many parallel element passes a scan runs; their union is used. */
 export const SCAN_PASSES = 3
 
-/** A readable element list for the connections prompt. */
-function listScanElements(proposals: RepoProposal[]): string {
+/** A readable element list for the connections prompt. Parents are addressed by
+ *  (namespaced) ref after the merge, so resolve them back to the parent's NAME —
+ *  otherwise the prompt reads "(container in p0_s1)" and the model can't tell
+ *  which system a container belongs to. */
+export function listScanElements(proposals: RepoProposal[]): string {
+  const nameByRef = new Map<string, string>()
+  for (const { op } of proposals) {
+    if ('ref' in op && op.ref && 'name' in op && op.name) nameByRef.set(op.ref, op.name)
+  }
+  const parentName = (ref: string): string => nameByRef.get(ref) ?? ref
   const lines: string[] = []
   for (const { op } of proposals) {
     if (op.op === 'addSoftwareSystem') lines.push(`- ${op.name}${op.external ? ' (external system)' : ' (software system)'}`)
-    else if (op.op === 'addContainer') lines.push(`- ${op.name} (container in ${op.parent})`)
-    else if (op.op === 'addComponent') lines.push(`- ${op.name} (component in ${op.parent})`)
+    else if (op.op === 'addContainer') lines.push(`- ${op.name} (container in ${parentName(op.parent)})`)
+    else if (op.op === 'addComponent') lines.push(`- ${op.name} (component in ${parentName(op.parent)})`)
     else if (op.op === 'addPerson') lines.push(`- ${op.name} (person)`)
   }
   return lines.join('\n')

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import type { AiProvider } from './types'
+import type { AiProvider, RepoProposal } from './types'
 import {
   suggestTags, generateDiagram, draftAdr,
-  reviewArchitecture, planEdit, autoDescribe, scanRepo,
+  reviewArchitecture, planEdit, autoDescribe, scanRepo, listScanElements,
 } from './features'
 import { makeWorkspace } from './testFixture'
 
@@ -155,5 +155,18 @@ describe('scanRepo', () => {
       async completeJson<T>(): Promise<T> { throw new Error('down') },
     }
     await expect(scanRepo(failing, null, 'bundle', 2)).rejects.toThrow(/down/)
+  })
+})
+
+describe('listScanElements', () => {
+  it('resolves namespaced parent refs to the parent element NAME', () => {
+    // After merge, parents are addressed by (namespaced) ref, not name.
+    const proposals: RepoProposal[] = [
+      { op: { op: 'addSoftwareSystem', ref: 'p0_s1', name: 'Auth Service' }, src: 'a', label: 'Auth' },
+      { op: { op: 'addContainer', ref: 'p0_c1', parent: 'p0_s1', name: 'Auth API' }, src: 'a', label: 'Auth API' },
+    ]
+    const out = listScanElements(proposals)
+    expect(out).toContain('Auth API (container in Auth Service)')
+    expect(out).not.toContain('p0_s1')
   })
 })

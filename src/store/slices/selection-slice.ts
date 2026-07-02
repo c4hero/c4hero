@@ -1,11 +1,9 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
-import { closeAiSurfaces } from '../workspace-helpers'
-
 /** Selection state: which element(s), relationship, or group is currently
- *  highlighted in the canvas / inspector. Selecting any canvas object closes
- *  the Highlighter panel and the AI assistant so the Inspector doesn't stack
- *  underneath them. */
+ *  highlighted in the canvas / inspector. Selecting any canvas object closes the
+ *  Highlighter panel. The assistant lives in the bottom-left dock and is
+ *  independent of the inspector, so selecting no longer closes it. */
 export type SelectionSlice = Pick<WorkspaceState,
   | 'selectedElementIds' | 'selectedRelationshipId' | 'selectedGroupId'
   | 'selectElements' | 'selectRelationship' | 'selectGroup' | 'clearSelection'
@@ -25,25 +23,19 @@ export const createSelectionSlice: StateCreator<
     s.selectedElementIds = ids
     s.selectedRelationshipId = null
     s.selectedGroupId = null
-    // Opening the inspector closes BOTH AI surfaces (panel + settings); App.tsx
-    // renders the assistant whenever either flag is set, so closing only
-    // aiPanelOpen would leave AI settings stacked over the inspector. EXCEPT
-    // while the assistant is mid-flow (aiPanelBusy) — an interview even invites
-    // you to click highlighted nodes — where closing it would discard the work;
-    // there the panel stays and App suppresses the inspector behind it.
-    if (ids.length > 0) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) closeAiSurfaces(s) }
+    if (ids.length > 0) s.highlighterOpenFacet = null
   }),
   selectRelationship: (id) => set((s) => {
     s.selectedRelationshipId = id
     s.selectedElementIds = []
     s.selectedGroupId = null
-    if (id) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) closeAiSurfaces(s) }
+    if (id) s.highlighterOpenFacet = null
   }),
   selectGroup: (id) => set((s) => {
     s.selectedGroupId = id
     s.selectedElementIds = []
     s.selectedRelationshipId = null
-    if (id) { s.highlighterOpenFacet = null; if (!s.aiPanelBusy) closeAiSurfaces(s) }
+    if (id) s.highlighterOpenFacet = null
   }),
   clearSelection: () => set({ selectedElementIds: [], selectedRelationshipId: null, selectedGroupId: null }),
 })

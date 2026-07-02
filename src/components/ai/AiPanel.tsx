@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { clearAiSession, ensureSessionForWorkspace, usePersistentState } from './sessionCache'
 import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, Folder, GitBranch, FileCode, ChevronRight, ChevronDown, HelpCircle,
-  Activity, Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, type LucideIcon,
+  Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView, getScopeMemberIds } from '@/store/workspace'
 import { allViewsOf } from '@/store/workspace-helpers'
-import { useAiSettingsStore, useAiProvider, type PanelPos } from '@/store/ai-settings'
+import { useAiSettingsStore, useAiProvider } from '@/store/ai-settings'
 import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
 import { parseDSL } from '@/lib/dsl'
 import { downloadFile } from '@/lib/exportUtils'
@@ -87,55 +87,9 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   // View routing: no key → BYOK welcome; disabled or settings open → settings; else app.
   const mode: 'byok' | 'settings' | 'app' = !hasKey ? 'byok' : (settingsOpen || !settings.enabled) ? 'settings' : 'app'
 
-  // Draggable floating panel. `pos` is the persisted top-left; null = default
-  // top-right anchor. Dragging starts on any element marked [data-drag-handle].
-  // The stored position is clamped to the current viewport so a panel dragged on
-  // a big screen never lands off-screen on a smaller one.
-  const [pos, setPos] = useState<PanelPos | null>(
-    () => (settings.panelPos ? clampPanelPos(settings.panelPos, window.innerWidth, window.innerHeight) : null),
-  )
-
-  // On resize keep a dragged panel on-screen and inside the top/bottom band, and
-  // hold its distance from the *right* edge constant (the panel docks near the
-  // right, so it should track that edge rather than drift as the width changes).
-  const lastW = useRef(window.innerWidth)
-  useEffect(() => {
-    const onResize = () => {
-      const w = window.innerWidth
-      const h = window.innerHeight
-      const prevW = lastW.current
-      lastW.current = w
-      setPos((p) => {
-        if (!p) return p
-        const rightGap = prevW - (p.x + PANEL_WIDTH)
-        return clampPanelPos({ x: w - PANEL_WIDTH - rightGap, y: p.y }, w, h)
-      })
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
-  function startDrag(e: React.PointerEvent) {
-    const t = e.target as HTMLElement
-    if (t.closest('button, input, textarea, a, select, [role="switch"]')) return
-    if (!t.closest('[data-drag-handle]')) return
-    const base = pos ?? { x: Math.max(EDGE, window.innerWidth - PANEL_WIDTH - 14), y: TOP_INSET }
-    const startX = e.clientX
-    const startY = e.clientY
-    let latest = base
-    const move = (ev: PointerEvent) => {
-      latest = clampPanelPos({ x: base.x + ev.clientX - startX, y: base.y + ev.clientY - startY }, window.innerWidth, window.innerHeight)
-      setPos(latest)
-    }
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      useAiSettingsStore.getState().update({ panelPos: latest })
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-    e.preventDefault()
-  }
+  // Fixed placement: a compact card tucked against the tool rail and centred
+  // vertically. The panel is intentionally not draggable, so any previously
+  // persisted panelPos is ignored — the layout is always the same.
 
   const baseStyle: React.CSSProperties = {
     display: 'flex', flexDirection: 'column',
@@ -144,18 +98,18 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
     fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
     width: `min(${PANEL_WIDTH}px, calc(100vw - 28px))`,
     borderRadius: 12,
-    // Default anchor: top-right, vertically inset to sit *between* the floating
-    // top pill (top:14, h44) and the bottom-right zoom HUD (bottom:14, h~44),
-    // shrinking to fit on smaller screens. Once dragged, switch to an explicit
-    // top-left with a capped height. `bottom: auto` (drag case) overrides
-    // DialogShell's docked full-height rail.
-    ...(pos
-      ? { top: pos.y, bottom: 'auto', height: `min(${MAX_PANEL_H}px, calc(100dvh - ${TOP_INSET + BOTTOM_INSET}px))`, left: pos.x, right: 'auto' }
-      : {
-          top: 'max(64px, calc(env(safe-area-inset-top, 0px) + 58px))',
-          bottom: 'max(72px, calc(env(safe-area-inset-bottom, 0px) + 66px))',
-          height: 'auto', right: 14,
-        }),
+    // Left edge tucked right up against the tool rail (which carries the
+    // assistant's own launcher button) and vertically centred in the viewport,
+    // sized to its content (capped) rather than spanning the full height — a
+    // compact card, not a full-height rail. `top: 50%` + translateY centres it;
+    // `bottom: auto` overrides DialogShell's docked full-height rail.
+    maxHeight: `min(${MAX_PANEL_H}px, calc(100dvh - 96px))`,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    bottom: 'auto',
+    height: 'auto',
+    left: 64,
+    right: 'auto',
   }
 
   return (
@@ -166,7 +120,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
       position="docked"
       style={baseStyle}
     >
-      <div onPointerDown={startDrag} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
         <style>{STYLE}</style>
 
         {mode === 'byok' && <ByokWelcome onClose={onClose} />}
@@ -182,39 +136,19 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
-const PANEL_WIDTH = 360
+const PANEL_WIDTH = 300
 
 /** Compact model name for the header pill (drops the vendor prefix), so it
  *  doesn't crowd the view title — e.g. "claude-haiku-4-5" → "haiku-4-5". */
 function shortModel(m: string): string {
   return m.replace(/^(claude-|gemini-|models\/)/, '')
 }
-const EDGE = 8            // min gap to the viewport edge
-const TOP_INSET = 64     // clears the floating top pill (top:14 + h44)
-const BOTTOM_INSET = 72  // clears the bottom-right zoom HUD
-const MAX_PANEL_H = 820  // cap so it doesn't get absurdly tall on big screens
-
-function clampPx(v: number, min: number, max: number): number {
-  return Math.min(Math.max(v, min), Math.max(min, max))
-}
+const MAX_PANEL_H = 560  // cap height so the panel stays a compact card, not a full-height rail
 
 /** Escape a string for safe use inside a RegExp (element names can contain
  *  regex metacharacters like dots or parens). */
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/** Height a dragged panel occupies: the top↔bottom band, capped, never negative. */
-function panelBandHeight(viewportH: number): number {
-  return Math.min(MAX_PANEL_H, Math.max(160, viewportH - TOP_INSET - BOTTOM_INSET))
-}
-
-/** Clamp a dragged top-left so the panel stays fully on-screen and within the
- *  top/bottom band, whatever the current viewport size. */
-function clampPanelPos(p: PanelPos, viewportW: number, viewportH: number): PanelPos {
-  const maxX = Math.max(EDGE, viewportW - PANEL_WIDTH - EDGE)
-  const maxY = Math.max(TOP_INSET, viewportH - BOTTOM_INSET - panelBandHeight(viewportH))
-  return { x: clampPx(p.x, EDGE, maxX), y: clampPx(p.y, TOP_INSET, maxY) }
 }
 
 // ─── App (guided-sweep controller) ──────────────────────────────────
@@ -327,6 +261,9 @@ function AppView({
   const [improveScope, setImproveScope] = usePersistentState<'view' | 'model'>('sweep.scope', 'view')
   const [interviewOn, setInterviewOn] = usePersistentState('sweep.interview', false)
   const [ivApplied, setIvApplied] = usePersistentState('sweep.ivApplied', false)
+  // Model pill starts minimal (just the status dot + gear) and expands to reveal
+  // the model name on hover/focus so the header stays uncluttered.
+  const [modelHover, setModelHover] = useState(false)
   // Transient (in-flight) flags — not worth persisting.
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
@@ -590,7 +527,7 @@ function AppView({
   return (
     <>
       {/* header (drag handle) */}
-      <div data-drag-handle style={{ ...headerRow, cursor: 'move' }}>
+      <div style={headerRow}>
         {view === 'home' ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: '1 1 auto', fontSize: 15, fontWeight: 700, color: C.text, whiteSpace: 'nowrap' }}>
             <Sparkles size={17} color={C.accent} style={{ flex: 'none' }} /> AI assistant
@@ -603,9 +540,11 @@ function AppView({
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
           <button onClick={onOpenSettings} title={`Connected — ${model} · open AI settings`}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 7px 0 9px', borderRadius: 999, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.22)', fontSize: 11, fontWeight: 500, color: C.greenText, cursor: 'pointer', maxWidth: 138, overflow: 'hidden' }}>
+            aria-label={`AI model ${shortModel(model)} — open AI settings`}
+            onPointerEnter={() => setModelHover(true)} onPointerLeave={() => setModelHover(false)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: modelHover ? 5 : 4, height: 28, padding: modelHover ? '0 7px 0 9px' : '0 6px', borderRadius: 999, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.22)', fontSize: 11, fontWeight: 500, color: C.greenText, cursor: 'pointer', maxWidth: 160, overflow: 'hidden', transition: 'gap .2s ease, padding .2s ease' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, flex: 'none' }} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortModel(model)}</span>
+            <span style={{ maxWidth: modelHover ? 130 : 0, opacity: modelHover ? 1 : 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', transition: 'max-width .25s ease, opacity .2s ease' }}>{shortModel(model)}</span>
             <Settings size={11} style={{ flex: 'none', opacity: 0.85 }} />
           </button>
           <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
@@ -615,7 +554,10 @@ function AppView({
       {/* body — keyed wrapper so every screen / sub-state change replays an
           entrance animation, making the transition unmistakable. */}
       <div data-scroll style={{ padding: '20px 20px 24px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div key={screenKey} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', animation: 'c4ai-screen .32s cubic-bezier(0.16,1,0.3,1) both' }}>
+        {/* flex: 1 0 auto — fills the body when a screen is short, but grows past
+            it (never shrinks) when content is tall, so the body scrolls instead
+            of compressing children (which would overlap fixed-minHeight rows). */}
+        <div key={screenKey} style={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column', animation: 'c4ai-screen .32s cubic-bezier(0.16,1,0.3,1) both' }}>
         {view === 'home' && (
           <HomeDashboard
             workspace={workspace} completePct={completePct}
@@ -794,16 +736,17 @@ function HomeDashboard({
 
   return (
     <>
-      {/* Health */}
+      {/* Quick Fixes */}
       <div style={{ padding: '12px 14px', borderRadius: 13, border: `1px solid ${C.border}`, background: 'linear-gradient(165deg, #1a222e, #161b22)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div style={{ minWidth: 0 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: C.text2 }}><Activity size={14} color={C.accent} /> Health</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: C.text2 }}><Wand2 size={14} color={C.accent} /> Quick Fixes</span>
             <span style={{ display: 'block', marginTop: 2, fontSize: 11, color: C.muted3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scopeContext}</span>
           </div>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none', fontSize: 22, fontWeight: 800, color: allClear ? '#facc15' : C.text, letterSpacing: '-.02em' }}>
-            {allClear && <Star size={15} fill="#facc15" color="#facc15" />}
-            {completePct}<span style={{ fontSize: 12, color: allClear ? '#facc15' : C.muted, fontWeight: 600 }}>%</span>
+            {allClear
+              ? <><Star size={15} fill="#facc15" color="#facc15" /><span style={{ fontSize: 15 }}>All clear</span></>
+              : <>{missingCount}<span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>ready</span></>}
           </span>
         </div>
         <div style={{ marginTop: 8, height: 7, borderRadius: 999, background: C.ink, overflow: 'hidden', border: '1px solid rgba(88,166,255,0.1)' }}>
@@ -929,7 +872,6 @@ function FixCard({ gap, draft, draftLoading, applied, onDraft, onRewrite, onReve
   onDraft: (v: string) => void; onRewrite: () => void | Promise<void>; onReveal?: () => void; onApply: () => void; onSkip: () => void; onRevert: () => void
 }) {
   const k = KIND[gap.kind]
-  const Icon = k.icon
   const [regen, setRegen] = useState(false)
   // Hold the spinner until the actual rewrite call settles (onRewrite returns the
   // async rewriteDraft promise), not a fixed timer.
@@ -937,12 +879,9 @@ function FixCard({ gap, draft, draftLoading, applied, onDraft, onRewrite, onReve
 
   return (
     <div style={{ marginTop: 18, animation: 'c4ai-next .3s cubic-bezier(0.16,1,0.3,1) both' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-        <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 12, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7dd3fc' }}><Icon size={23} /></span>
-        <div style={{ minWidth: 0 }}>
-          <div title={gap.label} style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em', lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{gap.label}</div>
-          <div style={{ fontSize: 13, color: C.muted2, marginTop: 2 }}>{k.prompt}</div>
-        </div>
+      <div style={{ minWidth: 0 }}>
+        <div title={gap.label} style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em', lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{gap.label}</div>
+        <div style={{ fontSize: 13, color: C.muted2, marginTop: 2 }}>{k.prompt}</div>
       </div>
       <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3 }}>
         <Sparkles size={13} color={C.accent} /> Suggested {k.label}
@@ -952,16 +891,16 @@ function FixCard({ gap, draft, draftLoading, applied, onDraft, onRewrite, onReve
       </div>
       <textarea value={draft} onChange={(e) => onDraft(e.target.value)}
         placeholder={draftLoading ? 'Drafting a suggestion…' : `Type a ${k.label}…`}
-        style={{ width: '100%', marginTop: 9, resize: 'vertical', minHeight: gap.kind === 'desc' ? 128 : gap.kind === 'rel' ? 112 : 60, padding: '13px 15px', borderRadius: 12, border: `1px solid ${C.borderStrong}`, background: C.card, color: C.text, fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit' }} />
+        style={{ width: '100%', marginTop: 9, resize: 'vertical', minHeight: gap.kind === 'desc' ? 150 : gap.kind === 'rel' ? 128 : 64, padding: '13px 15px', borderRadius: 12, border: `1px solid ${C.borderStrong}`, background: C.card, color: C.text, fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit' }} />
       {onReveal && <div><RevealLink onClick={onReveal} /></div>}
-      <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <div style={{ marginTop: 16, display: 'flex', gap: 9 }}>
+        {applied
+          ? <button onClick={onRevert} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', minWidth: 92, height: 46, color: C.dangerText }}>Revert</button>
+          : <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', minWidth: 92, height: 46 }}>Skip</button>}
         <button onClick={onApply} disabled={!draft.trim()} className="c4ai-pri"
-          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: applied ? C.green : C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', opacity: draft.trim() ? 1 : 0.55 }}>
+          style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: applied ? C.green : C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', opacity: draft.trim() ? 1 : 0.55 }}>
           <Check size={16} /> {applied ? 'Applied · update' : 'Apply'}
         </button>
-        {applied
-          ? <button onClick={onRevert} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%', color: C.dangerText }}>Revert</button>
-          : <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>}
       </div>
     </div>
   )
@@ -980,12 +919,9 @@ function FindingCardStep({ finding, applied, onReveal, onApply, onSkip, onRevert
   const pick = (idx: number) => onChoice({ idx, other: sel.other })
   return (
     <div style={{ marginTop: 18, animation: 'c4ai-next .3s cubic-bezier(0.16,1,0.3,1) both' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13 }}>
-        <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 12, background: sev.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: sev.color }}><AlertCircle size={23} /></span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>{finding.title}</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: sev.color, marginTop: 3 }}>{sev.label} severity · {finding.category}</div>
-        </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>{finding.title}</div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: sev.color, marginTop: 3 }}>{sev.label} severity · {finding.category}</div>
       </div>
       <div style={{ marginTop: 16, fontSize: 14, color: C.text2, lineHeight: 1.55 }}>{finding.detail}</div>
 
@@ -1012,16 +948,16 @@ function FindingCardStep({ finding, applied, onReveal, onApply, onSkip, onRevert
       )}
 
       {onReveal && <div><RevealLink onClick={onReveal} /></div>}
-      <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <div style={{ marginTop: 16, display: 'flex', gap: 9 }}>
+        {applied
+          ? <button onClick={onRevert} className="c4ai-ghost" style={{ ...wizSecBtn, flex: actionable ? 'none' : 1, minWidth: 92, height: 46, color: C.dangerText }}>Revert</button>
+          : <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: actionable ? 'none' : 1, minWidth: 92, height: 46 }}>Skip</button>}
         {actionable && (
           <button onClick={onApply} disabled={applyBusy || (!applied && otherEmpty)} className="c4ai-pri"
-            style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: applied ? C.green : C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: applyBusy || (!applied && otherEmpty) ? 'default' : 'pointer', opacity: applyBusy || (!applied && otherEmpty) ? 0.55 : 1 }}>
+            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: applied ? C.green : C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: applyBusy || (!applied && otherEmpty) ? 'default' : 'pointer', opacity: applyBusy || (!applied && otherEmpty) ? 0.55 : 1 }}>
             {applyBusy ? <><Loader2 size={16} className="animate-spin" /> Applying…</> : <><Check size={16} /> {applied ? 'Applied · update' : 'Apply fix'}</>}
           </button>
         )}
-        {applied
-          ? <button onClick={onRevert} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%', color: C.dangerText }}>Revert</button>
-          : <button onClick={onSkip} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', width: '100%' }}>Skip</button>}
       </div>
     </div>
   )
@@ -2072,7 +2008,7 @@ function ByokWelcome({ onClose }: { onClose: () => void }) {
 
   return (
     <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-      <div data-drag-handle style={{ display: 'flex', justifyContent: 'flex-end', padding: '13px 14px 0', cursor: 'move' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '13px 14px 0' }}>
         <button onClick={onClose} className="c4ai-ghost" aria-label="Close" style={iconBtn}><X size={14} /></button>
       </div>
       <div style={{ padding: '6px 32px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', flex: 1, justifyContent: 'center' }}>
@@ -2124,7 +2060,7 @@ function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?: () =>
 
   return (
     <div data-scroll style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-      <div data-drag-handle style={{ ...headerRow, cursor: 'move' }}>
+      <div style={headerRow}>
         {onDone ? (
           <button onClick={onDone} className="c4ai-ghost" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px 0 7px', borderRadius: 9, border: 'none', background: 'transparent', color: C.text, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
             <ArrowLeft size={16} color={C.muted} /> AI settings
