@@ -6,9 +6,11 @@ import {
   interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
 } from './prompts'
 import { isRecord } from '@/lib/guards'
+import type { GapKind } from './sweep'
 import {
   elementsMissingDescription, relationshipsMissingDescription,
   viewScopeInternalIds, makeHumanizer,
+  serializeContext, flattenElements, elementNameMap,
 } from './context'
 import {
   describeSchema, editSchema, reviewSchema,
@@ -118,6 +120,75 @@ export async function suggestTags(
     return out.slice(0, 5)
   }
   return [...new Set(cleaned)].slice(0, 4)
+}
+
+// ─── Single-field suggestion (the sweep's per-step "Rewrite") ───────
+
+const FIELD_ASK: Record<GapKind, string> = {
+  title: 'Suggest a short, specific name for this element.',
+  desc: 'Write a short description (one phrase or sentence) of what this element does.',
+  tech: 'Suggest a plausible technology (e.g. "React", "PostgreSQL", "Node.js/Express") for this element, inferred from its name, description and the rest of the model. Return only the technology, not a sentence.',
+  rel: 'Write a short description of what this relationship represents (e.g. "Sends order confirmations to", "Reads customer records from").',
+}
+
+/** One line identifying the target of a single-field suggestion, or null when
+ *  the id no longer resolves (deleted mid-sweep). */
+function describeFieldTarget(ws: Workspace, kind: GapKind, targetId: string): string | null {
+  if (kind === 'rel') {
+    const r = ws.model.relationships.find((x) => x.id === targetId)
+    if (!r) return null
+    const names = elementNameMap(ws)
+    return `Target relationship: ${names.get(r.sourceId) ?? r.sourceId} -> ${names.get(r.destinationId) ?? r.destinationId} (id ${r.id}).`
+  }
+  const el = flattenElements(ws).find((e) => e.id === targetId)
+  if (!el) return null
+  const part = el.parentName ? `, part of ${el.parentName}` : ''
+  return `Target element: ${el.type} “${el.name}” (id ${el.id})${part}.`
+}
+
+/** Draft a value for ONE missing field — an element's name/description/
+ *  technology or a relationship's description — grounded in the whole model.
+ *  The guided sweep's per-step "Rewrite" uses this instead of re-running the
+ *  whole-model autoDescribe/planEdit batches: same grounding, one tiny answer,
+ *  a fraction of the tokens and latency. Pass `avoid` (the draft being
+ *  re-rolled) to ask for a different take. Returns null when the target no
+ *  longer exists or the model returns nothing usable. */
+export async function suggestFieldValue(
+  provider: AiProvider, ws: Workspace, kind: GapKind, targetId: string, avoid?: string,
+): Promise<string | null> {
+  const target = describeFieldTarget(ws, kind, targetId)
+  if (!target) return null
+  const avoidLine = avoid?.trim()
+    ? `The user was shown “${avoid.trim()}” and asked for a different suggestion — do not repeat it.`
+    : null
+  const raw = await provider.completeJson({
+    system: [
+      'You fill in one missing field of a C4 architecture model, using the rest of the model as context.',
+      'Be specific and free of filler. Return JSON: { "value": string } — the field value only, with no',
+      'label, surrounding quotes, or explanation.',
+    ].join('\n'),
+    user: [
+      serializeContext(ws),
+      '',
+      target,
+      FIELD_ASK[kind],
+      ...(avoidLine ? [avoidLine] : []),
+      'Return JSON: { "value": string }.',
+    ].join('\n'),
+    schema: { type: 'object', additionalProperties: false, properties: { value: { type: 'string' } }, required: ['value'] },
+    validate: isRecord,
+    // Reasoning models share this budget with their thinking tokens; a tight cap
+    // would starve the (tiny) JSON output.
+    maxTokens: 1500,
+    // Vary the answer when re-rolling a rejected draft (ignored by providers
+    // that no longer support temperature).
+    temperature: avoidLine ? 1 : undefined,
+  })
+  const v = isRecord(raw) && typeof (raw as { value?: unknown }).value === 'string' ? (raw as { value: string }).value.trim() : ''
+  // Models sometimes wrap the value in quotes despite instructions.
+  const unquoted = v.match(/^["'“](.*)["'”]$/s)
+  const cleaned = (unquoted ? unquoted[1] : v).trim()
+  return cleaned || null
 }
 
 /** Natural-language edit → returns a validated operation plan. */

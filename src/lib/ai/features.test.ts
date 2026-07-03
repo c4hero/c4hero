@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import type { AiProvider } from './types'
+import type { AiProvider, AiJsonRequest } from './types'
 import {
-  suggestTags, generateDiagram, draftAdr,
+  suggestTags, suggestFieldValue, generateDiagram, draftAdr,
   reviewArchitecture, planEdit, autoDescribe,
 } from './features'
 import { makeWorkspace } from './testFixture'
@@ -41,6 +41,65 @@ describe('suggestTags', () => {
   it('handles a target with a description but no technology', async () => {
     const provider = makeProvider({ json: { tags: ['Actor'] } })
     expect(await suggestTags(provider, { name: 'Customer', type: 'Person', description: 'buys things' }, [])).toEqual(['Actor'])
+  })
+})
+
+describe('suggestFieldValue', () => {
+  // Provider that records each completeJson request so tests can assert on the
+  // prompt the feature actually built.
+  function capturing(json: unknown) {
+    const calls: AiJsonRequest<unknown>[] = []
+    const provider: AiProvider = {
+      async complete() { return '' },
+      async completeJson<T>(req: AiJsonRequest<T>): Promise<T> {
+        calls.push(req as AiJsonRequest<unknown>)
+        return json as T
+      },
+    }
+    return { provider, calls }
+  }
+
+  it('targets one element and returns the trimmed value', async () => {
+    const { provider, calls } = capturing({ value: '  Stores orders and customers  ' })
+    const value = await suggestFieldValue(provider, makeWorkspace(), 'desc', 'db')
+    expect(value).toBe('Stores orders and customers')
+    expect(calls).toHaveLength(1)
+    expect(calls[0].user).toContain('Target element: container “Database” (id db), part of Shop.')
+    expect(calls[0].user).toContain('what this element does')
+  })
+
+  it('targets a relationship by naming its endpoints', async () => {
+    const { provider, calls } = capturing({ value: 'Reads and writes order data' })
+    const value = await suggestFieldValue(provider, makeWorkspace(), 'rel', 'r2')
+    expect(value).toBe('Reads and writes order data')
+    expect(calls[0].user).toContain('Target relationship: Web App -> Database (id r2).')
+  })
+
+  it('returns null without calling the provider when the target no longer exists', async () => {
+    const { provider, calls } = capturing({ value: 'never used' })
+    expect(await suggestFieldValue(provider, makeWorkspace(), 'desc', 'ghost')).toBeNull()
+    expect(await suggestFieldValue(provider, makeWorkspace(), 'rel', 'ghost')).toBeNull()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('asks for a different take (with temperature) when re-rolling a rejected draft', async () => {
+    const { provider, calls } = capturing({ value: 'Order storage' })
+    await suggestFieldValue(provider, makeWorkspace(), 'desc', 'db', 'Stores data')
+    expect(calls[0].user).toContain('“Stores data”')
+    expect(calls[0].user).toContain('do not repeat it')
+    expect(calls[0].temperature).toBe(1)
+    // No avoid → deterministic default (no temperature override).
+    await suggestFieldValue(provider, makeWorkspace(), 'desc', 'db')
+    expect(calls[1].temperature).toBeUndefined()
+  })
+
+  it('strips wrapping quotes and returns null for an empty value', async () => {
+    const quoted = capturing({ value: '“Serves web traffic”' })
+    expect(await suggestFieldValue(quoted.provider, makeWorkspace(), 'desc', 'web')).toBe('Serves web traffic')
+    const empty = capturing({ value: '   ' })
+    expect(await suggestFieldValue(empty.provider, makeWorkspace(), 'desc', 'web')).toBeNull()
+    const malformed = capturing({ nope: true })
+    expect(await suggestFieldValue(malformed.provider, makeWorkspace(), 'desc', 'web')).toBeNull()
   })
 })
 

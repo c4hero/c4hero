@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { clearAiSession, ensureSessionForWorkspace, usePersistentState } from './sessionCache'
 import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
@@ -17,7 +17,7 @@ import type { View, Workspace } from '@/types/model'
 import {
   aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr, detectComposeMode,
-  interviewAsk, interviewKickoffMessage, interviewBuildPlan,
+  interviewAsk, interviewKickoffMessage, interviewBuildPlan, suggestFieldValue,
   applyEditPlan, describeOps, summarizeSkips, elementNameMap, flattenElements, viewLabel,
   sortedFindings, isActionable, classifyPlanScopes,
   missingInfoGaps, modelHealthPercent, gapToOp,
@@ -264,6 +264,11 @@ function AppView({
   // Transient (in-flight) flags — not worth persisting.
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
+  // Deep-review failure is kept apart from `error`: without an explicit retry
+  // the Improve flow would quietly continue as quick-fixes-only. The ref
+  // remembers the scope the failed review ran with, so Retry re-runs the same one.
+  const [reviewError, setReviewError] = useState<string | null>(null)
+  const reviewScopeRef = useRef<'view' | 'model'>('view')
   // True while a finding's free-text "Other" fix is being turned into operations.
   const [applyBusy, setApplyBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -311,7 +316,12 @@ function AppView({
           return n
         })
       }))
-      await Promise.allSettled(tasks)
+      const settled = await Promise.allSettled(tasks)
+      // Drafting failures were previously swallowed — the user just saw empty
+      // suggestion boxes with no explanation. Surface the first one; each
+      // step's Rewrite button is the (targeted, cheap) retry.
+      const failed = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+      if (failed) setError(aiErrorMessage(failed.reason))
     } finally {
       setDraftsLoading(false)
     }
@@ -320,19 +330,24 @@ function AppView({
   // Run the architecture review and append its findings to the live queue. Scope
   // 'view' grounds the review on the active view; 'model' reviews the whole model.
   async function loadReview(ws: Workspace, scope: 'view' | 'model' = 'view') {
-    setReviewLoading(true); setError(null)
+    reviewScopeRef.current = scope
+    setReviewLoading(true); setReviewError(null)
     try {
       const result = await reviewArchitecture(provider, ws, scope === 'view' ? (activeView ?? null) : null)
       const steps: FindingStep[] = sortedFindings(result).map((finding, i) => ({ type: 'finding', key: `f:${i}`, cat: 'review', finding }))
       setQueue((q) => [...q, ...steps])
     } catch (err) {
-      setError(aiErrorMessage(err))
+      setReviewError(aiErrorMessage(err))
     } finally {
       setReviewLoading(false)
     }
   }
+  function retryReview() {
+    const ws = useWorkspaceStore.getState().workspace
+    if (ws && !reviewLoading) loadReview(ws, reviewScopeRef.current)
+  }
 
-  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setFindingChoice({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setError(null); setSkipNotice(null) }
+  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setFindingChoice({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setError(null); setSkipNotice(null); setReviewError(null) }
 
   function startSweep(cats: CatId[]) {
     if (!workspace) return
@@ -583,7 +598,7 @@ function AppView({
                 draft={drafts[cur.key] ?? ''} draftLoading={draftsLoading && (drafts[cur.key] ?? '') === ''}
                 applied={!!ledger.find((e) => e.key === cur.key)}
                 onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
-                onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
+                onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, drafts[cur.key] ?? '', setDrafts, setError) }}
                 onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace), stepRelationshipId(cur, workspace)) : undefined}
                 onBack={curIdx > 0 ? goBack : undefined}
                 onApply={applyStep} onSkip={skipStep} onRevert={() => revertEntry(cur.key)}
@@ -610,7 +625,16 @@ function AppView({
             />
           )
         )}
-        {view === 'wizard' && <><Notice text={skipNotice} /><ErrorLine error={error} /></>}
+        {view === 'wizard' && (
+          <>
+            <Notice text={skipNotice} />
+            <ErrorLine error={error} />
+            <ErrorLine
+              error={reviewError && !reviewLoading ? `Deep review didn’t finish — ${reviewError}` : null}
+              onRetry={retryReview}
+            />
+          </>
+        )}
 
         {view === 'describe' && <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />}
         {view === 'interview' && (workspace ? <InterviewBody provider={provider} /> : <Empty>Open or create a workspace to start an interview.</Empty>)}
@@ -621,24 +645,20 @@ function AppView({
   )
 }
 
-// Re-draft a single missing-info gap on demand (the wizard's "Rewrite").
+// Re-draft a single missing-info gap on demand (the wizard's "Rewrite") — one
+// targeted request for just this field, not the whole-model autoDescribe/
+// planEdit batches (which re-drafted EVERY gap to refresh one). Passing the
+// current draft asks for a genuinely different take rather than the same
+// deterministic answer, and makes Rewrite work on title gaps too.
 async function rewriteDraft(
-  provider: AiProvider, ws: Workspace, step: FixStep,
+  provider: AiProvider, ws: Workspace, step: FixStep, current: string,
   setDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>,
   setError: (e: string | null) => void,
 ) {
   try {
     const { gap } = step
-    if (gap.kind === 'desc' || gap.kind === 'rel') {
-      const r = await autoDescribe(provider, ws)
-      const list = gap.kind === 'desc' ? r.elements : r.relationships
-      const hit = list.find((p) => p.id === gap.targetId)
-      if (hit?.description?.trim()) setDrafts((d) => ({ ...d, [gap.key]: hit.description.trim() }))
-    } else if (gap.kind === 'tech') {
-      const plan = await planEdit(provider, ws, TECH_INSTRUCTION)
-      const op = plan.operations.find((o) => o.op === 'updateElement' && o.id === gap.targetId && o.technology?.trim())
-      if (op && op.op === 'updateElement' && op.technology) setDrafts((d) => ({ ...d, [gap.key]: op.technology!.trim() }))
-    }
+    const value = await suggestFieldValue(provider, ws, gap.kind, gap.targetId, current)
+    if (value) setDrafts((d) => ({ ...d, [gap.key]: value }))
   } catch (err) {
     setError(aiErrorMessage(err))
   }
@@ -1480,7 +1500,9 @@ function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: {
         </div>
       )}
 
-      <ErrorLine error={run.error} />
+      {/* retry re-runs the failed call from its closure — an interview answer
+          is cleared from the input on send, so "try again" must not need it. */}
+      <ErrorLine error={run.error} onRetry={run.retry} />
 
       {plan && (
         <Card>
@@ -1546,7 +1568,7 @@ function PlanPreviewBar({ provider, ws, view, history }: { provider: AiProvider;
         <span style={{ flex: 1 }} />
         <ChevronRight size={13} color={C.muted3} style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .18s' }} />
       </button>
-      <ErrorLine error={run.error} />
+      <ErrorLine error={run.error} onRetry={run.retry} />
       {open && plan && (
         <div style={{ marginTop: 8, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, padding: 8, animation: 'c4ai-fade .2s ease' }}>
           {lines.length === 0 ? (
@@ -1794,15 +1816,22 @@ interface RunState {
   loading: boolean
   error: string | null
   go: <T>(fn: () => Promise<T>, onResult: (v: T) => void) => Promise<void>
+  /** Re-run the last `go` — the retry for a failed call whose inputs (an
+   *  interview answer, a kickoff) are captured in its closure and may no
+   *  longer exist in state. No-op while loading or before any run. */
+  retry: () => void
 }
 function useAiRun(): RunState {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const lastRun = useRef<(() => Promise<void>) | null>(null)
   async function go<T>(fn: () => Promise<T>, onResult: (v: T) => void) {
+    lastRun.current = () => go(fn, onResult)
     setLoading(true); setError(null)
     try { onResult(await fn()) } catch (err) { setError(aiErrorMessage(err)) } finally { setLoading(false) }
   }
-  return { loading, error, go }
+  function retry() { if (!loading) void lastRun.current?.() }
+  return { loading, error, go, retry }
 }
 
 function Field({ value, onChange, placeholder, rows, grow, onSubmit }: { value: string; onChange: (v: string) => void; placeholder: string; rows?: number; grow?: boolean; onSubmit?: () => void }) {
@@ -1826,9 +1855,20 @@ function RunButton({ label, loading, disabled, onClick }: { label: string; loadi
   )
 }
 
-function ErrorLine({ error }: { error: string | null }) {
+function ErrorLine({ error, onRetry }: { error: string | null; onRetry?: () => void }) {
   if (!error) return null
-  return <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 12, color: C.dangerText }}><AlertCircle size={13} style={{ flex: 'none', marginTop: 1 }} /> {error}</div>
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 12, color: C.dangerText }}>
+      <AlertCircle size={13} style={{ flex: 'none', marginTop: 1 }} />
+      <span style={{ flex: 1, minWidth: 0 }}>{error}</span>
+      {onRetry && (
+        <button onClick={onRetry} className="c4ai-ghost"
+          style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '0 2px' }}>
+          <RotateCw size={12} /> Retry
+        </button>
+      )}
+    </div>
+  )
 }
 
 /** Warning-toned sibling of ErrorLine, for partial results (skipped operations). */
