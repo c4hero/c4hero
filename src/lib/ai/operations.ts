@@ -182,10 +182,17 @@ export function applyEditPlan(
       }
       case 'updateElement': {
         if (!validIds.has(op.id)) { skip(op, 'element not found'); break }
+        const name = optStr(op.name)
+        const description = optStr(op.description)
+        const technology = optStr(op.technology)
+        // The store treats a present-but-undefined key as "clear this field"
+        // (so the UI can blank out a text box). Only include a key here when
+        // the op actually set it, so an op that e.g. only changes location
+        // doesn't wipe out the element's existing name/description/technology.
         actions.updateElement(op.id, {
-          name: optStr(op.name),
-          description: optStr(op.description),
-          technology: optStr(op.technology),
+          ...(name && { name }),
+          ...(description && { description }),
+          ...(technology && { technology }),
           // Guard the value — isEditOp doesn't type-check it, so a bogus string
           // from the model must not reach the store.
           location: op.location === 'External' || op.location === 'Internal' ? op.location : undefined,
@@ -195,9 +202,13 @@ export function applyEditPlan(
       }
       case 'updateRelationship': {
         if (!relIds.has(op.id)) { skip(op, 'relationship not found'); break }
+        const description = optStr(op.description)
+        const technology = optStr(op.technology)
+        // Same "key presence clears the field" convention as updateElement above —
+        // omit unset keys so a description-only update doesn't clear technology (or vice versa).
         actions.updateRelationship(op.id, {
-          description: optStr(op.description),
-          technology: optStr(op.technology),
+          ...(description && { description }),
+          ...(technology && { technology }),
         })
         ok(op)
         break
@@ -216,6 +227,27 @@ export function applyEditPlan(
 
   const appliedCount = applied.filter((a) => a.ok).length
   return { applied, appliedCount, skippedCount: applied.length - appliedCount }
+}
+
+/** One-line, human-readable summary of an ApplyResult's skipped operations,
+ *  or null when everything applied. Reasons are grouped and counted so the UI
+ *  can show e.g. "Skipped 2 of 7 changes — unknown parent system (2)." —
+ *  applyEditPlan skips invalid ops rather than failing, and silently dropping
+ *  them reads as success to the user. */
+export function summarizeSkips(result: ApplyResult): string | null {
+  if (result.skippedCount === 0) return null
+  const counts = new Map<string, number>()
+  for (const a of result.applied) {
+    if (a.ok) continue
+    const reason = a.reason ?? 'unknown reason'
+    counts.set(reason, (counts.get(reason) ?? 0) + 1)
+  }
+  const reasons = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, n]) => (n > 1 ? `${reason} (${n})` : reason))
+    .join(', ')
+  const total = result.applied.length
+  return `Skipped ${result.skippedCount} of ${total} ${total === 1 ? 'change' : 'changes'} — ${reasons}.`
 }
 
 /** Human-readable, one-line-per-op preview, resolving existing ids to names. */

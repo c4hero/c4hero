@@ -53,7 +53,9 @@ export function reviewSystem(): string {
     '- category: one of missing-element, missing-relationship, naming, description, technology,',
     '  boundary, security, scalability, other',
     '- severity: high, medium, or low',
-    '- elementIds: the ids of affected existing elements (may be empty)',
+    '- elementIds: the ids of affected existing PEOPLE/SYSTEMS/CONTAINERS/COMPONENTS (may be',
+    '  empty). For a finding about a relationship (missing, mislabeled, or otherwise), use its',
+    '  two endpoint element ids — never a relationship\'s own id.',
     '- suggestion: a concrete recommended fix',
     '- operations: when (and only when) the finding can be fixed by a direct edit to the model,',
     '  include the operations that implement the fix (format below). For advisory findings',
@@ -128,6 +130,9 @@ export function editSystem(): string {
     'are black boxes — never give them containers or components.',
     'Do not delete or rename anything the instruction did not ask you to. Prefer adding',
     'descriptions and technologies to new elements.',
+    'Every addRelationship needs a description of what the interaction does (e.g. "Sends orders',
+    'to", "Reads customer records from"); include a technology/protocol (e.g. HTTPS/JSON, gRPC,',
+    'AMQP) whenever it is known or reasonably implied.',
   ].join('\n')
 }
 

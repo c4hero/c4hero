@@ -18,15 +18,16 @@ import {
   aiErrorMessage,
   generateDiagram, planEdit, autoDescribe, reviewArchitecture, draftAdr, detectComposeMode,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan,
-  applyEditPlan, describeOps, elementNameMap, flattenElements, viewLabel,
+  applyEditPlan, describeOps, summarizeSkips, elementNameMap, flattenElements, viewLabel,
   sortedFindings, isActionable, classifyPlanScopes,
   missingInfoGaps, modelHealthPercent, gapToOp,
   type MissingGap, type GapKind,
-  type AiProvider, type EditActions,
+  type AiProvider, type EditActions, type ApplyResult,
   type EditPlan, type EditOp, type AiFeatureId, type AiChatTurn,
   type ReviewFinding, type ReviewFixOption, type ReviewSeverity, type PlanScope,
 } from '@/lib/ai'
 import { MicButton } from './dictation'
+import { stepElementIds, stepRelationshipId, type Step, type FixStep, type FindingStep } from './wizardSteps'
 
 // ─── Palette (the "AI Assistant Hybrid" design) ─────────────────────
 
@@ -195,9 +196,6 @@ const SEV: Record<ReviewSeverity, { label: string; bg: string; color: string }> 
 const TECH_INSTRUCTION = 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.'
 
 type StepStatus = 'apply' | 'skip' | 'dismiss'
-interface FixStep { type: 'fix'; key: string; cat: 'missing'; gap: MissingGap }
-interface FindingStep { type: 'finding'; key: string; cat: 'review'; finding: ReviewFinding }
-type Step = FixStep | FindingStep
 
 /** How the user chose to fix a finding: `idx` indexes its options, or -1 = "Other"
  *  (a free-text instruction in `other`, run through planEdit at apply time). */
@@ -269,6 +267,10 @@ function AppView({
   // True while a finding's free-text "Other" fix is being turned into operations.
   const [applyBusy, setApplyBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // One-line warning when the latest apply/replay skipped some operations —
+  // applyEditPlan drops invalid ops rather than failing, and silently dropping
+  // them reads as success.
+  const [skipNotice, setSkipNotice] = useState<string | null>(null)
 
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
@@ -330,7 +332,7 @@ function AppView({
     }
   }
 
-  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setFindingChoice({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setError(null) }
+  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setFindingChoice({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setError(null); setSkipNotice(null) }
 
   function startSweep(cats: CatId[]) {
     if (!workspace) return
@@ -369,9 +371,12 @@ function AppView({
     const ws = useWorkspaceStore.getState().workspace
     if (ws) {
       if (!baseline) setBaseline(ws)
-      applyPlanToStore(plan, ws)
+      const result = applyPlanToStore(plan, ws)
+      setSkipNotice(summarizeSkips(result))
       if (plan.operations.length) {
-        setLedger((l) => [...l, { key: 'interview', label: 'From your answers', detail: plural(plan.operations.length, 'update', 'updates'), cat: 'interview', ops: plan.operations }])
+        const detail = plural(result.appliedCount, 'update', 'updates')
+          + (result.skippedCount ? ` · ${result.skippedCount} skipped` : '')
+        setLedger((l) => [...l, { key: 'interview', label: 'From your answers', detail, cat: 'interview', ops: plan.operations }])
       }
     }
     setIvApplied(true)
@@ -442,6 +447,7 @@ function AppView({
     // Mirror the disabled apply button: a fix needs a non-empty draft.
     if (cur.type === 'fix' && !(drafts[cur.key] ?? '').trim()) return
     if (cur.type === 'finding' && !isActionable(cur.finding)) { advance(cur.key, 'dismiss'); return }
+    setSkipNotice(null)
     const resolved = await resolveStep(cur)
     if (!resolved || !resolved.ops.length) { if (resolved) advance(cur.key, 'apply'); return }
     const { ops, detail } = resolved
@@ -457,7 +463,7 @@ function AppView({
       // just this step incrementally (cheap; no full rebuild on the hot path).
       const ws = useWorkspaceStore.getState().workspace
       if (ws && !baseline) setBaseline(ws)
-      if (ws) applyPlanToStore({ operations: ops }, ws)
+      if (ws) setSkipNotice(summarizeSkips(applyPlanToStore({ operations: ops }, ws)))
       setLedger((l) => [...l, entry])
     }
     advance(cur.key, 'apply')
@@ -474,7 +480,9 @@ function AppView({
     try {
       store.resetWorkspaceTo(base)
       const ops = keptEntries.flatMap((e) => e.ops)
-      if (ops.length) applyEditPlan({ operations: ops }, storeEditActions(), base)
+      // Replay skips are real information: a kept change whose target came from
+      // a now-reverted entry quietly stops applying — say so.
+      setSkipNotice(ops.length ? summarizeSkips(applyEditPlan({ operations: ops }, storeEditActions(), base)) : null)
     } finally {
       store.setBatchApplying(false)
     }
@@ -491,7 +499,7 @@ function AppView({
     setDecisions((d) => { const n = { ...d }; for (const e of ledger) delete n[e.key]; return n })
     setLedger([])
   }
-  function skipStep() { if (cur) advance(cur.key, cur.type === 'finding' && !isActionable(cur.finding) ? 'dismiss' : 'skip') }
+  function skipStep() { if (!cur) return; setSkipNotice(null); advance(cur.key, cur.type === 'finding' && !isActionable(cur.finding) ? 'dismiss' : 'skip') }
   // Step back to the previous question to revisit/change a decision. Drafts and
   // decisions are kept, so the earlier step shows exactly what you left.
   function goBack() { setCurIdx((i) => Math.max(0, i - 1)) }
@@ -576,7 +584,7 @@ function AppView({
                 applied={!!ledger.find((e) => e.key === cur.key)}
                 onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
                 onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, setDrafts, setError) }}
-                onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace), stepRelationshipId(cur)) : undefined}
+                onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace), stepRelationshipId(cur, workspace)) : undefined}
                 onBack={curIdx > 0 ? goBack : undefined}
                 onApply={applyStep} onSkip={skipStep} onRevert={() => revertEntry(cur.key)}
                 choice={findingChoice[cur.key]} onChoice={(c) => setFindingChoice((m) => ({ ...m, [cur.key]: c }))}
@@ -591,7 +599,7 @@ function AppView({
           ) : interviewOn && !ivApplied && workspace ? (
             // Interview tail: once the instant fixes and review findings are done,
             // fold in the conversational interview, applying its plan via the ledger.
-            <InterviewBody provider={provider} onClose={onClose} embedded
+            <InterviewBody provider={provider} embedded
               onApply={applyInterviewPlan} onSkipQuestions={() => setIvApplied(true)} />
           ) : (
             <SweepSummary
@@ -602,10 +610,10 @@ function AppView({
             />
           )
         )}
-        {view === 'wizard' && <ErrorLine error={error} />}
+        {view === 'wizard' && <><Notice text={skipNotice} /><ErrorLine error={error} /></>}
 
         {view === 'describe' && <ComposeBody provider={provider} workspace={workspace} onClose={onClose} />}
-        {view === 'interview' && (workspace ? <InterviewBody provider={provider} onClose={onClose} /> : <Empty>Open or create a workspace to start an interview.</Empty>)}
+        {view === 'interview' && (workspace ? <InterviewBody provider={provider} /> : <Empty>Open or create a workspace to start an interview.</Empty>)}
         {view === 'adr' && <AdrBody provider={provider} workspace={workspace} />}
         </div>
       </div>
@@ -634,24 +642,6 @@ async function rewriteDraft(
   } catch (err) {
     setError(aiErrorMessage(err))
   }
-}
-
-// The element id(s) a step refers to, for revealing them on the canvas. A
-// relationship gap resolves to its two endpoints.
-function stepElementIds(step: Step, ws: Workspace): string[] {
-  if (step.type === 'finding') return step.finding.elementIds ?? []
-  const g = step.gap
-  if (g.kind === 'rel') {
-    const r = ws.model.relationships.find((x) => x.id === g.targetId)
-    return r ? [r.sourceId, r.destinationId] : []
-  }
-  return [g.targetId]
-}
-
-// The relationship a step points at (if any), so reveal can frame the edge
-// itself, not just one endpoint.
-function stepRelationshipId(step: Step): string | null {
-  return step.type === 'fix' && step.gap.kind === 'rel' ? step.gap.targetId : null
 }
 
 // Switch to a view that shows the element(s) and zoom in on them — the same
@@ -1134,6 +1124,9 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
   const run = useAiRun()
   const [dsl, setDsl] = useState<string | null>(null)
   const [plan, setPlan] = useState<EditPlan | null>(null)
+  // Post-apply summary. The panel stays open (the moment after an apply is when
+  // follow-up changes are most likely), with a one-shot Undo.
+  const [applied, setApplied] = useState<AppliedInfo | null>(null)
   const [confirmReplace, setConfirmReplace] = useState(false)
   const parsed = useMemo(() => (dsl ? parseDSL(dsl) : null), [dsl])
   // Flatten the parsed preview once (the chip row read it three times per render).
@@ -1147,7 +1140,7 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
     ? 'Intent is detected automatically as you type.'
     : detected === 'new' ? 'Detected: new model — opens in a new workspace.' : `Detected: change to ${workspace?.name || 'the current model'}.`
 
-  function reset() { setDsl(null); setPlan(null); setConfirmReplace(false) }
+  function reset() { setDsl(null); setPlan(null); setApplied(null); setConfirmReplace(false) }
   const canRun = !!text.trim() && (detected === 'new' || !!workspace)
 
   function submit() {
@@ -1157,7 +1150,7 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
     else run.go(() => planEdit(provider, workspace!, text), setPlan)
   }
   function load() { if (parsed) { loadWorkspace(parsed.workspace); onClose() } }
-  const done = !!parsed || !!plan
+  const done = !!parsed || !!plan || !!applied
 
   return (
     <>
@@ -1247,10 +1240,19 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
           <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{planLines.length} proposed change(s)</div>
           <PlanList lines={planLines} />
           <Actions>
-            <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length} onClick={() => { if (workspace) { applyPlanToStore(plan, workspace); onClose() } }}>Apply changes</button>
+            <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length}
+              onClick={() => { if (workspace) { setApplied(runApply(plan, workspace)); setPlan(null); setText('') } }}>Apply changes</button>
             <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Discard</button>
           </Actions>
         </Card>
+      )}
+
+      {applied && (
+        <AppliedSummary
+          info={applied} liveWs={workspace}
+          onUndo={() => { useWorkspaceStore.getState().undo(); setPlan(applied.plan); setApplied(null) }}
+          hint="Describe another change to keep going."
+        />
       )}
     </>
   )
@@ -1262,8 +1264,8 @@ function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; w
 // open-ended; "Keep going" adds another round).
 const INTERVIEW_TARGET = 5
 
-function InterviewBody({ provider, onClose, embedded, onApply, onSkipQuestions }: {
-  provider: AiProvider; onClose: () => void
+function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: {
+  provider: AiProvider
   /** Rendered as the tail of the Improve flow: auto-start, apply via the ledger
    *  (onApply) instead of the standalone preview, and offer a skip-out. */
   embedded?: boolean; onApply?: (plan: EditPlan) => void; onSkipQuestions?: () => void
@@ -1280,6 +1282,9 @@ function InterviewBody({ provider, onClose, embedded, onApply, onSkipQuestions }
   // (or reopening on a different one) doesn't silently re-ground the questions.
   const [pinnedKey, setPinnedKey] = usePersistentState<string | null>('interview.viewKey', null)
   const [plan, setPlan] = useState<EditPlan | null>(null)
+  // Post-apply summary (standalone flow only): the panel stays open with the
+  // start screen ready for another round, plus a one-shot Undo.
+  const [applied, setApplied] = useState<AppliedInfo | null>(null)
   const [target, setTarget] = useState(INTERVIEW_TARGET)
   const [wrapUp, setWrapUp] = useState(false)
   const run = useAiRun()
@@ -1317,6 +1322,7 @@ function InterviewBody({ provider, onClose, embedded, onApply, onSkipQuestions }
   const v: View = view
 
   function start() {
+    setApplied(null)
     setPinnedKey(activeViewKey) // pin the interview to the view it began on
     setWrapUp(false); setTarget(INTERVIEW_TARGET); setQa([])
     run.go(async () => {
@@ -1364,6 +1370,12 @@ function InterviewBody({ provider, onClose, embedded, onApply, onSkipQuestions }
 
   return (
     <>
+      {applied && (
+        <AppliedSummary
+          info={applied} liveWs={ws}
+          onUndo={() => { useWorkspaceStore.getState().undo(); setPlan(applied.plan); setApplied(null) }}
+        />
+      )}
       {mismatched && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', marginBottom: 12, borderRadius: 9, border: '1px solid rgba(168,85,247,0.3)', background: 'rgba(168,85,247,0.08)', fontSize: 11.5, color: C.muted2 }}>
           <MessagesSquare size={13} color="#c4b5fd" style={{ flex: 'none' }} />
@@ -1476,7 +1488,15 @@ function InterviewBody({ provider, onClose, embedded, onApply, onSkipQuestions }
           <PlanList lines={planLines} />
           <Actions>
             <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length}
-              onClick={() => { if (onApply) onApply(plan); else { applyPlanToStore(plan, ws); clearAiSession('interview'); onClose() } }}>
+              onClick={() => {
+                if (onApply) { onApply(plan); return }
+                // Keep the panel open: apply, then reset the conversation and show
+                // the applied summary with the start screen ready for another round.
+                const info = runApply(plan, ws)
+                clearAiSession('interview')
+                reground()
+                setApplied(info)
+              }}>
               {onApply ? 'Apply & finish' : 'Apply changes'}
             </button>
             <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Back</button>
@@ -1811,6 +1831,36 @@ function ErrorLine({ error }: { error: string | null }) {
   return <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 12, color: C.dangerText }}><AlertCircle size={13} style={{ flex: 'none', marginTop: 1 }} /> {error}</div>
 }
 
+/** Warning-toned sibling of ErrorLine, for partial results (skipped operations). */
+function Notice({ text }: { text: string | null }) {
+  if (!text) return null
+  return <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 12, color: C.warnText }}><AlertCircle size={13} style={{ flex: 'none', marginTop: 1 }} /> {text}</div>
+}
+
+/** Post-apply summary card: what landed, what was skipped and why, and a
+ *  one-shot Undo offered only while nothing else has touched the model since. */
+function AppliedSummary({ info, liveWs, onUndo, hint }: {
+  info: AppliedInfo; liveWs: Workspace | null; onUndo: () => void; hint?: string
+}) {
+  const canUndo = info.undoTarget !== null && info.undoTarget === liveWs
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <CheckCircle2 size={16} color={C.green} style={{ flex: 'none' }} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: C.text }}>{plural(info.appliedCount, 'change', 'changes')} applied</span>
+        {canUndo && (
+          <button onClick={onUndo} className="c4ai-ghost"
+            style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, height: 26, padding: '0 9px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.text2, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            <Undo2 size={13} /> Undo
+          </button>
+        )}
+      </div>
+      <Notice text={info.skipText} />
+      {hint && <div style={{ marginTop: 10, fontSize: 12, color: C.muted2, lineHeight: 1.45 }}>{hint}</div>}
+    </Card>
+  )
+}
+
 function Card({ children }: { children: React.ReactNode }) {
   return <div style={{ marginTop: 16, padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-fade .25s ease' }}>{children}</div>
 }
@@ -1842,7 +1892,7 @@ function storeEditActions(): EditActions {
   }
 }
 
-function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched?: boolean }) {
+function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched?: boolean }): ApplyResult {
   const s = useWorkspaceStore.getState()
   // Apply in batch mode so the per-op addContainer/addComponent don't jump the
   // canvas to each created view; then navigate ONCE to where the new elements are.
@@ -1855,7 +1905,7 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched?: bool
   const before = new Set(flattenElements(liveBefore).map((e) => e.id))
   const ownBatch = !opts?.batched
   if (ownBatch) s.setBatchApplying(true)
-  let result
+  let result: ApplyResult = { applied: [], appliedCount: 0, skippedCount: 0 }
   try {
     result = applyEditPlan(plan, storeEditActions(), liveBefore)
   } finally {
@@ -1865,6 +1915,32 @@ function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched?: bool
   const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []
   if (newIds.length) useWorkspaceStore.getState().focusViewForElements(newIds)
   return result
+}
+
+/** Everything the post-apply summary needs. `plan` is retained so Undo can
+ *  restore the preview card for a re-apply. */
+interface AppliedInfo {
+  plan: EditPlan
+  appliedCount: number
+  skipText: string | null
+  /** Workspace ref taken right after a committed apply. Undo is offered only
+   *  while the live workspace is still this exact ref — any later edit (or the
+   *  user's own ⌘Z) invalidates it, since a blind undo() would then revert the
+   *  wrong thing. Null when the apply changed nothing (no undo entry exists). */
+  undoTarget: Workspace | null
+}
+
+/** Apply a plan and package the outcome for an AppliedSummary card. */
+function runApply(plan: EditPlan, ws: Workspace): AppliedInfo {
+  const before = useWorkspaceStore.getState().workspace
+  const result = applyPlanToStore(plan, ws)
+  const after = useWorkspaceStore.getState().workspace
+  return {
+    plan,
+    appliedCount: result.appliedCount,
+    skipText: summarizeSkips(result),
+    undoTarget: after !== before ? after : null,
+  }
 }
 
 function summarize(ws: Workspace): string {

@@ -820,6 +820,18 @@ export default function Canvas() {
       inspectorTimer.current = null
     }
     isDragging.current = false
+    // Also clear on unmount — without this, a group/element selection made
+    // just before the workspace changes or the canvas otherwise unmounts
+    // leaves this timer pending. It still fires later against whatever is
+    // NOW mounted (selectGroup/selectElements are stable store actions,
+    // unscoped to any one Canvas instance), silently selecting the wrong
+    // group/element in an unrelated view.
+    return () => {
+      if (inspectorTimer.current) {
+        clearTimeout(inspectorTimer.current)
+        inspectorTimer.current = null
+      }
+    }
   }, [activeViewKey])
 
   const onSelectionChange = useCallback(

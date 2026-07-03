@@ -40,7 +40,7 @@ export { extractDsl, stripCodeFence } from './dsl'
 export { detectComposeMode } from './composeMode'
 
 export {
-  applyEditPlan, describeOps, type EditActions, type ApplyResult,
+  applyEditPlan, describeOps, summarizeSkips, type EditActions, type ApplyResult,
 } from './operations'
 
 export {

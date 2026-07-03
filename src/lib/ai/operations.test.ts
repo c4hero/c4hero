@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { applyEditPlan, describeOps, type EditActions } from './operations'
+import { applyEditPlan, describeOps, summarizeSkips, type EditActions } from './operations'
 import type { EditPlan } from './types'
 import { makeWorkspace } from './testFixture'
+import { applyElementPatch } from '@/store/workspace-helpers'
 
 function fakeActions() {
   let counter = 0
@@ -248,6 +249,46 @@ describe('applyEditPlan — parent-type and existence guards', () => {
     expect(actions.updateElement).toHaveBeenCalledWith('web', expect.objectContaining({ location: undefined }))
   })
 
+  it('an updateElement that only sets location does not touch name/description/technology', () => {
+    // Guards against a real bug: the store's applyElementPatch treats a
+    // present-but-undefined key as "clear this field" (so the UI can blank a
+    // text box). If the applier always included name/description/technology
+    // keys — even when the op didn't set them — a location-only op (e.g. "mark
+    // this system external") would silently wipe the element's description.
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [{ op: 'updateElement', id: 'shop', location: 'External' }] }, actions, ws)
+    const patch = vi.mocked(actions.updateElement).mock.calls[0][1]
+    expect(patch).not.toHaveProperty('name')
+    expect(patch).not.toHaveProperty('description')
+    expect(patch).not.toHaveProperty('technology')
+  })
+
+  it('reproduces the reported bug end-to-end: marking a system external keeps its description', () => {
+    const ws = makeWorkspace() // 'shop' has description 'The store'
+    const actions: EditActions = {
+      ...fakeActions(),
+      updateElement: (id, patch) => { applyElementPatch(ws, id, patch) },
+    }
+    applyEditPlan({ operations: [{ op: 'updateElement', id: 'shop', location: 'External' }] }, actions, ws)
+    const shop = ws.model.softwareSystems.find((s) => s.id === 'shop')!
+    expect(shop.location).toBe('External')
+    expect(shop.description).toBe('The store')
+  })
+
+  it('an updateRelationship that only sets description does not touch technology, and vice versa', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'updateRelationship', id: 'r1', description: 'Browses the catalog' },
+      { op: 'updateRelationship', id: 'r2', technology: 'HTTPS/JSON' },
+    ] }, actions, ws)
+    const [, descPatch] = vi.mocked(actions.updateRelationship).mock.calls.find(([id]) => id === 'r1')!
+    const [, techPatch] = vi.mocked(actions.updateRelationship).mock.calls.find(([id]) => id === 'r2')!
+    expect(descPatch).not.toHaveProperty('technology')
+    expect(techPatch).not.toHaveProperty('description')
+  })
+
   it('skips updateRelationship for an unknown relationship id', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()
@@ -292,8 +333,11 @@ describe('applyEditPlan — malformed optional fields are dropped, not fatal', (
       { op: 'updateElement', id: 'cart', description: 'real description' },
     ] } as unknown as EditPlan
     expect(() => applyEditPlan(plan, actions, ws)).not.toThrow()
-    // The bad field is dropped but the valid one (name) still applies.
-    expect(actions.updateElement).toHaveBeenCalledWith('web', expect.objectContaining({ name: 'Renamed', description: undefined }))
+    // The bad field is dropped but the valid one (name) still applies. It must
+    // not even be present as an `undefined` key — the store treats key presence
+    // as "clear this field" (see the updateElement/updateRelationship tests below).
+    expect(actions.updateElement).toHaveBeenCalledWith('web', expect.objectContaining({ name: 'Renamed' }))
+    expect(vi.mocked(actions.updateElement).mock.calls[0][1]).not.toHaveProperty('description')
     expect(actions.updateElement).toHaveBeenCalledWith('cart', expect.objectContaining({ description: 'real description' }))
   })
 
@@ -318,5 +362,42 @@ describe('applyEditPlan — malformed optional fields are dropped, not fatal', (
     expect(() => applyEditPlan(plan, actions, ws)).not.toThrow()
     // Created, with the bad description coerced to undefined.
     expect(actions.addRelationship).toHaveBeenCalledWith('cust', 'web', undefined, undefined)
+  })
+})
+
+describe('summarizeSkips', () => {
+  it('returns null when nothing was skipped', () => {
+    const ws = makeWorkspace()
+    const result = applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'web', description: 'Serves the storefront' },
+    ] }, fakeActions(), ws)
+    expect(summarizeSkips(result)).toBeNull()
+  })
+
+  it('summarizes a single skip with its reason', () => {
+    const ws = makeWorkspace()
+    const result = applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'web', description: 'ok' },
+      { op: 'deleteElement', id: 'ghost' },
+    ] }, fakeActions(), ws)
+    expect(summarizeSkips(result)).toBe('Skipped 1 of 2 changes — element not found.')
+  })
+
+  it('groups repeated reasons with a count, most frequent first', () => {
+    const ws = makeWorkspace()
+    const result = applyEditPlan({ operations: [
+      { op: 'addContainer', ref: 'a', parent: 'ghost', name: 'A' },
+      { op: 'addContainer', ref: 'b', parent: 'ghost', name: 'B' },
+      { op: 'deleteElement', id: 'ghost' },
+    ] }, fakeActions(), ws)
+    expect(summarizeSkips(result)).toBe('Skipped 3 of 3 changes — unknown parent system (2), element not found.')
+  })
+
+  it('uses singular "change" when the plan had one op', () => {
+    const ws = makeWorkspace()
+    const result = applyEditPlan({ operations: [
+      { op: 'deleteElement', id: 'ghost' },
+    ] }, fakeActions(), ws)
+    expect(summarizeSkips(result)).toBe('Skipped 1 of 1 change — element not found.')
   })
 })
