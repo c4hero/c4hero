@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { QueueOverview } from './AiPanel'
+import { QueueOverview } from './wizard'
 import type { Step, FixStep, FindingStep, StepStatus } from './wizardSteps'
 import type { GapKind, ReviewSeverity } from '@/lib/ai'
 
