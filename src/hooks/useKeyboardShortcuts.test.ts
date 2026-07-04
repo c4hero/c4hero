@@ -213,6 +213,7 @@ describe('useKeyboardShortcuts — global shortcut coverage', () => {
     // UI flags aren't reset by closeWorkspace, so clear the ones these tests
     // assert on to keep each case order-independent.
     s.setAiPanelOpen(false)
+    s.setAiSettingsOpen(false)
     s.setAddElementPanelOpen(false)
     s.setMultiSelectMode(false)
     s.setPresentationMode(false)
@@ -229,6 +230,28 @@ describe('useKeyboardShortcuts — global shortcut coverage', () => {
     expect(useWorkspaceStore.getState().aiPanelOpen).toBe(true)
     press('i')
     expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
+  })
+
+  it('"i" clears settings-only assistant state when toggling', () => {
+    setup()
+    const s = useWorkspaceStore.getState()
+    s.setAiSettingsOpen(true)
+    expect(useWorkspaceStore.getState().aiSettingsOpen).toBe(true)
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(true)
+    press('i')
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
+    expect(useWorkspaceStore.getState().aiSettingsOpen).toBe(false)
+  })
+
+  it('"i" recovers stale settings-only assistant state when toggling', () => {
+    setup()
+    useWorkspaceStore.setState({ aiPanelOpen: false, aiSettingsOpen: true })
+    press('i')
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(true)
+    expect(useWorkspaceStore.getState().aiSettingsOpen).toBe(false)
+    press('i')
+    expect(useWorkspaceStore.getState().aiPanelOpen).toBe(false)
+    expect(useWorkspaceStore.getState().aiSettingsOpen).toBe(false)
   })
 
   it('"a" toggles the add-element panel', () => {

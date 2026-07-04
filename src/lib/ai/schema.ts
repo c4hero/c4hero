@@ -73,8 +73,20 @@ const OP_NAMES: ReadonlySet<string> = new Set<EditOp['op']>([
   'addRelationship', 'updateElement', 'updateRelationship', 'deleteElement',
 ])
 
+const OP_STRING_FIELDS = [
+  'ref', 'id', 'name', 'description', 'technology', 'parent', 'source', 'destination',
+] as const
+
+function hasValidOpFieldTypes(value: Record<string, unknown>): boolean {
+  for (const field of OP_STRING_FIELDS) {
+    if (value[field] !== undefined && typeof value[field] !== 'string') return false
+  }
+  return value.external === undefined || typeof value.external === 'boolean'
+}
+
 export function isEditOp(value: unknown): value is EditOp {
   if (!isRecord(value) || typeof value.op !== 'string' || !OP_NAMES.has(value.op)) return false
+  if (!hasValidOpFieldTypes(value)) return false
   switch (value.op) {
     case 'addPerson':
     case 'addSoftwareSystem':

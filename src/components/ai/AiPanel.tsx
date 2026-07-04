@@ -75,9 +75,10 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const settings = useAiSettingsStore()
   const setStoreSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
+  const storeFeature = useWorkspaceStore((s) => s.aiPanelFeature)
+  const storeSettingsOpen = useWorkspaceStore((s) => s.aiSettingsOpen)
 
-  const [initialFeature] = useState(() => useWorkspaceStore.getState().aiPanelFeature)
-  const [settingsOpen, setSettingsOpen] = useState(() => useWorkspaceStore.getState().aiSettingsOpen)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const { provider, hasKey, model } = useAiProvider()
 
@@ -85,7 +86,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   function closeSettings() { setSettingsOpen(false); setStoreSettingsOpen(false) }
 
   // View routing: no key → BYOK welcome; disabled or settings open → settings; else app.
-  const mode: 'byok' | 'settings' | 'app' = !hasKey ? 'byok' : (settingsOpen || !settings.enabled) ? 'settings' : 'app'
+  const mode: 'byok' | 'settings' | 'app' = !hasKey ? 'byok' : (settingsOpen || storeSettingsOpen || !settings.enabled) ? 'settings' : 'app'
 
   // Fixed placement: a compact card tucked against the tool rail and centred
   // vertically. The panel is intentionally not draggable, so any previously
@@ -118,6 +119,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
       ariaLabel="AI assistant"
       className="c4ai"
       position="docked"
+      closeOnEscape={false}
       style={baseStyle}
     >
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -128,7 +130,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
         {mode === 'app' && provider && (
           <AppView
             provider={provider} workspace={workspace} model={model}
-            initialFeature={initialFeature} onOpenSettings={openSettings} onClose={onClose}
+            feature={storeFeature} onOpenSettings={openSettings} onClose={onClose}
           />
         )}
       </div>
@@ -221,12 +223,12 @@ function viewScopeIds(view: View | undefined): ReadonlySet<string> | undefined {
 }
 
 function AppView({
-  provider, workspace, model, initialFeature, onOpenSettings, onClose,
+  provider, workspace, model, feature, onOpenSettings, onClose,
 }: {
   provider: AiProvider
   workspace: Workspace | null
   model: string
-  initialFeature: AiFeatureId | null
+  feature: AiFeatureId | null
   onOpenSettings: () => void
   onClose: () => void
 }) {
@@ -236,7 +238,7 @@ function AppView({
   // key — `/collection/:c/:ws/:view` — so a view switch would wrongly clear the
   // in-progress flow). Take the first three path segments only.
   ensureSessionForWorkspace(typeof window !== 'undefined' ? window.location.pathname.split('/').slice(0, 4).join('/') : null)
-  const [view, setView] = usePersistentState<SweepView>('sweep.view', initialFeature ? FEATURE_TO_VIEW[initialFeature] : 'home')
+  const [view, setView] = usePersistentState<SweepView>('sweep.view', feature ? FEATURE_TO_VIEW[feature] : 'home')
 
   // Sweep state — persisted across close→reopen so an in-progress wizard resumes.
   const [queue, setQueue] = usePersistentState<Step[]>('sweep.queue', [])
@@ -404,14 +406,13 @@ function AppView({
   // open. Running an AI feature command (Review/Interview/ADR…) on an open panel
   // must switch the tab, not silently no-op; we consume the one-shot so it can't
   // fire again later.
-  const storeFeature = useWorkspaceStore((s) => s.aiPanelFeature)
   useEffect(() => {
-    if (!storeFeature) return
-    if (storeFeature === 'review') { if (workspace) startSweep(['review']) }
-    else { resetSweep(); setView(FEATURE_TO_VIEW[storeFeature]) }
+    if (!feature) return
+    if (feature === 'review') { if (workspace) startSweep(['review']) }
+    else { resetSweep(); setView(FEATURE_TO_VIEW[feature]) }
     useWorkspaceStore.getState().clearAiPanelFeature()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeFeature, workspace])
+  }, [feature, workspace])
 
   // Mark the assistant "busy" whenever it's in a flow (anything but Home), so a
   // canvas selection won't close the panel and discard an in-progress interview
@@ -528,12 +529,18 @@ function AppView({
       if (e.key === 'Escape') {
         // While editing a draft, Escape just defocuses the field — it must not
         // skip the step and discard what the user is typing.
+        e.preventDefault()
+        e.stopPropagation()
         if (typing) { t!.blur(); return }
-        e.preventDefault(); skipStep()
-      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); applyStep() }
+        skipStep()
+      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        e.stopPropagation()
+        applyStep()
+      }
     }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, cur])
 

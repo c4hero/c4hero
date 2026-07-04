@@ -19,10 +19,12 @@ interface DialogShellProps {
   style?: React.CSSProperties
   /** Defaults to "center". Use "shade" for top-pill-anchored slide-downs. */
   position?: DialogPosition
+  /** Defaults to true. Disable when a child flow owns Escape for its own UX. */
+  closeOnEscape?: boolean
 }
 
 export default function DialogShell({
-  onClose, ariaLabel, children, className, style, position = 'center',
+  onClose, ariaLabel, children, className, style, position = 'center', closeOnEscape = true,
 }: DialogShellProps) {
   const trapRef = useFocusTrap<HTMLDivElement>()
   const previouslyFocusedRef = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null)
@@ -41,12 +43,13 @@ export default function DialogShell({
   // settles). React's synthetic event delegation also doesn't surface
   // document-level keydowns to nested handlers.
   useEffect(() => {
+    if (!closeOnEscape) return undefined
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') handleClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [handleClose])
+  }, [closeOnEscape, handleClose])
 
   if (position === 'shade') {
     // Slide-down panel pattern: an invisible click-catcher behind the panel

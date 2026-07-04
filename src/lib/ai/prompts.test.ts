@@ -35,6 +35,9 @@ describe('isEditOp', () => {
     expect(isEditOp({ op: 'addContainer', ref: 'c', name: 'C' })).toBe(false) // missing parent
     expect(isEditOp({ op: 'addRelationship', source: 'a' })).toBe(false) // missing destination
     expect(isEditOp({ op: 'updateElement' })).toBe(false) // missing id
+    expect(isEditOp({ op: 'addPerson', ref: 'u', name: 'U', description: 123 })).toBe(false)
+    expect(isEditOp({ op: 'addSoftwareSystem', ref: 's', name: 'S', external: 'true' })).toBe(false)
+    expect(isEditOp({ op: 'updateElement', id: 'x', technology: 42 })).toBe(false)
   })
 })
 

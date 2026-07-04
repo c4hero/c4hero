@@ -14,6 +14,7 @@ describe('AiError', () => {
 describe('aiErrorMessage', () => {
   it('maps each AiError kind to a friendly message', () => {
     expect(aiErrorMessage(new AiError('auth', 'x'))).toMatch(/API key/i)
+    expect(aiErrorMessage(new AiError('auth', 'x'))).not.toMatch(/Anthropic/i)
     expect(aiErrorMessage(new AiError('rate-limit', 'x'))).toMatch(/rate limit/i)
     expect(aiErrorMessage(new AiError('network', 'x'))).toMatch(/server error/i)
     expect(aiErrorMessage(new AiError('invalid-response', 'x'))).toMatch(/unexpected/i)

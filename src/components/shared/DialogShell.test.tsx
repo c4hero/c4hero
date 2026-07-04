@@ -63,6 +63,17 @@ describe('DialogShell', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
+  it('can leave Escape handling to child flows', () => {
+    const onClose = vi.fn()
+    render(
+      <DialogShell onClose={onClose} ariaLabel="Test" closeOnEscape={false}>
+        <button>Inside</button>
+      </DialogShell>,
+    )
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('non-Escape keys do not trigger onClose', () => {
     const onClose = vi.fn()
     render(

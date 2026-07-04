@@ -149,13 +149,15 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     // later when a diagram is finally opened, so gate it on the same condition.
     if (!store.workspace) return
     if (!/\/collection\/[^/]+\/[^/]+/.test(window.location.pathname)) return
-    // The assistant renders on aiPanelOpen OR aiSettingsOpen, so toggle based on
-    // either being open — otherwise "i" can't dismiss a settings-opened panel.
-    if (store.aiPanelOpen || store.aiSettingsOpen) {
+    if (store.aiPanelOpen) {
       store.setAiPanelOpen(false)
       store.setAiSettingsOpen(false)
     } else {
       store.setAiPanelOpen(true)
+      // aiSettingsOpen without aiPanelOpen is a stale state (setAiSettingsOpen
+      // normally forces both together) — normalize it instead of leaving a
+      // dangling settings flag armed under the freshly opened panel.
+      if (store.aiSettingsOpen) store.setAiSettingsOpen(false)
     }
   },
   'h': (store) => {

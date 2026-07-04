@@ -79,6 +79,10 @@ export const createUiSlice: StateCreator<
   setAiSettingsOpen: (open) => set((s) => {
     s.aiSettingsOpen = open
     s.commandPaletteOpen = false
+    if (open) {
+      s.aiPanelOpen = true
+      s.aiPanelFeature = null
+    }
   }),
   // Consume the one-shot deep-link feature (after the panel routes to it)
   // without closing the panel, so a stale feature can't fire again later.
