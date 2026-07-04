@@ -1,6 +1,7 @@
-import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest } from '../types'
+import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiStreamRequest } from '../types'
 import { AiError } from '../types'
-import { postJson, parseAndValidate } from './http'
+import { isRecord } from '@/lib/guards'
+import { postJson, postStream, parseAndValidate } from './http'
 
 // Anthropic Messages API, called directly from the browser with the user's key.
 // Direct browser calls require the `anthropic-dangerous-direct-browser-access`
@@ -11,6 +12,33 @@ const API_VERSION = '2023-06-01'
 
 interface AnthropicBlock { type: string; text?: string }
 interface AnthropicResponse { content?: AnthropicBlock[]; stop_reason?: string }
+
+// Map one Anthropic SSE event (its `data:` JSON) to a text delta. The Messages
+// stream interleaves `content_block_delta` (text/thinking), `message_delta`
+// (carries the final stop_reason), and `error` frames; we surface only the
+// visible `text_delta` and turn refusals / error events into AiErrors.
+function parseAnthropicEvent(data: unknown): string {
+  if (!isRecord(data)) return ''
+  if (data.type === 'error') {
+    const err = isRecord(data.error) ? data.error : {}
+    const type = typeof err.type === 'string' ? err.type : ''
+    const message = typeof err.message === 'string' ? err.message : 'The AI provider reported a streaming error.'
+    if (type === 'overloaded_error' || type === 'api_error') throw new AiError('network', message)
+    if (type === 'rate_limit_error') throw new AiError('rate-limit', message)
+    throw new AiError('unknown', message)
+  }
+  if (data.type === 'content_block_delta') {
+    const delta = data.delta
+    if (isRecord(delta) && delta.type === 'text_delta' && typeof delta.text === 'string') return delta.text
+  }
+  if (data.type === 'message_delta') {
+    const delta = data.delta
+    if (isRecord(delta) && delta.stop_reason === 'refusal') {
+      throw new AiError('invalid-response', 'The model declined this request.')
+    }
+  }
+  return ''
+}
 
 async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
   const data = (await postJson({
@@ -59,6 +87,31 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
         output_config: { format: { type: 'json_schema', schema: req.schema } },
       })
       return parseAndValidate(text, req.validate, `Anthropic (${config.model})`)
+    },
+
+    async completeStream(req: AiStreamRequest): Promise<string> {
+      const text = await postStream({
+        url: API_URL,
+        headers: {
+          'x-api-key': config.apiKey,
+          'anthropic-version': API_VERSION,
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: {
+          model: config.model,
+          stream: true,
+          max_tokens: req.maxTokens ?? 8000,
+          system: req.system,
+          messages: [...(req.history ?? []), { role: 'user', content: req.user }],
+        },
+        host: 'api.anthropic.com',
+        label: `Anthropic (${config.model})`,
+        parseEvent: parseAnthropicEvent,
+        onText: req.onText,
+        signal: req.signal,
+      })
+      if (!text.trim()) throw new AiError('invalid-response', 'The model returned an empty response.')
+      return text
     },
   }
 }

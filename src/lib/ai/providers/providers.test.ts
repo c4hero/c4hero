@@ -148,3 +148,127 @@ describe('AI providers', () => {
     expect(() => createProvider('bogus' as 'anthropic', cfg)).toThrow(/Unknown AI provider/)
   })
 })
+
+// ─── Streaming (completeStream over SSE) ────────────────────────────────
+//
+// Streaming adapters share the same fetch/error mapping as the JSON path but
+// read a `text/event-stream` body. We stub fetch to return a fake ReadableStream
+// of SSE `data:` frames and drive every branch: per-delta callbacks, the full
+// accumulated result, cross-chunk buffering, [DONE]/keep-alive handling, error
+// and refusal frames, empty output, non-OK responses, and abort propagation.
+
+/** A Response whose body streams `chunks` (arbitrary byte slices of an SSE
+ *  stream) through a minimal getReader(), so tests can split frames anywhere. */
+function streamRes(chunks: string[]): Response {
+  const encoder = new TextEncoder()
+  let i = 0
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      getReader() {
+        return {
+          read() {
+            return i < chunks.length
+              ? Promise.resolve({ done: false, value: encoder.encode(chunks[i++]) })
+              : Promise.resolve({ done: true, value: undefined })
+          },
+        }
+      },
+    },
+  } as unknown as Response
+}
+
+/** Build the provider-specific SSE `data:` frame carrying one text delta. */
+function sseFrame(id: (typeof PROVIDERS)[number], text: string): string {
+  const payload = id === 'anthropic'
+    ? { type: 'content_block_delta', delta: { type: 'text_delta', text } }
+    : id === 'openai'
+      ? { choices: [{ delta: { content: text } }] }
+      : { candidates: [{ content: { parts: [{ text }] } }] }
+  return `data: ${JSON.stringify(payload)}\n\n`
+}
+
+describe('AI provider streaming', () => {
+  for (const id of PROVIDERS) {
+    describe(id, () => {
+      it('fires onText per delta and resolves with the full text', async () => {
+        stubFetch(() => streamRes([sseFrame(id, 'Hello, '), sseFrame(id, 'world')]))
+        const p = createProvider(id, cfg)
+        const deltas: string[] = []
+        const full = await p.completeStream!({ system: 's', user: 'u', onText: (d) => deltas.push(d) })
+        expect(deltas).toEqual(['Hello, ', 'world'])
+        expect(full).toBe('Hello, world')
+      })
+
+      it('reassembles frames split across read() chunks', async () => {
+        // One SSE stream, sliced into 7-byte pieces to split `data:` lines mid-JSON.
+        const stream = sseFrame(id, 'abc') + sseFrame(id, 'def')
+        const pieces: string[] = []
+        for (let i = 0; i < stream.length; i += 7) pieces.push(stream.slice(i, i + 7))
+        stubFetch(() => streamRes(pieces))
+        const p = createProvider(id, cfg)
+        expect(await p.completeStream!({ system: 's', user: 'u', onText: () => {} })).toBe('abcdef')
+      })
+
+      it('ignores keep-alive and non-JSON data frames', async () => {
+        stubFetch(() => streamRes([': keep-alive comment\n\n', 'data: not json\n\n', sseFrame(id, 'ok')]))
+        const p = createProvider(id, cfg)
+        expect(await p.completeStream!({ system: 's', user: 'u', onText: () => {} })).toBe('ok')
+      })
+
+      it('reports an empty stream as invalid-response', async () => {
+        stubFetch(() => streamRes(['data: [DONE]\n\n']))
+        const p = createProvider(id, cfg)
+        await expect(p.completeStream!({ system: 's', user: 'u', onText: () => {} }))
+          .rejects.toMatchObject({ kind: 'invalid-response' })
+      })
+
+      it('maps a non-OK response to the shared error kinds', async () => {
+        stubFetch(() => res({ ok: false, status: 429, json: async () => ({ error: { message: 'slow down' } }) }))
+        const p = createProvider(id, cfg)
+        await expect(p.completeStream!({ system: 's', user: 'u', onText: () => {} }))
+          .rejects.toMatchObject({ kind: 'rate-limit' })
+      })
+
+      it('propagates a caller abort without wrapping it as a connection error', async () => {
+        stubFetch(() => { throw new DOMException('aborted', 'AbortError') })
+        const p = createProvider(id, cfg)
+        await expect(p.completeStream!({ system: 's', user: 'u', onText: () => {} }))
+          .rejects.toMatchObject({ name: 'AbortError' })
+      })
+    })
+  }
+
+  it('tolerates OpenAI-style [DONE] framing after content', async () => {
+    stubFetch(() => streamRes([sseFrame('openai', 'hi'), 'data: [DONE]\n\n']))
+    const p = createProvider('openai', cfg)
+    expect(await p.completeStream!({ system: 's', user: 'u', onText: () => {} })).toBe('hi')
+  })
+
+  it('surfaces a mid-stream safety refusal', async () => {
+    // OpenAI delta.refusal
+    stubFetch(() => streamRes([`data: ${JSON.stringify({ choices: [{ delta: { refusal: 'no' } }] })}\n\n`]))
+    await expect(createProvider('openai', cfg).completeStream!({ system: 's', user: 'u', onText: () => {} }))
+      .rejects.toMatchObject({ kind: 'invalid-response' })
+
+    // Gemini SAFETY finishReason
+    stubFetch(() => streamRes([`data: ${JSON.stringify({ candidates: [{ finishReason: 'SAFETY' }] })}\n\n`]))
+    await expect(createProvider('gemini', cfg).completeStream!({ system: 's', user: 'u', onText: () => {} }))
+      .rejects.toMatchObject({ kind: 'invalid-response' })
+  })
+
+  it('maps an Anthropic error event to a network error', async () => {
+    stubFetch(() => streamRes([`data: ${JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'busy' } })}\n\n`]))
+    await expect(createProvider('anthropic', cfg).completeStream!({ system: 's', user: 'u', onText: () => {} }))
+      .rejects.toMatchObject({ kind: 'network' })
+  })
+
+  it('ends the Anthropic stream cleanly on a non-refusal message_delta', async () => {
+    stubFetch(() => streamRes([
+      sseFrame('anthropic', 'done'),
+      `data: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'end_turn' } })}\n\n`,
+    ]))
+    expect(await createProvider('anthropic', cfg).completeStream!({ system: 's', user: 'u', onText: () => {} })).toBe('done')
+  })
+})

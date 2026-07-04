@@ -32,6 +32,27 @@ export async function generateDiagram(provider: AiProvider, description: string)
   return extractDsl(text)
 }
 
+/** Streaming generate: fires `onText` with each raw chunk (fences/preamble and
+ *  all — the caller shows it as a live preview) and resolves with the extracted,
+ *  parse-ready DSL. Falls back to a single non-streaming `complete` (one `onText`
+ *  with the whole text) when the provider has no SSE support. Pass `signal` to
+ *  cancel; the returned promise rejects with the fetch abort error. */
+export async function generateDiagramStream(
+  provider: AiProvider,
+  description: string,
+  onText: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const req = { system: generateSystem(), user: generateUser(description), maxTokens: 8000 }
+  if (!provider.completeStream) {
+    const text = await provider.complete(req)
+    onText(text)
+    return extractDsl(text)
+  }
+  const text = await provider.completeStream({ ...req, onText, signal })
+  return extractDsl(text)
+}
+
 /** Review architecture → structured, triageable findings (each actionable one
  *  carries the operations that fix it). Pass `view` to scope the review to the
  *  current screen; omit/null to review the whole model. */

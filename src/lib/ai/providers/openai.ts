@@ -1,6 +1,7 @@
-import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest } from '../types'
+import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiStreamRequest } from '../types'
 import { AiError } from '../types'
-import { postJson, parseAndValidate } from './http'
+import { isRecord } from '@/lib/guards'
+import { postJson, postStream, parseAndValidate } from './http'
 
 // OpenAI Chat Completions API, called directly from the browser with the user's
 // key. For structured output we use JSON mode (`response_format: json_object`)
@@ -15,6 +16,20 @@ interface OpenAiChoice {
   finish_reason?: string
 }
 interface OpenAiResponse { choices?: OpenAiChoice[] }
+
+// Map one Chat Completions stream chunk (`data:` JSON) to a text delta. Chunks
+// carry `choices[0].delta.content`; a `delta.refusal` marks a safety decline.
+function parseOpenAiEvent(data: unknown): string {
+  if (!isRecord(data) || !Array.isArray(data.choices) || !data.choices.length) return ''
+  const choice = data.choices[0]
+  if (!isRecord(choice)) return ''
+  const delta = choice.delta
+  if (!isRecord(delta)) return ''
+  if (typeof delta.refusal === 'string' && delta.refusal.trim()) {
+    throw new AiError('invalid-response', 'The model declined this request.')
+  }
+  return typeof delta.content === 'string' ? delta.content : ''
+}
 
 async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
   const data = (await postJson({
@@ -74,6 +89,27 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
         response_format: { type: 'json_object' },
       })
       return parseAndValidate(text, req.validate, `OpenAI (${config.model})`)
+    },
+
+    async completeStream(req: AiStreamRequest): Promise<string> {
+      const text = await postStream({
+        url: API_URL,
+        headers: { authorization: `Bearer ${config.apiKey}` },
+        body: {
+          model: config.model,
+          stream: true,
+          max_completion_tokens: req.maxTokens ?? 8000,
+          temperature: req.temperature,
+          messages: messages(req.system, req.user, req.history),
+        },
+        host: 'api.openai.com',
+        label: `OpenAI (${config.model})`,
+        parseEvent: parseOpenAiEvent,
+        onText: req.onText,
+        signal: req.signal,
+      })
+      if (!text.trim()) throw new AiError('invalid-response', 'The model returned an empty response.')
+      return text
     },
   }
 }

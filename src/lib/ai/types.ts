@@ -33,11 +33,24 @@ export interface AiJsonRequest<T> extends AiTextRequest {
   validate: (value: unknown) => value is T
 }
 
+export interface AiStreamRequest extends AiTextRequest {
+  /** Invoked with each incremental text chunk as it arrives over SSE. */
+  onText: (delta: string) => void
+  /** Cancels the in-flight request. Rejects the returned promise with the
+   *  DOMException the fetch abort raises. */
+  signal?: AbortSignal
+}
+
 export interface AiProvider {
   /** Free-form text completion (used by Generate → DSL and Review → markdown). */
   complete(req: AiTextRequest): Promise<string>
   /** Structured completion validated against a schema (Describe, Edit). */
   completeJson<T>(req: AiJsonRequest<T>): Promise<T>
+  /** Streaming free-form completion: fires `onText` with each chunk as it
+   *  arrives and resolves with the full accumulated text, so callers can still
+   *  post-process the complete result (e.g. extract DSL). Optional — a provider
+   *  without SSE support omits it and callers fall back to `complete`. */
+  completeStream?(req: AiStreamRequest): Promise<string>
 }
 
 export interface AiProviderConfig {

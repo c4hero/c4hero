@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { AiProvider, AiJsonRequest } from './types'
 import {
-  suggestTags, suggestFieldValue, generateDiagram, draftAdr,
+  suggestTags, suggestFieldValue, generateDiagram, generateDiagramStream, draftAdr,
   reviewArchitecture, planEdit, autoDescribe,
 } from './features'
 import { makeWorkspace } from './testFixture'
@@ -107,6 +107,37 @@ describe('generateDiagram', () => {
   it('extracts DSL from a fenced completion', async () => {
     const provider = makeProvider({ text: 'Sure:\n```\nworkspace "X" {}\n```' })
     expect(await generateDiagram(provider, 'a system')).toContain('workspace "X"')
+  })
+})
+
+describe('generateDiagramStream', () => {
+  const dsl = 'workspace "Shop" {\n  model {\n  }\n}'
+
+  it('streams raw chunks to onText and resolves with the extracted DSL', async () => {
+    const provider: AiProvider = {
+      async complete() { return '' },
+      async completeJson<T>(): Promise<T> { return {} as T },
+      async completeStream(req) {
+        req.onText('Here you go:\n')
+        req.onText(dsl)
+        return `Here you go:\n${dsl}`
+      },
+    }
+    const chunks: string[] = []
+    const out = await generateDiagramStream(provider, 'a shop', (d) => chunks.push(d))
+    expect(chunks).toEqual(['Here you go:\n', dsl]) // raw, pre-extraction preview
+    expect(out).toBe(dsl) // extracted, parse-ready
+  })
+
+  it('falls back to a single complete() call when the provider has no streaming', async () => {
+    const provider: AiProvider = {
+      async complete() { return `preamble\n${dsl}` },
+      async completeJson<T>(): Promise<T> { return {} as T },
+    }
+    const chunks: string[] = []
+    const out = await generateDiagramStream(provider, 'a shop', (d) => chunks.push(d))
+    expect(chunks).toEqual([`preamble\n${dsl}`]) // whole text delivered as one chunk
+    expect(out).toBe(dsl)
   })
 })
 

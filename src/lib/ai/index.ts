@@ -6,7 +6,7 @@
 // orchestration over an injected AiProvider, so features stay testable.
 
 export type {
-  AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn,
+  AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiStreamRequest, AiChatTurn,
   EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind, AiFeatureId,
   ReviewResult, ReviewFinding, ReviewFixOption, ReviewSeverity,
 } from './types'
@@ -24,7 +24,7 @@ export { AI_PROVIDER_META, AI_PROVIDER_IDS, getProviderMeta, isAiProviderId } fr
 export { createProvider } from './providers'
 
 export {
-  generateDiagram, reviewArchitecture, autoDescribe, planEdit, draftAdr,
+  generateDiagram, generateDiagramStream, reviewArchitecture, autoDescribe, planEdit, draftAdr,
   interviewAsk, interviewKickoffMessage, interviewBuildPlan, suggestTags,
   suggestFieldValue,
 } from './features'

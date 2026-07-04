@@ -1,6 +1,7 @@
-import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn } from '../types'
+import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn, AiStreamRequest } from '../types'
 import { AiError } from '../types'
-import { postJson, parseAndValidate } from './http'
+import { isRecord } from '@/lib/guards'
+import { postJson, postStream, parseAndValidate } from './http'
 
 // Google Gemini (Generative Language API), called directly from the browser with
 // the user's key. For structured output we request a JSON response MIME type and
@@ -12,6 +13,21 @@ const BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 interface GeminiPart { text?: string }
 interface GeminiResponse {
   candidates?: { content?: { parts?: GeminiPart[] }; finishReason?: string }[]
+}
+
+// Map one streamGenerateContent SSE chunk (`data:` JSON) to a text delta. Each
+// chunk carries a candidate whose parts hold the incremental text; a SAFETY /
+// BLOCKLIST finishReason marks a decline.
+function parseGeminiEvent(data: unknown): string {
+  if (!isRecord(data) || !Array.isArray(data.candidates) || !data.candidates.length) return ''
+  const candidate = data.candidates[0]
+  if (!isRecord(candidate)) return ''
+  if (candidate.finishReason === 'SAFETY' || candidate.finishReason === 'BLOCKLIST') {
+    throw new AiError('invalid-response', 'The model declined this request.')
+  }
+  const content = candidate.content
+  if (!isRecord(content) || !Array.isArray(content.parts)) return ''
+  return content.parts.map((p) => (isRecord(p) && typeof p.text === 'string' ? p.text : '')).join('')
 }
 
 function toContents(history: AiChatTurn[] | undefined, user: string) {
@@ -69,6 +85,28 @@ export function createGeminiProvider(config: AiProviderConfig): AiProvider {
         generationConfig: { maxOutputTokens: req.maxTokens ?? 8000, responseMimeType: 'application/json', temperature: req.temperature ?? 0 },
       })
       return parseAndValidate(text, req.validate, `Gemini (${config.model})`)
+    },
+
+    async completeStream(req: AiStreamRequest): Promise<string> {
+      // `streamGenerateContent` with `alt=sse` returns a `data:`-framed SSE body
+      // (the default is a streamed JSON array, which our line parser can't read).
+      const url = `${BASE}/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse`
+      const text = await postStream({
+        url,
+        headers: { 'x-goog-api-key': config.apiKey },
+        body: {
+          systemInstruction: { parts: [{ text: req.system }] },
+          contents: toContents(req.history, req.user),
+          generationConfig: { maxOutputTokens: req.maxTokens ?? 8000, temperature: req.temperature },
+        },
+        host: 'generativelanguage.googleapis.com',
+        label: `Gemini (${config.model})`,
+        parseEvent: parseGeminiEvent,
+        onText: req.onText,
+        signal: req.signal,
+      })
+      if (!text.trim()) throw new AiError('invalid-response', 'The model returned an empty response.')
+      return text
     },
   }
 }
