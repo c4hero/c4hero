@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react'
-import { Sparkles, Pencil, SquarePen, Wand2, ArrowRight, Layers, AlertCircle } from 'lucide-react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { Sparkles, Pencil, SquarePen, Wand2, ArrowRight, Layers, AlertCircle, Loader2 } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { parseDSL } from '@/lib/dsl'
 import {
-  generateDiagram, planEdit, detectComposeMode, describeOps, flattenElements,
+  generateDiagramStream, planEdit, detectComposeMode, describeOps, flattenElements,
   type AiProvider, type EditPlan,
 } from '@/lib/ai'
 import type { Workspace } from '@/types/model'
@@ -26,6 +26,9 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
   const [text, setText] = useState('')
   const run = useAiRun()
   const [dsl, setDsl] = useState<string | null>(null)
+  // Raw text as it streams in (fences/preamble and all) — a live "it's working"
+  // preview shown until the final DSL parses into the clean card below.
+  const [streamText, setStreamText] = useState('')
   const [plan, setPlan] = useState<EditPlan | null>(null)
   // Post-apply summary. The panel stays open (the moment after an apply is when
   // follow-up changes are most likely), with a one-shot Undo.
@@ -36,6 +39,10 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
   const parsedElements = useMemo(() => (parsed ? flattenElements(parsed.workspace) : []), [parsed])
   const planLines = plan && workspace ? describeOps(plan, workspace) : []
 
+  // Keep the streaming code view pinned to the newest tokens as they arrive.
+  const streamRef = useRef<HTMLPreElement>(null)
+  useEffect(() => { const el = streamRef.current; if (el) el.scrollTop = el.scrollHeight }, [streamText])
+
   // Auto-detect intent. Without a workspace there's nothing to change → "new".
   const detected: 'new' | 'change' = !workspace ? 'new' : detectComposeMode(text)
   const DetIcon = detected === 'new' ? Sparkles : Pencil
@@ -43,13 +50,16 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
     ? 'Intent is detected automatically as you type.'
     : detected === 'new' ? 'Detected: new model — opens in a new workspace.' : `Detected: change to ${workspace?.name || 'the current model'}.`
 
-  function reset() { setDsl(null); setPlan(null); setApplied(null); setConfirmReplace(false) }
+  function reset() { setDsl(null); setPlan(null); setApplied(null); setConfirmReplace(false); setStreamText('') }
   const canRun = !!text.trim() && (detected === 'new' || !!workspace)
 
   function submit() {
     if (!canRun || run.loading) return
     reset()
-    if (detected === 'new') run.go(() => generateDiagram(provider, text), setDsl)
+    // New model → stream the DSL in as it generates (an 8k-token call runs
+    // 30–60s on reasoning models). `onText` gets raw chunks; accumulate them for
+    // the live preview, and `go`'s result is the extracted, parse-ready DSL.
+    if (detected === 'new') run.go(() => generateDiagramStream(provider, text, (delta) => setStreamText((t) => t + delta)), setDsl)
     else run.go(() => planEdit(provider, workspace!, text), setPlan)
   }
   function load() { if (parsed) { loadWorkspace(parsed.workspace); onClose() } }
@@ -89,6 +99,18 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
       </div>
       <RunButton label={detected === 'new' ? 'Generate diagram' : 'Plan changes'} loading={run.loading} disabled={!canRun} onClick={submit} />
       <ErrorLine error={run.error} />
+
+      {run.loading && detected === 'new' && streamText && (
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Loader2 size={13} className="animate-spin" color={C.accent} />
+            <span style={kicker}>Generating diagram…</span>
+          </div>
+          <pre ref={streamRef} data-scroll style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '10px 0 0', fontFamily: 'ui-monospace, monospace', fontSize: 12, lineHeight: 1.55, color: C.text2, maxHeight: 220, overflowY: 'auto' }}>
+            {streamText}<span style={{ animation: 'c4ai-node 1.1s ease-in-out infinite' }}>▍</span>
+          </pre>
+        </Card>
+      )}
 
       {parsed && (
         <Card>
