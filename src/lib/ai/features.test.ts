@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { AiProvider, AiJsonRequest } from './types'
 import {
   suggestTags, suggestFieldValue, generateDiagram, generateDiagramStream, draftAdr,
-  reviewArchitecture, planEdit, autoDescribe,
+  reviewArchitecture, planEdit, autoDescribe, interviewAskStream,
 } from './features'
 import { makeWorkspace } from './testFixture'
 
@@ -138,6 +138,30 @@ describe('generateDiagramStream', () => {
     const out = await generateDiagramStream(provider, 'a shop', (d) => chunks.push(d))
     expect(chunks).toEqual([`preamble\n${dsl}`]) // whole text delivered as one chunk
     expect(out).toBe(dsl)
+  })
+})
+
+describe('interviewAskStream', () => {
+  const view = { type: 'container' as const, key: 'c', softwareSystemId: 'shop', elements: [{ id: 'web' }], relationships: [] }
+  const question = 'What datastore does the Web App rely on?'
+
+  it('streams tokens to onText and resolves with the full question', async () => {
+    const provider: AiProvider = {
+      async complete() { return '' },
+      async completeJson<T>(): Promise<T> { return {} as T },
+      async completeStream(req) { req.onText('What datastore '); req.onText('does it use?'); return 'What datastore does it use?' },
+    }
+    const chunks: string[] = []
+    const out = await interviewAskStream(provider, makeWorkspace(), view, [], 'kickoff', (d) => chunks.push(d))
+    expect(chunks).toEqual(['What datastore ', 'does it use?'])
+    expect(out).toBe('What datastore does it use?')
+  })
+
+  it('falls back to a single complete() call when the provider has no streaming', async () => {
+    const chunks: string[] = []
+    const out = await interviewAskStream(makeProvider({ text: question }), makeWorkspace(), view, [], 'kickoff', (d) => chunks.push(d))
+    expect(chunks).toEqual([question]) // whole question delivered as one chunk
+    expect(out).toBe(question)
   })
 })
 

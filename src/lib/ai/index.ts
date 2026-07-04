@@ -25,7 +25,7 @@ export { createProvider } from './providers'
 
 export {
   generateDiagram, generateDiagramStream, reviewArchitecture, autoDescribe, planEdit, draftAdr,
-  interviewAsk, interviewKickoffMessage, interviewBuildPlan, suggestTags,
+  interviewAsk, interviewAskStream, interviewKickoffMessage, interviewBuildPlan, suggestTags,
   suggestFieldValue,
 } from './features'
 

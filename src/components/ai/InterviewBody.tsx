@@ -3,7 +3,7 @@ import { usePersistentState, clearAiSession } from './sessionCache'
 import { Loader2, Sparkles, ArrowRight, MessagesSquare, HelpCircle, CornerDownRight, ChevronRight, Layers } from 'lucide-react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import {
-  interviewAsk, interviewKickoffMessage, interviewBuildPlan,
+  interviewAskStream, interviewKickoffMessage, interviewBuildPlan,
   describeOps, flattenElements, viewLabel, classifyPlanScopes,
   type AiProvider, type EditPlan, type AiChatTurn, type PlanScope,
 } from '@/lib/ai'
@@ -45,6 +45,9 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
   const [applied, setApplied] = useState<AppliedInfo | null>(null)
   const [target, setTarget] = useState(INTERVIEW_TARGET)
   const [wrapUp, setWrapUp] = useState(false)
+  // The question as it streams in, token-by-token. Transient (not persisted, to
+  // avoid a sessionStorage write per token) — `null` once settled into `question`.
+  const [streamingQ, setStreamingQ] = useState<string | null>(null)
   const run = useAiRun()
   const started = history.length > 0
   const groundKey = started && pinnedKey ? pinnedKey : activeViewKey
@@ -75,20 +78,29 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [embedded, workspace, view, started])
 
+  // A failed stream leaves a partial question dangling — drop it so retry starts
+  // clean and the box falls back to the last settled question.
+  useEffect(() => { if (run.error) setStreamingQ(null) }, [run.error])
+
   if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
   const ws = workspace
   const v: View = view
 
+  // Accumulate streamed tokens into the transient question; commit clears it and
+  // writes the final text into the persisted `question`.
+  const streamQ = (delta: string) => setStreamingQ((s) => (s ?? '') + delta)
+  function commitQuestion(q: string) { setStreamingQ(null); setQuestion(q) }
   function start() {
     setApplied(null)
     setPinnedKey(activeViewKey) // pin the interview to the view it began on
     setWrapUp(false); setTarget(INTERVIEW_TARGET); setQa([])
+    setStreamingQ('')
     run.go(async () => {
       const kickoff = interviewKickoffMessage(v)
-      const q = await interviewAsk(provider, ws, v, [], kickoff)
+      const q = await interviewAskStream(provider, ws, v, [], kickoff, streamQ)
       setHistory([{ role: 'user', content: kickoff }, { role: 'assistant', content: q }])
       return q
-    }, setQuestion)
+    }, commitQuestion)
   }
   function answerNext() {
     if (!question || !answer.trim()) return
@@ -96,28 +108,30 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
     setQa((p) => [...p, { q: question, a }])
     setAnswer('')
     setWrapUp(qa.length + 1 >= target) // hit the planned count → offer to wrap up
+    setStreamingQ('')
     // Always fetch the next question so the transcript ends on a question
     // (keeps history alternating, and the next one is ready if they continue).
     run.go(async () => {
-      const q = await interviewAsk(provider, ws, v, history, a)
+      const q = await interviewAskStream(provider, ws, v, history, a, streamQ)
       setHistory([...history, { role: 'user', content: a }, { role: 'assistant', content: q }])
       return q
-    }, setQuestion)
+    }, commitQuestion)
   }
   function skip() {
     if (!question || run.loading) return
     const msg = 'Let’s skip that one — ask me something else.'
     setAnswer('')
+    setStreamingQ('')
     run.go(async () => {
-      const q = await interviewAsk(provider, ws, v, history, msg)
+      const q = await interviewAskStream(provider, ws, v, history, msg, streamQ)
       setHistory([...history, { role: 'user', content: msg }, { role: 'assistant', content: q }])
       return q
-    }, setQuestion)
+    }, commitQuestion)
   }
   function keepGoing() { setWrapUp(false); setTarget((t) => t + INTERVIEW_TARGET) }
   // Discard the pinned conversation and offer a fresh interview on the view the
   // user is now looking at.
-  function reground() { setHistory([]); setQa([]); setQuestion(null); setAnswer(''); setPinnedKey(null); setWrapUp(false); setPlan(null) }
+  function reground() { setHistory([]); setQa([]); setQuestion(null); setAnswer(''); setPinnedKey(null); setWrapUp(false); setPlan(null); setStreamingQ(null) }
   // Build from the committed transcript (always ends on a question), so the plan
   // request alternates cleanly. An unsent draft answer is ignored.
   function finish() { run.go(() => interviewBuildPlan(provider, ws, v, history), setPlan) }
@@ -193,9 +207,11 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
             <span style={{ fontSize: 11, color: C.muted }}>Question {answeredN + 1} of {dotCount}</span>
           </div>
           <div style={{ minHeight: 42, marginTop: 12, fontSize: 15, fontWeight: 600, lineHeight: 1.4, color: C.text }}>
-            {run.loading && !question
+            {run.loading && !streamingQ
               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: C.muted2 }}><Loader2 size={14} className="animate-spin" color={C.accent} /> Thinking…</span>
-              : <span key={question} style={{ display: 'block', animation: 'c4ai-rise .3s ease both' }}>{question}</span>}
+              : streamingQ
+                ? <span style={{ display: 'block' }}>{streamingQ}<span style={{ animation: 'c4ai-node 1.1s ease-in-out infinite' }}>▍</span></span>
+                : <span key={question} style={{ display: 'block', animation: 'c4ai-rise .3s ease both' }}>{question}</span>}
           </div>
           {mentioned.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', animation: 'c4ai-fade .25s ease' }}>

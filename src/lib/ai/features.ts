@@ -250,6 +250,23 @@ export async function interviewAsk(
   })
 }
 
+/** Streaming `interviewAsk`: fires `onText` with each token as it arrives and
+ *  resolves with the full question. Falls back to a single non-streaming
+ *  `complete` (one `onText` with the whole text) when the provider has no SSE
+ *  support. Pass `signal` to cancel. */
+export async function interviewAskStream(
+  provider: AiProvider, ws: Workspace, view: View, history: AiChatTurn[], userMessage: string,
+  onText: (delta: string) => void, signal?: AbortSignal,
+): Promise<string> {
+  const req = { system: interviewSystem(ws, view), history, user: userMessage, maxTokens: 2500 }
+  if (!provider.completeStream) {
+    const text = await provider.complete(req)
+    onText(text)
+    return text
+  }
+  return provider.completeStream({ ...req, onText, signal })
+}
+
 /** Convenience for the very first question. */
 export function interviewKickoffMessage(view: View): string {
   return interviewKickoff(view)
