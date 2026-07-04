@@ -168,7 +168,7 @@ export function toEditPlan(value: unknown): EditPlan {
   return { operations }
 }
 
-function toReviewFinding(value: unknown): ReviewFinding | null {
+export function toReviewFinding(value: unknown): ReviewFinding | null {
   if (!isRecord(value)) return null
   if (typeof value.title !== 'string' || typeof value.detail !== 'string' || typeof value.suggestion !== 'string') return null
   const severity: ReviewFinding['severity'] = value.severity === 'high' || value.severity === 'low' ? value.severity : 'medium'

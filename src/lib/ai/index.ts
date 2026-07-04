@@ -24,7 +24,8 @@ export { AI_PROVIDER_META, AI_PROVIDER_IDS, getProviderMeta, isAiProviderId } fr
 export { createProvider } from './providers'
 
 export {
-  generateDiagram, generateDiagramStream, reviewArchitecture, autoDescribe, planEdit, draftAdr,
+  generateDiagram, generateDiagramStream, reviewArchitecture, reviewArchitectureStream,
+  autoDescribe, planEdit, draftAdr,
   interviewAsk, interviewAskStream, interviewKickoffMessage, interviewBuildPlan, suggestTags,
   suggestFieldValue,
 } from './features'

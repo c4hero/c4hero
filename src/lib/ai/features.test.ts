@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { AiProvider, AiJsonRequest } from './types'
 import {
   suggestTags, suggestFieldValue, generateDiagram, generateDiagramStream, draftAdr,
-  reviewArchitecture, planEdit, autoDescribe, interviewAskStream,
+  reviewArchitecture, reviewArchitectureStream, planEdit, autoDescribe, interviewAskStream,
 } from './features'
 import { makeWorkspace } from './testFixture'
 
@@ -215,6 +215,56 @@ describe('reviewArchitecture', () => {
     ] } })
     const { findings } = await reviewArchitecture(provider, makeWorkspace())
     expect(findings).toHaveLength(1)
+  })
+})
+
+describe('reviewArchitectureStream', () => {
+  // Streams a payload in small chunks (so objects close mid-chunk) via completeStream.
+  function streamingProvider(payload: string, chunkSize = 7): AiProvider {
+    return {
+      async complete() { return '' },
+      async completeJson<T>(): Promise<T> { return {} as T },
+      async completeStream(req) {
+        let text = ''
+        for (let i = 0; i < payload.length; i += chunkSize) { const d = payload.slice(i, i + chunkSize); text += d; req.onText(d) }
+        return text
+      },
+    }
+  }
+
+  it('emits findings one-by-one as they stream, humanizing ids in the prose', async () => {
+    const payload = JSON.stringify({ findings: [
+      { title: "web ('Web App') is undescribed", detail: 'The db needs a description.', suggestion: 'Describe web', severity: 'low', category: 'description', elementIds: ['web'] },
+      { title: 'Naming is inconsistent', detail: 'd', suggestion: 's', severity: 'high', category: 'naming', elementIds: [] },
+    ] })
+    const seen: string[] = []
+    const result = await reviewArchitectureStream(streamingProvider(payload), makeWorkspace(), null, (f) => seen.push(f.title))
+    // Each finding surfaced through onFinding, in stream order, already humanized.
+    expect(seen).toEqual(['Web App is undescribed', 'Naming is inconsistent'])
+    expect(result.findings).toHaveLength(2)
+    expect(result.findings[0].detail).toBe('The Database needs a description.')
+  })
+
+  it('applies the same scope filter as the bulk review (drops external boundary findings)', async () => {
+    const view = { type: 'container' as const, key: 'c', softwareSystemId: 'shop', elements: [{ id: 'web' }, { id: 'cust' }], relationships: [] }
+    const payload = JSON.stringify({ findings: [
+      { title: 'Customer placed wrong', detail: 'd', suggestion: 's', severity: 'high', category: 'boundary', elementIds: ['cust'] },
+      { title: 'Web App boundary', detail: 'd', suggestion: 's', severity: 'high', category: 'boundary', elementIds: ['web'] },
+    ] })
+    const seen: string[] = []
+    const result = await reviewArchitectureStream(streamingProvider(payload), makeWorkspace(), view, (f) => seen.push(f.title))
+    expect(seen).toEqual(['Web App boundary'])
+    expect(result.findings.map((f) => f.title)).toEqual(['Web App boundary'])
+  })
+
+  it('falls back to a single non-streaming review when the provider has no completeStream', async () => {
+    const provider = makeProvider({ json: { findings: [
+      { title: 'A', detail: 'd', suggestion: 's', severity: 'high', category: 'naming', elementIds: [] },
+    ] } })
+    const seen: string[] = []
+    const result = await reviewArchitectureStream(provider, makeWorkspace(), null, (f) => seen.push(f.title))
+    expect(seen).toEqual(['A'])
+    expect(result.findings).toHaveLength(1)
   })
 })
 

@@ -10,9 +10,9 @@ import { useAiSettingsStore, useAiProvider } from '@/store/ai-settings'
 import type { Workspace } from '@/types/model'
 import {
   aiErrorMessage,
-  planEdit, autoDescribe, reviewArchitecture, suggestFieldValue,
+  planEdit, autoDescribe, reviewArchitectureStream, suggestFieldValue,
   applyEditPlan, summarizeSkips, viewLabel,
-  sortedFindings, isActionable,
+  isActionable,
   missingInfoGaps, modelHealthPercent, gapToOp,
   type MissingGap,
   type AiProvider,
@@ -21,7 +21,7 @@ import {
 import {
   stepElementIds, stepRelationshipId,
   bulkApplyTargets, nextUndecidedIndex,
-  type Step, type FixStep, type FindingStep, type StepStatus,
+  type Step, type FixStep, type StepStatus,
 } from './wizardSteps'
 import {
   C, STYLE,
@@ -183,6 +183,9 @@ function AppView({
   // remembers the scope the failed review ran with, so Retry re-runs the same one.
   const [reviewError, setReviewError] = useState<string | null>(null)
   const reviewScopeRef = useRef<'view' | 'model'>('view')
+  // Monotonic key source for streamed findings — unique even across a retry that
+  // re-streams after a partial run.
+  const findingKeyRef = useRef(0)
   // True while a finding's free-text "Other" fix is being turned into operations.
   const [applyBusy, setApplyBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -245,11 +248,16 @@ function AppView({
   // 'view' grounds the review on the active view; 'model' reviews the whole model.
   async function loadReview(ws: Workspace, scope: 'view' | 'model' = 'view') {
     reviewScopeRef.current = scope
+    // Drop findings from a prior (possibly partial) run so a retry re-streams clean.
+    setQueue((q) => q.filter((s) => s.type !== 'finding'))
     setReviewLoading(true); setReviewError(null)
     try {
-      const result = await reviewArchitecture(provider, ws, scope === 'view' ? (activeView ?? null) : null)
-      const steps: FindingStep[] = sortedFindings(result).map((finding, i) => ({ type: 'finding', key: `f:${i}`, cat: 'review', finding }))
-      setQueue((q) => [...q, ...steps])
+      // Stream findings into the queue as each one parses — the wizard leaves the
+      // scanning screen and lets the user triage the first finding while the rest
+      // are still generating (the model emits them high-severity first).
+      await reviewArchitectureStream(provider, ws, scope === 'view' ? (activeView ?? null) : null, (finding) => {
+        setQueue((q) => [...q, { type: 'finding', key: `f:${findingKeyRef.current++}`, cat: 'review', finding }])
+      })
     } catch (err) {
       setReviewError(aiErrorMessage(err))
     } finally {

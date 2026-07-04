@@ -14,8 +14,9 @@ import {
 } from './context'
 import {
   describeSchema, editSchema, reviewSchema,
-  toDescribeResult, toEditPlan, toReviewResult,
+  toDescribeResult, toEditPlan, toReviewResult, toReviewFinding,
 } from './schema'
+import { createArrayStreamParser } from './streamJson'
 import { extractDsl } from './dsl'
 
 // Feature orchestration. Each function takes a provider (injected, so tests use a
@@ -92,6 +93,68 @@ function isExternalMisplacement(f: ReviewFinding, internalIds: Set<string>): boo
     && f.category === 'boundary'
     && f.elementIds.length > 0
     && f.elementIds.every((id) => !internalIds.has(id))
+}
+
+/** Humanize + scope-filter one raw finding, exactly as `reviewArchitecture` does
+ *  in bulk — returns the finished finding, or null if it's malformed or a
+ *  suppressed external-misplacement. */
+function finishFinding(raw: unknown, humanize: (s: string) => string, internal: Set<string>): ReviewFinding | null {
+  const f = toReviewFinding(raw)
+  if (!f) return null
+  const h: ReviewFinding = {
+    ...f,
+    title: humanize(f.title),
+    detail: humanize(f.detail),
+    suggestion: humanize(f.suggestion),
+    options: f.options?.map((o) => ({ ...o, label: humanize(o.label) })),
+  }
+  return isExternalMisplacement(h, internal) ? null : h
+}
+
+/** Streaming architecture review: fires `onFinding` for each finding the moment it
+ *  finishes parsing out of the streamed JSON — already humanized and scope-filtered
+ *  exactly like `reviewArchitecture` — and resolves with the full result. Lets the
+ *  UI triage the first finding while the rest are still generating (a whole-model
+ *  review runs 30–60s). Falls back to a single non-streaming `reviewArchitecture`
+ *  (replaying its findings through `onFinding`) when the provider has no SSE. Pass
+ *  `signal` to cancel. */
+export async function reviewArchitectureStream(
+  provider: AiProvider,
+  ws: Workspace,
+  view: View | null | undefined,
+  onFinding: (finding: ReviewFinding) => void,
+  signal?: AbortSignal,
+): Promise<ReviewResult> {
+  // Non-streaming providers: run the normal review, then replay its findings.
+  if (!provider.completeStream) {
+    const result = await reviewArchitecture(provider, ws, view)
+    result.findings.forEach(onFinding)
+    return result
+  }
+
+  const internal = view ? viewScopeInternalIds(ws, view) : new Set<string>()
+  const humanize = makeHumanizer(ws)
+  const collected: ReviewFinding[] = []
+  const process = (raw: unknown): void => {
+    const f = finishFinding(raw, humanize, internal)
+    if (f) { collected.push(f); onFinding(f) }
+  }
+
+  // completeStream carries no JSON mode (unlike completeJson), so spell out the
+  // envelope in the prompt; the tolerant parser lifts each finding from the
+  // streamed text as it closes.
+  const parse = createArrayStreamParser('findings')
+  let acc = ''
+  const text = await provider.completeStream({
+    system: `${reviewSystem()}\n\nReturn ONLY a JSON object of the form {"findings": [ ... ]} that conforms to this JSON Schema — no prose, no code fence:\n${JSON.stringify(reviewSchema)}`,
+    user: reviewUser(ws, view),
+    maxTokens: 6000,
+    onText: (delta) => { acc += delta; for (const raw of parse(acc)) process(raw) },
+    signal,
+  })
+  // Safety net for any tail the incremental pass didn't consume.
+  for (const raw of parse(text)) process(raw)
+  return { findings: collected }
 }
 
 /** Auto-describe → returns validated descriptions for missing-description ids. */
