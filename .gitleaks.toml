@@ -1,0 +1,20 @@
+title = "c4hero gitleaks config"
+
+# Keep the full built-in gitleaks ruleset active; we only add targeted
+# allowlists below. Without this, a config file replaces the defaults and
+# silently disables all secret detection.
+[extend]
+useDefault = true
+
+[allowlist]
+  description = """
+    Test fixtures and regex patterns for the credential-detection feature.
+    repoScan.ts defines a regex *pattern* that matches PEM private-key blocks
+    (it is not itself a key). repoScan.test.ts uses intentionally fake tokens
+    (ghp_abc…, sk-abc…, BEGIN PRIVATE KEY…) to verify the redactSensitiveContent
+    function strips them before any data leaves the browser.
+  """
+  paths = [
+    '''src/lib/ai/repoScan\.ts''',
+    '''src/lib/ai/repoScan\.test\.ts''',
+  ]
