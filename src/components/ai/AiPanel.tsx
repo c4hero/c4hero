@@ -4,7 +4,7 @@ import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, ChevronRight, ChevronDown, HelpCircle,
-  Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, type LucideIcon,
+  Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, ListChecks, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -27,7 +27,11 @@ import {
   type ReviewFinding, type ReviewFixOption, type ReviewSeverity, type PlanScope,
 } from '@/lib/ai'
 import { MicButton } from './dictation'
-import { stepElementIds, stepRelationshipId, type Step, type FixStep, type FindingStep } from './wizardSteps'
+import {
+  stepElementIds, stepRelationshipId,
+  stepState, stepMatchesFilter, queueFilterChips, bulkApplyTargets, bulkSkipTargets, nextUndecidedIndex,
+  type Step, type FixStep, type FindingStep, type StepStatus, type QueueFilter, type QueueStepState,
+} from './wizardSteps'
 
 // ─── Palette (the "AI Assistant Hybrid" design) ─────────────────────
 
@@ -197,8 +201,6 @@ const SEV: Record<ReviewSeverity, { label: string; bg: string; color: string }> 
 // Instruction reused to draft technologies for the missing-info "tech" gaps.
 const TECH_INSTRUCTION = 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.'
 
-type StepStatus = 'apply' | 'skip' | 'dismiss'
-
 /** How the user chose to fix a finding: `idx` indexes its options, or -1 = "Other"
  *  (a free-text instruction in `other`, run through planEdit at apply time). */
 interface FindingChoice { idx: number; other: string }
@@ -260,6 +262,11 @@ function AppView({
   const [improveScope, setImproveScope] = usePersistentState<'view' | 'model'>('sweep.scope', 'view')
   const [interviewOn, setInterviewOn] = usePersistentState('sweep.interview', false)
   const [ivApplied, setIvApplied] = usePersistentState('sweep.ivApplied', false)
+  // Queue overview: the all-steps screen with filters, jump-to-step and the
+  // bulk actions. `bulkOptOut` holds fixes the user unticked from "Apply all
+  // suggested" — an opt-out set, so newly drafted fixes default to included.
+  const [overviewOpen, setOverviewOpen] = usePersistentState('sweep.overview', false)
+  const [bulkOptOut, setBulkOptOut] = usePersistentState<Record<string, boolean>>('sweep.bulkOptOut', {})
   // Model pill starts minimal (just the status dot + gear) and expands to reveal
   // the model name on hover/focus so the header stays uncluttered.
   const [modelHover, setModelHover] = useState(false)
@@ -349,7 +356,7 @@ function AppView({
     if (ws && !reviewLoading) loadReview(ws, reviewScopeRef.current)
   }
 
-  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setFindingChoice({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setError(null); setSkipNotice(null); setReviewError(null) }
+  function resetSweep() { setQueue([]); setCurIdx(0); setDecisions({}); setDrafts({}); setFindingChoice({}); setLedger([]); setBaseline(null); setInterviewOn(false); setIvApplied(false); setOverviewOpen(false); setBulkOptOut({}); setError(null); setSkipNotice(null); setReviewError(null) }
 
   function startSweep(cats: CatId[]) {
     if (!workspace) return
@@ -425,13 +432,14 @@ function AppView({
 
   // ── queue navigation ──
   const cur = view === 'wizard' && curIdx >= 0 && curIdx < queue.length ? queue[curIdx] : null
+  const showOverview = view === 'wizard' && overviewOpen && queue.length > 0
+  // The ledger keys — with `decisions`, what resolves each step's display state.
+  const appliedKeys = useMemo(() => new Set(ledger.map((e) => e.key)), [ledger])
 
   function advance(key: string, status: StepStatus) {
     const next = { ...decisions, [key]: status }
     setDecisions(next)
-    let i = curIdx + 1
-    while (i < queue.length && next[queue[i].key]) i++
-    setCurIdx(i)
+    setCurIdx(nextUndecidedIndex(queue, curIdx + 1, next))
   }
   // Resolve the forward ops + ledger detail for the current step. A fix maps its
   // draft to one update; a finding applies the chosen option's ops, or — for a
@@ -515,6 +523,38 @@ function AppView({
     setDecisions((d) => { const n = { ...d }; for (const e of ledger) delete n[e.key]; return n })
     setLedger([])
   }
+  // Bulk-apply the given missing-info fixes (their drafted values) in ONE store
+  // apply — a single undo entry — but one ledger entry PER fix, so each stays
+  // individually revertable in the summary, exactly as if applied one by one.
+  function bulkApplyFixes(steps: FixStep[]) {
+    const ws = useWorkspaceStore.getState().workspace
+    if (!ws) return
+    setSkipNotice(null)
+    const entries: LedgerEntry[] = []
+    for (const s of steps) {
+      const v = (drafts[s.key] ?? '').trim()
+      if (!v || appliedKeys.has(s.key)) continue
+      entries.push({ key: s.key, label: s.gap.label, detail: v, cat: 'missing', ops: [gapToOp(s.gap, v)] })
+    }
+    if (!entries.length) return
+    if (!baseline) setBaseline(ws)
+    setSkipNotice(summarizeSkips(applyPlanToStore({ operations: entries.flatMap((e) => e.ops) }, ws)))
+    setLedger((l) => [...l, ...entries])
+    const next = { ...decisions }
+    for (const e of entries) next[e.key] = 'apply'
+    setDecisions(next)
+    setCurIdx((i) => nextUndecidedIndex(queue, i, next))
+  }
+  // Bulk-skip the given steps — decisions only, no model change.
+  function bulkSkipSteps(steps: Step[]) {
+    const next = { ...decisions }
+    for (const s of steps) {
+      if (next[s.key] || appliedKeys.has(s.key)) continue
+      next[s.key] = s.type === 'finding' && !isActionable(s.finding) ? 'dismiss' : 'skip'
+    }
+    setDecisions(next)
+    setCurIdx((i) => nextUndecidedIndex(queue, i, next))
+  }
   function skipStep() { if (!cur) return; setSkipNotice(null); advance(cur.key, cur.type === 'finding' && !isActionable(cur.finding) ? 'dismiss' : 'skip') }
   // Step back to the previous question to revisit/change a decision. Drafts and
   // decisions are kept, so the earlier step shows exactly what you left.
@@ -522,7 +562,7 @@ function AppView({
 
   // ⌘↵ apply · esc skip, while stepping through the wizard.
   useEffect(() => {
-    if (view !== 'wizard' || !cur) return
+    if (view !== 'wizard' || showOverview || !cur) return
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       const typing = !!t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)
@@ -542,16 +582,38 @@ function AppView({
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, cur])
+  }, [view, cur, showOverview])
+
+  // Esc closes the queue overview back to the stepper. Capture phase +
+  // stopPropagation so it wins over DialogShell's document-level Escape
+  // (which would close the whole panel) and the stepper's esc-to-skip.
+  useEffect(() => {
+    if (!showOverview) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault(); e.stopPropagation()
+      setOverviewOpen(false)
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showOverview])
 
   // Memoized — AppView re-renders on every wizard keystroke; without this each
   // one would re-walk the whole model tree via modelHealthPercent.
   const completePct = useMemo(() => (workspace ? modelHealthPercent(workspace, scopeIds) : 100), [workspace, scopeIds])
 
+  // How many drafted fixes "Apply all suggested" would land right now (whole
+  // queue, minus opt-outs) — the stepper's shortcut row shows this count.
+  const bulkReady = useMemo(
+    () => bulkApplyTargets(queue, 'all', decisions, appliedKeys, drafts, bulkOptOut).length,
+    [queue, decisions, appliedKeys, drafts, bulkOptOut],
+  )
+
   // A key that changes on every screen / wizard sub-state change (but NOT between
   // wizard steps — those animate per-card). Drives the body entrance animation so
   // a screen change is always visible. Step-to-step is handled by the card key.
-  const screenKey = view !== 'wizard' ? view : cur ? 'wizard-step' : reviewLoading ? 'wizard-scan' : 'wizard-review'
+  const screenKey = view !== 'wizard' ? view : showOverview ? 'wizard-queue' : cur ? 'wizard-step' : reviewLoading ? 'wizard-scan' : 'wizard-review'
 
   return (
     <>
@@ -598,7 +660,17 @@ function AppView({
         )}
 
         {view === 'wizard' && (
-          cur ? (
+          showOverview ? (
+            <QueueOverview
+              queue={queue} curIdx={curIdx} decisions={decisions} appliedKeys={appliedKeys}
+              drafts={drafts} draftsLoading={draftsLoading} reviewLoading={reviewLoading}
+              optOut={bulkOptOut}
+              onToggleOptOut={(key) => setBulkOptOut((m) => ({ ...m, [key]: !m[key] }))}
+              onJump={(i) => { setCurIdx(i); setOverviewOpen(false) }}
+              onBulkApply={bulkApplyFixes} onBulkSkip={bulkSkipSteps}
+              onClose={() => setOverviewOpen(false)}
+            />
+          ) : cur ? (
             <>
               <WizardStep
                 step={cur} idx={curIdx} total={queue.length}
@@ -611,6 +683,7 @@ function AppView({
                 onApply={applyStep} onSkip={skipStep} onRevert={() => revertEntry(cur.key)}
                 choice={findingChoice[cur.key]} onChoice={(c) => setFindingChoice((m) => ({ ...m, [cur.key]: c }))}
                 applyBusy={applyBusy}
+                onOverview={() => setOverviewOpen(true)} bulkReady={bulkReady}
               />
               {ledger.length > 0 && (
                 <AppliedBar n={ledger.length} pct={completePct} onReview={() => setCurIdx(queue.length)} />
@@ -825,7 +898,7 @@ function HomeDashboard({
 
 function WizardStep({
   step, idx, total, draft, draftLoading, applied, onDraft, onRewrite, onReveal, onBack, onApply, onSkip, onRevert,
-  choice, onChoice, applyBusy,
+  choice, onChoice, applyBusy, onOverview, bulkReady,
 }: {
   step: Step; idx: number; total: number
   draft: string; draftLoading: boolean; applied: boolean
@@ -833,6 +906,9 @@ function WizardStep({
   onBack?: () => void
   onApply: () => void; onSkip: () => void; onRevert: () => void
   choice?: FindingChoice; onChoice: (c: FindingChoice) => void; applyBusy: boolean
+  onOverview: () => void
+  /** Drafted fixes a bulk apply would land right now — powers the shortcut row. */
+  bulkReady: number
 }) {
   const cm = CAT[step.cat]
   const CatIcon = cm.icon
@@ -853,13 +929,26 @@ function WizardStep({
               <ArrowLeft size={13} /> Back
             </button>
           )}
-          <span style={{ fontSize: 12, color: C.muted2 }}>Step {Math.min(idx + 1, total)} of {total}</span>
+          <button onClick={onOverview} className="c4ai-ghost" aria-label={`All steps — step ${Math.min(idx + 1, total)} of ${total}`} title="All steps"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none', background: 'transparent', color: C.muted2, fontSize: 12, fontWeight: 500, cursor: 'pointer', padding: '2px 3px', borderRadius: 6 }}>
+            <ListChecks size={13} /> Step {Math.min(idx + 1, total)} of {total}
+          </button>
         </span>
       </div>
 
       {step.type === 'fix'
         ? <FixCard key={step.key} gap={step.gap} draft={draft} draftLoading={draftLoading} applied={applied} onDraft={onDraft} onRewrite={onRewrite} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onRevert={onRevert} />
         : <FindingCardStep key={step.key} finding={step.finding} applied={applied} onReveal={onReveal} onApply={onApply} onSkip={onSkip} onRevert={onRevert} choice={choice} onChoice={onChoice} applyBusy={applyBusy} />}
+
+      {/* Shortcut out of one-at-a-time: with several drafted fixes waiting,
+          offer the queue overview's bulk apply (it opens for review first —
+          nothing is applied from here). */}
+      {step.type === 'fix' && bulkReady > 1 && (
+        <button onClick={onOverview} className="c4ai-ghost"
+          style={{ marginTop: 10, width: '100%', height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 9, border: `1px dashed ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
+          <Wand2 size={13} /> Apply all {bulkReady} suggested…
+        </button>
+      )}
     </div>
   )
 }
@@ -971,6 +1060,150 @@ function FixOptionRow({ label, selected, disabled, onSelect }: { label: string; 
       </span>
       <span style={{ flex: 1, minWidth: 0, lineHeight: 1.4 }}>{label}</span>
     </button>
+  )
+}
+
+// ─── Queue overview ─────────────────────────────────────────────────
+
+// The wizard's all-steps screen: every queued step with its kind and status,
+// filter chips (per gap kind / finding severity), jump-to-step, and the bulk
+// actions — "Apply all suggested" over the drafted missing-info fixes (with
+// per-item opt-out via the checkboxes) and "Skip shown". Findings are never
+// bulk-applied; they keep the one-at-a-time stepper. Exported for tests.
+export function QueueOverview({
+  queue, curIdx, decisions, appliedKeys, drafts, draftsLoading, reviewLoading,
+  optOut, onToggleOptOut, onJump, onBulkApply, onBulkSkip, onClose,
+}: {
+  queue: Step[]; curIdx: number
+  decisions: Record<string, StepStatus>; appliedKeys: ReadonlySet<string>
+  drafts: Record<string, string>; draftsLoading: boolean; reviewLoading: boolean
+  optOut: Record<string, boolean>
+  onToggleOptOut: (key: string) => void
+  onJump: (idx: number) => void
+  onBulkApply: (steps: FixStep[]) => void
+  onBulkSkip: (steps: Step[]) => void
+  onClose: () => void
+}) {
+  const [filter, setFilter] = useState<QueueFilter>('all')
+  const chips = useMemo(() => queueFilterChips(queue), [queue])
+  const shown = queue.map((step, idx) => ({ step, idx })).filter(({ step }) => stepMatchesFilter(step, filter))
+  const applyTargets = bulkApplyTargets(queue, filter, decisions, appliedKeys, drafts, optOut)
+  const skipTargets = bulkSkipTargets(queue, filter, decisions, appliedKeys)
+  const doneCount = queue.filter((s) => stepState(s, decisions, appliedKeys) !== 'pending').length
+  const pendingFixShown = shown.some(({ step }) => step.type === 'fix' && stepState(step, decisions, appliedKeys) === 'pending')
+  const pendingFindingShown = shown.some(({ step }) => step.type === 'finding' && stepState(step, decisions, appliedKeys) === 'pending')
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button onClick={onClose} className="c4ai-ghost" aria-label="Back to the current step"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 3, border: 'none', background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+          <ArrowLeft size={13} /> {doneCount === queue.length ? 'Continue' : 'Back'}
+        </button>
+        <span style={{ fontSize: 12, color: C.muted2 }}>{doneCount} of {queue.length} done</span>
+      </div>
+
+      <div style={{ marginTop: 12, fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>All steps</div>
+      {(reviewLoading || draftsLoading) && (
+        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.muted2 }}>
+          <Loader2 size={12} className="animate-spin" color={C.accent} />
+          {reviewLoading ? 'Deep review running — its findings will appear here.' : 'Drafting suggestions…'}
+        </div>
+      )}
+
+      {/* filters */}
+      <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {chips.map((c) => (
+          <button key={c.id} onClick={() => setFilter(c.id)} aria-pressed={filter === c.id}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+              background: filter === c.id ? 'rgba(88,166,255,0.14)' : 'transparent',
+              border: `1px solid ${filter === c.id ? C.borderStrong : C.border}`,
+              color: filter === c.id ? C.text : C.muted2 }}>
+            {c.label} <span style={{ fontWeight: 500, opacity: 0.75 }}>{c.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* the queue */}
+      <div data-scroll style={{ marginTop: 12, maxHeight: 252, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 2 }}>
+        {shown.map(({ step, idx }) => (
+          <QueueRow key={step.key} step={step} current={idx === curIdx}
+            state={stepState(step, decisions, appliedKeys)}
+            draft={(drafts[step.key] ?? '').trim()} draftsLoading={draftsLoading}
+            optedOut={!!optOut[step.key]}
+            onToggle={() => onToggleOptOut(step.key)} onJump={() => onJump(idx)} />
+        ))}
+      </div>
+
+      {/* bulk actions */}
+      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {pendingFixShown && (
+          <button onClick={() => onBulkApply(applyTargets)} disabled={!applyTargets.length} className="c4ai-pri"
+            style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, border: 'none', background: C.accent, color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: applyTargets.length ? 'pointer' : 'default', opacity: applyTargets.length ? 1 : 0.55 }}>
+            <Wand2 size={16} /> Apply {applyTargets.length} suggested
+          </button>
+        )}
+        {skipTargets.length > 0 && (
+          <button onClick={() => onBulkSkip(skipTargets)} className="c4ai-ghost" style={{ ...wizSecBtn, flex: 'none', height: 38 }}>
+            Skip {skipTargets.length} shown
+          </button>
+        )}
+        {pendingFindingShown && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '0 2px', fontSize: 11.5, color: C.muted2, lineHeight: 1.45 }}>
+            <Stethoscope size={12} color={C.warn} style={{ flex: 'none', marginTop: 1 }} />
+            <span>Review findings aren’t bulk-applied — open one to pick its fix.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** One row in the queue overview. The checkbox (drafted, pending fixes only)
+ *  is a sibling of the row button — nested interactive elements are invalid —
+ *  and toggles that fix in or out of "Apply all suggested". */
+function QueueRow({ step, current, state, draft, draftsLoading, optedOut, onToggle, onJump }: {
+  step: Step; current: boolean; state: QueueStepState
+  draft: string; draftsLoading: boolean
+  optedOut: boolean; onToggle: () => void; onJump: () => void
+}) {
+  // Keep the current step visible when the (scrolling) list first opens.
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => { if (current) rowRef.current?.scrollIntoView?.({ block: 'nearest' }) }, [current])
+
+  const isFix = step.type === 'fix'
+  const label = isFix ? step.gap.label : step.finding.title
+  const sub = isFix
+    ? (draft || (draftsLoading ? 'Drafting a suggestion…' : `No ${KIND[step.gap.kind].label} yet — open to write one`))
+    : `${SEV[step.finding.severity].label} severity · ${step.finding.category}`
+  const showCheckbox = isFix && state === 'pending' && !!draft
+  const ticked = showCheckbox && !optedOut
+  const KindIcon = isFix ? KIND[step.gap.kind].icon : null
+
+  return (
+    <div ref={rowRef} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+      {/* fix rows keep the checkbox gutter even without one, so their labels align */}
+      {isFix && (showCheckbox ? (
+        <button onClick={onToggle} role="checkbox" aria-checked={ticked} aria-label={`Include "${label}" in bulk apply`}
+          style={{ width: 17, height: 17, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, cursor: 'pointer', padding: 0, background: ticked ? C.accent : 'transparent', border: `1px solid ${ticked ? C.accent : C.borderStrong}`, color: C.ink }}>
+          {ticked && <Check size={12} strokeWidth={3} />}
+        </button>
+      ) : (
+        <span style={{ width: 17, flex: 'none' }} />
+      ))}
+      <button onClick={onJump} className="c4ai-card" aria-current={current ? 'step' : undefined}
+        style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: '8px 10px', borderRadius: 10, cursor: 'pointer', background: C.card, border: `1px solid ${current ? C.borderStrong : C.border}`, opacity: state === 'skipped' ? 0.55 : 1 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          {KindIcon
+            ? <KindIcon size={12} color={CAT.missing.color} style={{ flex: 'none' }} />
+            : step.type === 'finding' && <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: SEV[step.finding.severity].color }} />}
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+          {state === 'applied' && <CheckCircle2 size={13} color={C.green} style={{ flex: 'none' }} aria-label="Applied" />}
+          {state === 'skipped' && <span style={{ flex: 'none', fontSize: 10, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: C.muted3 }}>Skipped</span>}
+        </span>
+        <span style={{ display: 'block', marginTop: 2, paddingLeft: 19, fontSize: 11.5, color: C.muted2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>
+      </button>
+    </div>
   )
 }
 
