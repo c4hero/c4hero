@@ -4,7 +4,7 @@ import {
   X, Loader2, Sparkles, Check, Copy, Download, AlertCircle,
   ArrowLeft, ArrowRight, KeyRound, ShieldCheck, ExternalLink,
   Pencil, Layers, Wand2, ChevronRight, ChevronDown, HelpCircle,
-  Cpu, Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, ListChecks, type LucideIcon,
+  Type, Link2, Box, Unlink, Stethoscope, MessagesSquare, CheckCircle2, CornerDownRight, SquarePen, Settings, Star, RotateCw, Undo2, ListChecks, type LucideIcon,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
@@ -21,59 +21,31 @@ import {
   applyEditPlan, describeOps, summarizeSkips, elementNameMap, flattenElements, viewLabel,
   sortedFindings, isActionable, classifyPlanScopes,
   missingInfoGaps, modelHealthPercent, gapToOp,
-  type MissingGap, type GapKind,
-  type AiProvider, type EditActions, type ApplyResult,
+  type MissingGap,
+  type AiProvider,
   type EditPlan, type EditOp, type AiFeatureId, type AiChatTurn,
-  type ReviewFinding, type ReviewFixOption, type ReviewSeverity, type PlanScope,
+  type ReviewFinding, type PlanScope,
 } from '@/lib/ai'
-import { MicButton } from './dictation'
 import {
   stepElementIds, stepRelationshipId,
   stepState, stepMatchesFilter, queueFilterChips, bulkApplyTargets, bulkSkipTargets, nextUndecidedIndex,
   type Step, type FixStep, type FindingStep, type StepStatus, type QueueFilter, type QueueStepState,
 } from './wizardSteps'
-
-// ─── Palette (the "AI Assistant Hybrid" design) ─────────────────────
-
-const C = {
-  accent: '#58a6ff', accentHover: '#79b8ff', ink: '#0d1117',
-  text: '#e6edf3', text2: '#c9d1d9', muted: '#8b949e', muted2: '#848d97', muted3: '#6e7681',
-  // Match the floating chrome (top pill / tool rail / bottom strip) — they all
-  // use the heavy glass surface, so the assistant reads as part of the same set.
-  panel: 'var(--glass-bg-heavy)', card: '#161b22',
-  border: 'rgba(88,166,255,0.16)', borderStrong: 'rgba(88,166,255,0.45)',
-  green: '#22c55e', greenText: '#86efac',
-  danger: '#ef4444', dangerText: '#fca5a5',
-  warn: '#f97316', warnText: '#fdba74',
-}
-
-
-const STYLE = `
-.c4ai [data-scroll]{scrollbar-width:thin;scrollbar-color:rgba(88,166,255,0.28) transparent}
-.c4ai [data-scroll]::-webkit-scrollbar{width:10px;height:10px}
-.c4ai [data-scroll]::-webkit-scrollbar-thumb{background:rgba(88,166,255,0.22);border-radius:999px;border:3px solid transparent;background-clip:padding-box}
-.c4ai-pri:hover{background:${C.accentHover}!important}
-.c4ai-ghost:hover{background:rgba(255,255,255,0.06)!important;color:${C.text}!important}
-.c4ai-sec:hover{background:rgba(255,255,255,0.05)!important}
-.c4ai-card:hover{border-color:${C.borderStrong}!important;background:#1c2128!important}
-@keyframes c4ai-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-@keyframes c4ai-rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
-@keyframes c4ai-result{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
-@keyframes c4ai-stagger{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@keyframes c4ai-screen{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@keyframes c4ai-next{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
-@keyframes c4ai-node{0%,100%{opacity:.35}50%{opacity:1}}
-@keyframes c4ai-flow{to{stroke-dashoffset:-14}}
-@keyframes c4ai-radar{to{transform:rotate(360deg)}}
-@keyframes c4ai-ping{0%,72%,100%{opacity:.4;transform:scale(.78)}82%{opacity:1;transform:scale(1.22)}}
-@keyframes c4ai-pop{0%{opacity:0;transform:scale(0)}65%{opacity:1;transform:scale(1.2)}100%{opacity:1;transform:scale(1)}}
-@keyframes c4ai-ringpulse{0%{opacity:.5;transform:scale(.7)}100%{opacity:0;transform:scale(1.25)}}
-@keyframes c4ai-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
-.c4ai-node{transform-box:fill-box;transform-origin:center;animation:c4ai-node 1.7s ease-in-out infinite}
-.c4ai-edge{stroke-dasharray:3 5;animation:c4ai-flow .9s linear infinite}
-.c4ai-ping{transform-box:fill-box;transform-origin:center;animation:c4ai-ping 2.8s cubic-bezier(.4,0,.2,1) infinite}
-.c4ai-pop{transform-box:fill-box;transform-origin:center;animation:c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both}
-`
+import {
+  C, STYLE,
+  headerRow, sectionLabel, wizSecBtn, describeBtn, describeIcon, iconBtn,
+  blurb, kicker, fieldLabel, primaryBtn, secondaryBtn, miniBtn, keyInput, chipBlue,
+} from './aiTheme'
+import {
+  useAiRun, plural, storeEditActions, applyPlanToStore, runApply, type AppliedInfo,
+} from './aiHelpers'
+import {
+  FEATURE_TO_VIEW, VIEW_TITLE, CAT, KIND, SEV, TECH_INSTRUCTION, findingOptions, viewScopeIds,
+  type SweepView, type CatId, type FindingChoice, type LedgerEntry,
+} from './sweepModel'
+import {
+  Field, RunButton, ErrorLine, Notice, AppliedSummary, Card, Actions, PlanList, Empty,
+} from './aiPrimitives'
 
 export default function AiPanel({ onClose }: { onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -164,65 +136,6 @@ function escapeRegExp(s: string): string {
 // review findings), a batch-review screen, and a commit. Interview and repo —
 // inherently conversational / folder-driven — are reachable from the dashboard
 // as their own focused flows (existing InterviewBody / RepoBody).
-
-type SweepView = 'home' | 'wizard' | 'describe' | 'interview' | 'adr'
-
-const FEATURE_TO_VIEW: Record<AiFeatureId, SweepView> = {
-  compose: 'describe', interview: 'interview', review: 'wizard', adr: 'adr',
-}
-
-const VIEW_TITLE: Partial<Record<SweepView, string>> = {
-  wizard: 'Guided cleanup',
-  describe: 'Describe', interview: 'Interview', adr: 'Draft ADR',
-}
-
-// Per-category presentation (matches the imported design's palette).
-type CatId = 'missing' | 'review' | 'interview'
-const CAT: Record<CatId, { label: string; sub: string; icon: LucideIcon; color: string; bg: string; iconBg: string }> = {
-  missing: { label: 'Missing info', sub: 'Titles, descriptions and technologies', icon: Wand2, color: C.accent, bg: 'rgba(88,166,255,0.16)', iconBg: 'rgba(88,166,255,0.1)' },
-  review: { label: 'Deep review', sub: 'Orphans, untyped links, naming', icon: Stethoscope, color: C.warn, bg: 'rgba(249,115,22,0.16)', iconBg: 'rgba(249,115,22,0.1)' },
-  interview: { label: 'Your answers', sub: 'From the interview questions', icon: MessagesSquare, color: '#a78bfa', bg: 'rgba(168,85,247,0.16)', iconBg: 'rgba(168,85,247,0.1)' },
-}
-
-// Icon + label per missing-info kind.
-const KIND: Record<GapKind, { icon: LucideIcon; label: string; prompt: string }> = {
-  title: { icon: Type, label: 'title', prompt: 'Still has a placeholder name.' },
-  desc: { icon: Pencil, label: 'description', prompt: 'This element has no description.' },
-  tech: { icon: Cpu, label: 'technology', prompt: 'No technology is set.' },
-  rel: { icon: Link2, label: 'label', prompt: 'This relationship is untyped.' },
-}
-
-const SEV: Record<ReviewSeverity, { label: string; bg: string; color: string }> = {
-  high: { label: 'High', bg: 'rgba(239,68,68,0.12)', color: C.dangerText },
-  medium: { label: 'Medium', bg: 'rgba(249,115,22,0.12)', color: C.warnText },
-  low: { label: 'Low', bg: 'rgba(132,141,151,0.14)', color: '#9aa3ad' },
-}
-
-// Instruction reused to draft technologies for the missing-info "tech" gaps.
-const TECH_INSTRUCTION = 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.'
-
-/** How the user chose to fix a finding: `idx` indexes its options, or -1 = "Other"
- *  (a free-text instruction in `other`, run through planEdit at apply time). */
-interface FindingChoice { idx: number; other: string }
-
-/** The candidate fixes for a finding: its explicit `options`, or a single option
- *  synthesized from its `operations` when the model didn't break out alternatives. */
-function findingOptions(f: ReviewFinding): ReviewFixOption[] {
-  if (f.options?.length) return f.options
-  return f.operations?.length ? [{ label: f.suggestion, operations: f.operations }] : []
-}
-
-// One applied change in the guided flow's revert ledger. We store the forward ops
-// (not an inverse): revert rebuilds the model by replaying the kept entries' ops on
-// top of the pre-sweep baseline, so reversal is always exact regardless of op kind.
-interface LedgerEntry { key: string; label: string; detail: string; cat: CatId; ops: EditOp[] }
-
-/** The element + relationship ids a view shows — the scope set for "this view".
- *  `undefined` when there's no view (treated as whole-model). */
-function viewScopeIds(view: View | undefined): ReadonlySet<string> | undefined {
-  if (!view) return undefined
-  return new Set<string>([...view.elements.map((e) => e.id), ...view.relationships.map((r) => r.id)])
-}
 
 function AppView({
   provider, workspace, model, feature, onOpenSettings, onClose,
@@ -2052,176 +1965,7 @@ function SecurityNote({ style }: { style?: React.CSSProperties }) {
 
 // ─── Shared primitives ──────────────────────────────────────────────
 
-interface RunState {
-  loading: boolean
-  error: string | null
-  go: <T>(fn: () => Promise<T>, onResult: (v: T) => void) => Promise<void>
-  /** Re-run the last `go` — the retry for a failed call whose inputs (an
-   *  interview answer, a kickoff) are captured in its closure and may no
-   *  longer exist in state. No-op while loading or before any run. */
-  retry: () => void
-}
-function useAiRun(): RunState {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const lastRun = useRef<(() => Promise<void>) | null>(null)
-  async function go<T>(fn: () => Promise<T>, onResult: (v: T) => void) {
-    lastRun.current = () => go(fn, onResult)
-    setLoading(true); setError(null)
-    try { onResult(await fn()) } catch (err) { setError(aiErrorMessage(err)) } finally { setLoading(false) }
-  }
-  function retry() { if (!loading) void lastRun.current?.() }
-  return { loading, error, go, retry }
-}
-
-function Field({ value, onChange, placeholder, rows, grow, onSubmit }: { value: string; onChange: (v: string) => void; placeholder: string; rows?: number; grow?: boolean; onSubmit?: () => void }) {
-  return (
-    <div style={{ position: 'relative', display: 'flex', ...(grow ? { flex: 1, minHeight: 130 } : {}) }}>
-      <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={grow ? undefined : (rows ?? 3)}
-        onKeyDown={(e) => { if (onSubmit && (e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); onSubmit() } }}
-        style={{ width: '100%', resize: grow ? 'none' : 'vertical', height: grow ? '100%' : undefined, minHeight: grow ? undefined : 60, padding: '11px 42px 11px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, lineHeight: 1.5, fontFamily: 'inherit' }} />
-      <MicButton value={value} onChange={onChange} style={{ position: 'absolute', top: 8, right: 8, color: C.muted2 }} />
-    </div>
-  )
-}
-
-function RunButton({ label, loading, disabled, onClick }: { label: string; loading: boolean; disabled?: boolean; onClick: () => void }) {
-  return (
-    <button className="c4ai-pri" onClick={onClick} disabled={loading || disabled}
-      style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 7, alignSelf: 'flex-start', height: 36, padding: '0 16px', borderRadius: 10, border: 'none', background: C.accent, color: C.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (loading || disabled) ? 0.55 : 1 }}>
-      {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-      {loading ? 'Thinking…' : label}
-    </button>
-  )
-}
-
-function ErrorLine({ error, onRetry }: { error: string | null; onRetry?: () => void }) {
-  if (!error) return null
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 12, color: C.dangerText }}>
-      <AlertCircle size={13} style={{ flex: 'none', marginTop: 1 }} />
-      <span style={{ flex: 1, minWidth: 0 }}>{error}</span>
-      {onRetry && (
-        <button onClick={onRetry} className="c4ai-ghost"
-          style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '0 2px' }}>
-          <RotateCw size={12} /> Retry
-        </button>
-      )}
-    </div>
-  )
-}
-
-/** Warning-toned sibling of ErrorLine, for partial results (skipped operations). */
-function Notice({ text }: { text: string | null }) {
-  if (!text) return null
-  return <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 12, color: C.warnText }}><AlertCircle size={13} style={{ flex: 'none', marginTop: 1 }} /> {text}</div>
-}
-
-/** Post-apply summary card: what landed, what was skipped and why, and a
- *  one-shot Undo offered only while nothing else has touched the model since. */
-function AppliedSummary({ info, liveWs, onUndo, hint }: {
-  info: AppliedInfo; liveWs: Workspace | null; onUndo: () => void; hint?: string
-}) {
-  const canUndo = info.undoTarget !== null && info.undoTarget === liveWs
-  return (
-    <Card>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        <CheckCircle2 size={16} color={C.green} style={{ flex: 'none' }} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: C.text }}>{plural(info.appliedCount, 'change', 'changes')} applied</span>
-        {canUndo && (
-          <button onClick={onUndo} className="c4ai-ghost"
-            style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, height: 26, padding: '0 9px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.text2, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            <Undo2 size={13} /> Undo
-          </button>
-        )}
-      </div>
-      <Notice text={info.skipText} />
-      {hint && <div style={{ marginTop: 10, fontSize: 12, color: C.muted2, lineHeight: 1.45 }}>{hint}</div>}
-    </Card>
-  )
-}
-
-function Card({ children }: { children: React.ReactNode }) {
-  return <div style={{ marginTop: 16, padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, animation: 'c4ai-fade .25s ease' }}>{children}</div>
-}
-function Actions({ children }: { children: React.ReactNode }) {
-  return <div style={{ marginTop: 15, display: 'flex', gap: 8 }}>{children}</div>
-}
-function PlanList({ lines }: { lines: string[] }) {
-  if (lines.length === 0) return <div style={{ ...blurb, margin: '8px 0 0' }}>No changes proposed.</div>
-  return <ul style={{ margin: '10px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>{lines.map((l, i) => <li key={i} style={liStyle}>{l}</li>)}</ul>
-}
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ ...blurb, padding: '8px 0' }}>{children}</div>
-}
-
-// ─── apply / format helpers ─────────────────────────────────────────
-
-// EditActions bound to the live store — the seam applyEditPlan drives.
-function storeEditActions(): EditActions {
-  const s = useWorkspaceStore.getState()
-  return {
-    addPerson: (name) => s.addPerson(name),
-    addSoftwareSystem: (name, external) => s.addSoftwareSystem(name, undefined, external ? 'External' : undefined),
-    addContainer: (systemId, name) => s.addContainer(systemId, name),
-    addComponent: (containerId, name) => s.addComponent(containerId, name),
-    addRelationship: (src, dst, desc, tech) => s.addRelationship(src, dst, desc, tech),
-    updateElement: (id, patch) => s.updateElement(id, patch),
-    updateRelationship: (id, patch) => s.updateRelationship(id, patch),
-    deleteElement: (id) => s.deleteElement(id),
-  }
-}
-
-function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched?: boolean }): ApplyResult {
-  const s = useWorkspaceStore.getState()
-  // Apply in batch mode so the per-op addContainer/addComponent don't jump the
-  // canvas to each created view; then navigate ONCE to where the new elements are.
-  // Validate and diff against the LIVE store (not the possibly-stale `ws` prop
-  // snapshot) so the applier doesn't skip edits to elements added since the panel
-  // rendered, and the navigation target is accurate.
-  // When `batched`, the CALLER already opened the undo batch (so post-apply view
-  // mutations coalesce into the same single undo entry) — don't toggle it here.
-  const liveBefore = s.workspace ?? ws
-  const before = new Set(flattenElements(liveBefore).map((e) => e.id))
-  const ownBatch = !opts?.batched
-  if (ownBatch) s.setBatchApplying(true)
-  let result: ApplyResult = { applied: [], appliedCount: 0, skippedCount: 0 }
-  try {
-    result = applyEditPlan(plan, storeEditActions(), liveBefore)
-  } finally {
-    if (ownBatch) s.setBatchApplying(false)
-  }
-  const updated = useWorkspaceStore.getState().workspace
-  const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []
-  if (newIds.length) useWorkspaceStore.getState().focusViewForElements(newIds)
-  return result
-}
-
-/** Everything the post-apply summary needs. `plan` is retained so Undo can
- *  restore the preview card for a re-apply. */
-interface AppliedInfo {
-  plan: EditPlan
-  appliedCount: number
-  skipText: string | null
-  /** Workspace ref taken right after a committed apply. Undo is offered only
-   *  while the live workspace is still this exact ref — any later edit (or the
-   *  user's own ⌘Z) invalidates it, since a blind undo() would then revert the
-   *  wrong thing. Null when the apply changed nothing (no undo entry exists). */
-  undoTarget: Workspace | null
-}
-
-/** Apply a plan and package the outcome for an AppliedSummary card. */
-function runApply(plan: EditPlan, ws: Workspace): AppliedInfo {
-  const before = useWorkspaceStore.getState().workspace
-  const result = applyPlanToStore(plan, ws)
-  const after = useWorkspaceStore.getState().workspace
-  return {
-    plan,
-    appliedCount: result.appliedCount,
-    skipText: summarizeSkips(result),
-    undoTarget: after !== before ? after : null,
-  }
-}
+// ─── format helpers ─────────────────────────────────────────────────
 
 function summarize(ws: Workspace): string {
   const systems = ws.model.softwareSystems.length
@@ -2233,26 +1977,7 @@ function summarize(ws: Workspace): string {
   return parts.join(' · ')
 }
 function hasContent(ws: Workspace): boolean { return ws.model.people.length > 0 || ws.model.softwareSystems.length > 0 }
-function plural(n: number, one: string, many: string): string { return `${n} ${n === 1 ? one : many}` }
 function adrFilename(topic: string): string {
   const slug = topic.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'decision'
   return `adr-${slug}.md`
 }
-
-// ─── style objects ──────────────────────────────────────────────────
-
-const headerRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 13px', borderBottom: `1px solid ${C.border}`, flex: 'none' }
-const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: C.muted3, margin: '18px 0 10px' }
-const wizSecBtn: React.CSSProperties = { flex: 1, height: 40, borderRadius: 11, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }
-const describeBtn: React.CSSProperties = { width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 13, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer' }
-const describeIcon: React.CSSProperties = { width: 38, height: 38, flex: 'none', borderRadius: 11, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }
-const iconBtn: React.CSSProperties = { width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer' }
-const blurb: React.CSSProperties = { fontSize: 12, color: C.muted2, margin: '0 0 12px' }
-const kicker: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted2 }
-const fieldLabel: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: C.text }
-const liStyle: React.CSSProperties = { fontSize: 13, color: C.text, lineHeight: 1.45 }
-const primaryBtn: React.CSSProperties = { height: 32, padding: '0 14px', borderRadius: 10, border: 'none', background: C.accent, color: C.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }
-const secondaryBtn: React.CSSProperties = { height: 32, padding: '0 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.text, fontSize: 13, fontWeight: 500, cursor: 'pointer' }
-const miniBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }
-const keyInput: React.CSSProperties = { flex: 1, minWidth: 0, width: '100%', height: 38, padding: '0 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontFamily: 'ui-monospace, monospace', fontSize: 13 }
-const chipBlue: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500, background: '#142540', border: '1px solid rgba(37,99,235,0.4)', color: '#7dd3fc' }
