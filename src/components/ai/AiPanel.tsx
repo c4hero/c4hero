@@ -122,7 +122,11 @@ const PANEL_WIDTH = 340
 function shortModel(m: string): string {
   return m.replace(/^(claude-|gemini-|models\/)/, '')
 }
-const MAX_PANEL_H = 560  // cap height so the panel stays a compact card, not a full-height rail
+// Cap the height so the panel stays a card, not a full-height rail — but high
+// enough that content-heavy screens (settings, the sweep summary) fit on a tall
+// viewport instead of scrolling inside a needlessly-short 560px box. `calc(100dvh
+// - 96px)` still shrinks it on short laptops.
+const MAX_PANEL_H = 740
 
 // ─── App (guided-sweep controller) ──────────────────────────────────
 //

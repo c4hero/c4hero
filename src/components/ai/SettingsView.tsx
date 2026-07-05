@@ -201,26 +201,19 @@ function UsageRow() {
   const usage = useAiUsage()
   if (usage.calls === 0) return null
   const tokens = usage.inputTokens + usage.outputTokens
+  // Single compact line — the in/out split lives in the tooltip so the settings
+  // screen stays short. The header pill carries the same count at a glance.
+  const tokenTitle = usage.measuredCalls > 0
+    ? `${formatTokens(usage.inputTokens)} in · ${formatTokens(usage.outputTokens)} out`
+    : undefined
   return (
-    <div style={{ padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: C.text }}>
-          <Activity size={13} color={C.accent} /> Usage this session
-        </span>
-        <button onClick={resetAiUsage} className="c4ai-ghost" style={{ height: 24, padding: '0 8px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>Reset</button>
-      </div>
-      <div style={{ marginTop: 8, display: 'flex', gap: 18 }}>
-        <span style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: 18, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{usage.calls}</span>
-          <span style={{ fontSize: 11, color: C.muted2 }}>{usage.calls === 1 ? 'call' : 'calls'}</span>
-        </span>
-        {usage.measuredCalls > 0 && (
-          <span style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>~{formatTokens(tokens)}</span>
-            <span style={{ fontSize: 11, color: C.muted2 }}>tokens ({formatTokens(usage.inputTokens)} in · {formatTokens(usage.outputTokens)} out)</span>
-          </span>
-        )}
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card }}>
+      <Activity size={13} color={C.accent} style={{ flex: 'none' }} />
+      <span title={tokenTitle} style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.text2, fontVariantNumeric: 'tabular-nums' }}>
+        <b style={{ color: C.text, fontWeight: 600 }}>{usage.calls}</b> {usage.calls === 1 ? 'call' : 'calls'} this session
+        {usage.measuredCalls > 0 && <> · <b style={{ color: C.text, fontWeight: 600 }}>~{formatTokens(tokens)}</b> tokens</>}
+      </span>
+      <button onClick={resetAiUsage} className="c4ai-ghost" style={{ flex: 'none', height: 24, padding: '0 8px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>Reset</button>
     </div>
   )
 }
@@ -241,7 +234,7 @@ function SecurityNote({ style }: { style?: CSSProperties }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)', ...style }}>
       <ShieldCheck size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
-      <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Your key is stored only in this browser and sent only to the provider, directly from your device. Anyone with access to this profile can read it.</span>
+      <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Your key stays in this browser and is sent only to the provider. Anyone with access to this profile can read it.</span>
     </div>
   )
 }
