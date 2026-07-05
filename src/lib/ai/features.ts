@@ -339,6 +339,8 @@ export async function interviewAsk(
     // that spend thinking tokens from this same budget — keep enough headroom
     // that the answer isn't starved (a 600 cap left interviews empty/truncated).
     maxTokens: 2500,
+    // Same system (serialized view context) re-sent every turn — cache it.
+    cacheSystem: true,
   })
 }
 
@@ -350,7 +352,7 @@ export async function interviewAskStream(
   provider: AiProvider, ws: Workspace, view: View, history: AiChatTurn[], userMessage: string,
   onText: (delta: string) => void, signal?: AbortSignal,
 ): Promise<string> {
-  const req = { system: interviewSystem(ws, view), history, user: userMessage, maxTokens: 2500 }
+  const req = { system: interviewSystem(ws, view), history, user: userMessage, maxTokens: 2500, cacheSystem: true }
   if (!provider.completeStream) {
     const text = await provider.complete(req)
     onText(text)
@@ -375,6 +377,9 @@ export async function interviewBuildPlan(
     schema: editSchema,
     validate: isRecord,
     maxTokens: 4000,
+    // Large system (full model + view context) built from the same ws/view the
+    // interview turns already cached — reuse the cached prefix.
+    cacheSystem: true,
   })
   return toEditPlan(raw)
 }

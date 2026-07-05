@@ -147,6 +147,38 @@ describe('AI providers', () => {
   it('throws for an unknown provider id', () => {
     expect(() => createProvider('bogus' as 'anthropic', cfg)).toThrow(/Unknown AI provider/)
   })
+
+  // ─── Anthropic prompt caching (TEA-49) ────────────────────────────────
+  it('sends the Anthropic system as a plain string by default', async () => {
+    const fetchMock = vi.fn(() => okText('ok'))
+    stubFetch(fetchMock)
+    await createProvider('anthropic', cfg).complete({ system: 'ctx', user: 'u' })
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body)
+    expect(body.system).toBe('ctx')
+  })
+
+  it('flags the Anthropic system block cacheable when cacheSystem is set', async () => {
+    const fetchMock = vi.fn(() => okText('ok'))
+    stubFetch(fetchMock)
+    await createProvider('anthropic', cfg).complete({ system: 'ctx', user: 'u', cacheSystem: true })
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body)
+    expect(body.system).toEqual([{ type: 'text', text: 'ctx', cache_control: { type: 'ephemeral' } }])
+  })
+
+  it('caches the Anthropic system block for completeJson too', async () => {
+    const fetchMock = vi.fn(() => okText('{"a":1}'))
+    stubFetch(fetchMock)
+    await createProvider('anthropic', cfg).completeJson({ system: 'ctx', user: 'u', schema: {}, validate: isObj, cacheSystem: true })
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body)
+    expect(body.system[0].cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  it('ignores cacheSystem for non-Anthropic providers (no crash, plain system)', async () => {
+    for (const id of ['openai', 'gemini'] as const) {
+      stubFetch(() => okText('ok'))
+      expect(await createProvider(id, cfg).complete({ system: 's', user: 'u', cacheSystem: true })).toBe('ok')
+    }
+  })
 })
 
 // ─── Streaming (completeStream over SSE) ────────────────────────────────

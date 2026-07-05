@@ -13,6 +13,17 @@ const API_VERSION = '2023-06-01'
 interface AnthropicBlock { type: string; text?: string }
 interface AnthropicResponse { content?: AnthropicBlock[]; stop_reason?: string }
 
+/** The `system` request field: a plain string, or — when `cache` is set — a
+ *  single text block flagged `cache_control: ephemeral` so Anthropic caches the
+ *  (large, reused) system prefix. Multi-turn features re-send the same system
+ *  every turn, so caching it is a cheap win after the first turn. The ephemeral
+ *  cache is a no-op below the model's minimum cacheable prefix, so flagging a
+ *  short system does no harm. */
+function systemParam(system: string, cache?: boolean): unknown {
+  if (!cache) return system
+  return [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }]
+}
+
 // Map one Anthropic SSE event (its `data:` JSON) to a text delta. The Messages
 // stream interleaves `content_block_delta` (text/thinking), `message_delta`
 // (carries the final stop_reason), and `error` frames; we surface only the
@@ -71,7 +82,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
     async complete(req: AiTextRequest): Promise<string> {
       return call(config, {
         max_tokens: req.maxTokens ?? 8000,
-        system: req.system,
+        system: systemParam(req.system, req.cacheSystem),
         messages: [...(req.history ?? []), { role: 'user', content: req.user }],
       })
     },
@@ -82,7 +93,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
       // repo snapshot and the prompt instead.
       const text = await call(config, {
         max_tokens: req.maxTokens ?? 4000,
-        system: req.system,
+        system: systemParam(req.system, req.cacheSystem),
         messages: [...(req.history ?? []), { role: 'user', content: req.user }],
         output_config: { format: { type: 'json_schema', schema: req.schema } },
       })
@@ -101,7 +112,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
           model: config.model,
           stream: true,
           max_tokens: req.maxTokens ?? 8000,
-          system: req.system,
+          system: systemParam(req.system, req.cacheSystem),
           messages: [...(req.history ?? []), { role: 'user', content: req.user }],
         },
         host: 'api.anthropic.com',

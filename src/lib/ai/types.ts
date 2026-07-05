@@ -24,6 +24,12 @@ export interface AiTextRequest {
   maxTokens?: number
   /** Sampling temperature. Structured features default to 0 for consistency. */
   temperature?: number
+  /** Mark the (large, reused) system block as cacheable. Multi-turn features
+   *  (the interview) re-send the same serialized model + view context every
+   *  turn, so a provider that supports prompt caching (Anthropic's
+   *  `cache_control`) can serve it from cache after the first turn. Providers
+   *  without caching ignore this flag. */
+  cacheSystem?: boolean
 }
 
 export interface AiJsonRequest<T> extends AiTextRequest {
