@@ -1,3 +1,5 @@
+import type { ElementStatus, ViewType } from '@/types/model'
+
 /** The BYOK AI features / panel modes. `compose` merges generate + edit;
  *  auto-describe is folded into `review`; `adr` is reachable from the command
  *  palette only. */
@@ -162,6 +164,14 @@ export interface UpdateElementOp {
   technology?: string
   /** Internal vs external — applies to people and software systems only. */
   location?: 'Internal' | 'External'
+  /** Category tags to ADD (never replace) — merged with the element's existing
+   *  tags so structural tags (Element/Container/…) that drive styling are kept. */
+  tags?: string[]
+  /** Lifecycle status. Must be one of the ElementStatus values; an invalid value
+   *  is dropped by the applier. */
+  status?: ElementStatus
+  /** Team/person responsible for the element. */
+  owner?: string
 }
 
 export interface UpdateRelationshipOp {
@@ -178,6 +188,20 @@ export interface DeleteElementOp {
   id: string
 }
 
+export interface AddViewOp {
+  op: 'addView'
+  /** Kind of diagram to create. */
+  viewType: ViewType
+  /** The element the view is about — a software system (for systemContext /
+   *  container views) or a container (for component views), addressed by real id
+   *  or a ref defined earlier in this batch. Omitted/ignored for systemLandscape,
+   *  which spans the whole model. The view is auto-populated with the scope plus
+   *  its related elements, mirroring the app's own "new view" behaviour. */
+  scope?: string
+  /** Optional view title; a sensible default is used when omitted. */
+  title?: string
+}
+
 export type EditOp =
   | AddPersonOp
   | AddSoftwareSystemOp
@@ -187,6 +211,7 @@ export type EditOp =
   | UpdateElementOp
   | UpdateRelationshipOp
   | DeleteElementOp
+  | AddViewOp
 
 export interface EditPlan {
   operations: EditOp[]

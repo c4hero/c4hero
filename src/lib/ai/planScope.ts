@@ -68,6 +68,10 @@ function classifyWithCtx(op: EditOp, view: View, ctx: ScopeCtx, viewRefs?: Reado
       return inView(op.id) ? 'view' : 'model'
     case 'updateRelationship':
       return view.relationships.some((r) => r.id === op.id) ? 'view' : 'model'
+    case 'addView':
+      // A view-creating op produces the visible artifact itself — label it 'view'
+      // so the plan preview flags it as landing on-screen (a new screen).
+      return 'view'
     default:
       return 'model'
   }

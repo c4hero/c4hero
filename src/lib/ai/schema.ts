@@ -43,6 +43,7 @@ const opSchema = {
       enum: [
         'addPerson', 'addSoftwareSystem', 'addContainer', 'addComponent',
         'addRelationship', 'updateElement', 'updateRelationship', 'deleteElement',
+        'addView',
       ],
     },
     ref: { type: 'string' },
@@ -55,9 +56,24 @@ const opSchema = {
     destination: { type: 'string' },
     external: { type: 'boolean' },
     location: { type: 'string', enum: ['Internal', 'External'] },
+    // updateElement extras: category tags (added, not replaced), lifecycle status,
+    // and owner. The applier validates status against the enum and merges tags.
+    tags: { type: 'array', items: { type: 'string' } },
+    status: { type: 'string', enum: ['Live', 'Planned', 'Deprecated', 'Removed'] },
+    owner: { type: 'string' },
+    // addView: the kind of diagram and its scope element.
+    viewType: { type: 'string', enum: ['systemLandscape', 'systemContext', 'container', 'component'] },
+    scope: { type: 'string' },
+    title: { type: 'string' },
   },
   required: ['op'],
 }
+
+/** Valid lifecycle status values (mirrors ElementStatus). */
+export const ELEMENT_STATUS_VALUES: ReadonlySet<string> = new Set(['Live', 'Planned', 'Deprecated', 'Removed'])
+
+/** Valid view-type values (mirrors ViewType). */
+export const VIEW_TYPE_VALUES: ReadonlySet<string> = new Set(['systemLandscape', 'systemContext', 'container', 'component'])
 
 export const editSchema = {
   type: 'object',
@@ -71,17 +87,24 @@ export const editSchema = {
 const OP_NAMES: ReadonlySet<string> = new Set<EditOp['op']>([
   'addPerson', 'addSoftwareSystem', 'addContainer', 'addComponent',
   'addRelationship', 'updateElement', 'updateRelationship', 'deleteElement',
+  'addView',
 ])
 
 const OP_STRING_FIELDS = [
-  'ref', 'id', 'name', 'description', 'technology', 'parent', 'source', 'destination',
+  'ref', 'id', 'name', 'description', 'technology', 'parent', 'source', 'destination', 'owner',
+  'scope', 'title',
 ] as const
 
 function hasValidOpFieldTypes(value: Record<string, unknown>): boolean {
   for (const field of OP_STRING_FIELDS) {
     if (value[field] !== undefined && typeof value[field] !== 'string') return false
   }
-  return value.external === undefined || typeof value.external === 'boolean'
+  if (value.external !== undefined && typeof value.external !== 'boolean') return false
+  // Only the TYPE is gated here (a malformed value drops the whole op); the
+  // status enum value is validated leniently in the applier so a slightly-off
+  // status doesn't discard an otherwise-valid update.
+  if (value.tags !== undefined && !isStringArray(value.tags)) return false
+  return value.status === undefined || typeof value.status === 'string'
 }
 
 export function isEditOp(value: unknown): value is EditOp {
@@ -100,6 +123,10 @@ export function isEditOp(value: unknown): value is EditOp {
     case 'updateRelationship':
     case 'deleteElement':
       return typeof value.id === 'string'
+    case 'addView':
+      // Scope requirement (system for context/container, container for component)
+      // is enforced in the applier, which can skip with a reason.
+      return typeof value.viewType === 'string' && VIEW_TYPE_VALUES.has(value.viewType)
     default:
       return false
   }

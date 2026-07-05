@@ -35,6 +35,9 @@ describe('classifyScope (on a container view)', () => {
   it('tags a container added to a DIFFERENT system as model-only, not on-view', () => {
     expect(classifyScope({ op: 'addContainer', ref: 'c', parent: 'other-system', name: 'X' }, ws, containerView)).toBe('model')
   })
+  it('tags a view-creating op as on-view (it produces a new screen)', () => {
+    expect(classifyScope({ op: 'addView', viewType: 'component', scope: 'web' }, ws, containerView)).toBe('view')
+  })
 })
 
 describe('classifyPlanScopes (in-plan refs)', () => {

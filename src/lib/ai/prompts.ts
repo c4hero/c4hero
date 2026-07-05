@@ -67,6 +67,9 @@ export function reviewSystem(): string {
     'Order findings by severity (high first). Put real element ids ONLY in `elementIds` and in',
     'operations — in `title`, `detail`, and `suggestion`, refer to elements by NAME, never echo a',
     'raw id. If the model looks complete, return an empty findings list.',
+    'When a finding is about categorisation, lifecycle or ownership (e.g. datastores that should be',
+    'tagged, deprecated elements, unassigned ownership), make it actionable with an updateElement',
+    'op that sets tags / status / owner accordingly.',
     '',
     'Operation format (used only inside a finding\'s `operations`):',
     editSystem(),
@@ -153,6 +156,18 @@ export function editSystem(): string {
     'Every addRelationship needs a description of what the interaction does (e.g. "Sends orders',
     'to", "Reads customer records from"); include a technology/protocol (e.g. HTTPS/JSON, gRPC,',
     'AMQP) whenever it is known or reasonably implied.',
+    'updateElement can also set, on an existing element: "tags" (short category tags for styling,',
+    'grouping and filtering, e.g. ["Database"], ["Gateway"], ["Critical"] — these are ADDED to the',
+    'element; its existing tags are kept, so never re-list structural tags like "Element" or',
+    '"Container"), "status" (lifecycle, exactly one of Live, Planned, Deprecated, Removed), and',
+    '"owner" (the team or person responsible). Use these only when the instruction or finding asks',
+    'for categorising, marking lifecycle, or assigning ownership.',
+    'addView creates a new diagram: "viewType" is one of systemLandscape, systemContext, container,',
+    'component; "scope" is the software system (for systemContext/container) or container (for',
+    'component) the view is about, by real id or a ref (omit for systemLandscape, which spans the',
+    'whole model). The view is auto-populated with the scope and its related elements — do not add',
+    'elements to it yourself. Emit addView only when the instruction explicitly asks for a new view',
+    'or diagram (e.g. "make a component view of the API service"); never add views unprompted.',
   ].join('\n')
 }
 

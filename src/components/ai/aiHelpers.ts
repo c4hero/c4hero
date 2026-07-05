@@ -66,6 +66,7 @@ export function storeEditActions(): EditActions {
     updateElement: (id, patch) => s.updateElement(id, patch),
     updateRelationship: (id, patch) => s.updateRelationship(id, patch),
     deleteElement: (id) => s.deleteElement(id),
+    addView: (type, scopeId, title) => s.addView(type, scopeId, title),
   }
 }
 

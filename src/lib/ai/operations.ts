@@ -1,6 +1,7 @@
-import type { Workspace } from '@/types/model'
+import type { Workspace, ElementStatus, ViewType } from '@/types/model'
 import type { EditOp, EditPlan } from './types'
 import { elementNameMap, flattenElements } from './context'
+import { ELEMENT_STATUS_VALUES } from './schema'
 
 // Apply an AI-produced EditPlan against the workspace store. The applier is
 // decoupled from zustand via the EditActions interface so it can be unit-tested
@@ -13,9 +14,13 @@ export interface EditActions {
   addContainer: (systemId: string, name: string) => string
   addComponent: (containerId: string, name: string) => string
   addRelationship: (sourceId: string, destinationId: string, description?: string, technology?: string) => string
-  updateElement: (id: string, patch: { name?: string; description?: string; technology?: string; location?: 'Internal' | 'External' }) => void
+  updateElement: (id: string, patch: { name?: string; description?: string; technology?: string; location?: 'Internal' | 'External'; tags?: string[]; status?: ElementStatus; owner?: string }) => void
   updateRelationship: (id: string, patch: { description?: string; technology?: string }) => void
   deleteElement: (id: string) => void
+  /** Create a view of `type` scoped to `scopeId` (a system for systemContext /
+   *  container views, a container for component views, undefined for a landscape
+   *  view). Auto-populates the view. Returns the new view key. */
+  addView: (type: ViewType, scopeId: string | undefined, title?: string) => string
 }
 
 export interface AppliedOp {
@@ -33,7 +38,9 @@ export interface ApplyResult {
 
 // Dependency order: a parent/endpoint must be created before whatever references
 // it. People+systems, then containers, then components, then relationships, then
-// updates, then deletes (last, so nothing a relationship needs is gone first).
+// updates, then view creation (so an auto-populated view captures the elements
+// and relationships just added), then deletes last (so nothing a relationship
+// needs is gone first).
 // Exported so repo-scan's proposal merge sorts by the SAME order applyEditPlan
 // applies in — otherwise the two paths could disagree and drop children whose
 // parent resolves in one ordering but not the other.
@@ -46,7 +53,8 @@ export function editOpRank(op: EditOp): number {
     case 'addRelationship': return 3
     case 'updateElement':
     case 'updateRelationship': return 4
-    case 'deleteElement': return 5
+    case 'addView': return 5
+    case 'deleteElement': return 6
     default: return 4
   }
 }
@@ -57,6 +65,31 @@ export function editOpRank(op: EditOp): number {
 // keep non-empty trimmed strings, drop anything else (number, null, object).
 function optStr(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined
+}
+
+/** Validate an AI-proposed status against the enum, dropping anything invalid so
+ *  a bogus value never reaches the store. */
+function optStatus(v: unknown): ElementStatus | undefined {
+  return typeof v === 'string' && ELEMENT_STATUS_VALUES.has(v) ? (v as ElementStatus) : undefined
+}
+
+/** Merge AI-proposed category tags into an element's existing tags. Additive by
+ *  design: replacing the array would strip structural tags (Element, Container,
+ *  Database, …) that drive styling, so "tag your datastores" would silently
+ *  break the diagram. Returns a new array only when it genuinely adds a tag
+ *  (case-insensitive), else undefined so the update is a no-op. */
+function mergeTags(existing: string[] | undefined, proposed: unknown): string[] | undefined {
+  if (!Array.isArray(proposed)) return undefined
+  const clean = proposed.map((t) => (typeof t === 'string' ? t.trim() : '')).filter(Boolean)
+  if (!clean.length) return undefined
+  const base = existing ?? []
+  const seen = new Set(base.map((t) => t.toLowerCase()))
+  const out = [...base]
+  for (const t of clean) {
+    const k = t.toLowerCase()
+    if (!seen.has(k)) { seen.add(k); out.push(t) }
+  }
+  return out.length > base.length ? out : undefined
 }
 
 /** Apply each operation in dependency order, resolving refs to real ids. Invalid
@@ -86,6 +119,19 @@ export function applyEditPlan(
     else if (el.type === 'container') containerIds.add(el.id)
   }
   const relIds = new Set(ws.model.relationships.map((r) => r.id))
+  // Current tags per element, so an updateElement.tags op can MERGE (add) rather
+  // than replace — see mergeTags. Built from the raw model (flattenElements drops
+  // tags). Newly-created elements aren't included: updateElement addresses real
+  // ids only, so a same-batch add never needs merging here.
+  const tagsById = new Map<string, string[]>()
+  for (const p of ws.model.people) tagsById.set(p.id, p.tags)
+  for (const sys of ws.model.softwareSystems) {
+    tagsById.set(sys.id, sys.tags)
+    for (const c of sys.containers) {
+      tagsById.set(c.id, c.tags)
+      for (const comp of c.components) tagsById.set(comp.id, comp.tags)
+    }
+  }
   // External systems can't hold containers (the UI forbids it via getCreatableTypes);
   // reject AI ops that would create that otherwise-impossible model state.
   const externalSystemIds = new Set(
@@ -185,6 +231,9 @@ export function applyEditPlan(
         const name = optStr(op.name)
         const description = optStr(op.description)
         const technology = optStr(op.technology)
+        const owner = optStr(op.owner)
+        const status = optStatus(op.status)
+        const tags = mergeTags(tagsById.get(op.id), op.tags)
         // The store treats a present-but-undefined key as "clear this field"
         // (so the UI can blank out a text box). Only include a key here when
         // the op actually set it, so an op that e.g. only changes location
@@ -193,6 +242,9 @@ export function applyEditPlan(
           ...(name && { name }),
           ...(description && { description }),
           ...(technology && { technology }),
+          ...(tags && { tags }),
+          ...(status && { status }),
+          ...(owner && { owner }),
           // Guard the value — isEditOp doesn't type-check it, so a bogus string
           // from the model must not reach the store.
           location: op.location === 'External' || op.location === 'Internal' ? op.location : undefined,
@@ -210,6 +262,24 @@ export function applyEditPlan(
           ...(description && { description }),
           ...(technology && { technology }),
         })
+        ok(op)
+        break
+      }
+      case 'addView': {
+        const title = optStr(op.title)
+        // Landscape spans the whole model — no scope element.
+        if (op.viewType === 'systemLandscape') { actions.addView('systemLandscape', undefined, title); ok(op); break }
+        const scopeId = resolve(op.scope)
+        if (!scopeId) { skip(op, 'unknown view scope element'); break }
+        // systemContext / container views are scoped to a software system;
+        // component views to a container. Reject a mismatched scope rather than
+        // create an empty or nonsensical view.
+        if (op.viewType === 'systemContext' || op.viewType === 'container') {
+          if (!systemIds.has(scopeId)) { skip(op, 'view scope is not a software system'); break }
+        } else if (!containerIds.has(scopeId)) {
+          skip(op, 'view scope is not a container'); break
+        }
+        actions.addView(op.viewType, scopeId, title)
         ok(op)
         break
       }
@@ -250,6 +320,13 @@ export function summarizeSkips(result: ApplyResult): string | null {
   return `Skipped ${result.skippedCount} of ${total} ${total === 1 ? 'change' : 'changes'} — ${reasons}.`
 }
 
+const VIEW_KIND_LABEL: Record<ViewType, string> = {
+  systemLandscape: 'a system landscape',
+  systemContext: 'a system context',
+  container: 'a container',
+  component: 'a component',
+}
+
 /** Human-readable, one-line-per-op preview, resolving existing ids to names. */
 export function describeOps(plan: EditPlan, ws: Workspace | null): string[] {
   const names = ws ? elementNameMap(ws) : new Map<string, string>()
@@ -277,11 +354,13 @@ export function describeOps(plan: EditPlan, ws: Workspace | null): string[] {
       case 'addRelationship':
         return `Connect ${label(op.source)} → ${label(op.destination)}${op.description ? ` (“${op.description}”)` : ''}`
       case 'updateElement':
-        return `Update ${label(op.id)}${op.name ? ` → rename “${op.name}”` : ''}${op.description ? ' (description)' : ''}${op.technology ? ` (tech: ${op.technology})` : ''}${op.location ? ` (${op.location.toLowerCase()})` : ''}`
+        return `Update ${label(op.id)}${op.name ? ` → rename “${op.name}”` : ''}${op.description ? ' (description)' : ''}${op.technology ? ` (tech: ${op.technology})` : ''}${op.tags?.length ? ` (tags: ${op.tags.join(', ')})` : ''}${op.status ? ` (status: ${op.status})` : ''}${op.owner ? ` (owner: ${op.owner})` : ''}${op.location ? ` (${op.location.toLowerCase()})` : ''}`
       case 'updateRelationship':
         return `Update relationship ${op.id}${op.description ? ` (“${op.description}”)` : ''}`
       case 'deleteElement':
         return `Delete ${label(op.id)}`
+      case 'addView':
+        return `Add ${VIEW_KIND_LABEL[op.viewType]} view${op.viewType !== 'systemLandscape' && op.scope ? ` of ${label(op.scope)}` : ''}${op.title ? ` (“${op.title}”)` : ''}`
       default:
         return 'Unknown operation'
     }

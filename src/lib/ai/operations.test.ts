@@ -16,6 +16,7 @@ function fakeActions() {
     updateElement: vi.fn(),
     updateRelationship: vi.fn(),
     deleteElement: vi.fn(),
+    addView: vi.fn(() => newId()),
   }
   return actions
 }
@@ -303,6 +304,111 @@ describe('applyEditPlan — parent-type and existence guards', () => {
   })
 })
 
+describe('applyEditPlan — tags / status / owner (TEA-45)', () => {
+  it('merges proposed tags with existing ones (keeps structural tags) and sets status + owner', () => {
+    const ws = makeWorkspace()
+    ws.model.softwareSystems[0].containers[1].tags = ['Element', 'Container'] // db
+    const actions: EditActions = { ...fakeActions(), updateElement: (id, patch) => { applyElementPatch(ws, id, patch) } }
+    applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'db', tags: ['Database', 'Critical'], status: 'Deprecated', owner: 'Data Team' },
+    ] }, actions, ws)
+    const db = ws.model.softwareSystems[0].containers[1]
+    expect(db.tags).toEqual(['Element', 'Container', 'Database', 'Critical'])
+    expect(db.status).toBe('Deprecated')
+    expect(db.owner).toBe('Data Team')
+  })
+
+  it('drops a bogus status value but still applies the rest of the update', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'db', status: 'Retired' as 'Live', owner: 'Platform' },
+    ] }, actions, ws)
+    const patch = vi.mocked(actions.updateElement).mock.calls[0][1]
+    expect(patch).not.toHaveProperty('status')
+    expect(patch).toHaveProperty('owner', 'Platform')
+  })
+
+  it('does not emit a tags key when every proposed tag already exists (no-op, no phantom undo)', () => {
+    const ws = makeWorkspace()
+    ws.model.softwareSystems[0].containers[1].tags = ['Element', 'Container', 'Database']
+    const actions = fakeActions()
+    // 'database' differs only in case → already present.
+    applyEditPlan({ operations: [{ op: 'updateElement', id: 'db', tags: ['database'] }] }, actions, ws)
+    expect(vi.mocked(actions.updateElement).mock.calls[0][1]).not.toHaveProperty('tags')
+  })
+
+  it('ignores non-string / empty tag entries', () => {
+    const ws = makeWorkspace()
+    const actions: EditActions = { ...fakeActions(), updateElement: (id, patch) => { applyElementPatch(ws, id, patch) } }
+    applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'db', tags: ['  ', 'Database', 42 as unknown as string, ''] },
+    ] }, actions, ws)
+    expect(ws.model.softwareSystems[0].containers[1].tags).toEqual(['Database'])
+  })
+})
+
+describe('applyEditPlan — addView (TEA-44)', () => {
+  it('creates a container view scoped to an existing system', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'addView', viewType: 'container', scope: 'shop', title: 'Shop Containers' },
+    ] }, actions, ws)
+    expect(actions.addView).toHaveBeenCalledWith('container', 'shop', 'Shop Containers')
+    expect(result.appliedCount).toBe(1)
+  })
+
+  it('creates a component view scoped to an existing container', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [{ op: 'addView', viewType: 'component', scope: 'web' }] }, actions, ws)
+    expect(actions.addView).toHaveBeenCalledWith('component', 'web', undefined)
+  })
+
+  it('creates a landscape view with no scope', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [{ op: 'addView', viewType: 'systemLandscape' }] }, actions, ws)
+    expect(actions.addView).toHaveBeenCalledWith('systemLandscape', undefined, undefined)
+  })
+
+  it('resolves a scope element by name', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [{ op: 'addView', viewType: 'container', scope: 'Shop' }] }, actions, ws)
+    expect(actions.addView).toHaveBeenCalledWith('container', 'shop', undefined)
+  })
+
+  it('can create a view of an element added earlier in the same batch (via ref)', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions() // addSoftwareSystem returns gen1
+    const result = applyEditPlan({ operations: [
+      { op: 'addView', viewType: 'systemContext', scope: 'svc' },
+      { op: 'addSoftwareSystem', ref: 'svc', name: 'API Service' },
+    ] }, actions, ws)
+    // addView is ranked after the adds, so the ref resolves to the created id.
+    expect(actions.addView).toHaveBeenCalledWith('systemContext', 'gen1', undefined)
+    expect(result.appliedCount).toBe(2)
+  })
+
+  it('skips a component view whose scope is a system, not a container', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [{ op: 'addView', viewType: 'component', scope: 'shop' }] }, actions, ws)
+    expect(actions.addView).not.toHaveBeenCalled()
+    expect(result.skippedCount).toBe(1)
+  })
+
+  it('skips a container view with an unresolvable scope', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [{ op: 'addView', viewType: 'container', scope: 'ghost' }] }, actions, ws)
+    expect(actions.addView).not.toHaveBeenCalled()
+    expect(result.skippedCount).toBe(1)
+  })
+})
+
 describe('describeOps — every op kind', () => {
   it('produces a readable line for each operation', () => {
     const ws = makeWorkspace()
@@ -312,6 +418,8 @@ describe('describeOps — every op kind', () => {
       { op: 'addComponent', ref: 'c', parent: 'web', name: 'Worker', technology: 'Go' },
       { op: 'updateElement', id: 'web', name: 'Portal', description: 'd', technology: 'Vue' },
       { op: 'updateRelationship', id: 'r1', description: 'reads from' },
+      { op: 'updateElement', id: 'db', tags: ['Database'], status: 'Deprecated', owner: 'Data Team' },
+      { op: 'addView', viewType: 'container', scope: 'shop', title: 'Containers' },
     ] }, ws)
     expect(lines[0]).toContain('Add person “New User”')
     expect(lines[1]).toContain('Add software system “New Sys”')
@@ -319,6 +427,11 @@ describe('describeOps — every op kind', () => {
     expect(lines[2]).toContain('Go')
     expect(lines[3]).toContain('rename “Portal”')
     expect(lines[4]).toContain('relationship')
+    expect(lines[5]).toContain('tags: Database')
+    expect(lines[5]).toContain('status: Deprecated')
+    expect(lines[5]).toContain('owner: Data Team')
+    expect(lines[6]).toContain('a container view of Shop')
+    expect(lines[6]).toContain('Containers')
   })
 })
 
