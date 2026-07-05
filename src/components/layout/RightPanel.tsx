@@ -131,9 +131,10 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const typeColor = TYPE_COLORS[element.type] ?? 'var(--color-accent)'
   const safeUrl = element.url ? normalizeSafeExternalUrl(element.url) : null
 
-  // AI auto-suggest: fill empty description / technology fields. Only available
-  // when a key is set and AI is enabled.
-  const { ready: aiReady, provider } = useAiProvider()
+  // AI auto-suggest: fill empty description / technology / tag fields. Only
+  // available when a key is set and AI is enabled. These are all mechanical
+  // single-field drafts, so they route to the cheap tier (TEA-48).
+  const { ready: aiReady, draftProvider } = useAiProvider()
   const [busyField, setBusyField] = useState<string | null>(null)
   const missingDesc = !element.description?.trim()
   const missingTech = hasTech && !tech?.trim()
@@ -141,21 +142,21 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const hasMissing = missingDesc || missingTech || missingTags
 
   async function suggest(fields: ('description' | 'technology' | 'tags')[]) {
-    if (!provider || !workspace || busyField) return
+    if (!draftProvider || !workspace || busyField) return
     setBusyField(fields.length > 1 ? 'all' : fields[0])
     try {
       if (fields.includes('description') && missingDesc) {
-        const r = await autoDescribe(provider, workspace)
+        const r = await autoDescribe(draftProvider, workspace)
         const hit = r.elements.find((p) => p.id === element.id)
         if (hit?.description?.trim()) updateElement(element.id, { description: hit.description.trim() })
       }
       if (fields.includes('technology') && missingTech) {
-        const plan = await planEdit(provider, workspace, TECH_SUGGEST_INSTRUCTION)
+        const plan = await planEdit(draftProvider, workspace, TECH_SUGGEST_INSTRUCTION)
         const op = plan.operations.find((o) => o.op === 'updateElement' && o.id === element.id && o.technology?.trim())
         if (op && op.op === 'updateElement' && op.technology) updateTech(element.id, op.technology.trim())
       }
       if (fields.includes('tags') && missingTags) {
-        const tags = await suggestTags(provider, { name: element.name, type: element.type, description: element.description, technology: tech }, modelTagVocabulary(workspace))
+        const tags = await suggestTags(draftProvider, { name: element.name, type: element.type, description: element.description, technology: tech }, modelTagVocabulary(workspace))
         if (tags.length) updateElement(element.id, { tags: Array.from(new Set([...element.tags, ...tags])) })
       }
     } catch { /* leave the field empty on failure */ } finally {

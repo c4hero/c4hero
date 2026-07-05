@@ -28,6 +28,10 @@ export interface AiSettings {
   /** Show the AI button in the top bar. When false, the assistant is still
    *  reachable from the command palette. */
   showInTopBar: boolean
+  /** Route mechanical drafts (auto-describe, technology drafts, tag/field
+   *  suggestions) to the provider's cheap tier, reserving the selected model for
+   *  review / interview / generate. On by default; a BYOK cost saver. */
+  routeCheapDrafts: boolean
 }
 
 function emptyKeys(): Record<AiProviderId, string> {
@@ -45,6 +49,7 @@ const DEFAULTS: AiSettings = {
   models: defaultModels(),
   panelPos: null,
   showInTopBar: true,
+  routeCheapDrafts: true,
 }
 
 function isPanelPos(value: unknown): value is PanelPos {
@@ -83,6 +88,7 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     models,
     panelPos: isPanelPos(source.panelPos) ? source.panelPos : DEFAULTS.panelPos,
     showInTopBar: typeof source.showInTopBar === 'boolean' ? source.showInTopBar : DEFAULTS.showInTopBar,
+    routeCheapDrafts: typeof source.routeCheapDrafts === 'boolean' ? source.routeCheapDrafts : DEFAULTS.routeCheapDrafts,
   }
 }
 
@@ -93,6 +99,17 @@ export function activeAiConfig(settings: AiSettings): { provider: AiProviderId; 
     apiKey: settings.apiKeys[settings.provider] ?? '',
     model: settings.models[settings.provider] || AI_PROVIDER_META[settings.provider].defaultModel,
   }
+}
+
+/** The model mechanical drafts should use: the provider's cheap tier when
+ *  routing is on, else the selected model. Returns the SAME string as
+ *  `activeAiConfig().model` when routing is off or the cheap tier already equals
+ *  the selection — callers can compare to decide whether a second provider is
+ *  even needed. */
+export function draftModel(settings: AiSettings): string {
+  const { model } = activeAiConfig(settings)
+  if (!settings.routeCheapDrafts) return model
+  return AI_PROVIDER_META[settings.provider].cheapModel || model
 }
 
 /** True when AI is enabled and the active provider has a non-empty key. */
@@ -155,6 +172,10 @@ export function useAiProvider(): {
   ready: boolean
   hasKey: boolean
   provider: AiProvider | null
+  /** Provider for mechanical drafts — the cheap tier when per-task routing is on,
+   *  else the same instance as `provider`. Callers route auto-describe / tech
+   *  drafts / tag & field suggestions here. */
+  draftProvider: AiProvider | null
   providerId: AiProviderId
   apiKey: string
   model: string
@@ -162,9 +183,17 @@ export function useAiProvider(): {
   const settings = useAiSettingsStore()
   const ready = isAiReady(settings)
   const { provider: providerId, apiKey, model } = activeAiConfig(settings)
+  const draft = draftModel(settings)
   const provider = useMemo(
     () => (ready ? createProvider(providerId, { apiKey, model }) : null),
     [ready, providerId, apiKey, model],
   )
-  return { ready, hasKey: apiKey.trim().length > 0, provider, providerId, apiKey, model }
+  // Reuse the main provider instance when the draft model matches the selection
+  // (routing off, or the cheap tier is already what's selected) — no need for a
+  // second client.
+  const draftProvider = useMemo(
+    () => (!ready ? null : draft === model ? provider : createProvider(providerId, { apiKey, model: draft })),
+    [ready, providerId, apiKey, model, draft, provider],
+  )
+  return { ready, hasKey: apiKey.trim().length > 0, provider, draftProvider, providerId, apiKey, model }
 }

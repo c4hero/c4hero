@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeAiSettings, isAiReady, activeAiConfig } from './ai-settings'
+import { normalizeAiSettings, isAiReady, activeAiConfig, draftModel } from './ai-settings'
 
 describe('normalizeAiSettings', () => {
   it('fills defaults for empty input', () => {
@@ -12,6 +12,12 @@ describe('normalizeAiSettings', () => {
     expect(s.models.gemini).toBe('gemini-2.5-flash')
     expect(s.panelPos).toBeNull()
     expect(s.showInTopBar).toBe(true)
+    expect(s.routeCheapDrafts).toBe(true)
+  })
+
+  it('preserves routeCheapDrafts when set to false', () => {
+    expect(normalizeAiSettings({ routeCheapDrafts: false }).routeCheapDrafts).toBe(false)
+    expect(normalizeAiSettings({ routeCheapDrafts: 'nope' }).routeCheapDrafts).toBe(true)
   })
 
   it('preserves a valid panel position and rejects a malformed one', () => {
@@ -76,6 +82,24 @@ describe('activeAiConfig', () => {
   it('falls back to the provider default model when the stored model is blank', () => {
     const s = normalizeAiSettings({ provider: 'openai', apiKeys: { openai: 'o' }, models: { openai: '' } })
     expect(activeAiConfig(s).model).toBe('gpt-5-mini')
+  })
+})
+
+describe('draftModel (per-task routing, TEA-48)', () => {
+  it('routes drafts to the cheap tier when a capable model is selected', () => {
+    const s = normalizeAiSettings({ provider: 'anthropic', apiKeys: { anthropic: 'a' }, models: { anthropic: 'claude-opus-4-8' } })
+    expect(draftModel(s)).toBe('claude-haiku-4-5')
+    expect(activeAiConfig(s).model).toBe('claude-opus-4-8')
+  })
+
+  it('equals the selected model when routing is off', () => {
+    const s = normalizeAiSettings({ provider: 'anthropic', apiKeys: { anthropic: 'a' }, models: { anthropic: 'claude-opus-4-8' }, routeCheapDrafts: false })
+    expect(draftModel(s)).toBe('claude-opus-4-8')
+  })
+
+  it('equals the selected model when the selection already is the cheap tier', () => {
+    const s = normalizeAiSettings({ provider: 'openai', apiKeys: { openai: 'o' }, models: { openai: 'gpt-5-mini' } })
+    expect(draftModel(s)).toBe('gpt-5-mini')
   })
 })
 

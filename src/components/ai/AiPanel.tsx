@@ -55,7 +55,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  const { provider, hasKey, model } = useAiProvider()
+  const { provider, draftProvider, hasKey, model } = useAiProvider()
 
   function openSettings() { setSettingsOpen(true); setStoreSettingsOpen(false) }
   function closeSettings() { setSettingsOpen(false); setStoreSettingsOpen(false) }
@@ -104,7 +104,7 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
         {mode === 'settings' && <SettingsView onClose={onClose} onDone={hasKey ? closeSettings : undefined} />}
         {mode === 'app' && provider && (
           <AppView
-            provider={provider} workspace={workspace} model={model}
+            provider={provider} draftProvider={draftProvider ?? provider} workspace={workspace} model={model}
             feature={storeFeature} onOpenSettings={openSettings} onClose={onClose}
           />
         )}
@@ -131,9 +131,11 @@ const MAX_PANEL_H = 560  // cap height so the panel stays a compact card, not a 
 // as their own focused flows (existing InterviewBody / RepoBody).
 
 function AppView({
-  provider, workspace, model, feature, onOpenSettings, onClose,
+  provider, draftProvider, workspace, model, feature, onOpenSettings, onClose,
 }: {
   provider: AiProvider
+  /** Cheap-tier provider for mechanical drafts (auto-describe, tech, rewrite). */
+  draftProvider: AiProvider
   workspace: Workspace | null
   model: string
   feature: AiFeatureId | null
@@ -221,7 +223,9 @@ function AppView({
     setDraftsLoading(true)
     try {
       const tasks: Promise<void>[] = []
-      if (needDesc) tasks.push(autoDescribe(provider, ws).then((r) => {
+      // Mechanical drafts run on the cheap tier (TEA-48) — the selected model is
+      // reserved for the deep review and interview.
+      if (needDesc) tasks.push(autoDescribe(draftProvider, ws).then((r) => {
         setDrafts((d) => {
           const n = { ...d }
           for (const p of r.elements) { const k = `desc:${p.id}`; if (n[k] === undefined && p.description?.trim()) n[k] = p.description.trim() }
@@ -229,7 +233,7 @@ function AppView({
           return n
         })
       }))
-      if (needTech) tasks.push(planEdit(provider, ws, TECH_INSTRUCTION).then((plan) => {
+      if (needTech) tasks.push(planEdit(draftProvider, ws, TECH_INSTRUCTION).then((plan) => {
         setDrafts((d) => {
           const n = { ...d }
           for (const op of plan.operations) if (op.op === 'updateElement' && op.technology?.trim()) { const k = `tech:${op.id}`; if (n[k] === undefined) n[k] = op.technology.trim() }
@@ -601,7 +605,7 @@ function AppView({
                 draft={drafts[cur.key] ?? ''} draftLoading={draftsLoading && (drafts[cur.key] ?? '') === ''}
                 applied={!!ledger.find((e) => e.key === cur.key)}
                 onDraft={(v) => setDrafts((d) => ({ ...d, [cur.key]: v }))}
-                onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(provider, workspace, cur, drafts[cur.key] ?? '', setDrafts, setError) }}
+                onRewrite={() => { if (workspace && cur.type === 'fix') return rewriteDraft(draftProvider, workspace, cur, drafts[cur.key] ?? '', setDrafts, setError) }}
                 onReveal={workspace && stepElementIds(cur, workspace).length ? () => revealInDiagram(workspace, stepElementIds(cur, workspace), stepRelationshipId(cur, workspace)) : undefined}
                 onBack={curIdx > 0 ? goBack : undefined}
                 onApply={applyStep} onSkip={skipStep} onRevert={() => revertEntry(cur.key)}

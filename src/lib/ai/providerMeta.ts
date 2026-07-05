@@ -18,6 +18,12 @@ export interface AiProviderMeta {
    *  users can also type any model id the provider supports. */
   models: AiModelOption[]
   defaultModel: string
+  /** Cheapest capable tier for this provider. Mechanical drafts (auto-describe,
+   *  technology drafts, tag suggestions, single-field rewrites) route here when
+   *  per-task routing is on, reserving the user's selected model for the quality
+   *  work (review, interview plan, generate). Equal to defaultModel for providers
+   *  whose default already is the cheap tier. */
+  cheapModel: string
   keyLabel: string
   keyPlaceholder: string
   keyHelpUrl: string
@@ -39,6 +45,7 @@ export const AI_PROVIDER_META: Record<AiProviderId, AiProviderMeta> = {
     // don't need a frontier model, and BYOK users care about cost. Opus stays
     // selectable for anyone who wants maximum capability.
     defaultModel: 'claude-sonnet-4-6',
+    cheapModel: 'claude-haiku-4-5',
     keyLabel: 'Anthropic API key',
     keyPlaceholder: 'sk-ant-…',
     keyHelpUrl: 'https://console.anthropic.com/settings/keys',
@@ -55,6 +62,7 @@ export const AI_PROVIDER_META: Record<AiProviderId, AiProviderMeta> = {
       { id: 'gpt-4o', label: 'GPT-4o' },
     ],
     defaultModel: 'gpt-5-mini',
+    cheapModel: 'gpt-5-mini',
     keyLabel: 'OpenAI API key',
     keyPlaceholder: 'sk-…',
     keyHelpUrl: 'https://platform.openai.com/api-keys',
@@ -70,6 +78,7 @@ export const AI_PROVIDER_META: Record<AiProviderId, AiProviderMeta> = {
       { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
     ],
     defaultModel: 'gemini-2.5-flash',
+    cheapModel: 'gemini-2.5-flash',
     keyLabel: 'Google AI API key',
     keyPlaceholder: 'AIza…',
     keyHelpUrl: 'https://aistudio.google.com/app/apikey',
