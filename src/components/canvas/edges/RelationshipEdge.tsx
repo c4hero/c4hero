@@ -267,7 +267,17 @@ function RelationshipEdge({
             {relationship.tags.filter(t => t !== 'Relationship').length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1">
                 {relationship.tags.filter(t => t !== 'Relationship').map(tag => (
-                  <span key={tag} className="text-[9px] rounded px-1 py-0.5" style={{ background: 'var(--color-surface-3)', color: 'var(--color-text-muted)' }}>
+                  <span
+                    key={tag}
+                    className="c4-type-chip"
+                    style={{
+                      background: 'var(--color-surface-3)',
+                      color: 'var(--color-text-muted)',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      letterSpacing: 'normal',
+                    }}
+                  >
                     {tag}
                   </span>
                 ))}

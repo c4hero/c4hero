@@ -1316,8 +1316,8 @@ body {
 
 .glass-panel-solid {
   background: var(--glass-bg-heavy);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--glass-shadow);
@@ -1333,8 +1333,8 @@ body {
 /* Shade panels that drop down from the top pill */
 .shade-panel {
   background: var(--glass-bg-heavy);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--color-border);
   border-top: none;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
@@ -1510,7 +1510,7 @@ body {
 .hover-surface[data-active="true"],
 .hover-lift[data-active="true"],
 .btn-icon[data-active="true"] {
-  background: rgba(88, 166, 255, 0.12);
+  background: var(--color-accent-active);
   color: var(--color-accent);
 }
 
@@ -2071,8 +2071,8 @@ body {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-overlay-sm);
+  background: var(--glass-overlay-xs);
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease;
   padding: 0;
