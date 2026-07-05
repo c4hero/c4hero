@@ -28,7 +28,7 @@ import {
   headerRow, iconBtn,
 } from './aiTheme'
 import {
-  plural, storeEditActions, applyPlanToStore,
+  plural, storeEditActions, applyPlanToStore, isAbortError,
 } from './aiHelpers'
 import {
   FEATURE_TO_VIEW, VIEW_TITLE, TECH_INSTRUCTION, findingOptions, viewScopeIds,
@@ -186,6 +186,8 @@ function AppView({
   // Monotonic key source for streamed findings — unique even across a retry that
   // re-streams after a partial run.
   const findingKeyRef = useRef(0)
+  // Aborts the in-flight streamed review when the user hits Stop.
+  const reviewAbortRef = useRef<AbortController | null>(null)
   // True while a finding's free-text "Other" fix is being turned into operations.
   const [applyBusy, setApplyBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -250,6 +252,9 @@ function AppView({
     reviewScopeRef.current = scope
     // Drop findings from a prior (possibly partial) run so a retry re-streams clean.
     setQueue((q) => q.filter((s) => s.type !== 'finding'))
+    reviewAbortRef.current?.abort()
+    const ac = new AbortController()
+    reviewAbortRef.current = ac
     setReviewLoading(true); setReviewError(null)
     try {
       // Stream findings into the queue as each one parses — the wizard leaves the
@@ -257,13 +262,16 @@ function AppView({
       // are still generating (the model emits them high-severity first).
       await reviewArchitectureStream(provider, ws, scope === 'view' ? (activeView ?? null) : null, (finding) => {
         setQueue((q) => [...q, { type: 'finding', key: `f:${findingKeyRef.current++}`, cat: 'review', finding }])
-      })
+      }, ac.signal)
     } catch (err) {
-      setReviewError(aiErrorMessage(err))
+      // A user Stop surfaces as an AbortError — not a failure.
+      if (!ac.signal.aborted && !isAbortError(err)) setReviewError(aiErrorMessage(err))
     } finally {
-      setReviewLoading(false)
+      if (reviewAbortRef.current === ac) { reviewAbortRef.current = null; setReviewLoading(false) }
     }
   }
+  // Stop the streamed review; findings already surfaced stay in the queue.
+  function cancelReview() { reviewAbortRef.current?.abort(); reviewAbortRef.current = null; setReviewLoading(false) }
   function retryReview() {
     const ws = useWorkspaceStore.getState().workspace
     if (ws && !reviewLoading) loadReview(ws, reviewScopeRef.current)
@@ -582,6 +590,7 @@ function AppView({
               onJump={(i) => { setCurIdx(i); setOverviewOpen(false) }}
               onBulkApply={bulkApplyFixes} onBulkSkip={bulkSkipSteps}
               onClose={() => setOverviewOpen(false)}
+              onStopReview={cancelReview}
             />
           ) : cur ? (
             <>
@@ -603,7 +612,7 @@ function AppView({
               )}
             </>
           ) : reviewLoading && workspace ? (
-            <ReviewScanning workspace={workspace} scopeIds={scopeIds} scopeLabel={improveScope === 'view' ? 'this view' : null} />
+            <ReviewScanning workspace={workspace} scopeIds={scopeIds} scopeLabel={improveScope === 'view' ? 'this view' : null} onStop={cancelReview} />
           ) : interviewOn && !ivApplied && workspace ? (
             // Interview tail: once the instant fixes and review findings are done,
             // fold in the conversational interview, applying its plan via the ledger.

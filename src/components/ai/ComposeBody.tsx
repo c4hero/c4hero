@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Sparkles, Pencil, SquarePen, Wand2, ArrowRight, Layers, AlertCircle, Loader2 } from 'lucide-react'
+import { Sparkles, Pencil, SquarePen, Wand2, ArrowRight, Layers, AlertCircle, Loader2, X } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { parseDSL } from '@/lib/dsl'
 import {
@@ -59,7 +59,7 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
     // New model → stream the DSL in as it generates (an 8k-token call runs
     // 30–60s on reasoning models). `onText` gets raw chunks; accumulate them for
     // the live preview, and `go`'s result is the extracted, parse-ready DSL.
-    if (detected === 'new') run.go(() => generateDiagramStream(provider, text, (delta) => setStreamText((t) => t + delta)), setDsl)
+    if (detected === 'new') run.go((signal) => generateDiagramStream(provider, text, (delta) => setStreamText((t) => t + delta), signal), setDsl)
     else run.go(() => planEdit(provider, workspace!, text), setPlan)
   }
   function load() { if (parsed) { loadWorkspace(parsed.workspace); onClose() } }
@@ -105,6 +105,7 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Loader2 size={13} className="animate-spin" color={C.accent} />
             <span style={kicker}>Generating diagram…</span>
+            <button onClick={run.cancel} className="c4ai-ghost" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><X size={12} /> Stop</button>
           </div>
           <pre ref={streamRef} data-scroll style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '10px 0 0', fontFamily: 'ui-monospace, monospace', fontSize: 12, lineHeight: 1.55, color: C.text2, maxHeight: 220, overflowY: 'auto' }}>
             {streamText}<span style={{ animation: 'c4ai-node 1.1s ease-in-out infinite' }}>▍</span>

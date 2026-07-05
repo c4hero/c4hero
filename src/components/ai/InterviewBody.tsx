@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePersistentState, clearAiSession } from './sessionCache'
-import { Loader2, Sparkles, ArrowRight, MessagesSquare, HelpCircle, CornerDownRight, ChevronRight, Layers } from 'lucide-react'
+import { Loader2, Sparkles, ArrowRight, MessagesSquare, HelpCircle, CornerDownRight, ChevronRight, Layers, X } from 'lucide-react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import {
   interviewAskStream, interviewKickoffMessage, interviewBuildPlan,
@@ -95,9 +95,9 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
     setPinnedKey(activeViewKey) // pin the interview to the view it began on
     setWrapUp(false); setTarget(INTERVIEW_TARGET); setQa([])
     setStreamingQ('')
-    run.go(async () => {
+    run.go(async (signal) => {
       const kickoff = interviewKickoffMessage(v)
-      const q = await interviewAskStream(provider, ws, v, [], kickoff, streamQ)
+      const q = await interviewAskStream(provider, ws, v, [], kickoff, streamQ, signal)
       setHistory([{ role: 'user', content: kickoff }, { role: 'assistant', content: q }])
       return q
     }, commitQuestion)
@@ -111,8 +111,8 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
     setStreamingQ('')
     // Always fetch the next question so the transcript ends on a question
     // (keeps history alternating, and the next one is ready if they continue).
-    run.go(async () => {
-      const q = await interviewAskStream(provider, ws, v, history, a, streamQ)
+    run.go(async (signal) => {
+      const q = await interviewAskStream(provider, ws, v, history, a, streamQ, signal)
       setHistory([...history, { role: 'user', content: a }, { role: 'assistant', content: q }])
       return q
     }, commitQuestion)
@@ -122,8 +122,8 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
     const msg = 'Let’s skip that one — ask me something else.'
     setAnswer('')
     setStreamingQ('')
-    run.go(async () => {
-      const q = await interviewAskStream(provider, ws, v, history, msg, streamQ)
+    run.go(async (signal) => {
+      const q = await interviewAskStream(provider, ws, v, history, msg, streamQ, signal)
       setHistory([...history, { role: 'user', content: msg }, { role: 'assistant', content: q }])
       return q
     }, commitQuestion)
@@ -213,6 +213,12 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
                 ? <span style={{ display: 'block' }}>{streamingQ}<span style={{ animation: 'c4ai-node 1.1s ease-in-out infinite' }}>▍</span></span>
                 : <span key={question} style={{ display: 'block', animation: 'c4ai-rise .3s ease both' }}>{question}</span>}
           </div>
+          {run.loading && (
+            <button onClick={() => { run.cancel(); setStreamingQ(null) }} className="c4ai-ghost"
+              style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 5, height: 26, padding: '0 10px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <X size={12} /> Stop
+            </button>
+          )}
           {mentioned.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', animation: 'c4ai-fade .25s ease' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.muted2 }}><CornerDownRight size={12} /> Highlighting</span>

@@ -8,10 +8,19 @@ import type { Workspace } from '@/types/model'
 
 // ─── run state (shared by every feature body) ───────────────────────
 
+export function isAbortError(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { name?: string }).name === 'AbortError'
+}
+
 export interface RunState {
   loading: boolean
   error: string | null
-  go: <T>(fn: () => Promise<T>, onResult: (v: T) => void) => Promise<void>
+  /** Run `fn`, tracking loading/error. `fn` receives an AbortSignal it can pass
+   *  to a streaming call so `cancel()` (or a superseding `go`) stops it. */
+  go: <T>(fn: (signal: AbortSignal) => Promise<T>, onResult: (v: T) => void) => Promise<void>
+  /** Abort the in-flight run. The result is discarded and no error is shown —
+   *  it's a user action, not a failure. No-op when nothing is running. */
+  cancel: () => void
   /** Re-run the last `go` — the retry for a failed call whose inputs (an
    *  interview answer, a kickoff) are captured in its closure and may no
    *  longer exist in state. No-op while loading or before any run. */
@@ -21,13 +30,26 @@ export function useAiRun(): RunState {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastRun = useRef<(() => Promise<void>) | null>(null)
-  async function go<T>(fn: () => Promise<T>, onResult: (v: T) => void) {
+  const abortRef = useRef<AbortController | null>(null)
+  async function go<T>(fn: (signal: AbortSignal) => Promise<T>, onResult: (v: T) => void) {
     lastRun.current = () => go(fn, onResult)
+    abortRef.current?.abort() // supersede any in-flight run
+    const ac = new AbortController()
+    abortRef.current = ac
     setLoading(true); setError(null)
-    try { onResult(await fn()) } catch (err) { setError(aiErrorMessage(err)) } finally { setLoading(false) }
+    try {
+      const v = await fn(ac.signal)
+      if (!ac.signal.aborted) onResult(v)
+    } catch (err) {
+      // A user cancel (or a superseding run) surfaces as an AbortError — not a failure.
+      if (!ac.signal.aborted && !isAbortError(err)) setError(aiErrorMessage(err))
+    } finally {
+      if (abortRef.current === ac) { abortRef.current = null; setLoading(false) }
+    }
   }
+  function cancel() { abortRef.current?.abort(); abortRef.current = null; setLoading(false) }
   function retry() { if (!loading) void lastRun.current?.() }
-  return { loading, error, go, retry }
+  return { loading, error, go, cancel, retry }
 }
 
 // ─── apply helpers ──────────────────────────────────────────────────

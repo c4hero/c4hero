@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check, Loader2, Sparkles, ArrowLeft, ArrowRight, Wand2, Star, ChevronDown,
   CornerDownRight, SquarePen, RotateCw, CheckCircle2, Stethoscope, Undo2, Layers,
-  Box, Link2, Unlink, Type, ListChecks, type LucideIcon,
+  Box, Link2, Unlink, Type, ListChecks, X, type LucideIcon,
 } from 'lucide-react'
 import {
   missingInfoGaps, flattenElements, elementNameMap,
@@ -314,7 +314,7 @@ function FixOptionRow({ label, selected, disabled, onSelect }: { label: string; 
 // bulk-applied; they keep the one-at-a-time stepper. Exported for tests.
 export function QueueOverview({
   queue, curIdx, decisions, appliedKeys, drafts, draftsLoading, reviewLoading,
-  optOut, onToggleOptOut, onJump, onBulkApply, onBulkSkip, onClose,
+  optOut, onToggleOptOut, onJump, onBulkApply, onBulkSkip, onClose, onStopReview,
 }: {
   queue: Step[]; curIdx: number
   decisions: Record<string, StepStatus>; appliedKeys: ReadonlySet<string>
@@ -325,6 +325,7 @@ export function QueueOverview({
   onBulkApply: (steps: FixStep[]) => void
   onBulkSkip: (steps: Step[]) => void
   onClose: () => void
+  onStopReview?: () => void
 }) {
   const [filter, setFilter] = useState<QueueFilter>('all')
   const chips = useMemo(() => queueFilterChips(queue), [queue])
@@ -349,7 +350,10 @@ export function QueueOverview({
       {(reviewLoading || draftsLoading) && (
         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.muted2 }}>
           <Loader2 size={12} className="animate-spin" color={C.accent} />
-          {reviewLoading ? 'Deep review running — its findings will appear here.' : 'Drafting suggestions…'}
+          <span>{reviewLoading ? 'Deep review running — its findings will appear here.' : 'Drafting suggestions…'}</span>
+          {reviewLoading && onStopReview && (
+            <button onClick={onStopReview} className="c4ai-ghost" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', color: C.accent, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '0 2px' }}><X size={11} /> Stop</button>
+          )}
         </div>
       )}
 
@@ -526,7 +530,7 @@ export function SweepSummary({ completePct, ledger, onRevert, onRevertAll, onBac
 // wait in what's actually being looked at, then settles on "Synthesizing…".
 // `scopeIds` (when given) limits the checklist to the in-view targets so the
 // animation matches the scoped review — not a misleading whole-model sweep.
-export function ReviewScanning({ workspace, scopeIds, scopeLabel }: { workspace: Workspace; scopeIds?: ReadonlySet<string>; scopeLabel?: string | null }) {
+export function ReviewScanning({ workspace, scopeIds, scopeLabel, onStop }: { workspace: Workspace; scopeIds?: ReadonlySet<string>; scopeLabel?: string | null; onStop?: () => void }) {
   const items = useMemo(() => {
     const out: { label: string; icon: LucideIcon }[] = []
     const els = flattenElements(workspace).filter((e) => !scopeIds || scopeIds.has(e.id))
@@ -604,6 +608,12 @@ export function ReviewScanning({ workspace, scopeIds, scopeLabel }: { workspace:
           })}
         </div>
       </div>
+      {onStop && (
+        <button onClick={onStop} className="c4ai-ghost"
+          style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 14px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+          <X size={13} /> Stop review
+        </button>
+      )}
     </div>
   )
 }
