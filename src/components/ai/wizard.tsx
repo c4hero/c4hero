@@ -419,6 +419,9 @@ function QueueRow({ step, current, state, draft, draftsLoading, optedOut, onTogg
 
   const isFix = step.type === 'fix'
   const label = isFix ? step.gap.label : step.finding.title
+  // Two gaps on the SAME element (e.g. its description and its technology) share
+  // an identical label; a small kind suffix disambiguates them at a glance.
+  const kindSuffix = isFix ? KIND[step.gap.kind].label : null
   const sub = isFix
     ? (draft || (draftsLoading ? 'Drafting a suggestion…' : `No ${KIND[step.gap.kind].label} yet — open to write one`))
     : `${SEV[step.finding.severity].label} severity · ${step.finding.category}`
@@ -443,7 +446,7 @@ function QueueRow({ step, current, state, draft, draftsLoading, optedOut, onTogg
           {KindIcon
             ? <KindIcon size={12} color={CAT.missing.color} style={{ flex: 'none' }} />
             : step.type === 'finding' && <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: SEV[step.finding.severity].color }} />}
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}{kindSuffix && <span style={{ fontWeight: 500, color: C.muted3 }}> · {kindSuffix}</span>}</span>
           {state === 'applied' && <CheckCircle2 size={13} color={C.green} style={{ flex: 'none' }} aria-label="Applied" />}
           {state === 'skipped' && <span style={{ flex: 'none', fontSize: 10, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: C.muted3 }}>Skipped</span>}
         </span>
@@ -456,13 +459,15 @@ function QueueRow({ step, current, state, draft, draftsLoading, optedOut, onTogg
 // ─── Review (batch) screen ──────────────────────────────────────────
 
 // Compact "applied so far" bar shown under each wizard step once changes start
-// landing. Reflects live model health and jumps to the summary/revert ledger.
+// landing. Reflects live metadata completeness and jumps to the summary/revert
+// ledger. (It's "completeness", not "health" — a model with open high-severity
+// review findings can still be 100% complete on descriptions/tech/labels.)
 export function AppliedBar({ n, pct, onReview }: { n: number; pct: number; onReview: () => void }) {
   return (
     <button onClick={onReview}
       style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '9px 12px', borderRadius: 11, border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.06)', color: C.text2, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
       <CheckCircle2 size={15} color={C.green} style={{ flex: 'none' }} />
-      <span style={{ flex: 1, textAlign: 'left' }}>{plural(n, 'change', 'changes')} applied · health {pct}%</span>
+      <span style={{ flex: 1, textAlign: 'left' }}>{plural(n, 'change', 'changes')} applied · {pct}% complete</span>
       <span style={{ color: C.accent }}>Review</span>
     </button>
   )
@@ -487,7 +492,7 @@ export function SweepSummary({ completePct, ledger, onRevert, onRevertAll, onBac
         <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, background: n > 0 ? 'rgba(34,197,94,0.14)' : 'rgba(88,166,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: n > 0 ? C.green : C.accent, animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}>{n > 0 ? <CheckCircle2 size={20} /> : <Layers size={20} />}</span>
         <div>
           <div style={{ fontSize: 17, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>{n > 0 ? `${plural(n, 'change', 'changes')} applied` : 'No changes applied'}</div>
-          <div style={{ fontSize: 12.5, color: C.muted2, marginTop: 1 }}>Model health is now <span style={{ color: '#7dd3fc', fontWeight: 600 }}>{completePct}%</span></div>
+          <div style={{ fontSize: 12.5, color: C.muted2, marginTop: 1 }}>Model completeness is now <span style={{ color: '#7dd3fc', fontWeight: 600 }}>{completePct}%</span></div>
         </div>
       </div>
 

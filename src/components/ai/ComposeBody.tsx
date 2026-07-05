@@ -12,11 +12,31 @@ import { C, kicker, chipBlue, primaryBtn, secondaryBtn } from './aiTheme'
 import { useAiRun, runApply, plural, type AppliedInfo } from './aiHelpers'
 import { Field, RunButton, ErrorLine, Card, Actions, PlanList, AppliedSummary } from './aiPrimitives'
 
+// Static fallbacks for an empty/new model (nothing to reference yet).
 const DESCRIBE_EXAMPLES = [
   'Add a Redis cache between the Web App and the database',
   'Split the monolith into separate Orders and Payments services',
   'Add Stripe as an external payment system the API calls',
 ]
+
+/** Example prompts templated with the open model's real element names, so the
+ *  suggestions feel aware of what's on screen — no AI call, pure string assembly.
+ *  Falls back to the static examples for a small or empty model. */
+function describeExamples(ws: Workspace | null): string[] {
+  if (!ws) return DESCRIBE_EXAMPLES
+  const els = flattenElements(ws)
+  const systems = els.filter((e) => e.type === 'softwareSystem').map((e) => e.name)
+  const containers = els.filter((e) => e.type === 'container').map((e) => e.name)
+  const out: string[] = []
+  if (containers.length >= 2) out.push(`Add a Redis cache between ${containers[0]} and ${containers[1]}`)
+  else if (containers.length === 1) out.push(`Add a Redis cache in front of ${containers[0]}`)
+  if (systems.length >= 1) out.push(`Add Stripe as an external payment system that ${systems[0]} calls`)
+  if (containers.length >= 1) out.push(`Split ${containers[0]} into separate read and write services`)
+  else if (systems.length >= 1) out.push(`Split ${systems[0]} into separate Orders and Payments services`)
+  // Pad from the static list (de-duped) if the model was too small to fill three.
+  for (const e of DESCRIBE_EXAMPLES) { if (out.length >= 3) break; if (!out.includes(e)) out.push(e) }
+  return out.slice(0, 3)
+}
 
 export function ComposeBody({ provider, workspace, onClose }: { provider: AiProvider; workspace: Workspace | null; onClose: () => void }) {
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
@@ -41,6 +61,9 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
   // follow-up changes are most likely), with a one-shot Undo.
   const [applied, setApplied] = useState<AppliedInfo | null>(null)
   const [confirmReplace, setConfirmReplace] = useState(false)
+  // Examples templated from the open model's real names (recomputed only when the
+  // model changes) — see describeExamples.
+  const examples = useMemo(() => describeExamples(workspace), [workspace])
   const parsed = useMemo(() => (dsl ? parseDSL(dsl) : null), [dsl])
   // Flatten the parsed preview once (the chip row read it three times per render).
   const parsedElements = useMemo(() => (parsed ? flattenElements(parsed.workspace) : []), [parsed])
@@ -117,7 +140,7 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
           )}
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3, marginBottom: 8 }}>Try one of these</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {DESCRIBE_EXAMPLES.map((ex, i) => (
+            {examples.map((ex, i) => (
               <button key={i} onClick={() => setText(ex)} className="c4ai-card"
                 style={{ display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '9px 11px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer', animation: 'c4ai-stagger .4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.06 + i * 0.06}s` }}>
                 <Wand2 size={13} color={C.accent} style={{ flex: 'none' }} />

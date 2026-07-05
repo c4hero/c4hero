@@ -113,7 +113,9 @@ export default function AiPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
-const PANEL_WIDTH = 300
+// 340 (was 300): finding cards carry up to three fix options plus a free-text
+// "Other", which crowded at 300. Still capped to the viewport on narrow screens.
+const PANEL_WIDTH = 340
 
 /** Compact model name for the header pill (drops the vendor prefix), so it
  *  doesn't crowd the view title — e.g. "claude-haiku-4-5" → "haiku-4-5". */
