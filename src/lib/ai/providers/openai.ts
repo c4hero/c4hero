@@ -1,7 +1,7 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiStreamRequest } from '../types'
 import { AiError } from '../types'
 import { isRecord } from '@/lib/guards'
-import { postJson, postStream, parseAndValidate } from './http'
+import { postJson, postStream, parseAndValidate, type UsageDelta } from './http'
 
 // OpenAI Chat Completions API, called directly from the browser with the user's
 // key. For structured output we use JSON mode (`response_format: json_object`)
@@ -31,6 +31,15 @@ function parseOpenAiEvent(data: unknown): string {
   return typeof delta.content === 'string' ? delta.content : ''
 }
 
+// Both the JSON response and the final streaming chunk (with include_usage)
+// carry `usage: { prompt_tokens, completion_tokens }`.
+function parseOpenAiUsage(data: unknown): UsageDelta | null {
+  if (!isRecord(data) || !isRecord(data.usage)) return null
+  const input = typeof data.usage.prompt_tokens === 'number' ? data.usage.prompt_tokens : 0
+  const output = typeof data.usage.completion_tokens === 'number' ? data.usage.completion_tokens : 0
+  return input || output ? { input: input || undefined, output: output || undefined } : null
+}
+
 async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
   const data = (await postJson({
     url: API_URL,
@@ -38,6 +47,7 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
     body: { model: config.model, ...body },
     host: 'api.openai.com',
     label: `OpenAI (${config.model})`,
+    parseUsage: parseOpenAiUsage,
   })) as OpenAiResponse
 
   const choice = data.choices?.[0]
@@ -98,6 +108,8 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
         body: {
           model: config.model,
           stream: true,
+          // Ask for a final usage-only chunk so the session meter can count tokens.
+          stream_options: { include_usage: true },
           max_completion_tokens: req.maxTokens ?? 8000,
           temperature: req.temperature,
           messages: messages(req.system, req.user, req.history),
@@ -105,6 +117,7 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
         host: 'api.openai.com',
         label: `OpenAI (${config.model})`,
         parseEvent: parseOpenAiEvent,
+        parseUsage: parseOpenAiUsage,
         onText: req.onText,
         signal: req.signal,
       })

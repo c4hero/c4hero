@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { createProvider } from './index'
 import type { AiProviderConfig } from '../types'
 import { AiError } from '../types'
+import { getAiUsage, resetAiUsage } from '../usage'
 
 // Provider implementations are thin adapters over `fetch`. We stub `fetch` to
 // drive every branch: success, each mapped HTTP error, network failure,
@@ -302,5 +303,72 @@ describe('AI provider streaming', () => {
       `data: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'end_turn' } })}\n\n`,
     ]))
     expect(await createProvider('anthropic', cfg).completeStream!({ system: 's', user: 'u', onText: () => {} })).toBe('done')
+  })
+})
+
+// ─── Session usage meter (TEA-47) ───────────────────────────────────────
+describe('AI provider usage metering', () => {
+  beforeEach(() => resetAiUsage())
+
+  it('counts one call per successful JSON request', async () => {
+    stubFetch(() => okText('ok'))
+    await createProvider('anthropic', cfg).complete({ system: 's', user: 'u' })
+    await createProvider('openai', cfg).complete({ system: 's', user: 'u' })
+    expect(getAiUsage().calls).toBe(2)
+  })
+
+  it('does not count a failed (non-OK) request', async () => {
+    stubFetch(() => res({ ok: false, status: 500, json: async () => ({ error: { message: 'boom' } }) }))
+    await expect(createProvider('anthropic', cfg).complete({ system: 's', user: 'u' })).rejects.toBeInstanceOf(AiError)
+    expect(getAiUsage().calls).toBe(0)
+  })
+
+  it('records Anthropic token usage (including cached tokens as input)', async () => {
+    stubFetch(() => res({ ok: true, status: 200, json: async () => ({
+      content: [{ type: 'text', text: 'hi' }],
+      usage: { input_tokens: 40, output_tokens: 12, cache_read_input_tokens: 100 },
+    }) }))
+    await createProvider('anthropic', cfg).complete({ system: 's', user: 'u' })
+    const u = getAiUsage()
+    expect(u.inputTokens).toBe(140)
+    expect(u.outputTokens).toBe(12)
+    expect(u.measuredCalls).toBe(1)
+  })
+
+  it('records OpenAI token usage from the response body', async () => {
+    stubFetch(() => res({ ok: true, status: 200, json: async () => ({
+      choices: [{ message: { content: 'hi' } }],
+      usage: { prompt_tokens: 30, completion_tokens: 8 },
+    }) }))
+    await createProvider('openai', cfg).complete({ system: 's', user: 'u' })
+    expect(getAiUsage()).toMatchObject({ calls: 1, inputTokens: 30, outputTokens: 8, measuredCalls: 1 })
+  })
+
+  it('records Gemini token usage from usageMetadata', async () => {
+    stubFetch(() => res({ ok: true, status: 200, json: async () => ({
+      candidates: [{ content: { parts: [{ text: 'hi' }] } }],
+      usageMetadata: { promptTokenCount: 22, candidatesTokenCount: 6 },
+    }) }))
+    await createProvider('gemini', cfg).complete({ system: 's', user: 'u' })
+    expect(getAiUsage()).toMatchObject({ calls: 1, inputTokens: 22, outputTokens: 6 })
+  })
+
+  it('merges Anthropic streaming usage across message_start and message_delta into one call', async () => {
+    stubFetch(() => streamRes([
+      `data: ${JSON.stringify({ type: 'message_start', message: { usage: { input_tokens: 200 } } })}\n\n`,
+      `data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'hi' } })}\n\n`,
+      `data: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 15 } })}\n\n`,
+    ]))
+    await createProvider('anthropic', cfg).completeStream!({ system: 's', user: 'u', onText: () => {} })
+    expect(getAiUsage()).toMatchObject({ calls: 1, inputTokens: 200, outputTokens: 15, measuredCalls: 1 })
+  })
+
+  it('records OpenAI streaming usage from the final include_usage chunk once', async () => {
+    stubFetch(() => streamRes([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'hi' } }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 12, completion_tokens: 4 } })}\n\n`,
+    ]))
+    await createProvider('openai', cfg).completeStream!({ system: 's', user: 'u', onText: () => {} })
+    expect(getAiUsage()).toMatchObject({ calls: 1, inputTokens: 12, outputTokens: 4 })
   })
 })

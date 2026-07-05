@@ -1,6 +1,14 @@
 import { AiError } from '../types'
 import { stripCodeFence } from '../dsl'
+import { recordAiCall, recordAiTokens } from '../usage'
 import { createLogger } from '@/lib/logger'
+
+// Token usage extracted from a provider response (or SSE frame). Fields are
+// optional because different providers surface input/output at different points
+// (Anthropic splits them across the start/end stream frames); the stream reader
+// merges partials and records the final absolute values once per call.
+export interface UsageDelta { input?: number; output?: number }
+export type UsageParser = (data: unknown) => UsageDelta | null
 
 // Shared HTTP + parsing helpers for BYOK provider implementations. Each provider
 // owns its own request/response shape, but they map failures to the same AiError
@@ -36,6 +44,9 @@ export async function postJson(opts: {
   host: string
   /** Provider label for logs / errors, e.g. `Anthropic (claude-…)`. */
   label: string
+  /** Extract token usage from the parsed response body, when the provider
+   *  exposes it — recorded to the session usage meter. */
+  parseUsage?: UsageParser
 }): Promise<unknown> {
   let res: Response
   try {
@@ -58,11 +69,22 @@ export async function postJson(opts: {
     httpFail(opts.label, res.status, await readErrorMessage(res, `Request failed (${res.status})`))
   }
 
+  let data: unknown
   try {
-    return await res.json()
+    data = await res.json()
   } catch {
     throw new AiError('invalid-response', `Malformed response from ${opts.label}.`)
   }
+  // The single choke point for BYOK cost visibility: one accepted response = one
+  // billable call. Record it (and any token usage) before handing the body back.
+  recordAiCall()
+  recordUsage(opts.parseUsage?.(data))
+  return data
+}
+
+/** Record a usage delta to the session meter, ignoring absent/empty counts. */
+function recordUsage(u: UsageDelta | null | undefined): void {
+  if (u) recordAiTokens(u.input ?? 0, u.output ?? 0)
 }
 
 /** POST a JSON body and stream a `text/event-stream` response, mapping each
@@ -83,6 +105,10 @@ export async function postStream(opts: {
   label: string
   /** Map one parsed SSE `data:` JSON payload to its text delta (`''` if none). */
   parseEvent: (data: unknown) => string
+  /** Extract token usage from an SSE frame. Providers split input/output across
+   *  frames (Anthropic) or send a cumulative/final total; partials are merged
+   *  and the final absolute values recorded once. */
+  parseUsage?: UsageParser
   onText: (delta: string) => void
   signal?: AbortSignal
 }): Promise<string> {
@@ -113,11 +139,18 @@ export async function postStream(opts: {
   if (!res.body) {
     throw new AiError('invalid-response', `No response stream from ${opts.label}.`)
   }
+  // Response accepted → one billable call. (Token usage is recorded at the end,
+  // once the final usage frame has been merged.)
+  recordAiCall()
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   let full = ''
+  // Absolute token counts, merged across frames — providers report input at the
+  // start and output at the end (or a cumulative total), so we keep the latest
+  // non-empty value for each and record once when the stream closes.
+  const usage: UsageDelta = {}
 
   // Parse one SSE `data:` payload (the text after `data:`) and emit its delta.
   // `[DONE]` (OpenAI) and blank keep-alive frames are ignored; malformed JSON is
@@ -130,6 +163,11 @@ export async function postStream(opts: {
       parsed = JSON.parse(trimmed)
     } catch {
       return
+    }
+    const u = opts.parseUsage?.(parsed)
+    if (u) {
+      if (u.input != null) usage.input = u.input
+      if (u.output != null) usage.output = u.output
     }
     const delta = opts.parseEvent(parsed) // may throw AiError on error/refusal frames
     if (delta) { full += delta; opts.onText(delta) }
@@ -152,6 +190,7 @@ export async function postStream(opts: {
   const tail = buffer.replace(/\r$/, '')
   if (tail.startsWith('data:')) handleData(tail.slice(5))
 
+  recordUsage(usage)
   return full
 }
 

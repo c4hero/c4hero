@@ -37,6 +37,7 @@ import {
 import {
   ErrorLine, Notice, Empty,
 } from './aiPrimitives'
+import { UsageCounterPill } from './UsageCounter'
 import { AdrBody } from './AdrBody'
 import { ComposeBody } from './ComposeBody'
 import { InterviewBody } from './InterviewBody'
@@ -551,6 +552,7 @@ function AppView({
           </button>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+          <UsageCounterPill />
           <button onClick={onOpenSettings} title={`Connected — ${model} · open AI settings`}
             aria-label={`AI model ${shortModel(model)} — open AI settings`}
             onPointerEnter={() => setModelHover(true)} onPointerLeave={() => setModelHover(false)}

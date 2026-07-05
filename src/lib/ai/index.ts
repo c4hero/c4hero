@@ -24,6 +24,10 @@ export { AI_PROVIDER_META, AI_PROVIDER_IDS, getProviderMeta, isAiProviderId } fr
 export { createProvider } from './providers'
 
 export {
+  getAiUsage, subscribeAiUsage, resetAiUsage, type AiUsage,
+} from './usage'
+
+export {
   generateDiagram, generateDiagramStream, reviewArchitecture, reviewArchitectureStream,
   autoDescribe, planEdit, draftAdr, answerQuestion, answerQuestionStream,
   interviewAsk, interviewAskStream, interviewKickoffMessage, interviewBuildPlan, suggestTags,

@@ -1,7 +1,7 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiStreamRequest } from '../types'
 import { AiError } from '../types'
 import { isRecord } from '@/lib/guards'
-import { postJson, postStream, parseAndValidate } from './http'
+import { postJson, postStream, parseAndValidate, type UsageDelta } from './http'
 
 // Anthropic Messages API, called directly from the browser with the user's key.
 // Direct browser calls require the `anthropic-dangerous-direct-browser-access`
@@ -51,6 +51,30 @@ function parseAnthropicEvent(data: unknown): string {
   return ''
 }
 
+function num(v: unknown): number { return typeof v === 'number' ? v : 0 }
+
+/** Sum an Anthropic `usage` block into input/output totals. Cached-prefix tokens
+ *  (read + creation) are reported separately from `input_tokens`; count them as
+ *  input so the session total reflects the full prompt size. */
+function anthropicUsage(u: unknown): UsageDelta | null {
+  if (!isRecord(u)) return null
+  const input = num(u.input_tokens) + num(u.cache_read_input_tokens) + num(u.cache_creation_input_tokens)
+  const output = num(u.output_tokens)
+  return input || output ? { input: input || undefined, output: output || undefined } : null
+}
+
+// Non-streaming responses carry usage at the top level; streaming splits it
+// across `message_start` (input) and `message_delta` (final output).
+function parseAnthropicJsonUsage(data: unknown): UsageDelta | null {
+  return isRecord(data) ? anthropicUsage(data.usage) : null
+}
+function parseAnthropicStreamUsage(data: unknown): UsageDelta | null {
+  if (!isRecord(data)) return null
+  if (data.type === 'message_start' && isRecord(data.message)) return anthropicUsage(data.message.usage)
+  if (data.type === 'message_delta') return anthropicUsage(data.usage)
+  return null
+}
+
 async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
   const data = (await postJson({
     url: API_URL,
@@ -62,6 +86,7 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
     body: { model: config.model, ...body },
     host: 'api.anthropic.com',
     label: `Anthropic (${config.model})`,
+    parseUsage: parseAnthropicJsonUsage,
   })) as AnthropicResponse
 
   if (data.stop_reason === 'refusal') {
@@ -118,6 +143,7 @@ export function createAnthropicProvider(config: AiProviderConfig): AiProvider {
         host: 'api.anthropic.com',
         label: `Anthropic (${config.model})`,
         parseEvent: parseAnthropicEvent,
+        parseUsage: parseAnthropicStreamUsage,
         onText: req.onText,
         signal: req.signal,
       })

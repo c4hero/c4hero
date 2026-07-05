@@ -1,7 +1,7 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn, AiStreamRequest } from '../types'
 import { AiError } from '../types'
 import { isRecord } from '@/lib/guards'
-import { postJson, postStream, parseAndValidate } from './http'
+import { postJson, postStream, parseAndValidate, type UsageDelta } from './http'
 
 // Google Gemini (Generative Language API), called directly from the browser with
 // the user's key. For structured output we request a JSON response MIME type and
@@ -38,6 +38,17 @@ function toContents(history: AiChatTurn[] | undefined, user: string) {
   return [...turns, { role: 'user', parts: [{ text: user }] }]
 }
 
+// `usageMetadata` appears on the JSON response and on streaming chunks, where
+// its counts are cumulative — so the stream reader's "keep the latest absolute
+// value" merge yields the final total without double-counting.
+function parseGeminiUsage(data: unknown): UsageDelta | null {
+  if (!isRecord(data) || !isRecord(data.usageMetadata)) return null
+  const m = data.usageMetadata
+  const input = typeof m.promptTokenCount === 'number' ? m.promptTokenCount : 0
+  const output = typeof m.candidatesTokenCount === 'number' ? m.candidatesTokenCount : 0
+  return input || output ? { input: input || undefined, output: output || undefined } : null
+}
+
 async function call(config: AiProviderConfig, body: Record<string, unknown>): Promise<string> {
   const url = `${BASE}/${encodeURIComponent(config.model)}:generateContent`
   const data = (await postJson({
@@ -46,6 +57,7 @@ async function call(config: AiProviderConfig, body: Record<string, unknown>): Pr
     body,
     host: 'generativelanguage.googleapis.com',
     label: `Gemini (${config.model})`,
+    parseUsage: parseGeminiUsage,
   })) as GeminiResponse
 
   const candidate = data.candidates?.[0]
@@ -102,6 +114,7 @@ export function createGeminiProvider(config: AiProviderConfig): AiProvider {
         host: 'generativelanguage.googleapis.com',
         label: `Gemini (${config.model})`,
         parseEvent: parseGeminiEvent,
+        parseUsage: parseGeminiUsage,
         onText: req.onText,
         signal: req.signal,
       })
