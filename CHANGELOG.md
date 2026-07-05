@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-07-05
+
+### Fixed
+
+- Overlapping/nested groups: selecting a group fully contained within another group now selects the smaller inner group instead of always selecting the outer one. ([#84](https://github.com/c4hero/c4hero/issues/84))
+- Design-system consistency: unified close/delete button sizing across element, relationship, and group inspector panels; aligned technology and tag chip styling in relationship tooltips; replaced a handful of hardcoded colors and blur values that had drifted from their design tokens.
+
+## [0.2.1] - 2026-06-13
+
+### Fixed
+
+- PNG export now uses html-to-image's `toBlob` directly instead of a data-URL fetch, so it's no longer blocked by CSP.
+- SVG export inlines computed styles property-by-property so downloaded SVGs render correctly outside the app.
+
 ## [0.2.0] - 2026-05-19
 
 Initial public release. c4hero is a local-first browser-based visual editor for C4 architecture diagrams that reads and writes Structurizr DSL. Workspaces stay on your device; nothing is uploaded to a c4hero server.
@@ -40,4 +54,6 @@ Initial public release. c4hero is a local-first browser-based visual editor for 
 - Canvas interactions no longer trigger browser-back navigation on Backspace in non-text contexts.
 - Boundary-node E2E selectors now match the per-scope ID format.
 
+[0.2.2]: https://github.com/c4hero/c4hero/releases/tag/v0.2.2
+[0.2.1]: https://github.com/c4hero/c4hero/releases/tag/v0.2.1
 [0.2.0]: https://github.com/c4hero/c4hero/releases/tag/v0.2.0

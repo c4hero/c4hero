@@ -1,6 +1,6 @@
 {
   "name": "c4hero",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Local-first visual architecture modelling for the C4 model. Edit visually, save as Structurizr DSL — your architecture lives in your repo.",
   "license": "Apache-2.0",
