@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { detectComposeMode } from './composeMode'
+import { detectComposeMode, isQuestion } from './composeMode'
 
 // detectComposeMode runs ONLY when a workspace already exists, so it defaults to
 // extending ('change') and returns 'new' (which replaces the model) only on an
@@ -33,5 +33,32 @@ describe('detectComposeMode', () => {
     expect(detectComposeMode('Replace my model with a microservices design')).toBe('new')
     expect(detectComposeMode('Build a brand new workspace')).toBe('new')
     expect(detectComposeMode('Create a new model for the platform')).toBe('new')
+  })
+})
+
+describe('isQuestion', () => {
+  it('treats a trailing question mark as a question', () => {
+    expect(isQuestion('What talks to the database?')).toBe(true)
+    expect(isQuestion('the API — is it externally reachable?')).toBe(true)
+    expect(isQuestion('  add a cache?  ')).toBe(true) // an explicit ? wins
+  })
+
+  it('treats an opening interrogative / auxiliary as a question without a mark', () => {
+    for (const q of [
+      'what talks to the database', 'how does authentication work', 'which services use Postgres',
+      'why is the queue there', 'does the API call Stripe', 'are there any orphaned components',
+      'explain the payment flow', 'summarize the model',
+    ]) expect(isQuestion(q)).toBe(true)
+  })
+
+  it('treats edit instructions as NOT questions', () => {
+    for (const i of [
+      'Add a Redis cache between the Web App and the database',
+      'Rename the API to Gateway', 'Connect the worker to the queue',
+      'Split the monolith into two services', 'remove the legacy database',
+      'make the database external',
+    ]) expect(isQuestion(i)).toBe(false)
+    expect(isQuestion('')).toBe(false)
+    expect(isQuestion('   ')).toBe(false)
   })
 })

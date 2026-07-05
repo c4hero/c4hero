@@ -16,6 +16,20 @@
 // anyway).
 const MODEL_NOUN = '(model|workspace)'
 
+// A question the assistant should ANSWER (grounded Q&A) rather than an instruction
+// to edit the model. Matches a trailing '?', or an opening interrogative / auxiliary
+// / "explain|summarize". Deliberately conservative: edit verbs (add/create/remove/
+// rename/connect/split/…) never lead a question, so instructions keep the plan path.
+// Pure + unit-tested. The caller only treats input as a question when a workspace
+// exists to ground the answer on.
+const QUESTION_LEAD = /^(what|which|who|whom|whose|where|when|why|how|is|are|am|do|does|did|can|could|should|would|will|has|have|had|explain|summar\w*)\b/i
+
+export function isQuestion(text: string): boolean {
+  const t = text.trim()
+  if (!t) return false
+  return t.endsWith('?') || QUESTION_LEAD.test(t)
+}
+
 export function detectComposeMode(text: string): 'new' | 'change' {
   const t = text.toLowerCase()
   const replace =

@@ -3,6 +3,7 @@ import type { AiProvider, AiJsonRequest } from './types'
 import {
   suggestTags, suggestFieldValue, generateDiagram, generateDiagramStream, draftAdr,
   reviewArchitecture, reviewArchitectureStream, planEdit, autoDescribe, interviewAskStream,
+  answerQuestion, answerQuestionStream,
 } from './features'
 import { makeWorkspace } from './testFixture'
 
@@ -169,6 +170,48 @@ describe('draftAdr', () => {
   it('returns the model markdown and tolerates a null workspace', async () => {
     const provider = makeProvider({ text: '# ADR 1\nContext…' })
     expect(await draftAdr(provider, null, 'use Postgres')).toMatch(/ADR 1/)
+  })
+})
+
+describe('answerQuestion', () => {
+  // Records the request so we can assert the model is grounded into the prompt.
+  function capturing(answer: string) {
+    const calls: string[] = []
+    const provider: AiProvider = {
+      async complete(req) { calls.push(req.user); return answer },
+      async completeJson<T>(): Promise<T> { return {} as T },
+    }
+    return { provider, calls }
+  }
+
+  it('returns a prose answer grounded on the whole model when no view is given', async () => {
+    const { provider, calls } = capturing('The Web App talks to the Database.')
+    const out = await answerQuestion(provider, makeWorkspace(), null, 'what talks to the database?')
+    expect(out).toBe('The Web App talks to the Database.')
+    expect(calls[0]).toContain('Question: what talks to the database?')
+    expect(calls[0]).toContain('Database') // the serialized model is in the prompt
+  })
+})
+
+describe('answerQuestionStream', () => {
+  it('streams tokens to onText and resolves with the full answer', async () => {
+    const provider: AiProvider = {
+      async complete() { return '' },
+      async completeJson<T>(): Promise<T> { return {} as T },
+      async completeStream(req) { req.onText('The Web App '); req.onText('calls the Database.'); return 'The Web App calls the Database.' },
+    }
+    const chunks: string[] = []
+    const out = await answerQuestionStream(provider, makeWorkspace(), null, 'q', (d) => chunks.push(d))
+    expect(chunks).toEqual(['The Web App ', 'calls the Database.'])
+    expect(out).toBe('The Web App calls the Database.')
+  })
+
+  it('falls back to a single complete() call when the provider has no streaming', async () => {
+    const answer = 'The API depends on Postgres.'
+    const chunks: string[] = []
+    const out = await answerQuestionStream(makeProvider({ text: answer }), makeWorkspace(), null, 'q', (d) => chunks.push(d))
+    expect(chunks).toEqual([answer])
+    expect(out).toBe(answer)
   })
 })
 

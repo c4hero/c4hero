@@ -25,7 +25,7 @@ export { createProvider } from './providers'
 
 export {
   generateDiagram, generateDiagramStream, reviewArchitecture, reviewArchitectureStream,
-  autoDescribe, planEdit, draftAdr,
+  autoDescribe, planEdit, draftAdr, answerQuestion, answerQuestionStream,
   interviewAsk, interviewAskStream, interviewKickoffMessage, interviewBuildPlan, suggestTags,
   suggestFieldValue,
 } from './features'
@@ -39,7 +39,7 @@ export {
 
 export { extractDsl, stripCodeFence } from './dsl'
 
-export { detectComposeMode } from './composeMode'
+export { detectComposeMode, isQuestion } from './composeMode'
 
 export {
   applyEditPlan, describeOps, summarizeSkips, type EditActions, type ApplyResult,

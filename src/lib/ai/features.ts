@@ -4,6 +4,7 @@ import {
   generateSystem, generateUser, reviewSystem, reviewUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
   interviewSystem, interviewKickoff, interviewPlanSystem, interviewPlanUser,
+  qaSystem, qaUser,
 } from './prompts'
 import { isRecord } from '@/lib/guards'
 import type { GapKind } from './sweep'
@@ -294,6 +295,34 @@ export async function draftAdr(provider: AiProvider, ws: Workspace | null, topic
     user: adrUser(ws, topic),
     maxTokens: 4000,
   })
+}
+
+/** Grounded Q&A: answer a question about the model in prose. Grounds on `view`
+ *  (the current screen) when given, otherwise the whole model. */
+export async function answerQuestion(
+  provider: AiProvider, ws: Workspace, view: View | null, question: string,
+): Promise<string> {
+  return provider.complete({
+    system: qaSystem(),
+    user: qaUser(ws, view, question),
+    maxTokens: 2000,
+  })
+}
+
+/** Streaming `answerQuestion`: fires `onText` with each token and resolves with
+ *  the full answer. Falls back to a single non-streaming `complete` when the
+ *  provider has no SSE. Pass `signal` to cancel. */
+export async function answerQuestionStream(
+  provider: AiProvider, ws: Workspace, view: View | null, question: string,
+  onText: (delta: string) => void, signal?: AbortSignal,
+): Promise<string> {
+  const req = { system: qaSystem(), user: qaUser(ws, view, question), maxTokens: 2000 }
+  if (!provider.completeStream) {
+    const text = await provider.complete(req)
+    onText(text)
+    return text
+  }
+  return provider.completeStream({ ...req, onText, signal })
 }
 
 /** Interview: ask the next question given the prior turns. `history` is the full

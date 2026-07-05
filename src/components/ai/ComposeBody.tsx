@@ -1,12 +1,13 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Sparkles, Pencil, SquarePen, Wand2, ArrowRight, Layers, AlertCircle, Loader2, X } from 'lucide-react'
-import { useWorkspaceStore } from '@/store/workspace'
+import { Sparkles, Pencil, SquarePen, Wand2, ArrowRight, Layers, AlertCircle, Loader2, X, HelpCircle, Copy, Check } from 'lucide-react'
+import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { parseDSL } from '@/lib/dsl'
 import {
-  generateDiagramStream, planEdit, detectComposeMode, describeOps, flattenElements,
+  generateDiagramStream, planEdit, detectComposeMode, isQuestion, answerQuestionStream,
+  describeOps, flattenElements, viewLabel,
   type AiProvider, type EditPlan,
 } from '@/lib/ai'
-import type { Workspace } from '@/types/model'
+import type { Workspace, View } from '@/types/model'
 import { C, kicker, chipBlue, primaryBtn, secondaryBtn } from './aiTheme'
 import { useAiRun, runApply, plural, type AppliedInfo } from './aiHelpers'
 import { Field, RunButton, ErrorLine, Card, Actions, PlanList, AppliedSummary } from './aiPrimitives'
@@ -21,7 +22,9 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const undoLen = useWorkspaceStore((s) => s.undoStack.length)
   const lastSaved = useWorkspaceStore((s) => s.lastSavedUndoLength)
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const hasUnsaved = !!workspace && undoLen !== lastSaved
+  const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
   const [text, setText] = useState('')
   const run = useAiRun()
@@ -29,6 +32,10 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
   // Raw text as it streams in (fences/preamble and all) — a live "it's working"
   // preview shown until the final DSL parses into the clean card below.
   const [streamText, setStreamText] = useState('')
+  // Grounded Q&A answer (streamed). Non-null once an ask starts; the answer card
+  // shows it building token-by-token.
+  const [answer, setAnswer] = useState<string | null>(null)
+  const [answerCopied, setAnswerCopied] = useState(false)
   const [plan, setPlan] = useState<EditPlan | null>(null)
   // Post-apply summary. The panel stays open (the moment after an apply is when
   // follow-up changes are most likely), with a one-shot Undo.
@@ -43,27 +50,46 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
   const streamRef = useRef<HTMLPreElement>(null)
   useEffect(() => { const el = streamRef.current; if (el) el.scrollTop = el.scrollHeight }, [streamText])
 
-  // Auto-detect intent. Without a workspace there's nothing to change → "new".
-  const detected: 'new' | 'change' = !workspace ? 'new' : detectComposeMode(text)
-  const DetIcon = detected === 'new' ? Sparkles : Pencil
+  // Auto-detect intent. Without a workspace there's nothing to change or ask about
+  // → "new". With one, a question routes to grounded Q&A; anything else is an edit.
+  const intent: 'new' | 'change' | 'ask' = !workspace ? 'new' : isQuestion(text) ? 'ask' : detectComposeMode(text)
+  const DetIcon = intent === 'new' ? Sparkles : intent === 'ask' ? HelpCircle : Pencil
   const detectedHint = !text.trim()
     ? 'Intent is detected automatically as you type.'
-    : detected === 'new' ? 'Detected: new model — opens in a new workspace.' : `Detected: change to ${workspace?.name || 'the current model'}.`
+    : intent === 'new' ? 'Detected: new model — opens in a new workspace.'
+    : intent === 'ask' ? 'Detected: question — I’ll answer from your model.'
+    : `Detected: change to ${workspace?.name || 'the current model'}.`
 
-  function reset() { setDsl(null); setPlan(null); setApplied(null); setConfirmReplace(false); setStreamText('') }
-  const canRun = !!text.trim() && (detected === 'new' || !!workspace)
+  function reset() { setDsl(null); setPlan(null); setApplied(null); setConfirmReplace(false); setStreamText(''); setAnswer(null) }
+  const canRun = !!text.trim() && (intent === 'new' || !!workspace)
+
+  // Stream a grounded answer into the answer card. `view` scopes it to a screen
+  // (Explain this view); null grounds on the whole model (a typed question).
+  function ask(question: string, view: View | null) {
+    reset()
+    setAnswer('')
+    run.go((signal) => answerQuestionStream(provider, workspace!, view, question, (d) => setAnswer((a) => (a ?? '') + d), signal), (full) => setAnswer(full))
+  }
 
   function submit() {
     if (!canRun || run.loading) return
+    // Question → grounded prose answer (streamed), grounded on the whole model.
+    if (intent === 'ask') { ask(text, null); return }
     reset()
     // New model → stream the DSL in as it generates (an 8k-token call runs
     // 30–60s on reasoning models). `onText` gets raw chunks; accumulate them for
     // the live preview, and `go`'s result is the extracted, parse-ready DSL.
-    if (detected === 'new') run.go((signal) => generateDiagramStream(provider, text, (delta) => setStreamText((t) => t + delta), signal), setDsl)
+    if (intent === 'new') run.go((signal) => generateDiagramStream(provider, text, (delta) => setStreamText((t) => t + delta), signal), setDsl)
     else run.go(() => planEdit(provider, workspace!, text), setPlan)
   }
+  function explainView() {
+    if (!workspace || !activeView || run.loading) return
+    setText('')
+    ask(`Explain this view (${viewLabel(activeView)}): walk through its main elements, how they interact, and its overall purpose. Keep it to a short narrative suitable for onboarding docs.`, activeView)
+  }
+  function copyAnswer() { if (answer) navigator.clipboard?.writeText(answer).then(() => { setAnswerCopied(true); setTimeout(() => setAnswerCopied(false), 1500) }).catch(() => {}) }
   function load() { if (parsed) { loadWorkspace(parsed.workspace); onClose() } }
-  const done = !!parsed || !!plan || !!applied
+  const done = !!parsed || !!plan || !!applied || answer !== null
 
   return (
     <>
@@ -73,11 +99,22 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
           <span style={{ position: 'absolute', inset: -1, borderRadius: 16, border: '1px solid rgba(88,166,255,0.35)', animation: 'c4ai-ringpulse 2.4s ease-out infinite' }} />
         </span>
         <h2 style={{ margin: '16px 0 0', fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>Describe <span style={{ color: '#7dd3fc' }}>a change</span></h2>
-        <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 300 }}>Tell me in plain English what to build or change. I’ll detect whether it’s a new model or an edit to this one, then show you a preview first.</p>
+        <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 300 }}>Tell me what to build or change — or ask a question about your model. I detect the intent and preview any edits before applying.</p>
       </div>
 
       {!done && !text.trim() && (
         <div style={{ marginBottom: 13 }}>
+          {workspace && activeView && (
+            <button onClick={explainView} className="c4ai-card"
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer', marginBottom: 12 }}>
+              <span style={{ width: 30, height: 30, flex: 'none', borderRadius: 8, background: 'rgba(88,166,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent }}><HelpCircle size={16} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text }}>Explain this view</span>
+                <span style={{ display: 'block', fontSize: 11.5, color: C.muted2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>A narrative walkthrough of {viewLabel(activeView)}</span>
+              </span>
+              <ArrowRight size={14} color={C.muted3} style={{ flex: 'none' }} />
+            </button>
+          )}
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3, marginBottom: 8 }}>Try one of these</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             {DESCRIBE_EXAMPLES.map((ex, i) => (
@@ -97,10 +134,24 @@ export function ComposeBody({ provider, workspace, onClose }: { provider: AiProv
         <DetIcon size={13} color={C.accent} style={{ flex: 'none' }} />
         <span style={{ fontSize: 11.5, color: C.text2, lineHeight: 1.4 }}>{detectedHint}</span>
       </div>
-      <RunButton label={detected === 'new' ? 'Generate diagram' : 'Plan changes'} loading={run.loading} disabled={!canRun} onClick={submit} />
+      <RunButton label={intent === 'new' ? 'Generate diagram' : intent === 'ask' ? 'Ask' : 'Plan changes'} loading={run.loading} disabled={!canRun} onClick={submit} />
       <ErrorLine error={run.error} />
 
-      {run.loading && detected === 'new' && streamText && (
+      {answer !== null && (
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={kicker}>Answer</span>
+            {run.loading
+              ? <button onClick={run.cancel} className="c4ai-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><X size={12} /> Stop</button>
+              : answer.trim() && <button onClick={copyAnswer} className="c4ai-sec" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{answerCopied ? <Check size={12} /> : <Copy size={12} />} {answerCopied ? 'Copied' : 'Copy'}</button>}
+          </div>
+          <div data-scroll style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '10px 0 0', fontSize: 13.5, lineHeight: 1.55, color: C.text2, maxHeight: 320, overflowY: 'auto' }}>
+            {answer || (run.loading ? 'Thinking…' : '')}{run.loading && <span style={{ animation: 'c4ai-node 1.1s ease-in-out infinite' }}>▍</span>}
+          </div>
+        </Card>
+      )}
+
+      {run.loading && intent === 'new' && streamText && (
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Loader2 size={13} className="animate-spin" color={C.accent} />

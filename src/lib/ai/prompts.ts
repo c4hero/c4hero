@@ -89,6 +89,26 @@ export function reviewUser(ws: Workspace, view?: View | null): string {
   return `Review this entire architecture model:\n\n${serializeContext(ws)}`
 }
 
+// ─── Grounded Q&A ───────────────────────────────────────────────────
+
+export function qaSystem(): string {
+  return [
+    'You answer questions about a C4 software-architecture model, grounded ONLY in the model',
+    'given below. Be concise, specific and concrete — name the actual people, systems,',
+    'containers, components and relationships. When tracing what connects to what, follow the',
+    'relationships in the model rather than guessing. If the model does not contain enough',
+    'information to answer, say so plainly instead of inventing elements or relationships that',
+    'are not there. Answer in prose — short paragraphs or bullet points — never JSON or DSL.',
+  ].join('\n')
+}
+
+/** Build the Q&A user message. Grounds on `view` (the current screen) when given,
+ *  otherwise the whole model. */
+export function qaUser(ws: Workspace, view: View | null, question: string): string {
+  const context = view ? serializeViewContext(ws, view) : serializeContext(ws)
+  return [context, '', `Question: ${question}`].join('\n')
+}
+
 // ─── Auto-describe ──────────────────────────────────────────────────
 
 export function describeSystem(): string {
