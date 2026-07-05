@@ -156,7 +156,7 @@ AiPanel.tsx (UI, flows, sessionCache)
       │  calls features with a provider instance
       ▼
 features.ts  ── generateDiagram, reviewArchitecture, autoDescribe, planEdit,
-                 interviewAsk/BuildPlan, scanRepo, suggestTags, draftAdr
+                 interviewAsk/BuildPlan, suggestTags, draftAdr
       │  uses prompts.ts + schema.ts + context.ts
       ▼
 providers/   ── createProvider(id, {apiKey, model}) → AiProvider
@@ -177,8 +177,7 @@ Key seams and pure modules:
 - **Pure helpers (unit-tested in isolation):** `sweep.ts` (instant missing-info
   gaps + model-health %), `context.ts` (model flattening/serialization),
   `schema.ts` (tolerant `to*()` sanitizers), `dsl.ts` (extract DSL from model
-  prose), `composeMode.ts` (new-vs-change intent), `repoScan.ts`, `review.ts`,
-  `planScope.ts`.
+  prose), `composeMode.ts` (new-vs-change intent), `review.ts`, `planScope.ts`.
 - **`sessionCache.ts`** keeps an in-progress assistant flow (sweep/interview)
   alive across close→reopen, keyed on the diagram route, session-only.
 
