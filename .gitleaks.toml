@@ -1,5 +1,11 @@
 title = "c4hero gitleaks config"
 
+# Keep the full built-in gitleaks ruleset active; we only add targeted
+# allowlists below. Without this, a config file replaces the defaults and
+# silently disables all secret detection.
+[extend]
+useDefault = true
+
 [allowlist]
   description = """
     Test fixtures and regex patterns for the credential-detection feature.

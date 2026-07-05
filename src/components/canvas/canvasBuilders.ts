@@ -196,6 +196,13 @@ export function buildNodes(
 type OverlayRect = { x: number; y: number; w: number; h: number }
 type ModelGroup = Workspace['model']['groups'][number]
 
+// Group nodes sit below element nodes (which default to z 0) and above scope
+// boundaries (BOUNDARY_Z). Nesting depth is added on top of GROUP_BASE_Z so a
+// group fully contained by another gets a higher (less negative) z-index than
+// its container, keeping plenty of headroom before either neighbor.
+const GROUP_BASE_Z = -50
+const BOUNDARY_Z = -100
+
 function nodeRect(node: Node): OverlayRect {
   return {
     x: node.position.x,
@@ -212,6 +219,14 @@ function groupIsNestedInside(
   if (child.id === parent.id || child.elementIds.length >= parent.elementIds.length) return false
   const parentIds = new Set(parent.elementIds)
   return child.elementIds.every((id) => parentIds.has(id))
+}
+
+/** Number of other groups that fully contain `group` — used so a group nested
+ *  inside another renders (and hit-tests) above its container instead of the
+ *  reverse. Without this, overlapping groups tied on the same z-index and the
+ *  one later in array order silently won every click within the overlap. */
+function groupNestingDepth(group: ModelGroup, groups: ModelGroup[]): number {
+  return groups.filter((candidate) => groupIsNestedInside(group, candidate)).length
 }
 
 /** Build group background nodes using post-layout element positions. */
@@ -291,7 +306,7 @@ export function buildGroupNodes(
       measured: { width: rect.w, height: rect.h },
       style: { width: rect.w, height: rect.h, backgroundColor: 'transparent', pointerEvents: 'auto' },
       data: { label: group.name, elementCount: group.elementIds.length },
-      zIndex: -1,
+      zIndex: GROUP_BASE_Z + groupNestingDepth(group, groups),
       selectable: true,
       // Drag handler: Canvas's onNodeDragStart/onNodeDrag/onNodeDragStop
       // detect group drags (id starts with `group-`) and translate every
@@ -367,7 +382,7 @@ export function buildBoundaryNodes(
         measured: { width: EMPTY_BOUNDARY_W, height: EMPTY_BOUNDARY_H },
         style: { width: EMPTY_BOUNDARY_W, height: EMPTY_BOUNDARY_H, pointerEvents: 'none' },
         data: { name, typeLabel, empty: true },
-        zIndex: -2,
+        zIndex: BOUNDARY_Z,
         selectable: false,
         draggable: false,
         focusable: false,
@@ -391,7 +406,7 @@ export function buildBoundaryNodes(
         pointerEvents: 'none',
       },
       data: { name, typeLabel },
-      zIndex: -2,
+      zIndex: BOUNDARY_Z,
       selectable: false,
       draggable: false,
       focusable: false,
