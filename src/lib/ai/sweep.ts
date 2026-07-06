@@ -107,6 +107,35 @@ export function modelHealthPercent(ws: Workspace, scopeIds?: ReadonlySet<string>
   return Math.round((filled / checkable) * 100)
 }
 
+/** Field-level completeness for the review header ("X of Y fields complete").
+ *  Unlike modelHealthPercent, always-present fields are counted in BOTH the
+ *  numerator and the denominator — each element's type (and its name, when set)
+ *  plus each relationship's endpoints — so a fresh model reads as mostly
+ *  complete instead of a discouraging 0%. */
+export function healthFieldCounts(ws: Workspace, scopeIds?: ReadonlySet<string>): { filled: number; total: number; pct: number } {
+  const all = flattenElements(ws)
+  const els = scopeIds ? all.filter((e) => scopeIds.has(e.id)) : all
+  const rels = (ws.model.relationships ?? []).filter((r) => !scopeIds || scopeIds.has(r.id))
+
+  // Always-present slots: type per element, endpoints per relationship.
+  let total = els.length + rels.length
+  let filled = els.length + rels.length
+  for (const el of els) {
+    total += 2 // name + description
+    if (!isBlank(el.name)) filled += 1
+    if (!isBlank(el.description)) filled += 1
+    if (el.type === 'container' || el.type === 'component') {
+      total += 1
+      if (!isBlank(el.technology)) filled += 1
+    }
+  }
+  for (const r of rels) {
+    total += 1
+    if (!isBlank(r.description)) filled += 1
+  }
+  return { filled, total, pct: total === 0 ? 100 : Math.round((filled / total) * 100) }
+}
+
 // ─── Gap → edit operation ───────────────────────────────────────────
 
 /** Turn a gap and its (possibly user-edited) draft value into an edit op. */

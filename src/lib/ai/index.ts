@@ -15,7 +15,7 @@ export { AiError, aiErrorMessage } from './types'
 export { findingsToMarkdown, sortedFindings, isActionable, findingOptions } from './review'
 export { classifyScope, classifyPlanScopes, type PlanScope } from './planScope'
 export {
-  missingInfoGaps, modelHealthPercent, gapToOp,
+  missingInfoGaps, modelHealthPercent, healthFieldCounts, gapToOp,
   type MissingGap, type GapKind,
 } from './sweep'
 export type { AiProviderId, AiProviderMeta, AiModelOption } from './providerMeta'

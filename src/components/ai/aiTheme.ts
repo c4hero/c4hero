@@ -23,6 +23,8 @@ export const STYLE = `
 .c4ai-ghost:hover{background:rgba(255,255,255,0.06)!important;color:${C.text}!important}
 .c4ai-sec:hover{background:rgba(255,255,255,0.05)!important}
 .c4ai-card:hover{border-color:${C.borderStrong}!important;background:#1c2128!important}
+.c4ai-chip:hover{color:${C.text2}!important}
+.c4ai-link:hover{text-decoration:underline}
 @keyframes c4ai-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes c4ai-rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
 @keyframes c4ai-result{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
@@ -36,6 +38,9 @@ export const STYLE = `
 @keyframes c4ai-pop{0%{opacity:0;transform:scale(0)}65%{opacity:1;transform:scale(1.2)}100%{opacity:1;transform:scale(1)}}
 @keyframes c4ai-ringpulse{0%{opacity:.5;transform:scale(.7)}100%{opacity:0;transform:scale(1.25)}}
 @keyframes c4ai-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
+@keyframes c4ai-dot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.c4ai-msg{animation:c4ai-rise .22s cubic-bezier(0.16,1,0.3,1) both}
+@media (prefers-reduced-motion:reduce){.c4ai .c4ai-msg{animation:none}}
 .c4ai-node{transform-box:fill-box;transform-origin:center;animation:c4ai-node 1.7s ease-in-out infinite}
 .c4ai-edge{stroke-dasharray:3 5;animation:c4ai-flow .9s linear infinite}
 .c4ai-ping{transform-box:fill-box;transform-origin:center;animation:c4ai-ping 2.8s cubic-bezier(.4,0,.2,1) infinite}

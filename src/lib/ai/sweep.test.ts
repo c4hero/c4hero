@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { missingInfoGaps, modelHealthPercent, gapToOp, type MissingGap } from './sweep'
+import { missingInfoGaps, modelHealthPercent, healthFieldCounts, gapToOp, type MissingGap } from './sweep'
 import { makeWorkspace } from './testFixture'
 import type { Workspace } from '@/types/model'
 
@@ -104,6 +104,27 @@ describe('modelHealthPercent', () => {
     // 6 desc slots (3 filled) + 3 tech slots (1 filled) + 2 rel slots (1 filled)
     // = 5/11 ≈ 45%.
     expect(modelHealthPercent(makeWorkspace())).toBe(45)
+  })
+})
+
+describe('healthFieldCounts', () => {
+  it('counts always-present fields so a gappy model never reads near 0%', () => {
+    // Fixture: 6 elements, 2 relationships.
+    // Always-present: 6 types + 2 endpoint pairs = 8, plus 6 filled names.
+    // Fillable: 6 desc (3 filled) + 3 tech (1) + 2 rel desc (1).
+    const c = healthFieldCounts(makeWorkspace())
+    expect(c).toEqual({ filled: 19, total: 25, pct: 76 })
+  })
+
+  it('scopes to the given ids', () => {
+    // {web, db}: 2 types + 2 names always; web desc+tech filled, db's empty.
+    const c = healthFieldCounts(makeWorkspace(), new Set(['web', 'db']))
+    expect(c).toEqual({ filled: 6, total: 8, pct: 75 })
+  })
+
+  it('is 100% for an empty model', () => {
+    const ws: Workspace = { name: 'E', model: { people: [], softwareSystems: [], relationships: [], groups: [] }, views: emptyViews() }
+    expect(healthFieldCounts(ws)).toEqual({ filled: 0, total: 0, pct: 100 })
   })
 })
 
