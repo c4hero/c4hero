@@ -278,11 +278,11 @@ function AppView({
   function applyGap(gap: MissingGap) {
     const v = (drafts[gap.key] ?? '').trim()
     if (!v) return
-    pushApplied({ key: gap.key, label: gap.label, detail: v, cat: 'missing', ops: [gapToOp(gap, v)] })
+    pushApplied({ key: gap.key, label: gap.label, detail: v, ops: [gapToOp(gap, v)] })
   }
   function applyFinding(item: FindingItem, opt: ReviewFixOption | null) {
     if (opt && opt.operations.length) {
-      pushApplied({ key: item.key, label: item.finding.title, detail: opt.label, cat: 'review', ops: opt.operations })
+      pushApplied({ key: item.key, label: item.finding.title, detail: opt.label, ops: opt.operations })
     } else {
       // "Mark done" — nothing to apply; resolve the row like a skip so Undo
       // last can restore it.
@@ -303,7 +303,7 @@ function AppView({
     const entries: LedgerEntry[] = []
     for (const g of activeGaps) {
       const v = (drafts[g.key] ?? '').trim()
-      if (v) entries.push({ key: g.key, label: g.label, detail: v, cat: 'missing', ops: [gapToOp(g, v)] })
+      if (v) entries.push({ key: g.key, label: g.label, detail: v, ops: [gapToOp(g, v)] })
     }
     if (!entries.length) return
     if (!baseline) setBaseline(ws)

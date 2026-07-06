@@ -95,6 +95,18 @@ const CARD_BUBBLE: React.CSSProperties = {
   background: C.card, border: `1px solid ${C.border}`,
 }
 
+// The full-width primary + ghost pair used by the plan and generated-diagram cards.
+const CARD_PRIMARY_BTN: React.CSSProperties = {
+  flex: 1, height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  borderRadius: 11, border: 'none', background: C.accent, color: C.ink,
+  fontSize: 13, fontWeight: 700, cursor: 'pointer',
+}
+const CARD_GHOST_BTN: React.CSSProperties = {
+  flex: 'none', height: 40, padding: '0 14px', borderRadius: 11,
+  border: `1px solid ${C.border}`, background: 'transparent', color: C.muted,
+  fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+}
+
 const EYEBROW: React.CSSProperties = {
   fontSize: 10.5, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: C.muted3,
 }
@@ -346,12 +358,10 @@ function PlanMsg({ msg, workspace, onApply, onUndo, onDiscard }: {
       )}
       {msg.state === 'open' && n > 0 && (
         <div style={{ marginTop: 14, display: 'flex', gap: 9 }}>
-          <button onClick={onApply} className="c4ai-pri"
-            style={{ flex: 1, height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 11, border: 'none', background: C.accent, color: C.ink, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          <button onClick={onApply} className="c4ai-pri" style={CARD_PRIMARY_BTN}>
             <Check size={15} /> Apply {plural(n, 'change', 'changes')}
           </button>
-          <button onClick={onDiscard} className="c4ai-ghost"
-            style={{ flex: 'none', height: 40, padding: '0 14px', borderRadius: 11, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={onDiscard} className="c4ai-ghost" style={CARD_GHOST_BTN}>
             Discard
           </button>
         </div>
@@ -419,12 +429,10 @@ function GenMsg({ msg, workspace, hasUnsaved, onStop, onLoad, onConfirm, onDisca
       )}
       {!msg.confirmReplace ? (
         <div style={{ marginTop: 13, display: 'flex', gap: 9 }}>
-          <button onClick={() => { if (workspace) onConfirm(true); else onLoad(parsed.workspace) }} className="c4ai-pri"
-            style={{ flex: 1, height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 11, border: 'none', background: C.accent, color: C.ink, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          <button onClick={() => { if (workspace) onConfirm(true); else onLoad(parsed.workspace) }} className="c4ai-pri" style={CARD_PRIMARY_BTN}>
             <Check size={15} /> Load diagram
           </button>
-          <button onClick={onDiscard} className="c4ai-ghost"
-            style={{ flex: 'none', height: 40, padding: '0 14px', borderRadius: 11, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={onDiscard} className="c4ai-ghost" style={CARD_GHOST_BTN}>
             Discard
           </button>
         </div>

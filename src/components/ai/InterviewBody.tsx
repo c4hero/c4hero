@@ -22,12 +22,7 @@ function escapeRegExp(s: string): string {
 // open-ended; "Keep going" adds another round).
 const INTERVIEW_TARGET = 5
 
-export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: {
-  provider: AiProvider
-  /** Rendered as the tail of the Improve flow: auto-start, apply via the ledger
-   *  (onApply) instead of the standalone preview, and offer a skip-out. */
-  embedded?: boolean; onApply?: (plan: EditPlan) => void; onSkipQuestions?: () => void
-}) {
+export function InterviewBody({ provider }: { provider: AiProvider }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
 
@@ -71,15 +66,9 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
     useWorkspaceStore.setState({ focusElementId: mentioned[0].id })
   }, [mentioned])
 
-  // Embedded (Improve-flow tail): kick the first question off automatically so the
-  // interview begins without a separate "Start" screen.
-  useEffect(() => {
-    if (embedded && workspace && view && !started && !plan && !run.loading) start()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [embedded, workspace, view, started])
-
   // A failed stream leaves a partial question dangling — drop it so retry starts
   // clean and the box falls back to the last settled question.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (run.error) setStreamingQ(null) }, [run.error])
 
   if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
@@ -156,18 +145,6 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
         </div>
       )}
       {!started && !plan ? (
-        embedded ? (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '14px 4px', fontSize: 13, color: C.muted2 }}>
-              {run.error
-                ? <span>Couldn’t start the questions.</span>
-                : <><Loader2 size={15} className="animate-spin" color="#c4b5fd" /> Preparing a few questions about <span style={{ color: C.text2 }}>{viewLabel(v)}</span>…</>}
-            </div>
-            {onSkipQuestions && (
-              <button onClick={onSkipQuestions} className="c4ai-ghost" style={{ marginTop: 6, width: '100%', height: 34, borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>Skip the questions →</button>
-            )}
-          </div>
-        ) : (
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '6px 0 2px' }}>
             <span style={{ position: 'relative', width: 60, height: 60, borderRadius: 16, background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c4b5fd', animation: 'c4ai-pop .5s cubic-bezier(.34,1.56,.64,1) both' }}>
@@ -191,7 +168,6 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
             {run.loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} {run.loading ? 'Starting…' : 'Start interview'} {!run.loading && <ArrowRight size={15} />}
           </button>
         </div>
-        )
       ) : (
         <p style={blurb}>Filling in <span style={{ color: '#7dd3fc' }}>{viewLabel(v)}</span>. Answer a few questions; c4hero turns them into model updates.</p>
       )}
@@ -242,10 +218,7 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
               </button>
             </div>
           </div>
-          {embedded && onSkipQuestions && (
-            <button onClick={onSkipQuestions} className="c4ai-ghost" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>Skip the questions →</button>
-          )}
-          {qa.length > 0 && !embedded && <PlanPreviewBar provider={provider} ws={ws} view={v} history={history} />}
+          {qa.length > 0 && <PlanPreviewBar provider={provider} ws={ws} view={v} history={history} />}
         </>
       )}
 
@@ -271,7 +244,6 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
           <Actions>
             <button className="c4ai-pri" style={primaryBtn} disabled={!planLines.length}
               onClick={() => {
-                if (onApply) { onApply(plan); return }
                 // Keep the panel open: apply, then reset the conversation and show
                 // the applied summary with the start screen ready for another round.
                 const info = runApply(plan, ws)
@@ -279,7 +251,7 @@ export function InterviewBody({ provider, embedded, onApply, onSkipQuestions }: 
                 reground()
                 setApplied(info)
               }}>
-              {onApply ? 'Apply & finish' : 'Apply changes'}
+              Apply changes
             </button>
             <button className="c4ai-sec" style={secondaryBtn} onClick={() => setPlan(null)}>Back</button>
           </Actions>

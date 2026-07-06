@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useAiSettingsStore, isAiReady } from '@/store/ai-settings'
 import { missingInfoGaps } from '@/lib/ai'
+import { viewScopeIds } from '@/components/ai/sweepModel'
 import { useArrowNav } from '@/hooks/useArrowNav'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
@@ -60,10 +61,7 @@ export default function FloatingToolRail() {
   const pendingCount = useMemo(() => {
     if (!aiReady || !workspace) return 0
     const v = activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
-    const ids = v
-      ? new Set<string>([...v.elements.map((e) => e.id), ...v.relationships.map((r) => r.id)])
-      : undefined
-    return missingInfoGaps(workspace, ids).length
+    return missingInfoGaps(workspace, viewScopeIds(v)).length
   }, [aiReady, workspace, activeViewKey])
 
   const reactFlow = useReactFlow()

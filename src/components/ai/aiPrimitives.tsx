@@ -54,8 +54,8 @@ export function Notice({ text }: { text: string | null }) {
 
 /** Post-apply summary card: what landed, what was skipped and why, and a
  *  one-shot Undo offered only while nothing else has touched the model since. */
-export function AppliedSummary({ info, liveWs, onUndo, hint }: {
-  info: AppliedInfo; liveWs: Workspace | null; onUndo: () => void; hint?: string
+export function AppliedSummary({ info, liveWs, onUndo }: {
+  info: AppliedInfo; liveWs: Workspace | null; onUndo: () => void
 }) {
   const canUndo = info.undoTarget !== null && info.undoTarget === liveWs
   return (
@@ -71,7 +71,6 @@ export function AppliedSummary({ info, liveWs, onUndo, hint }: {
         )}
       </div>
       <Notice text={info.skipText} />
-      {hint && <div style={{ marginTop: 10, fontSize: 12, color: C.muted2, lineHeight: 1.45 }}>{hint}</div>}
     </Card>
   )
 }

@@ -20,15 +20,12 @@ export const VIEW_TITLE: Partial<Record<AiView, string>> = {
   interview: 'Interview', adr: 'Draft ADR',
 }
 
-/** Which category of work produced a ledger entry. */
-export type CatId = 'missing' | 'review' | 'interview'
-
 // Icon + label per missing-info kind.
-export const KIND: Record<GapKind, { icon: LucideIcon; label: string; prompt: string }> = {
-  title: { icon: Type, label: 'title', prompt: 'Still has a placeholder name.' },
-  desc: { icon: Pencil, label: 'description', prompt: 'This element has no description.' },
-  tech: { icon: Cpu, label: 'technology', prompt: 'No technology is set.' },
-  rel: { icon: Link2, label: 'label', prompt: 'This relationship is untyped.' },
+export const KIND: Record<GapKind, { icon: LucideIcon; label: string }> = {
+  title: { icon: Type, label: 'title' },
+  desc: { icon: Pencil, label: 'description' },
+  tech: { icon: Cpu, label: 'technology' },
+  rel: { icon: Link2, label: 'label' },
 }
 
 export const SEV: Record<ReviewSeverity, { label: string; bg: string; color: string }> = {
@@ -50,7 +47,7 @@ export function findingOptions(f: ReviewFinding): ReviewFixOption[] {
 // One applied change in the review worklist's revert ledger. We store the forward
 // ops (not an inverse): revert rebuilds the model by replaying the kept entries' ops
 // on top of the pre-review baseline, so reversal is always exact regardless of op kind.
-export interface LedgerEntry { key: string; label: string; detail: string; cat: CatId; ops: EditOp[] }
+export interface LedgerEntry { key: string; label: string; detail: string; ops: EditOp[] }
 
 /** One (still-streaming or settled) deep-review finding in the Review tab,
  *  tagged with the scope it was generated for so the scope toggle can filter. */

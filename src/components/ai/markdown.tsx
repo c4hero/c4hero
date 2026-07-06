@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, memo, type ReactNode } from 'react'
 import { parseBlocks } from './markdownBlocks'
 import { C } from './aiTheme'
 
@@ -44,8 +44,10 @@ function Lines({ lines }: { lines: string[] }) {
 const CARET = <span style={{ animation: 'c4ai-node 1.1s ease-in-out infinite' }}> ▍</span>
 
 /** Rendered markdown. `caret` appends the streaming caret inside the last
- *  block, so it trails the text instead of dropping to its own line. */
-export function Md({ text, caret }: { text: string; caret?: boolean }) {
+ *  block, so it trails the text instead of dropping to its own line. Memoized:
+ *  streaming re-renders the whole thread per token, and without this every
+ *  settled bubble would fully re-parse its markdown each time. */
+export const Md = memo(function Md({ text, caret }: { text: string; caret?: boolean }) {
   const blocks = parseBlocks(text)
   if (!blocks.length) return caret ? CARET : null
   return (
@@ -90,4 +92,4 @@ export function Md({ text, caret }: { text: string; caret?: boolean }) {
       })}
     </>
   )
-}
+})

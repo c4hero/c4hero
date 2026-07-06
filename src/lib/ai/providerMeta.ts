@@ -28,7 +28,10 @@ export interface AiProviderMeta {
   keyPlaceholder: string
   keyHelpUrl: string
   keyHelpLabel: string
-  /** Host the browser connects to directly (shown in the privacy note + CSP). */
+  /** Host the browser connects to directly (shown in the privacy note). Must
+   *  also be listed in BOTH static CSP connect-src copies — index.html and
+   *  vercel.json — or the browser silently blocks the provider (guarded by
+   *  providerMeta.csp.test.ts). */
   endpointHost: string
 }
 
