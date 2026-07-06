@@ -11,7 +11,7 @@ describe('normalizeAiSettings', () => {
     expect(s.models.openai).toBe('gpt-5-mini')
     expect(s.models.gemini).toBe('gemini-2.5-flash')
     expect(s.panelPos).toBeNull()
-    expect(s.showInTopBar).toBe(true)
+    expect(s.enabled).toBe(true)
     expect(s.routeCheapDrafts).toBe(true)
   })
 
@@ -26,9 +26,9 @@ describe('normalizeAiSettings', () => {
     expect(normalizeAiSettings({ panelPos: 'nope' }).panelPos).toBeNull()
   })
 
-  it('preserves showInTopBar when set to false', () => {
-    expect(normalizeAiSettings({ showInTopBar: false }).showInTopBar).toBe(false)
-    expect(normalizeAiSettings({ showInTopBar: 'nope' }).showInTopBar).toBe(true)
+  it('preserves the launcher (enabled) flag when set to false', () => {
+    expect(normalizeAiSettings({ enabled: false }).enabled).toBe(false)
+    expect(normalizeAiSettings({ enabled: 'nope' }).enabled).toBe(true)
   })
 
   it('preserves valid per-provider values', () => {
@@ -104,10 +104,11 @@ describe('draftModel (per-task routing, TEA-48)', () => {
 })
 
 describe('isAiReady', () => {
-  it('requires enabled and a non-empty key for the active provider', () => {
+  it('requires a non-empty key for the active provider, independent of the launcher toggle', () => {
     const base = normalizeAiSettings({ provider: 'anthropic', apiKeys: { anthropic: 'sk-x', openai: '' } })
     expect(isAiReady(base)).toBe(true)
-    expect(isAiReady({ ...base, enabled: false })).toBe(false)
+    // `enabled` only hides the launcher button; AI stays usable from the palette.
+    expect(isAiReady({ ...base, enabled: false })).toBe(true)
     // Switching to a provider with no key makes it not-ready.
     expect(isAiReady({ ...base, provider: 'openai' })).toBe(false)
   })

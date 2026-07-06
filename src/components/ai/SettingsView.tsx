@@ -134,7 +134,8 @@ export function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?
             <UsageRow />
 
             <Switch
-              label="Enable AI features" hint="Show the AI assistant and its commands."
+              label="Show AI assistant"
+              hint="Show the assistant button on the toolbar. It stays reachable from the command palette (press I) and the app menu either way."
               on={enabled} onToggle={() => update({ enabled: !enabled })}
             />
             <Switch

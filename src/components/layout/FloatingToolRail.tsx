@@ -49,6 +49,9 @@ export default function FloatingToolRail() {
   // reflect/toggle either — otherwise it can't dismiss a settings-opened panel.
   const aiOpen = useWorkspaceStore((s) => s.aiPanelOpen || s.aiSettingsOpen)
   const aiReady = useAiSettingsStore(isAiReady)
+  // Launcher visibility. When off, the assistant is still reachable from the
+  // command palette (I) and the app menu — hiding the button doesn't disable AI.
+  const showLauncher = useAiSettingsStore((s) => s.enabled)
   const [aiHover, setAiHover] = useState(false)
   // Pending quick-fixes the assistant can resolve — surfaced as a count badge on
   // the AI button so the work waiting inside is visible without opening it.
@@ -155,9 +158,11 @@ export default function FloatingToolRail() {
         gap: 10,
       }}
     >
-      {/* AI assistant — its own button above the tool rail. Shows two states:
-          a filled accent background while the dialog is open, and a status dot
-          (green = key set + AI on, grey = off / needs setup). */}
+      {/* AI assistant — its own button above the tool rail, shown only when the
+          launcher is enabled (Show AI assistant). Two states: a filled accent
+          background while the dialog is open, and a status dot (green = key set,
+          grey = needs setup). Hidden entirely when the launcher is turned off. */}
+      {showLauncher && (
       <button
         type="button"
         className="glass-panel"
@@ -202,6 +207,7 @@ export default function FloatingToolRail() {
           <span style={{ pointerEvents: 'none', position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: '50%', background: aiReady ? '#22c55e' : 'var(--color-text-muted)', border: `2px solid ${aiOpen ? 'var(--color-accent)' : 'var(--glass-bg-heavy)'}` }} />
         )}
       </button>
+      )}
 
     <div
       className="glass-panel"

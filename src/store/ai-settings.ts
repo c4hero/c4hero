@@ -14,7 +14,10 @@ import {
 export interface PanelPos { x: number; y: number }
 
 export interface AiSettings {
-  /** Master toggle. When false, all AI UI is hidden. */
+  /** Whether the AI assistant launcher (the spark button on the tool rail) is
+   *  shown. When false, the launcher is hidden but the assistant is still
+   *  reachable from the command palette (I) and the app menu — it's a visibility
+   *  preference, not a kill switch. */
   enabled: boolean
   /** Currently selected provider. */
   provider: AiProviderId
@@ -25,9 +28,6 @@ export interface AiSettings {
   models: Record<AiProviderId, string>
   /** Where the user dragged the assistant panel; null until first moved. */
   panelPos: PanelPos | null
-  /** Show the AI button in the top bar. When false, the assistant is still
-   *  reachable from the command palette. */
-  showInTopBar: boolean
   /** Route mechanical drafts (auto-describe, technology drafts, tag/field
    *  suggestions) to the provider's cheap tier, reserving the selected model for
    *  review / interview / generate. On by default; a BYOK cost saver. */
@@ -48,7 +48,6 @@ const DEFAULTS: AiSettings = {
   apiKeys: emptyKeys(),
   models: defaultModels(),
   panelPos: null,
-  showInTopBar: true,
   routeCheapDrafts: true,
 }
 
@@ -87,7 +86,6 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     apiKeys,
     models,
     panelPos: isPanelPos(source.panelPos) ? source.panelPos : DEFAULTS.panelPos,
-    showInTopBar: typeof source.showInTopBar === 'boolean' ? source.showInTopBar : DEFAULTS.showInTopBar,
     routeCheapDrafts: typeof source.routeCheapDrafts === 'boolean' ? source.routeCheapDrafts : DEFAULTS.routeCheapDrafts,
   }
 }
@@ -112,9 +110,11 @@ export function draftModel(settings: AiSettings): string {
   return AI_PROVIDER_META[settings.provider].cheapModel || model
 }
 
-/** True when AI is enabled and the active provider has a non-empty key. */
+/** True when the active provider has a non-empty key — i.e. AI can actually run.
+ *  Independent of `enabled` (which only hides/shows the launcher): the assistant
+ *  works from the command palette even when its rail button is hidden. */
 export function isAiReady(settings: AiSettings): boolean {
-  return settings.enabled && (settings.apiKeys[settings.provider]?.trim().length ?? 0) > 0
+  return (settings.apiKeys[settings.provider]?.trim().length ?? 0) > 0
 }
 
 // ─── Persistence ────────────────────────────────────────────────────
