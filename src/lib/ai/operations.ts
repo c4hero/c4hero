@@ -269,6 +269,9 @@ export function applyEditPlan(
           // from the model must not reach the store.
           location: op.location === 'External' || op.location === 'Internal' ? op.location : undefined,
         })
+        // Keep the merged tags as the new base, so a second same-plan tags op on
+        // this element merges onto them rather than the pre-update set.
+        if (tags) tagsById.set(id, tags)
         ok(op)
         break
       }
