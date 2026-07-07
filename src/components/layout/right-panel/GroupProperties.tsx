@@ -52,15 +52,15 @@ export default function GroupProperties({ group, onClose }: { group: Group; onCl
         </span>
         <button
           onClick={() => confirmDelete(`Delete group "${group.name}"?`, () => { deleteGroup(group.id); onClose() })}
-          className="btn-icon !min-h-6 !min-w-6 !p-1"
+          className="btn-icon !min-h-7 !min-w-7 !p-1"
           title="Delete group"
           aria-label="Delete group"
           style={{ color: 'var(--color-text-muted)' }}
         >
-          <Trash2 size={12} />
+          <Trash2 size={14} />
         </button>
-        <button onClick={onClose} className="btn-icon !min-h-6 !min-w-6 !p-1" title="Close" aria-label="Close panel">
-          <X size={12} />
+        <button onClick={onClose} className="btn-icon !min-h-7 !min-w-7 !p-1" title="Close" aria-label="Close panel">
+          <X size={14} />
         </button>
       </div>
 
