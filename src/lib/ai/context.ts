@@ -224,8 +224,13 @@ export function serializeViewContext(ws: Workspace, view: View): string {
 
   lines.push('')
   lines.push('RELATIONSHIPS ON SCREEN (id | source -> destination | description):')
+  // A relationship is drawn only when it's in the view's explicit relationship list
+  // AND both endpoints are shown — the canvas renderer intersects the two (see
+  // canvasBuilders). Endpoints-present alone would surface links the view
+  // intentionally omits, grounding the assistant on relationships the user can't see.
+  const viewRelIds = new Set(view.relationships.map((r) => r.id))
   const onScreenRels = ws.model.relationships.filter(
-    (r) => viewElementIds.has(r.sourceId) && viewElementIds.has(r.destinationId),
+    (r) => viewRelIds.has(r.id) && viewElementIds.has(r.sourceId) && viewElementIds.has(r.destinationId),
   )
   if (onScreenRels.length === 0) {
     lines.push('  (none)')

@@ -353,6 +353,21 @@ describe('applyEditPlan — tags / status / owner (TEA-45)', () => {
     expect(patch).toHaveProperty('owner', 'Platform')
   })
 
+  it('merges tags onto the structural base when updating an element added in the same plan', () => {
+    // addContainer seeds the store's ['Element','Container']; a follow-up
+    // updateElement targeting that new ref by tags must MERGE onto it, not
+    // replace it with an empty base (which would drop the structural tags).
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'addContainer', ref: 'q', parent: 'shop', name: 'Queue' },
+      { op: 'updateElement', id: 'q', tags: ['MessageBus'] },
+    ] }, actions, ws)
+    // ref 'q' resolved to 'gen1'; tags patch keeps Element/Container.
+    const call = vi.mocked(actions.updateElement).mock.calls.find(([id]) => id === 'gen1')!
+    expect(call[1].tags).toEqual(['Element', 'Container', 'MessageBus'])
+  })
+
   it('does not emit a tags key when every proposed tag already exists (no-op, no phantom undo)', () => {
     const ws = makeWorkspace()
     ws.model.softwareSystems[0].containers[1].tags = ['Element', 'Container', 'Database']
