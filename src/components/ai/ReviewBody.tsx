@@ -167,9 +167,14 @@ export function ReviewBody({
           <div style={{ padding: '2px 16px 6px' }}>
             <DeepReviewCard onClick={onRunReview} />
           </div>
-        ) : reviewRan && findings.length === 0 && !allClear ? (
+        ) : reviewRan && !allClear ? (
+          // A deep review has run for this scope. Always offer a re-run — the
+          // model may have changed, or the user may just want a fresh pass —
+          // whether or not it surfaced findings this time.
           <div style={{ padding: '9px 16px 4px', borderTop: '1px solid rgba(88,166,255,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ flex: 1, fontSize: 12, color: C.muted2 }}>No findings in this scope.</span>
+            <span style={{ flex: 1, fontSize: 12, color: C.muted2 }}>
+              {findings.length === 0 ? 'No findings in this scope.' : `Deep review of ${scope === 'view' ? 'this view' : 'the whole model'} complete.`}
+            </span>
             <button onClick={onRunReview} className="c4ai-link" style={{ ...TEXT_LINK, color: C.accent }}>Re-run</button>
           </div>
         ) : null}
@@ -197,10 +202,13 @@ export function ReviewBody({
             <div style={{ marginTop: 3 }}>
               <ScopeToggle scope={scope} onToggle={onToggleScope} />
             </div>
-            {!reviewRan && (
+            {!reviewRan ? (
               <div style={{ width: '100%', marginTop: 14, textAlign: 'left' }}>
                 <DeepReviewCard onClick={onRunReview} />
               </div>
+            ) : (
+              // Already reviewed and clean — still let the user run it again.
+              <button onClick={onRunReview} className="c4ai-link" style={{ ...TEXT_LINK, color: C.accent, marginTop: 2 }}>Re-run deep review</button>
             )}
           </div>
         )}
