@@ -34,7 +34,7 @@ function clearHighlightFiltersWithStash(s: WorkspaceState): boolean {
 export type NavigationSlice = Pick<WorkspaceState,
   | 'activeViewKey' | 'viewHistory'
   | 'pendingZoomConfirm' | 'createViewDefaults'
-  | 'focusElementId' | 'focusZoom' | 'focusRelationshipId' | 'focusRelationshipNonce' | 'clearFocusElement'
+  | 'focusElementId' | 'clearFocusElement'
   | 'setActiveView' | 'drillInto' | 'zoomInto'
   | 'confirmZoomCreate' | 'cancelZoomConfirm' | 'openCreateViewFromZoom'
   | 'setCreateViewDefaults' | 'navigateBack' | 'focusViewForElements'
@@ -51,11 +51,8 @@ export const createNavigationSlice: StateCreator<
   pendingZoomConfirm: null,
   createViewDefaults: null,
   focusElementId: null,
-  focusZoom: null,
-  focusRelationshipId: null,
-  focusRelationshipNonce: 0,
 
-  clearFocusElement: () => set({ focusElementId: null, focusZoom: null }),
+  clearFocusElement: () => set({ focusElementId: null }),
 
   // After a batch (AI) apply that suppressed per-op view switching, navigate
   // ONCE to the view that best shows the newly-created elements. Prefer DEPTH:

@@ -41,10 +41,7 @@ export interface ApplyResult {
 // updates, then view creation (so an auto-populated view captures the elements
 // and relationships just added), then deletes last (so nothing a relationship
 // needs is gone first).
-// Exported so repo-scan's proposal merge sorts by the SAME order applyEditPlan
-// applies in — otherwise the two paths could disagree and drop children whose
-// parent resolves in one ordering but not the other.
-export function editOpRank(op: EditOp): number {
+function editOpRank(op: EditOp): number {
   switch (op.op) {
     case 'addPerson':
     case 'addSoftwareSystem': return 0
@@ -160,6 +157,18 @@ export function applyEditPlan(
     return nameToId.get(token.trim().toLowerCase()) ?? null
   }
 
+  // Like resolve() but WITHOUT the name fallback. Used by updateElement/
+  // deleteElement: a name that collides across the model (two "Database"s) must
+  // NOT silently retarget the first-walked one — a ref or real id is
+  // unambiguous, a bare name is skipped. (Creates/relationships keep name
+  // resolution via resolve(), where picking an existing element by name is the
+  // intended convenience and the op isn't destructive to an unrelated element.)
+  const resolveExact = (token: string | undefined): string | null => {
+    if (!token) return null
+    if (refMap.has(token)) return refMap.get(token)!
+    return validIds.has(token) ? token : null
+  }
+
   const skip = (op: EditOp, reason: string) => applied.push({ op, ok: false, reason })
   const ok = (op: EditOp) => applied.push({ op, ok: true })
 
@@ -227,18 +236,23 @@ export function applyEditPlan(
         break
       }
       case 'updateElement': {
-        if (!validIds.has(op.id)) { skip(op, 'element not found'); break }
+        // Resolve a same-plan ref or a real id (NOT a name — see resolveExact).
+        // The edit prompt tells the model it may update an element it just added
+        // by its ref, so a bare validIds check would silently drop those ops
+        // (created container, unset status/owner).
+        const id = resolveExact(op.id)
+        if (!id) { skip(op, 'element not found'); break }
         const name = optStr(op.name)
         const description = optStr(op.description)
         const technology = optStr(op.technology)
         const owner = optStr(op.owner)
         const status = optStatus(op.status)
-        const tags = mergeTags(tagsById.get(op.id), op.tags)
+        const tags = mergeTags(tagsById.get(id), op.tags)
         // The store treats a present-but-undefined key as "clear this field"
         // (so the UI can blank out a text box). Only include a key here when
         // the op actually set it, so an op that e.g. only changes location
         // doesn't wipe out the element's existing name/description/technology.
-        actions.updateElement(op.id, {
+        actions.updateElement(id, {
           ...(name && { name }),
           ...(description && { description }),
           ...(technology && { technology }),
@@ -284,8 +298,9 @@ export function applyEditPlan(
         break
       }
       case 'deleteElement': {
-        if (!validIds.has(op.id)) { skip(op, 'element not found'); break }
-        actions.deleteElement(op.id)
+        const id = resolveExact(op.id)
+        if (!id) { skip(op, 'element not found'); break }
+        actions.deleteElement(id)
         ok(op)
         break
       }

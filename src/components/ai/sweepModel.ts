@@ -1,7 +1,7 @@
 import { Type, Pencil, Cpu, Link2, type LucideIcon } from 'lucide-react'
 import type { View } from '@/types/model'
 import type {
-  AiFeatureId, GapKind, ReviewSeverity, ReviewFinding, ReviewFixOption, EditOp,
+  AiFeatureId, GapKind, ReviewSeverity, ReviewFinding, EditOp,
 } from '@/lib/ai'
 import { C } from './aiTheme'
 
@@ -28,21 +28,14 @@ export const KIND: Record<GapKind, { icon: LucideIcon; label: string }> = {
   rel: { icon: Link2, label: 'label' },
 }
 
-export const SEV: Record<ReviewSeverity, { label: string; bg: string; color: string }> = {
-  high: { label: 'High', bg: 'rgba(239,68,68,0.12)', color: C.dangerText },
-  medium: { label: 'Medium', bg: 'rgba(249,115,22,0.12)', color: '#fdba74' },
-  low: { label: 'Low', bg: 'rgba(132,141,151,0.14)', color: '#9aa3ad' },
+export const SEV: Record<ReviewSeverity, { label: string; color: string }> = {
+  high: { label: 'High', color: C.dangerText },
+  medium: { label: 'Medium', color: '#fdba74' },
+  low: { label: 'Low', color: '#9aa3ad' },
 }
 
 // Instruction reused to draft technologies for the missing-info "tech" gaps.
 export const TECH_INSTRUCTION = 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.'
-
-/** The candidate fixes for a finding: its explicit `options`, or a single option
- *  synthesized from its `operations` when the model didn't break out alternatives. */
-export function findingOptions(f: ReviewFinding): ReviewFixOption[] {
-  if (f.options?.length) return f.options
-  return f.operations?.length ? [{ label: f.suggestion, operations: f.operations }] : []
-}
 
 // One applied change in the review worklist's revert ledger. We store the forward
 // ops (not an inverse): revert rebuilds the model by replaying the kept entries' ops
@@ -50,8 +43,10 @@ export function findingOptions(f: ReviewFinding): ReviewFixOption[] {
 export interface LedgerEntry { key: string; label: string; detail: string; ops: EditOp[] }
 
 /** One (still-streaming or settled) deep-review finding in the Review tab,
- *  tagged with the scope it was generated for so the scope toggle can filter. */
-export interface FindingItem { key: string; scope: 'view' | 'model'; finding: ReviewFinding }
+ *  tagged with the scope it was generated for so the scope toggle can filter.
+ *  For a 'view' finding, `viewKey` records which view it was generated on, so
+ *  switching views doesn't show one view's findings against another. */
+export interface FindingItem { key: string; scope: 'view' | 'model'; viewKey?: string; finding: ReviewFinding }
 
 /** What "Undo last" pops: an apply (revert the ledger entry) or a skip/dismiss
  *  (restore the row). */

@@ -83,6 +83,30 @@ describe('applyEditPlan', () => {
     expect(result.appliedCount).toBe(1)
   })
 
+  it('does NOT resolve updateElement/deleteElement by element name — only ref or id — so a name collision cannot retarget the wrong element', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'Database', description: 'x' }, // display name, not the id 'db'
+      { op: 'deleteElement', id: 'Web App' },                    // display name, not the id 'web'
+    ] }, actions, ws)
+    expect(actions.updateElement).not.toHaveBeenCalled()
+    expect(actions.deleteElement).not.toHaveBeenCalled()
+    expect(result.skippedCount).toBe(2)
+    expect(result.applied[0].reason).toBe('element not found')
+  })
+
+  it('resolves updateElement against a ref created earlier in the same plan', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'addContainer', ref: 'new1', parent: 'shop', name: 'Payments' },
+      { op: 'updateElement', id: 'new1', description: 'Handles payments' },
+    ] }, actions, ws)
+    // ref 'new1' resolves to the id the store returned ('gen1').
+    expect(actions.updateElement).toHaveBeenCalledWith('gen1', { description: 'Handles payments' })
+  })
+
   it('skips self-relationships', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()

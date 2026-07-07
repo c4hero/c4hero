@@ -172,8 +172,6 @@ beforeEach(() => {
     canvasGuideOpen: false,
     multiSelectMode: false,
     focusElementId: null,
-    focusZoom: null,
-    focusRelationshipId: null,
   })
   useSettingsStore.setState({
     minimapMode: 'never',
@@ -587,29 +585,12 @@ describe('Canvas node dragging', () => {
   })
 })
 
-describe('Canvas focus and reveal', () => {
+describe('Canvas focus', () => {
   it('centers on a focused element and clears the focus request', async () => {
     seed('cont')
     await renderCanvas()
     await screen.findByText('C1')
-    act(() => { useWorkspaceStore.setState({ focusElementId: 'c1', focusZoom: null }) })
-    await waitFor(() => {
-      expect(useWorkspaceStore.getState().focusElementId).toBeNull()
-    }, { timeout: 3000 })
-  })
-
-  it('frames both relationship endpoints on reveal with zoom', async () => {
-    seed('cont')
-    await renderCanvas()
-    await screen.findByText('C1')
-    act(() => {
-      useWorkspaceStore.setState({
-        focusElementId: 'c1',
-        focusZoom: 1.4,
-        focusRelationshipId: 'r1',
-        focusRelationshipNonce: 1,
-      })
-    })
+    act(() => { useWorkspaceStore.setState({ focusElementId: 'c1' }) })
     await waitFor(() => {
       expect(useWorkspaceStore.getState().focusElementId).toBeNull()
     }, { timeout: 3000 })
@@ -619,24 +600,11 @@ describe('Canvas focus and reveal', () => {
     seed('cont')
     await renderCanvas()
     await screen.findByText('C1')
-    act(() => { useWorkspaceStore.setState({ focusElementId: 'ghost', focusZoom: null }) })
+    act(() => { useWorkspaceStore.setState({ focusElementId: 'ghost' }) })
     await waitFor(() => {
       expect(useWorkspaceStore.getState().focusElementId).toBeNull()
     }, { timeout: 5000 })
   }, 10000)
-
-  it('clears a stale relationship reveal via the backstop timer', async () => {
-    seed('cont')
-    await renderCanvas()
-    await screen.findByText('C1')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    act(() => {
-      useWorkspaceStore.setState({ focusRelationshipId: 'r1', focusRelationshipNonce: 9 })
-    })
-    act(() => { vi.advanceTimersByTime(4100) })
-    expect(useWorkspaceStore.getState().focusRelationshipId).toBeNull()
-    vi.useRealTimers()
-  })
 })
 
 describe('Canvas viewport persistence', () => {

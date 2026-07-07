@@ -1,7 +1,7 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiChatTurn, AiStreamRequest } from '../types'
 import { AiError } from '../types'
 import { isRecord } from '@/lib/guards'
-import { postJson, postStream, parseAndValidate, type UsageDelta } from './http'
+import { postJson, postStream, parseAndValidate, jsonSchemaSystemPrompt, type UsageDelta } from './http'
 
 // Google Gemini (Generative Language API), called directly from the browser with
 // the user's key. For structured output we request a JSON response MIME type and
@@ -88,7 +88,7 @@ export function createGeminiProvider(config: AiProviderConfig): AiProvider {
     },
 
     async completeJson<T>(req: AiJsonRequest<T>): Promise<T> {
-      const system = `${req.system}\n\nReturn ONLY a JSON object that conforms to this JSON Schema:\n${JSON.stringify(req.schema)}`
+      const system = jsonSchemaSystemPrompt(req.system, req.schema)
       const text = await call(config, {
         systemInstruction: { parts: [{ text: system }] },
         contents: toContents(req.history, req.user),

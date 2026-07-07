@@ -48,7 +48,7 @@ export function elementNameMap(ws: Workspace): Map<string, string> {
   return map
 }
 
-function escapeRegExp(s: string): string {
+export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 

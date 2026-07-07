@@ -3,12 +3,12 @@ import {
   ArrowRight, Box, Check, CheckCircle2, ChevronDown, Layers, Link2, Loader2,
   Stethoscope, TriangleAlert, Type, Unlink, Wand2, X, type LucideIcon,
 } from 'lucide-react'
-import { flattenElements, elementNameMap, type MissingGap, type ReviewFixOption } from '@/lib/ai'
+import { flattenElements, elementNameMap, findingOptions, type MissingGap, type ReviewFixOption } from '@/lib/ai'
 import type { Workspace } from '@/types/model'
 import { C } from './aiTheme'
 import { plural } from './aiHelpers'
 import { ErrorLine, Notice } from './aiPrimitives'
-import { KIND, SEV, findingOptions, type FindingItem } from './sweepModel'
+import { KIND, SEV, type FindingItem } from './sweepModel'
 import { MdInline } from './markdown'
 
 // ─── The Review tab: the completeness worklist ("the janitor") ───────
@@ -56,7 +56,7 @@ export function ReviewBody({
   openId, onToggleRow,
   onApplyGap, onApplyFinding, onSkip,
   applyAllCount, onApplyAll,
-  appliedCount, canUndoLast, onUndoLast,
+  appliedCount, canUndoLast, undoStale, onUndoLast,
   skipNotice, error,
 }: {
   workspace: Workspace
@@ -86,6 +86,9 @@ export function ReviewBody({
   onApplyAll: () => void
   appliedCount: number
   canUndoLast: boolean
+  /** The model has changed outside the review since the last apply, so the
+   *  replay-from-baseline undo would clobber that work — offer a hint, not the button. */
+  undoStale: boolean
   onUndoLast: () => void
   skipNotice: string | null
   error: string | null
@@ -217,7 +220,9 @@ export function ReviewBody({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 10, border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.06)', fontSize: 11.5, color: C.text2 }}>
               <CheckCircle2 size={13} color={C.green} style={{ flex: 'none' }} />
               <span style={{ flex: 1 }}>{plural(appliedCount, 'change', 'changes')} applied this session</span>
-              <button onClick={onUndoLast} className="c4ai-link" style={{ ...TEXT_LINK, color: C.accent }}>Undo last</button>
+              {undoStale
+                ? <span title="The diagram changed since — undo from the canvas (⌘Z) instead" style={{ color: C.muted3, fontSize: 11 }}>edited since</span>
+                : <button onClick={onUndoLast} className="c4ai-link" style={{ ...TEXT_LINK, color: C.accent }}>Undo last</button>}
             </div>
           )}
           <Notice text={skipNotice} />

@@ -132,25 +132,6 @@ export function getCreatableTypes(workspace: Workspace, activeViewKey: string | 
   return result
 }
 
-/**
- * Element IDs that belong to a container/component view's *own* scope — the
- * scoped system's containers, or the scoped container's components. Lets a
- * caller tell a view's native members apart from cross-scope elements (e.g. a
- * different system's containers that shouldn't live in this view). Returns an
- * empty set for landscape/context views, which have no single owning scope.
- */
-export function getScopeMemberIds(workspace: Workspace, view: View): Set<string> {
-  if (view.type === 'container' && view.softwareSystemId) {
-    const sys = workspace.model.softwareSystems.find((s) => s.id === view.softwareSystemId)
-    return new Set(sys ? sys.containers.map((c) => c.id) : [])
-  }
-  if (view.type === 'component' && view.containerId) {
-    const cont = workspace.model.softwareSystems.flatMap((s) => s.containers).find((c) => c.id === view.containerId)
-    return new Set(cont ? cont.components.map((c) => c.id) : [])
-  }
-  return new Set()
-}
-
 export { getFirstViewKey, findChildView as findChildViewHelper }
 
 /**

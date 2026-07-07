@@ -139,6 +139,13 @@ function AppView({
   // ops on top of it, which reverses any op kind without inverse bookkeeping.
   const [ledger, setLedger] = usePersistentState<LedgerEntry[]>('review.ledger', [])
   const [baseline, setBaseline] = usePersistentState<Workspace | null>('review.baseline', null)
+  // The workspace ref produced by the last review apply/replay. "Undo last" is a
+  // replay-from-baseline that would wipe any edit made outside the review since —
+  // so if the live workspace has diverged from this ref (a manual canvas edit, a
+  // Chat-tab apply, a freshly loaded model), the apply-undo is withheld. The ref
+  // survives close→reopen (the store keeps the same workspace object), so the
+  // guard holds across the whole session, not just this mount.
+  const [expectedWs, setExpectedWs] = usePersistentState<Workspace | null>('review.expectedWs', null)
   const [undoStack, setUndoStack] = usePersistentState<ReviewUndo[]>('review.undo', [])
   const [findings, setFindings] = usePersistentState<FindingItem[]>('review.findings', [])
   // Which scopes a deep review has run for — turns the run CTA into "Re-run".
@@ -177,8 +184,13 @@ function AppView({
     [workspace, scopeIds, skipped, appliedKeys],
   )
   const activeFindings = useMemo(
-    () => findings.filter((f) => f.scope === scope && !skipped[f.key] && !appliedKeys.has(f.key)),
-    [findings, scope, skipped, appliedKeys],
+    // Coalesce null→undefined to match how runReview stores viewKey (a viewless
+    // workspace stores `undefined`, so the filter must compare against undefined,
+    // not raw null, or it would hide every streamed finding).
+    () => findings.filter((f) => f.scope === scope
+      && (scope === 'model' || f.viewKey === (activeViewKey ?? undefined))
+      && !skipped[f.key] && !appliedKeys.has(f.key)),
+    [findings, scope, activeViewKey, skipped, appliedKeys],
   )
   const thingsCount = activeGaps.length + activeFindings.length
   const counts = useMemo(
@@ -189,6 +201,15 @@ function AppView({
     () => activeGaps.filter((g) => (drafts[g.key] ?? '').trim()).length,
     [activeGaps, drafts],
   )
+  // "Has a deep review run?" is per scope — and, for the view scope, per view, so
+  // reviewing one view doesn't mark another as already reviewed.
+  const ranKey = scope === 'view' ? `view:${activeViewKey ?? ''}` : 'model'
+  // The last undo entry is an apply-revert whose replay-from-baseline would clobber
+  // work done outside the review since it was applied. Withhold it when the live
+  // model has diverged from what the review last produced (skip-reverts are safe —
+  // they don't touch the model).
+  const lastUndo = undoStack[undoStack.length - 1]
+  const undoStale = !!lastUndo && lastUndo.type === 'apply' && expectedWs !== null && workspace !== expectedWs
 
   // ── Drafting (quick-win suggested values) ──
   // Lazily draft values for the visible gaps whenever the Review tab shows gaps
@@ -242,23 +263,30 @@ function AppView({
     const ws = useWorkspaceStore.getState().workspace
     if (!ws || reviewLoading) return
     const runScope = scope
-    // Drop findings from a prior run of this scope so a re-run streams clean.
-    setFindings((f) => f.filter((x) => x.scope !== runScope))
+    const runViewKey = runScope === 'view' ? (activeViewKey ?? undefined) : undefined
+    const runRanKey = runScope === 'view' ? `view:${runViewKey ?? ''}` : 'model'
+    // Drop findings from a prior run of THIS scope+view so a re-run streams clean,
+    // without touching another view's still-valid findings.
+    setFindings((f) => f.filter((x) => !(x.scope === runScope && (runScope === 'model' || x.viewKey === runViewKey))))
     reviewAbortRef.current?.abort()
     const ac = new AbortController()
     reviewAbortRef.current = ac
     setReviewLoading(true); setReviewError(null)
+    // Track whether anything streamed, so a Stop before the first finding doesn't
+    // mark the scope reviewed (which would falsely read as "Nothing to improve").
+    let streamed = 0
     try {
       // Findings surface as each one parses — the user can triage the first
       // while the rest are still generating (the model emits high-severity first).
       await reviewArchitectureStream(provider, ws, runScope === 'view' ? (activeView ?? null) : null, (finding) => {
-        setFindings((f) => [...f, { key: `f:${findingKeyRef.current++}`, scope: runScope, finding }])
+        streamed++
+        setFindings((f) => [...f, { key: `f:${findingKeyRef.current++}`, scope: runScope, viewKey: runViewKey, finding }])
       }, ac.signal)
-      setReviewRan((r) => ({ ...r, [runScope]: true }))
+      setReviewRan((r) => ({ ...r, [runRanKey]: true }))
     } catch (err) {
       // A user Stop surfaces as an AbortError — keep what streamed, no error.
       if (!ac.signal.aborted && !isAbortError(err)) setReviewError(aiErrorMessage(err))
-      else setReviewRan((r) => ({ ...r, [runScope]: true }))
+      else if (streamed > 0) setReviewRan((r) => ({ ...r, [runRanKey]: true }))
     } finally {
       if (reviewAbortRef.current === ac) { reviewAbortRef.current = null; setReviewLoading(false) }
     }
@@ -273,6 +301,7 @@ function AppView({
     setSkipNotice(summarizeSkips(applyPlanToStore({ operations: entry.ops }, ws)))
     setLedger((l) => [...l, entry])
     setUndoStack((u) => [...u, { type: 'apply', key: entry.key }])
+    setExpectedWs(useWorkspaceStore.getState().workspace)
     setOpenId((id) => (id === entry.key ? null : id))
   }
   function applyGap(gap: MissingGap) {
@@ -310,6 +339,7 @@ function AppView({
     setSkipNotice(summarizeSkips(applyPlanToStore({ operations: entries.flatMap((e) => e.ops) }, ws)))
     setLedger((l) => [...l, ...entries])
     setUndoStack((u) => [...u, ...entries.map((e) => ({ type: 'apply' as const, key: e.key }))])
+    setExpectedWs(useWorkspaceStore.getState().workspace)
     setOpenId(null)
   }
   // Revert is replay-from-baseline: reset the model to the pre-review snapshot
@@ -330,10 +360,17 @@ function AppView({
     } finally {
       store.setBatchApplying(false)
     }
+    // Record the workspace this replay produced, so a subsequent undo can tell
+    // whether the user has edited outside the review since.
+    setExpectedWs(useWorkspaceStore.getState().workspace)
   }
   function undoLast() {
     if (!undoStack.length) return
     const last = undoStack[undoStack.length - 1]
+    // Guard the destructive path: replaying the baseline over a diverged model
+    // would wipe intervening work. The Undo button is already hidden in this
+    // state (undoStale) — this is defense in depth for the keyboard/programmatic path.
+    if (last.type === 'apply' && undoStale) return
     setUndoStack((u) => u.slice(0, -1))
     if (last.type === 'skip') {
       setSkipped((s) => { const n = { ...s }; delete n[last.key]; return n })
@@ -355,7 +392,10 @@ function AppView({
   useEffect(() => {
     if (!feature) return
     setView(FEATURE_TO_VIEW[feature])
-    if (feature === 'review' && workspace && !reviewLoading) void runReview()
+    // Only auto-start a (paid) review when this scope+view hasn't been reviewed
+    // yet — re-invoking the palette command to reopen an existing worklist must
+    // not wipe the streamed findings and re-spend tokens.
+    if (feature === 'review' && workspace && !reviewLoading && !reviewRan[ranKey]) void runReview()
     useWorkspaceStore.getState().clearAiPanelFeature()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feature, workspace])
@@ -421,12 +461,12 @@ function AppView({
               scope={scope} onToggleScope={toggleScope}
               counts={counts} thingsCount={thingsCount}
               gaps={activeGaps} drafts={drafts} draftsLoading={draftsLoading}
-              findings={activeFindings} reviewRan={!!reviewRan[scope]} reviewLoading={reviewLoading}
+              findings={activeFindings} reviewRan={!!reviewRan[ranKey]} reviewLoading={reviewLoading}
               reviewError={reviewError} onRunReview={() => void runReview()} onStopReview={stopReview}
               openId={openId} onToggleRow={(key) => setOpenId((id) => (id === key ? null : key))}
               onApplyGap={applyGap} onApplyFinding={applyFinding} onSkip={skipItem}
               applyAllCount={applyAllCount} onApplyAll={applyAll}
-              appliedCount={ledger.length} canUndoLast={undoStack.length > 0} onUndoLast={undoLast}
+              appliedCount={ledger.length} canUndoLast={undoStack.length > 0} undoStale={undoStale} onUndoLast={undoLast}
               skipNotice={skipNotice} error={error}
             />
           ) : (

@@ -3,7 +3,7 @@ import type { View, ViewType } from '@/types/model'
 import type { AiProvider } from './types'
 import { makeWorkspace } from './testFixture'
 import { isEditOp } from './schema'
-import { interviewAsk, interviewKickoffMessage, interviewBuildPlan } from './features'
+import { interviewBuildPlan } from './features'
 import {
   generateSystem, generateUser, reviewSystem, reviewUser, describeSystem, describeUser,
   editSystem, editUser, adrSystem, adrUser, interviewSystem, interviewKickoff,
@@ -74,10 +74,6 @@ describe('interview features', () => {
     async complete() { return 'What datastore backs the cart?' },
     async completeJson<T>(): Promise<T> { return { operations: [{ op: 'updateElement', id: 'web', description: 'edge' }] } as T },
   }
-
-  it('asks the next question', async () => {
-    expect(await interviewAsk(provider, ws, view, [], interviewKickoffMessage(view))).toMatch(/datastore/)
-  })
 
   it('turns the transcript into a plan', async () => {
     const plan = await interviewBuildPlan(provider, ws, view, [{ role: 'user', content: 'cart writes to db' }])

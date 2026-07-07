@@ -10,7 +10,6 @@ describe('normalizeAiSettings', () => {
     expect(s.models.anthropic).toBe('claude-sonnet-4-6')
     expect(s.models.openai).toBe('gpt-5-mini')
     expect(s.models.gemini).toBe('gemini-2.5-flash')
-    expect(s.panelPos).toBeNull()
     expect(s.enabled).toBe(true)
     expect(s.routeCheapDrafts).toBe(true)
   })
@@ -18,12 +17,6 @@ describe('normalizeAiSettings', () => {
   it('preserves routeCheapDrafts when set to false', () => {
     expect(normalizeAiSettings({ routeCheapDrafts: false }).routeCheapDrafts).toBe(false)
     expect(normalizeAiSettings({ routeCheapDrafts: 'nope' }).routeCheapDrafts).toBe(true)
-  })
-
-  it('preserves a valid panel position and rejects a malformed one', () => {
-    expect(normalizeAiSettings({ panelPos: { x: 100, y: 40 } }).panelPos).toEqual({ x: 100, y: 40 })
-    expect(normalizeAiSettings({ panelPos: { x: 'a' } }).panelPos).toBeNull()
-    expect(normalizeAiSettings({ panelPos: 'nope' }).panelPos).toBeNull()
   })
 
   it('preserves the launcher (enabled) flag when set to false', () => {

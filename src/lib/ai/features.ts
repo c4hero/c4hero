@@ -24,16 +24,6 @@ import { extractDsl } from './dsl'
 // fake) plus inputs, and returns parsed/validated results. No store access here —
 // the UI layer applies results via the store and the operations/describe appliers.
 
-/** Generate diagram → returns DSL text ready for parseDSL. */
-export async function generateDiagram(provider: AiProvider, description: string): Promise<string> {
-  const text = await provider.complete({
-    system: generateSystem(),
-    user: generateUser(description),
-    maxTokens: 8000,
-  })
-  return extractDsl(text)
-}
-
 /** Streaming generate: fires `onText` with each raw chunk (fences/preamble and
  *  all — the caller shows it as a live preview) and resolves with the extracted,
  *  parse-ready DSL. Falls back to a single non-streaming `complete` (one `onText`
@@ -74,15 +64,22 @@ export async function reviewArchitecture(
   const internal = view ? viewScopeInternalIds(ws, view) : new Set<string>()
   const humanize = makeHumanizer(ws) // compile the id→name map once for the whole review
   const findings = toReviewResult(raw).findings
-    .map((f) => ({
-      ...f,
-      title: humanize(f.title),
-      detail: humanize(f.detail),
-      suggestion: humanize(f.suggestion),
-      options: f.options?.map((o) => ({ ...o, label: humanize(o.label) })),
-    }))
+    .map((f) => humanizeFinding(f, humanize))
     .filter((f) => !isExternalMisplacement(f, internal))
   return { findings }
+}
+
+/** Apply the id→name humanizer to a finding's prose fields (title, detail,
+ *  suggestion, and each fix-option label). Shared by the bulk `reviewArchitecture`
+ *  map and the per-finding streaming path so both humanize identically. */
+function humanizeFinding(f: ReviewFinding, humanize: (s: string) => string): ReviewFinding {
+  return {
+    ...f,
+    title: humanize(f.title),
+    detail: humanize(f.detail),
+    suggestion: humanize(f.suggestion),
+    options: f.options?.map((o) => ({ ...o, label: humanize(o.label) })),
+  }
 }
 
 /** A "boundary" finding whose every referenced element is external to the view's
@@ -102,13 +99,7 @@ function isExternalMisplacement(f: ReviewFinding, internalIds: Set<string>): boo
 function finishFinding(raw: unknown, humanize: (s: string) => string, internal: Set<string>): ReviewFinding | null {
   const f = toReviewFinding(raw)
   if (!f) return null
-  const h: ReviewFinding = {
-    ...f,
-    title: humanize(f.title),
-    detail: humanize(f.detail),
-    suggestion: humanize(f.suggestion),
-    options: f.options?.map((o) => ({ ...o, label: humanize(o.label) })),
-  }
+  const h = humanizeFinding(f, humanize)
   return isExternalMisplacement(h, internal) ? null : h
 }
 
@@ -297,26 +288,16 @@ export async function draftAdr(provider: AiProvider, ws: Workspace | null, topic
   })
 }
 
-/** Grounded Q&A: answer a question about the model in prose. Grounds on `view`
- *  (the current screen) when given, otherwise the whole model. */
-export async function answerQuestion(
-  provider: AiProvider, ws: Workspace, view: View | null, question: string,
-): Promise<string> {
-  return provider.complete({
-    system: qaSystem(),
-    user: qaUser(ws, view, question),
-    maxTokens: 2000,
-  })
-}
-
-/** Streaming `answerQuestion`: fires `onText` with each token and resolves with
- *  the full answer. Falls back to a single non-streaming `complete` when the
- *  provider has no SSE. Pass `signal` to cancel. */
+/** Streaming Q&A: fires `onText` with each token and resolves with
+ *  the full answer. `history` carries the prior chat turns so follow-ups ("tell
+ *  me more about the second one") resolve against the conversation, not just the
+ *  model snapshot in the current question. Falls back to a single non-streaming
+ *  `complete` when the provider has no SSE. Pass `signal` to cancel. */
 export async function answerQuestionStream(
   provider: AiProvider, ws: Workspace, view: View | null, question: string,
-  onText: (delta: string) => void, signal?: AbortSignal,
+  history: AiChatTurn[], onText: (delta: string) => void, signal?: AbortSignal,
 ): Promise<string> {
-  const req = { system: qaSystem(), user: qaUser(ws, view, question), maxTokens: 2000 }
+  const req = { system: qaSystem(), history, user: qaUser(ws, view, question), maxTokens: 2000 }
   if (!provider.completeStream) {
     const text = await provider.complete(req)
     onText(text)
@@ -325,26 +306,7 @@ export async function answerQuestionStream(
   return provider.completeStream({ ...req, onText, signal })
 }
 
-/** Interview: ask the next question given the prior turns. `history` is the full
- *  alternating message log; `userMessage` is the kickoff (first turn) or the
- *  user's latest answer. Returns the next question text. */
-export async function interviewAsk(
-  provider: AiProvider, ws: Workspace, view: View, history: AiChatTurn[], userMessage: string,
-): Promise<string> {
-  return provider.complete({
-    system: interviewSystem(ws, view),
-    history,
-    user: userMessage,
-    // The question itself is short, but the default models are reasoning models
-    // that spend thinking tokens from this same budget — keep enough headroom
-    // that the answer isn't starved (a 600 cap left interviews empty/truncated).
-    maxTokens: 2500,
-    // Same system (serialized view context) re-sent every turn — cache it.
-    cacheSystem: true,
-  })
-}
-
-/** Streaming `interviewAsk`: fires `onText` with each token as it arrives and
+/** Streaming interview ask: fires `onText` with each token as it arrives and
  *  resolves with the full question. Falls back to a single non-streaming
  *  `complete` (one `onText` with the whole text) when the provider has no SSE
  *  support. Pass `signal` to cancel. */

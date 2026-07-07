@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { missingInfoGaps, modelHealthPercent, healthFieldCounts, gapToOp, type MissingGap } from './sweep'
+import { missingInfoGaps, healthFieldCounts, gapToOp, type MissingGap } from './sweep'
 import { makeWorkspace } from './testFixture'
 import type { Workspace } from '@/types/model'
 
@@ -33,7 +33,7 @@ describe('missingInfoGaps', () => {
     expect(gapOf(gaps, 'rel:r2')?.targetKind).toBe('relationship')
   })
 
-  it('limits gaps and health to the given view scope ids', () => {
+  it('limits gaps to the given view scope ids', () => {
     const ws = makeWorkspace()
     const ids = new Set(['web', 'db']) // web is fully filled; db is missing desc + tech
     const keys = missingInfoGaps(ws, ids).map((g) => g.key)
@@ -41,8 +41,6 @@ describe('missingInfoGaps', () => {
     expect(keys).not.toContain('desc:cart') // out of scope
     expect(keys).not.toContain('desc:admin')
     expect(keys).not.toContain('rel:r2') // relationship not in scope
-    // Over {web, db}: web desc+tech filled, db both empty → 2 of 4 slots = 50%.
-    expect(modelHealthPercent(ws, ids)).toBe(50)
   })
 
   it('flags an element with a blank name as a title gap', () => {
@@ -74,36 +72,6 @@ describe('missingInfoGaps', () => {
       views: emptyViews(),
     }
     expect(missingInfoGaps(ws)).toEqual([])
-  })
-})
-
-describe('modelHealthPercent', () => {
-  it('is 100 for an empty model', () => {
-    const ws: Workspace = { name: 'E', model: { people: [], softwareSystems: [], relationships: [], groups: [] }, views: emptyViews() }
-    expect(modelHealthPercent(ws)).toBe(100)
-  })
-
-  it('is 100 for a fully-specified model', () => {
-    const ws: Workspace = {
-      name: 'T',
-      model: {
-        people: [{ id: 'p', type: 'person', name: 'User', description: 'A user', tags: [], properties: {} }],
-        softwareSystems: [{
-          id: 's', type: 'softwareSystem', name: 'Sys', description: 'sys', tags: [], properties: {},
-          containers: [{ id: 'c', type: 'container', name: 'API', description: 'api', technology: 'Go', tags: [], properties: {}, components: [] }],
-        }],
-        relationships: [{ id: 'r', sourceId: 'p', destinationId: 'c', description: 'uses', tags: [], properties: {} }],
-        groups: [],
-      },
-      views: emptyViews(),
-    }
-    expect(modelHealthPercent(ws)).toBe(100)
-  })
-
-  it('drops below 100 when the fixture has gaps', () => {
-    // 6 desc slots (3 filled) + 3 tech slots (1 filled) + 2 rel slots (1 filled)
-    // = 5/11 ≈ 45%.
-    expect(modelHealthPercent(makeWorkspace())).toBe(45)
   })
 })
 

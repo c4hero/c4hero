@@ -1,6 +1,6 @@
 // Public API for the BYOK AI engine.
 //
-//   import { createAnthropicProvider, generateDiagram } from '@/lib/ai'
+//   import { createProvider, generateDiagramStream } from '@/lib/ai'
 //
 // The provider is the only network-touching piece; everything else is pure
 // orchestration over an injected AiProvider, so features stay testable.
@@ -12,10 +12,10 @@ export type {
 } from './types'
 export { AiError, aiErrorMessage } from './types'
 
-export { findingsToMarkdown, sortedFindings, isActionable, findingOptions } from './review'
-export { classifyScope, classifyPlanScopes, type PlanScope } from './planScope'
+export { isActionable, findingOptions } from './review'
+export { classifyPlanScopes, type PlanScope } from './planScope'
 export {
-  missingInfoGaps, modelHealthPercent, healthFieldCounts, gapToOp,
+  missingInfoGaps, healthFieldCounts, gapToOp,
   type MissingGap, type GapKind,
 } from './sweep'
 export type { AiProviderId, AiProviderMeta, AiModelOption } from './providerMeta'
@@ -28,9 +28,9 @@ export {
 } from './usage'
 
 export {
-  generateDiagram, generateDiagramStream, reviewArchitecture, reviewArchitectureStream,
-  autoDescribe, planEdit, draftAdr, answerQuestion, answerQuestionStream,
-  interviewAsk, interviewAskStream, interviewKickoffMessage, interviewBuildPlan, suggestTags,
+  generateDiagramStream, reviewArchitecture, reviewArchitectureStream,
+  autoDescribe, planEdit, draftAdr, answerQuestionStream,
+  interviewAskStream, interviewKickoffMessage, interviewBuildPlan, suggestTags,
   suggestFieldValue,
 } from './features'
 
@@ -38,7 +38,7 @@ export {
   serializeContext, serializeViewContext, viewLabel,
   flattenElements, elementIdSet, elementNameMap,
   elementsMissingDescription, relationshipsMissingDescription,
-  viewScopeInternalIds, humanizeIds, makeHumanizer,
+  viewScopeInternalIds, humanizeIds, makeHumanizer, escapeRegExp,
 } from './context'
 
 export { extractDsl, stripCodeFence } from './dsl'
@@ -48,8 +48,3 @@ export { detectComposeMode, isQuestion } from './composeMode'
 export {
   applyEditPlan, describeOps, summarizeSkips, type EditActions, type ApplyResult,
 } from './operations'
-
-export {
-  countMissingDescriptions, buildDescribePreview, applyDescribePreview,
-  type DescribeActions, type DescribePreview, type DescribePreviewItem,
-} from './describe'

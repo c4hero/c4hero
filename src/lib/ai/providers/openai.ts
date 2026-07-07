@@ -1,7 +1,7 @@
 import type { AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiStreamRequest } from '../types'
 import { AiError } from '../types'
 import { isRecord } from '@/lib/guards'
-import { postJson, postStream, parseAndValidate, type UsageDelta } from './http'
+import { postJson, postStream, parseAndValidate, jsonSchemaSystemPrompt, type UsageDelta } from './http'
 
 // OpenAI Chat Completions API, called directly from the browser with the user's
 // key. For structured output we use JSON mode (`response_format: json_object`)
@@ -89,7 +89,7 @@ export function createOpenAiProvider(config: AiProviderConfig): AiProvider {
 
     async completeJson<T>(req: AiJsonRequest<T>): Promise<T> {
       // JSON mode requires the word "json" in the prompt; the schema block supplies it.
-      const system = `${req.system}\n\nReturn ONLY a JSON object that conforms to this JSON Schema:\n${JSON.stringify(req.schema)}`
+      const system = jsonSchemaSystemPrompt(req.system, req.schema)
       const text = await call(config, {
         // Higher floor than the caller passes: reasoning models share this budget
         // with their reasoning tokens, so structured output needs room.

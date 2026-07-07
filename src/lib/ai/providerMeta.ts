@@ -27,7 +27,6 @@ export interface AiProviderMeta {
   keyLabel: string
   keyPlaceholder: string
   keyHelpUrl: string
-  keyHelpLabel: string
   /** Host the browser connects to directly (shown in the privacy note). Must
    *  also be listed in BOTH static CSP connect-src copies — index.html and
    *  vercel.json — or the browser silently blocks the provider (guarded by
@@ -52,7 +51,6 @@ export const AI_PROVIDER_META: Record<AiProviderId, AiProviderMeta> = {
     keyLabel: 'Anthropic API key',
     keyPlaceholder: 'sk-ant-…',
     keyHelpUrl: 'https://console.anthropic.com/settings/keys',
-    keyHelpLabel: 'Get a key from the Anthropic Console',
     endpointHost: 'api.anthropic.com',
   },
   openai: {
@@ -69,7 +67,6 @@ export const AI_PROVIDER_META: Record<AiProviderId, AiProviderMeta> = {
     keyLabel: 'OpenAI API key',
     keyPlaceholder: 'sk-…',
     keyHelpUrl: 'https://platform.openai.com/api-keys',
-    keyHelpLabel: 'Get a key from the OpenAI dashboard',
     endpointHost: 'api.openai.com',
   },
   gemini: {
@@ -85,7 +82,6 @@ export const AI_PROVIDER_META: Record<AiProviderId, AiProviderMeta> = {
     keyLabel: 'Google AI API key',
     keyPlaceholder: 'AIza…',
     keyHelpUrl: 'https://aistudio.google.com/app/apikey',
-    keyHelpLabel: 'Get a key from Google AI Studio',
     endpointHost: 'generativelanguage.googleapis.com',
   },
 }

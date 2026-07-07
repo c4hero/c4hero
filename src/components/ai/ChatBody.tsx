@@ -5,13 +5,13 @@ import { parseDSL } from '@/lib/dsl'
 import {
   answerQuestionStream, planEdit, generateDiagramStream,
   detectComposeMode, isQuestion, describeOps, flattenElements,
-  type AiProvider, type EditPlan, type EditOp,
+  type AiProvider, type EditPlan, type EditOp, type AiChatTurn,
 } from '@/lib/ai'
 import type { Workspace } from '@/types/model'
 import { C } from './aiTheme'
 import { useAiRun, runApply, plural } from './aiHelpers'
 import { ErrorLine } from './aiPrimitives'
-import { usePersistentState } from './sessionCache'
+import { usePersistentState, clearAiSession } from './sessionCache'
 import { MicButton } from './dictation'
 import { Md } from './markdown'
 
@@ -142,11 +142,20 @@ export function ChatBody({ provider, workspace, scopeIds, onClose }: {
 
     if (intent === 'ask' && ws) {
       const i = msgs.length + 1 // index of the answer placeholder appended below
+      // Prior Q&A exchanges, so a follow-up resolves against the conversation.
+      // Only settled (user → done answer) pairs, to keep strict role alternation.
+      const history: AiChatTurn[] = []
+      for (let k = 0; k < msgs.length - 1; k++) {
+        const a = msgs[k], b = msgs[k + 1]
+        if (a.kind === 'user' && b.kind === 'answer' && b.done) {
+          history.push({ role: 'user', content: a.text }, { role: 'assistant', content: b.text })
+        }
+      }
       setMsgs((m) => [...m, { kind: 'user', text }, { kind: 'answer', text: '', done: false }])
       run.go(
         async (signal) => {
           try {
-            return await answerQuestionStream(provider, ws, null, text, (d) => patch(i, (msg) => ({ ...msg, text: (msg as { text: string }).text + d } as ChatMsg)), signal)
+            return await answerQuestionStream(provider, ws, null, text, history, (d) => patch(i, (msg) => ({ ...msg, text: (msg as { text: string }).text + d } as ChatMsg)), signal)
           } finally {
             // A Stop (or error) still settles the bubble — no stuck caret.
             patch(i, { done: true })
@@ -192,6 +201,11 @@ export function ChatBody({ provider, workspace, scopeIds, onClose }: {
     patch(i, { state: 'open', undoTarget: null, skipText: null })
   }
   function loadGen(i: number, ws: Workspace) {
+    // A generated model replaces the current one in place (same route), so the
+    // route-keyed session cache wouldn't reset on its own. Drop the review
+    // baseline/ledger/findings from the old model, or a later "Undo last" in the
+    // Review tab would replay the old baseline over this fresh diagram.
+    clearAiSession('review.')
     loadWorkspace(ws)
     patch(i, { loaded: true, confirmReplace: false })
     onClose()

@@ -3,7 +3,7 @@ import type { WorkspaceState } from '../workspace-types'
 import { announce } from '@/lib/announce'
 import { validateScope } from '@/lib/scopeValidation'
 import { undoSnapshot } from '../internals'
-import { findViewHelper } from '../workspace-helpers'
+import { findViewHelper, clearSelectionDraft } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 
 /** Undo / redo history. Other slices append snapshots to undoStack via
@@ -79,9 +79,7 @@ export const createUndoSlice: StateCreator<
     const activeStillExists = s.activeViewKey ? !!findViewHelper(ws, s.activeViewKey) : false
     s.activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(ws)
     s.viewHistory = s.viewHistory.filter(k => !!findViewHelper(ws, k))
-    s.selectedElementIds = []
-    s.selectedRelationshipId = null
-    s.selectedGroupId = null
+    clearSelectionDraft(s)
     s.scopeViolations = validateScope(ws)
   }),
 })

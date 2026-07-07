@@ -77,10 +77,6 @@ function classifyWithCtx(op: EditOp, view: View, ctx: ScopeCtx, viewRefs?: Reado
   }
 }
 
-export function classifyScope(op: EditOp, ws: Workspace, view: View, viewRefs?: ReadonlySet<string>): PlanScope {
-  return classifyWithCtx(op, view, buildScopeCtx(ws, view), viewRefs)
-}
-
 /** Classify every op in a plan, resolving in-plan-created refs: an op that
  *  references an element added earlier in the same plan (which lands on this
  *  view) is correctly tagged 'view' rather than 'model'. */

@@ -9,6 +9,7 @@ import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
+import { isCanvasRoute } from '@/lib/routes'
 
 const log = createLogger('keyboard')
 
@@ -148,7 +149,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     // Toggling it elsewhere would clear the selection and pop the panel open
     // later when a diagram is finally opened, so gate it on the same condition.
     if (!store.workspace) return
-    if (!/\/collection\/[^/]+\/[^/]+/.test(window.location.pathname)) return
+    if (!isCanvasRoute(window.location.pathname)) return
     if (store.aiPanelOpen) {
       store.setAiPanelOpen(false)
       store.setAiSettingsOpen(false)

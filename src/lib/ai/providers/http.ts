@@ -17,6 +17,14 @@ export type UsageParser = (data: unknown) => UsageDelta | null
 
 const log = createLogger('ai/provider')
 
+/** Build the structured-output system prompt: the caller's system text plus the
+ *  JSON Schema the model must conform to. OpenAI (JSON mode needs the word "json"
+ *  present) and Gemini (JSON MIME type) append the identical block, so it lives
+ *  here instead of being copy-pasted per provider. */
+export function jsonSchemaSystemPrompt(system: string, schema: unknown): string {
+  return `${system}\n\nReturn ONLY a JSON object that conforms to this JSON Schema:\n${JSON.stringify(schema)}`
+}
+
 export function mapHttpError(status: number, message: string): AiError {
   // 408 (Request Timeout) and 504 (Gateway Timeout) read as connectivity issues.
   if (status === 408 || status === 504) return new AiError('connection', message)

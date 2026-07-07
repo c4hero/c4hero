@@ -9,10 +9,6 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-/** Persisted top-left position of the (draggable) assistant panel, in viewport
- *  pixels. `null` means "not yet moved" — the panel sits at its default anchor. */
-export interface PanelPos { x: number; y: number }
-
 export interface AiSettings {
   /** Whether the AI assistant launcher (the spark button on the tool rail) is
    *  shown. When false, the launcher is hidden but the assistant is still
@@ -26,8 +22,6 @@ export interface AiSettings {
   apiKeys: Record<AiProviderId, string>
   /** Model id per provider (free text; suggestions come from provider metadata). */
   models: Record<AiProviderId, string>
-  /** Where the user dragged the assistant panel; null until first moved. */
-  panelPos: PanelPos | null
   /** Route mechanical drafts (auto-describe, technology drafts, tag/field
    *  suggestions) to the provider's cheap tier, reserving the selected model for
    *  review / interview / generate. On by default; a BYOK cost saver. */
@@ -47,12 +41,7 @@ const DEFAULTS: AiSettings = {
   provider: 'anthropic',
   apiKeys: emptyKeys(),
   models: defaultModels(),
-  panelPos: null,
   routeCheapDrafts: true,
-}
-
-function isPanelPos(value: unknown): value is PanelPos {
-  return isRecord(value) && typeof value.x === 'number' && typeof value.y === 'number'
 }
 
 const STORAGE_KEY = 'c4hero.ai.json'
@@ -85,7 +74,6 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     provider: isAiProviderId(source.provider) ? source.provider : DEFAULTS.provider,
     apiKeys,
     models,
-    panelPos: isPanelPos(source.panelPos) ? source.panelPos : DEFAULTS.panelPos,
     routeCheapDrafts: typeof source.routeCheapDrafts === 'boolean' ? source.routeCheapDrafts : DEFAULTS.routeCheapDrafts,
   }
 }

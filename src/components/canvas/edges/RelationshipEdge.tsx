@@ -10,7 +10,6 @@ import {
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
-import { useWorkspaceStore } from '@/store/workspace'
 
 interface RelationshipEdgeData {
   relationship: Relationship
@@ -52,14 +51,7 @@ function RelationshipEdge({
 }: EdgeProps & { data?: RelationshipEdgeData }) {
   const relationship = data?.relationship
   const relStyle = data?.relationshipStyle
-  // "Show in diagram" reveal: briefly emphasize + pulse this edge. The nonce is
-  // the pulse path's key so a repeat reveal of the same edge remounts it and
-  // replays the animation; on animation end the edge clears the reveal itself.
-  // Select the nonce ONLY for the revealed edge (else a stable 0), so a reveal
-  // re-renders just that edge, not every edge in the diagram.
-  const revealed = useWorkspaceStore((s) => s.focusRelationshipId === id)
-  const pulseNonce = useWorkspaceStore((s) => (s.focusRelationshipId === id ? s.focusRelationshipNonce : 0))
-  const emphasized = !!selected || revealed
+  const emphasized = !!selected
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
 
@@ -133,24 +125,6 @@ function RelationshipEdge({
         onMouseLeave={() => setHovered(false)}
         style={{ pointerEvents: 'stroke' }}
       />
-      {/* Reveal pulse: a glowing overlay that fades out, drawing the eye to the
-          relationship just framed by "Show in diagram". Keyed on the nonce so a
-          repeat reveal remounts and replays it; clears the reveal flag when the
-          animation ends (timing then tracks the actual mount, not a fixed timer). */}
-      {revealed && (
-        <path
-          key={pulseNonce}
-          d={edgePath}
-          className="c4-edge-reveal"
-          fill="none"
-          style={{ pointerEvents: 'none' }}
-          onAnimationEnd={() => {
-            if (useWorkspaceStore.getState().focusRelationshipId === id) {
-              useWorkspaceStore.setState({ focusRelationshipId: null })
-            }
-          }}
-        />
-      )}
       <BaseEdge
         id={id}
         path={edgePath}

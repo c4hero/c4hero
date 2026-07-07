@@ -73,19 +73,7 @@ export interface WorkspaceState extends UndoState {
   setLastSavedUndoLength: (n: number) => void
 
   // Focus request — set to an element ID to center the canvas on it, then cleared.
-  // `focusZoom`, when set, makes the canvas zoom-to-fit that node (capped at this
-  // maxZoom) instead of merely panning at the current zoom — used by "Show in
-  // diagram" so the revealed element is brought up close, not just centered.
   focusElementId: string | null
-  focusZoom: number | null
-  // Relationship reveal — set to a relationship id so "Show in diagram" frames
-  // BOTH of its endpoints (centering the edge between them) and pulses a
-  // highlight on the edge. Cleared when the edge's pulse animation ends (with a
-  // canvas backstop). `focusRelationshipNonce` bumps on every reveal so clicking
-  // the SAME relationship again re-triggers the pulse (the id alone wouldn't
-  // change, so nothing would re-fire).
-  focusRelationshipId: string | null
-  focusRelationshipNonce: number
   clearFocusElement: () => void
 
   // Canvas settings

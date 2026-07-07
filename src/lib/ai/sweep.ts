@@ -70,45 +70,8 @@ export function missingInfoGaps(ws: Workspace, scopeIds?: ReadonlySet<string>): 
 
 // ─── Model health (instant coverage %) ──────────────────────────────
 
-interface HealthCounts {
-  /** Total fillable slots: descriptions + technologies + relationship labels. */
-  checkable: number
-  /** Slots already filled. */
-  filled: number
-}
-
-/**
- * Coverage over the three things the sweep can fix: element descriptions,
- * container/component technologies, and relationship descriptions. Titles are
- * excluded — names are effectively always present, so they'd only pad the
- * denominator with always-filled slots.
- */
-function healthCounts(ws: Workspace, scopeIds?: ReadonlySet<string>): HealthCounts {
-  const all = flattenElements(ws)
-  const els = scopeIds ? all.filter((e) => scopeIds.has(e.id)) : all
-  const techBearing = els.filter((e) => e.type === 'container' || e.type === 'component')
-  const rels = (ws.model.relationships ?? []).filter((r) => !scopeIds || scopeIds.has(r.id))
-
-  const descSlots = els.length
-  const descFilled = els.filter((e) => !isBlank(e.description)).length
-  const techSlots = techBearing.length
-  const techFilled = techBearing.filter((e) => !isBlank(e.technology)).length
-  const relSlots = rels.length
-  const relFilled = rels.filter((r) => !isBlank(r.description)).length
-
-  return { checkable: descSlots + techSlots + relSlots, filled: descFilled + techFilled + relFilled }
-}
-
-/** Instant model-health percentage (0–100). 100 for an empty model. Pass
- *  `scopeIds` to measure only a view's elements/relationships. */
-export function modelHealthPercent(ws: Workspace, scopeIds?: ReadonlySet<string>): number {
-  const { checkable, filled } = healthCounts(ws, scopeIds)
-  if (checkable === 0) return 100
-  return Math.round((filled / checkable) * 100)
-}
-
 /** Field-level completeness for the review header ("X of Y fields complete").
- *  Unlike modelHealthPercent, always-present fields are counted in BOTH the
+ *  Always-present fields are counted in BOTH the
  *  numerator and the denominator — each element's type (and its name, when set)
  *  plus each relationship's endpoints — so a fresh model reads as mostly
  *  complete instead of a discouraging 0%. */

@@ -643,16 +643,13 @@ export default function Canvas() {
     }
   }, [onNodesChange, fitContentNodes, rebuildOverlays])
 
-  // Center view on newly created element
+  // Center view on newly created element (e.g. focused from the interview).
   const focusElementId = useWorkspaceStore((s) => s.focusElementId)
-  const focusZoom = useWorkspaceStore((s) => s.focusZoom)
   const clearFocusElement = useWorkspaceStore((s) => s.clearFocusElement)
   useEffect(() => {
     if (!focusElementId) return
     const targetId = focusElementId
-    const zoom = focusZoom
-    const relId = useWorkspaceStore.getState().focusRelationshipId
-    // Reveal often switches the active view first, which remounts the canvas
+    // A focus often switches the active view first, which remounts the canvas
     // nodes — so the target may not exist for several frames. Poll a bounded
     // number of frames instead of giving up after one, or the view changes but
     // the canvas never frames the element (left off-screen). Clear the one-shot
@@ -666,47 +663,17 @@ export default function Canvas() {
         clearFocusElement()
         return
       }
-      if (zoom != null) {
-        // Reveal ("Show in diagram"): zoom in to frame the target, not just pan.
-        // For a relationship, frame BOTH endpoints so the edge is centered
-        // between them; fall back to the single node if the edge isn't on this
-        // view (only one endpoint present).
-        const edge = relId ? reactFlowInstance.getEdge(relId) : null
-        const frame = edge && reactFlowInstance.getNode(edge.source) && reactFlowInstance.getNode(edge.target)
-          ? [{ id: edge.source }, { id: edge.target }]
-          : [{ id: targetId }]
-        reactFlowInstance.fitView({ nodes: frame, duration: 300, maxZoom: zoom, padding: 0.6 })
-      } else {
-        // New-element focus: center but keep the current zoom level.
-        reactFlowInstance.setCenter(
-          node.position.x + (node.measured?.width ?? 200) / 2,
-          node.position.y + (node.measured?.height ?? 100) / 2,
-          { duration: 300, zoom: reactFlowInstance.getZoom() },
-        )
-      }
+      // Center on the element but keep the current zoom level.
+      reactFlowInstance.setCenter(
+        node.position.x + (node.measured?.width ?? 200) / 2,
+        node.position.y + (node.measured?.height ?? 100) / 2,
+        { duration: 300, zoom: reactFlowInstance.getZoom() },
+      )
       clearFocusElement()
     }
     raf = requestAnimationFrame(run)
     return () => cancelAnimationFrame(raf)
-  }, [focusElementId, focusZoom, clearFocusElement, reactFlowInstance])
-
-  // Relationship reveal highlight: the edge clears focusRelationshipId itself
-  // when its pulse animation ends (so timing tracks the actual mount, even after
-  // a view switch). This is only a BACKSTOP — clear it after a generous window
-  // in case the edge never mounts (e.g. the relationship isn't on the resolved
-  // view), so a stale id can't make some other edge pulse later. Keyed on the
-  // nonce too, so a repeat reveal re-arms the backstop.
-  const focusRelationshipId = useWorkspaceStore((s) => s.focusRelationshipId)
-  const focusRelationshipNonce = useWorkspaceStore((s) => s.focusRelationshipNonce)
-  useEffect(() => {
-    if (!focusRelationshipId) return
-    const t = setTimeout(() => {
-      if (useWorkspaceStore.getState().focusRelationshipId === focusRelationshipId) {
-        useWorkspaceStore.setState({ focusRelationshipId: null })
-      }
-    }, 4000)
-    return () => clearTimeout(t)
-  }, [focusRelationshipId, focusRelationshipNonce])
+  }, [focusElementId, clearFocusElement, reactFlowInstance])
 
   // Suppress inspector opening during drag (works on touch too).
   // onSelectionChange fires at touch-start before any movement, so we schedule

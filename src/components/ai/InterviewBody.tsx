@@ -4,19 +4,13 @@ import { Loader2, Sparkles, ArrowRight, MessagesSquare, HelpCircle, CornerDownRi
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import {
   interviewAskStream, interviewKickoffMessage, interviewBuildPlan,
-  describeOps, flattenElements, viewLabel, classifyPlanScopes,
+  describeOps, flattenElements, viewLabel, classifyPlanScopes, escapeRegExp,
   type AiProvider, type EditPlan, type AiChatTurn, type PlanScope,
 } from '@/lib/ai'
 import type { View, Workspace } from '@/types/model'
 import { C, blurb, primaryBtn, secondaryBtn } from './aiTheme'
 import { useAiRun, runApply, type AppliedInfo } from './aiHelpers'
 import { Empty, Field, ErrorLine, AppliedSummary, Card, Actions, PlanList } from './aiPrimitives'
-
-/** Escape a string for safe use inside a RegExp (element names can contain
- *  regex metacharacters like dots or parens). */
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
 
 // Questions per round before offering to wrap up (the interview is otherwise
 // open-ended; "Keep going" adds another round).

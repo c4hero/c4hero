@@ -9,7 +9,7 @@ import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
 import { useAiProvider } from '@/store/ai-settings'
-import { autoDescribe, planEdit, suggestTags } from '@/lib/ai'
+import { suggestFieldValue, suggestTags } from '@/lib/ai'
 
 const STATUS_OPTIONS: { value: ElementStatus | undefined; label: string; color: string | null }[] = [
   { value: undefined, label: 'Not set', color: null },
@@ -68,10 +68,11 @@ export default function RightPanel() {
 
 // ─── AI auto-suggest helpers ─────────────────────────────────────────
 
-const TECH_SUGGEST_INSTRUCTION = 'Set a plausible technology for every container and component that currently has none, inferred from its name, description, and the rest of the model. Only set technology — do not rename, add, or remove anything.'
-
-// Structural type tags are implicit and not part of the user's taxonomy.
-const STRUCTURAL_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component', 'Relationship'])
+// The built-in / structural type tags — implicit, not part of the user's tag
+// taxonomy. Single source of truth for all three uses: excluded from the AI tag
+// vocabulary, treated as "no custom tags" by the suggest gate, and rendered
+// non-removable in the Tags tab. 'Database' is a subtype chip, not a user tag.
+const STRUCTURAL_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component', 'Database', 'Relationship'])
 
 /** Distinct custom tags already used across the model — the vocabulary AI tag
  *  suggestions are constrained to (keeps tagging consistent). */
@@ -146,14 +147,13 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
     setBusyField(fields.length > 1 ? 'all' : fields[0])
     try {
       if (fields.includes('description') && missingDesc) {
-        const r = await autoDescribe(draftProvider, workspace)
-        const hit = r.elements.find((p) => p.id === element.id)
-        if (hit?.description?.trim()) updateElement(element.id, { description: hit.description.trim() })
+        // One scoped draft for this field — not the whole-model autoDescribe batch.
+        const desc = await suggestFieldValue(draftProvider, workspace, 'desc', element.id)
+        if (desc) updateElement(element.id, { description: desc })
       }
       if (fields.includes('technology') && missingTech) {
-        const plan = await planEdit(draftProvider, workspace, TECH_SUGGEST_INSTRUCTION)
-        const op = plan.operations.find((o) => o.op === 'updateElement' && o.id === element.id && o.technology?.trim())
-        if (op && op.op === 'updateElement' && op.technology) updateTech(element.id, op.technology.trim())
+        const tech = await suggestFieldValue(draftProvider, workspace, 'tech', element.id)
+        if (tech) updateTech(element.id, tech)
       }
       if (fields.includes('tags') && missingTags) {
         const tags = await suggestTags(draftProvider, { name: element.name, type: element.type, description: element.description, technology: tech }, modelTagVocabulary(workspace))
@@ -709,11 +709,9 @@ function ElementRelationsTab({ elementId }: { elementId: string }) {
 
 // ─── Tags Tab ────────────────────────────────────────────────────────
 
-const BUILT_IN_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component', 'Database', 'Relationship'])
-
 function TagsTab({ tags, onUpdate, suggest }: { tags: string[]; onUpdate: (tags: string[]) => void; suggest?: { run: () => void; busy: boolean } }) {
   const [newTag, setNewTag] = useState('')
-  const noCustomTags = tags.every((t) => BUILT_IN_TAGS.has(t))
+  const noCustomTags = tags.every((t) => STRUCTURAL_TAGS.has(t))
 
   const addTag = useCallback(() => {
     const trimmed = newTag.trim()
@@ -724,7 +722,7 @@ function TagsTab({ tags, onUpdate, suggest }: { tags: string[]; onUpdate: (tags:
   }, [newTag, tags, onUpdate])
 
   const removeTag = (tag: string) => {
-    if (BUILT_IN_TAGS.has(tag)) return
+    if (STRUCTURAL_TAGS.has(tag)) return
     onUpdate(tags.filter((t) => t !== tag))
   }
 
@@ -733,7 +731,7 @@ function TagsTab({ tags, onUpdate, suggest }: { tags: string[]; onUpdate: (tags:
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((tag) => {
-            const isBuiltIn = BUILT_IN_TAGS.has(tag)
+            const isBuiltIn = STRUCTURAL_TAGS.has(tag)
             return (
               <span
                 key={tag}
