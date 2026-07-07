@@ -1209,6 +1209,16 @@ body {
     width: calc(100vw - 28px) !important;
     max-width: 360px !important;
   }
+  /* AI assistant: on desktop it docks against the left tool rail (left: 64).
+     On phones that rail moves to the bottom centre, so the panel has nothing
+     to dock against — centre it horizontally instead and lift its bottom edge
+     clear of the bottom-docked rail. Overrides the inline docked style. */
+  .c4ai {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 72px)) !important;
+  }
   /* Fallback button on the welcome screen for browsers without folder
      access — keep its CTA from running off the edge. */
   .welcome-fallback {
