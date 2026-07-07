@@ -107,6 +107,17 @@ describe('applyEditPlan', () => {
     expect(actions.updateElement).toHaveBeenCalledWith('gen1', { description: 'Handles payments' })
   })
 
+  it('merges tags onto structural tags for an element created earlier in the same plan', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'addContainer', ref: 'new1', parent: 'shop', name: 'Payments' },
+      { op: 'updateElement', id: 'new1', tags: ['Critical'] },
+    ] }, actions, ws)
+
+    expect(actions.updateElement).toHaveBeenCalledWith('gen1', expect.objectContaining({ tags: ['Element', 'Container', 'Critical'] }))
+  })
+
   it('skips self-relationships', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()

@@ -224,9 +224,10 @@ export function serializeViewContext(ws: Workspace, view: View): string {
 
   lines.push('')
   lines.push('RELATIONSHIPS ON SCREEN (id | source -> destination | description):')
-  const onScreenRels = ws.model.relationships.filter(
-    (r) => viewElementIds.has(r.sourceId) && viewElementIds.has(r.destinationId),
-  )
+  const relationshipsById = new Map(ws.model.relationships.map((r) => [r.id, r]))
+  const onScreenRels = view.relationships
+    .map((r) => relationshipsById.get(r.id))
+    .filter((r): r is Relationship => Boolean(r))
   if (onScreenRels.length === 0) {
     lines.push('  (none)')
   } else {

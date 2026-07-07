@@ -83,6 +83,19 @@ describe('viewLabel / serializeViewContext', () => {
     expect(text).toContain('r2 | Web App -> Database')
   })
 
+  it('does not include model relationships that are not rendered in the view', () => {
+    const hiddenRelationshipView: View = {
+      ...view,
+      relationships: [],
+    }
+    const text = serializeViewContext(makeWorkspace(), hiddenRelationshipView)
+    expect(text).toContain('web | container | Web App')
+    expect(text).toContain('db | container | Database')
+    expect(text).not.toContain('r2 | Web App -> Database')
+    expect(text).toContain('RELATIONSHIPS ON SCREEN')
+    expect(text).toContain('(none)')
+  })
+
   it('reports an empty view', () => {
     const empty: View = { type: 'systemLandscape', key: 'l', elements: [], relationships: [] }
     expect(serializeViewContext(makeWorkspace(), empty)).toContain('the view is empty')
