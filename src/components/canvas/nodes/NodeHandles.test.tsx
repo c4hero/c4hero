@@ -9,7 +9,10 @@ class ResizeObserverStub {
     this.callback = callback
   }
   observe(target: Element) {
-    this.callback([{ target } as globalThis.ResizeObserverEntry], this as unknown as ResizeObserver)
+    this.callback(
+      [{ target, contentRect: target.getBoundingClientRect() } as globalThis.ResizeObserverEntry],
+      this as unknown as ResizeObserver,
+    )
   }
   unobserve() {}
   disconnect() {}
