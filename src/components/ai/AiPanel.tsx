@@ -16,7 +16,7 @@ import {
   type AiProvider, type AiFeatureId,
 } from '@/lib/ai'
 import { C, STYLE, headerRow, iconBtn } from './aiTheme'
-import { storeEditActions, applyPlanToStore, isAbortError } from './aiHelpers'
+import { storeEditActions, applyPlanToStore, assertPostApplyIntegrity, isAbortError } from './aiHelpers'
 import {
   FEATURE_TO_VIEW, VIEW_TITLE, TECH_INSTRUCTION, viewScopeIds,
   type AiView, type FindingItem, type LedgerEntry, type ReviewUndo,
@@ -371,6 +371,7 @@ function AppView({
     } finally {
       store.setBatchApplying(false)
     }
+    assertPostApplyIntegrity()
     // Record the workspace this replay produced, so a subsequent undo can tell
     // whether the user has edited outside the review since.
     setExpectedWs(useWorkspaceStore.getState().workspace)

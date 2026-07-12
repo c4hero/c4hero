@@ -74,6 +74,21 @@ export function storeEditActions(): EditActions {
   }
 }
 
+/** Dev/test-only integrity assertion: a successful store apply should never
+ *  leave the model in a structurally broken state. Gated on the env so this
+ *  check (and its import) has zero effect on the production bundle's
+ *  behavior. Call this after any store-mutating apply of an EditPlan
+ *  completes — including replay/rebuild paths outside applyPlanToStore. */
+export function assertPostApplyIntegrity(): void {
+  if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+    const after = useWorkspaceStore.getState().workspace
+    if (after) {
+      const violations = checkModelIntegrity(after)
+      if (violations.length) log.error('post-apply model integrity violations', { violations })
+    }
+  }
+}
+
 export function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched?: boolean }): ApplyResult {
   const s = useWorkspaceStore.getState()
   // Apply in batch mode so the per-op addContainer/addComponent don't jump the
@@ -110,16 +125,7 @@ export function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched
   const updated = useWorkspaceStore.getState().workspace
   const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []
   if (newIds.length) useWorkspaceStore.getState().focusViewForElements(newIds)
-  // Dev/test-only integrity assertion: a successful apply should never leave
-  // the model in a structurally broken state. Gated on the env so this check
-  // (and its import) has zero effect on the production bundle's behavior.
-  if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
-    const after = useWorkspaceStore.getState().workspace
-    if (after) {
-      const violations = checkModelIntegrity(after)
-      if (violations.length) log.error('post-apply model integrity violations', { violations })
-    }
-  }
+  assertPostApplyIntegrity()
   return result
 }
 

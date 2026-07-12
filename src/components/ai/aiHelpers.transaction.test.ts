@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useWorkspaceStore } from '@/store/workspace'
 import { makeWorkspace } from '@/lib/ai/testFixture'
 import { applyPlanToStore } from './aiHelpers'
-import { generateDiagramStream, reviewArchitectureStream } from '@/lib/ai/features'
+import { generateDiagramStream, reviewArchitectureStream, interviewAskStream, answerQuestionStream } from '@/lib/ai/features'
 import type { AiProvider } from '@/lib/ai/types'
 import type { EditPlan } from '@/lib/ai'
 
@@ -136,6 +136,41 @@ describe('streaming AI calls — abort safety', () => {
     }
     await expect(
       generateDiagramStream(provider, 'a shop', () => {}),
+    ).rejects.toThrow()
+    expect(JSON.stringify(useWorkspaceStore.getState())).toBe(preJson)
+  })
+
+  it('interviewAskStream never mutates the store when aborted mid-stream', async () => {
+    const preJson = JSON.stringify(useWorkspaceStore.getState())
+    const provider: AiProvider = {
+      async complete() { return '' },
+      async completeJson<T>(): Promise<T> { return {} as T },
+      async completeStream(req) {
+        req.onText('What datastore ')
+        throw abortError()
+      },
+    }
+    const ws = useWorkspaceStore.getState().workspace!
+    const view = { type: 'container' as const, key: 'c', softwareSystemId: 'shop', elements: [{ id: 'web' }], relationships: [] }
+    await expect(
+      interviewAskStream(provider, ws, view, [], 'kickoff', () => {}),
+    ).rejects.toThrow()
+    expect(JSON.stringify(useWorkspaceStore.getState())).toBe(preJson)
+  })
+
+  it('answerQuestionStream never mutates the store when aborted mid-stream', async () => {
+    const preJson = JSON.stringify(useWorkspaceStore.getState())
+    const provider: AiProvider = {
+      async complete() { return '' },
+      async completeJson<T>(): Promise<T> { return {} as T },
+      async completeStream(req) {
+        req.onText('The Web App ')
+        throw abortError()
+      },
+    }
+    const ws = useWorkspaceStore.getState().workspace!
+    await expect(
+      answerQuestionStream(provider, ws, null, 'q', [], () => {}),
     ).rejects.toThrow()
     expect(JSON.stringify(useWorkspaceStore.getState())).toBe(preJson)
   })
