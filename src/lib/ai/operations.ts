@@ -125,8 +125,10 @@ export function applyEditPlan(
   const sameplanContainerParents = new Set<string>()
   // Current tags per element, so an updateElement.tags op can MERGE (add) rather
   // than replace — see mergeTags. Built from the raw model (flattenElements drops
-  // tags). Newly-created elements aren't included: updateElement addresses real
-  // ids only, so a same-batch add never needs merging here.
+  // tags). Newly-created elements ARE seeded too (see register): the edit prompt
+  // lets an updateElement target a same-plan ref, so a tags op on a just-added
+  // element must merge onto its structural base (Element/Container …) instead of
+  // replacing it via an empty base and wiping the store's built-in tags.
   const tagsById = new Map<string, string[]>()
   for (const p of ws.model.people) tagsById.set(p.id, p.tags)
   for (const sys of ws.model.softwareSystems) {
@@ -153,7 +155,10 @@ export function applyEditPlan(
   const applied: AppliedOp[] = []
 
   // Register a newly-created element so later ops can target it by ref, id, or name.
-  const register = (ref: string, id: string, name: string) => {
+  // `tags` are the structural defaults the store assigned at creation (Element/
+  // Container …); seeding them lets a same-plan updateElement.tags op merge rather
+  // than clobber them (see tagsById / mergeTags).
+  const register = (ref: string, id: string, name: string, tags: string[]) => {
     // No ref shadowing: refuse to bind `ref` when it collides with a
     // pre-existing element id or with a ref already registered earlier in this
     // plan (existing-wins / first-wins). The element is still created — only
@@ -161,6 +166,7 @@ export function applyEditPlan(
     // token keep resolving to the original element via validIds/refMap.
     if (ref && !preExistingIds.has(ref) && !refMap.has(ref)) refMap.set(ref, id)
     validIds.add(id)
+    tagsById.set(id, tags)
     const key = name.trim().toLowerCase()
     // Don't let a newly-created element hijack name resolution for an existing
     // element of the same name — keep the first (existing) mapping so a later
@@ -203,7 +209,7 @@ export function applyEditPlan(
       case 'addPerson': {
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addPerson(op.name.trim())
-        register(op.ref, id, op.name)
+        register(op.ref, id, op.name, ['Element', 'Person'])
         const desc = optStr(op.description)
         if (desc) actions.updateElement(id, { description: desc })
         ok(op)
@@ -212,7 +218,7 @@ export function applyEditPlan(
       case 'addSoftwareSystem': {
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addSoftwareSystem(op.name.trim(), op.external)
-        register(op.ref, id, op.name)
+        register(op.ref, id, op.name, ['Element', 'Software System'])
         systemIds.add(id)
         if (op.external) externalSystemIds.add(id)
         const desc = optStr(op.description)
@@ -227,7 +233,7 @@ export function applyEditPlan(
         if (externalSystemIds.has(parentId)) { skip(op, 'parent is an external system'); break }
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addContainer(parentId, op.name.trim())
-        register(op.ref, id, op.name)
+        register(op.ref, id, op.name, ['Element', 'Container'])
         containerIds.add(id)
         sameplanContainerParents.add(parentId)
         const desc = optStr(op.description), tech = optStr(op.technology)
@@ -241,7 +247,7 @@ export function applyEditPlan(
         if (!containerIds.has(parentId)) { skip(op, 'parent is not a container'); break }
         if (!op.name?.trim()) { skip(op, 'missing name'); break }
         const id = actions.addComponent(parentId, op.name.trim())
-        register(op.ref, id, op.name)
+        register(op.ref, id, op.name, ['Element', 'Component'])
         const desc = optStr(op.description), tech = optStr(op.technology)
         if (desc || tech) actions.updateElement(id, { description: desc, technology: tech })
         ok(op)
@@ -293,6 +299,9 @@ export function applyEditPlan(
           // from the model must not reach the store.
           location: op.location === 'External' || op.location === 'Internal' ? op.location : undefined,
         })
+        // Keep the merged tags as the new base, so a second same-plan tags op on
+        // this element merges onto them rather than the pre-update set.
+        if (tags) tagsById.set(id, tags)
         ok(op)
         break
       }
