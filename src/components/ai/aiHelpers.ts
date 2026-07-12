@@ -4,7 +4,11 @@ import {
   aiErrorMessage, applyEditPlan, summarizeSkips, flattenElements,
   type EditActions, type ApplyResult, type EditPlan,
 } from '@/lib/ai'
+import { checkModelIntegrity } from '@/lib/modelIntegrity'
+import { createLogger } from '@/lib/logger'
 import type { Workspace } from '@/types/model'
+
+const log = createLogger('ai:apply')
 
 // ─── run state (shared by every feature body) ───────────────────────
 
@@ -86,8 +90,29 @@ export function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched
   let result: ApplyResult = { applied: [], appliedCount: 0, skippedCount: 0 }
   try {
     result = applyEditPlan(plan, storeEditActions(), liveBefore)
+  } catch (err) {
+    // TRANSACTIONAL APPLY: applyEditPlan is designed to never throw, but this
+    // guards against a defective store action (or a future regression) leaving
+    // a half-applied model with a dangling undo snapshot. Restore the exact
+    // pre-apply workspace ref — when we own the batch, that ref is the same
+    // one `setBatchApplying(true)` captured as its baseline, so the `finally`
+    // below sees "unchanged" and rolls the undo/redo stacks back too (see the
+    // unchanged-check in ui-slice.ts's setBatchApplying). When the caller owns
+    // the batch (opts.batched), the same reasoning applies to THEIR baseline,
+    // since it was captured synchronously from the same pre-apply workspace.
+    useWorkspaceStore.getState().resetWorkspaceTo(liveBefore)
+    throw err
   } finally {
     if (ownBatch) s.setBatchApplying(false)
+  }
+  // DEV INTEGRITY ASSERT: never runs in production bundles — the env guard is
+  // load-bearing, not the (unnecessary) tree-shaking of the static import.
+  if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+    const postWs = useWorkspaceStore.getState().workspace
+    if (postWs) {
+      const violations = checkModelIntegrity(postWs)
+      if (violations.length) log.error('post-apply model integrity violations', violations)
+    }
   }
   const updated = useWorkspaceStore.getState().workspace
   const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []
