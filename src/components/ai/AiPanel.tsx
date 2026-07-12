@@ -350,6 +350,11 @@ function AppView({
     const base = baseline
     if (!base) return
     const store = useWorkspaceStore.getState()
+    // Transactional guard, same rationale as applyPlanToStore (aiHelpers.ts):
+    // capture the pre-replay workspace ref before the batch starts so a throw
+    // from resetWorkspaceTo or one of applyEditPlan's store actions can be
+    // fully unwound — no half-reset workspace, no dangling undo entry.
+    const preWs = store.workspace
     store.setBatchApplying(true)
     try {
       store.resetWorkspaceTo(base)
@@ -357,6 +362,12 @@ function AppView({
       // Replay skips are real information: a kept change whose target came from
       // a now-reverted entry quietly stops applying — say so.
       setSkipNotice(ops.length ? summarizeSkips(applyEditPlan({ operations: ops }, storeEditActions(), base)) : null)
+    } catch (err) {
+      // Roll back to the pre-replay workspace ref. As in applyPlanToStore, this
+      // makes the workspace ref === batchBaseWs so the setBatchApplying(false)
+      // below restores the undo/redo stacks to their pre-batch state itself.
+      if (preWs) useWorkspaceStore.getState().resetWorkspaceTo(preWs)
+      throw err
     } finally {
       store.setBatchApplying(false)
     }
