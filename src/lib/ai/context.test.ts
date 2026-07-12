@@ -83,6 +83,18 @@ describe('viewLabel / serializeViewContext', () => {
     expect(text).toContain('r2 | Web App -> Database')
   })
 
+  it('omits a relationship whose endpoints are both on screen but which the view does not draw', () => {
+    // web and db are both shown, but the view's relationship list is empty — the
+    // canvas wouldn't draw r2, so the context must not report it as on screen.
+    const v: View = {
+      type: 'container', key: 'c', softwareSystemId: 'shop',
+      elements: [{ id: 'web' }, { id: 'db' }], relationships: [],
+    }
+    const text = serializeViewContext(makeWorkspace(), v)
+    expect(text).not.toContain('r2 | Web App -> Database')
+    expect(text).toMatch(/RELATIONSHIPS ON SCREEN[\s\S]*\(none\)/)
+  })
+
   it('reports an empty view', () => {
     const empty: View = { type: 'systemLandscape', key: 'l', elements: [], relationships: [] }
     expect(serializeViewContext(makeWorkspace(), empty)).toContain('the view is empty')
