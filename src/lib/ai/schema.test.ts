@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  toEditPlan, toReviewResult, toDescribeResult, sanitizeEditOp,
+  toEditPlan, toReviewResult, toDescribeResult, sanitizeEditOp, isEditOp,
   MAX_PLAN_OPS, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_TECHNOLOGY_LENGTH,
   MAX_OWNER_LENGTH, MAX_TITLE_LENGTH, MAX_ID_FIELD_LENGTH, MAX_TAGS_COUNT, MAX_TAG_LENGTH,
 } from './schema'
@@ -241,17 +241,13 @@ describe('sanitizeEditOp and cap enforcement', () => {
 
   describe('non-string location/viewType rejection', () => {
     it('rejects op with non-string location via isEditOp', () => {
-      const op: Record<string, unknown> = { op: 'updateElement', id: 'x', location: 123 }
-      // isEditOp should reject this since location is not a string
-      const isValid = (typeof op === 'object' && op !== null && 'op' in op && typeof op.location === 'string')
-      expect(isValid).toBe(false)
+      const op = { op: 'updateElement', id: 'x', location: 123 }
+      expect(isEditOp(op)).toBe(false)
     })
 
     it('rejects op with non-string viewType via isEditOp', () => {
-      const op: Record<string, unknown> = { op: 'addView', viewType: { type: 'system' } }
-      // isEditOp should reject this since viewType is not a string
-      const isValid = (typeof op === 'object' && op !== null && 'op' in op && typeof op.viewType === 'string')
-      expect(isValid).toBe(false)
+      const op = { op: 'addView', viewType: { type: 'system' } }
+      expect(isEditOp(op)).toBe(false)
     })
   })
 })
