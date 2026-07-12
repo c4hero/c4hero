@@ -264,13 +264,17 @@ describe('applyEditPlan — parent-type and existence guards', () => {
   })
 
   it('forwards a valid updateElement location and drops a bogus one', () => {
+    // 'shop' has containers, so (post TEA-6x "no hierarchy escape via update")
+    // it can no longer be flipped External here — use 'admin' (a container-less
+    // person) for the valid-location half of this test; the bogus-value half is
+    // unrelated to that guard and keeps using 'web'.
     const ws = makeWorkspace()
     const actions = fakeActions()
     applyEditPlan({ operations: [
-      { op: 'updateElement', id: 'shop', location: 'External' },
+      { op: 'updateElement', id: 'admin', location: 'External' },
       { op: 'updateElement', id: 'web', location: 'sideways' as 'External' },
     ] }, actions, ws)
-    expect(actions.updateElement).toHaveBeenCalledWith('shop', expect.objectContaining({ location: 'External' }))
+    expect(actions.updateElement).toHaveBeenCalledWith('admin', expect.objectContaining({ location: 'External' }))
     expect(actions.updateElement).toHaveBeenCalledWith('web', expect.objectContaining({ location: undefined }))
   })
 
@@ -280,9 +284,11 @@ describe('applyEditPlan — parent-type and existence guards', () => {
     // text box). If the applier always included name/description/technology
     // keys — even when the op didn't set them — a location-only op (e.g. "mark
     // this system external") would silently wipe the element's description.
+    // Uses 'admin' (container-less) since 'shop' can no longer be flipped
+    // External — see the "no hierarchy escape via update" tests below.
     const ws = makeWorkspace()
     const actions = fakeActions()
-    applyEditPlan({ operations: [{ op: 'updateElement', id: 'shop', location: 'External' }] }, actions, ws)
+    applyEditPlan({ operations: [{ op: 'updateElement', id: 'admin', location: 'External' }] }, actions, ws)
     const patch = vi.mocked(actions.updateElement).mock.calls[0][1]
     expect(patch).not.toHaveProperty('name')
     expect(patch).not.toHaveProperty('description')
@@ -291,6 +297,11 @@ describe('applyEditPlan — parent-type and existence guards', () => {
 
   it('reproduces the reported bug end-to-end: marking a system external keeps its description', () => {
     const ws = makeWorkspace() // 'shop' has description 'The store'
+    // Strip 'shop's containers for this test: the original bug was about the
+    // description field being wiped by a location-only patch, which is
+    // orthogonal to the (separately tested) "no hierarchy escape via update"
+    // guard that now blocks flipping a container-holding system External.
+    ws.model.softwareSystems[0].containers = []
     const actions: EditActions = {
       ...fakeActions(),
       updateElement: (id, patch) => { applyElementPatch(ws, id, patch) },
@@ -299,6 +310,31 @@ describe('applyEditPlan — parent-type and existence guards', () => {
     const shop = ws.model.softwareSystems.find((s) => s.id === 'shop')!
     expect(shop.location).toBe('External')
     expect(shop.description).toBe('The store')
+  })
+
+  it('no hierarchy escape via update: skips flipping a system with containers to External', () => {
+    const ws = makeWorkspace() // 'shop' has containers 'web' and 'db'
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'shop', location: 'External' },
+    ] }, actions, ws)
+    expect(actions.updateElement).not.toHaveBeenCalled()
+    expect(result.appliedCount).toBe(0)
+    expect(result.applied[0]).toMatchObject({ ok: false, reason: 'system has containers' })
+  })
+
+  it('no hierarchy escape via update: blocks the flip even when the containers were added earlier in the same plan', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    const result = applyEditPlan({ operations: [
+      { op: 'addSoftwareSystem', ref: 'sys', name: 'Billing' },
+      { op: 'addContainer', ref: 'c1', parent: 'sys', name: 'API' },
+      { op: 'updateElement', id: 'sys', location: 'External' },
+    ] }, actions, ws)
+    expect(actions.updateElement).not.toHaveBeenCalled()
+    expect(result.appliedCount).toBe(2)
+    expect(result.skippedCount).toBe(1)
+    expect(result.applied.find((a) => a.op.op === 'updateElement')).toMatchObject({ ok: false, reason: 'system has containers' })
   })
 
   it('an updateRelationship that only sets description does not touch technology, and vice versa', () => {

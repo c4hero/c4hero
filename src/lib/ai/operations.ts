@@ -116,6 +116,13 @@ export function applyEditPlan(
     else if (el.type === 'container') containerIds.add(el.id)
   }
   const relIds = new Set(ws.model.relationships.map((r) => r.id))
+  // Snapshot of ids that existed BEFORE this plan ran — used by register() to
+  // refuse a ref binding that collides with a pre-existing id (no shadowing).
+  const preExistingIds = new Set(validIds)
+  // Same-plan `addContainer` parents, tracked so a same-batch updateElement that
+  // flips a just-created system External can be blocked too (see the external
+  // flip check in updateElement below), not just pre-existing containers.
+  const sameplanContainerParents = new Set<string>()
   // Current tags per element, so an updateElement.tags op can MERGE (add) rather
   // than replace — see mergeTags. Built from the raw model (flattenElements drops
   // tags). Newly-created elements aren't included: updateElement addresses real
@@ -134,11 +141,25 @@ export function applyEditPlan(
   const externalSystemIds = new Set(
     ws.model.softwareSystems.filter((s) => s.location === 'External').map((s) => s.id),
   )
+  // Pre-existing software systems that already have at least one container —
+  // used to block an updateElement from flipping them External (see the
+  // "external flip" check in the updateElement case below; NO HIERARCHY ESCAPE
+  // VIA UPDATE). A same-plan addContainer also marks its parent here via
+  // sameplanContainerParents, so a system that only gained containers earlier
+  // in THIS plan is protected too.
+  const systemsWithContainers = new Set(
+    ws.model.softwareSystems.filter((s) => Array.isArray(s.containers) && s.containers.length > 0).map((s) => s.id),
+  )
   const applied: AppliedOp[] = []
 
   // Register a newly-created element so later ops can target it by ref, id, or name.
   const register = (ref: string, id: string, name: string) => {
-    refMap.set(ref, id)
+    // No ref shadowing: refuse to bind `ref` when it collides with a
+    // pre-existing element id or with a ref already registered earlier in this
+    // plan (existing-wins / first-wins). The element is still created — only
+    // the colliding token binding is skipped, so later ops addressing that
+    // token keep resolving to the original element via validIds/refMap.
+    if (ref && !preExistingIds.has(ref) && !refMap.has(ref)) refMap.set(ref, id)
     validIds.add(id)
     const key = name.trim().toLowerCase()
     // Don't let a newly-created element hijack name resolution for an existing
@@ -208,6 +229,7 @@ export function applyEditPlan(
         const id = actions.addContainer(parentId, op.name.trim())
         register(op.ref, id, op.name)
         containerIds.add(id)
+        sameplanContainerParents.add(parentId)
         const desc = optStr(op.description), tech = optStr(op.technology)
         if (desc || tech) actions.updateElement(id, { description: desc, technology: tech })
         ok(op)
@@ -242,6 +264,14 @@ export function applyEditPlan(
         // (created container, unset status/owner).
         const id = resolveExact(op.id)
         if (!id) { skip(op, 'element not found'); break }
+        // NO HIERARCHY ESCAPE VIA UPDATE: a software system with containers
+        // (pre-existing or added earlier in this same plan) can't be flipped
+        // External — that would produce an External system with containers,
+        // which checkModelIntegrity flags. Skip the whole op rather than
+        // silently drop just the location field.
+        if (op.location === 'External' && (systemsWithContainers.has(id) || sameplanContainerParents.has(id))) {
+          skip(op, 'system has containers'); break
+        }
         const name = optStr(op.name)
         const description = optStr(op.description)
         const technology = optStr(op.technology)
