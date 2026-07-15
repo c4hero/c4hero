@@ -125,6 +125,7 @@ export function createEventDrivenTemplate(): Workspace {
         { id: 'r12', sourceId: 'analyst', destinationId: 'dataLake', description: 'Queries for analytics', technology: 'SQL / Athena', tags: ['Relationship'], properties: {} },
       ],
       groups: [],
+      deploymentEnvironments: [],
     },
     views: {
       systemLandscapeViews: [
@@ -172,6 +173,8 @@ export function createEventDrivenTemplate(): Workspace {
         },
       ],
       componentViews: [],
+      dynamicViews: [],
+      deploymentViews: [],
       configuration: {
         styles: {
           elements: [

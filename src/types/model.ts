@@ -49,6 +49,57 @@ export interface Group {
 
 export type ModelElement = Person | SoftwareSystem | Container | Component
 
+// ─── Deployment elements ─────────────────────────────────────────────
+
+export interface DeploymentNode extends BaseElement {
+  type: 'deploymentNode'
+  technology?: string
+  /** Structurizr `instances` — a number or range like "0..N", kept verbatim */
+  instances?: string
+  children: DeploymentNode[]
+  infrastructureNodes: InfrastructureNode[]
+  containerInstances: ContainerInstance[]
+  softwareSystemInstances: SoftwareSystemInstance[]
+}
+
+export interface InfrastructureNode extends BaseElement {
+  type: 'infrastructureNode'
+  technology?: string
+}
+
+/** An instance of a model container running on a deployment node. Instances
+ *  have no name of their own — display data comes from the referenced container. */
+export interface ContainerInstance {
+  id: string
+  type: 'containerInstance'
+  containerId: string
+  tags: string[]
+  properties: Record<string, string>
+  url?: string
+}
+
+/** An instance of a model software system running on a deployment node. */
+export interface SoftwareSystemInstance {
+  id: string
+  type: 'softwareSystemInstance'
+  softwareSystemId: string
+  tags: string[]
+  properties: Record<string, string>
+  url?: string
+}
+
+export interface DeploymentEnvironment {
+  id: string
+  name: string
+  deploymentNodes: DeploymentNode[]
+}
+
+export type DeploymentElement =
+  | DeploymentNode
+  | InfrastructureNode
+  | ContainerInstance
+  | SoftwareSystemInstance
+
 // ─── Relationships ───────────────────────────────────────────────────
 
 export interface Relationship {
@@ -62,11 +113,15 @@ export interface Relationship {
   url?: string
   tags: string[]
   properties: Record<string, string>
+  /** True for relationships the parser replicates between deployment
+   *  instances (mirroring Structurizr's implied instance relationships).
+   *  The serializer never emits implied relationships back to DSL. */
+  implied?: boolean
 }
 
 // ─── Views ───────────────────────────────────────────────────────────
 
-export type ViewType = 'systemLandscape' | 'systemContext' | 'container' | 'component'
+export type ViewType = 'systemLandscape' | 'systemContext' | 'container' | 'component' | 'dynamic' | 'deployment'
 
 export interface ElementInView {
   id: string
@@ -78,6 +133,11 @@ export interface ElementInView {
 
 export interface RelationshipInView {
   id: string
+  /** Dynamic views: sequence label for this interaction ("1", "2", …).
+   *  Interaction order is the array order; this is the rendered label. */
+  order?: string
+  /** Dynamic views: per-step description overriding the model relationship's. */
+  description?: string
 }
 
 export interface AutoLayout {
@@ -101,6 +161,8 @@ export interface View {
   description?: string
   softwareSystemId?: string
   containerId?: string
+  /** Deployment views: the deployment environment name this view renders. */
+  environment?: string
   elements: ElementInView[]
   relationships: RelationshipInView[]
   autoLayout?: AutoLayout
@@ -145,6 +207,7 @@ export interface Model {
   softwareSystems: SoftwareSystem[]
   relationships: Relationship[]
   groups: Group[]
+  deploymentEnvironments: DeploymentEnvironment[]
 }
 
 // ─── Workspace ───────────────────────────────────────────────────────
@@ -161,6 +224,8 @@ export interface Workspace {
     systemContextViews: View[]
     containerViews: View[]
     componentViews: View[]
+    dynamicViews: View[]
+    deploymentViews: View[]
     configuration: ViewConfiguration
   }
 }

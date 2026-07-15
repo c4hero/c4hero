@@ -6,6 +6,9 @@ import type {
     Model,
     View,
     ElementInView,
+    Relationship,
+    DeploymentNode,
+    DeploymentEnvironment,
 } from '@/types/model'
 import { lex } from './lexer'
 import type { Token, TokenType } from './lexer'
@@ -109,6 +112,134 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
     }
 
     return ids.map(id => ({ id }))
+}
+
+// ─── Deployment helpers ──────────────────────────────────────────────
+
+/** Depth-first walk over an environment's deployment node tree. */
+function walkDeploymentNodes(env: DeploymentEnvironment, visit: (node: DeploymentNode) => void): void {
+    const stack = [...env.deploymentNodes]
+    while (stack.length > 0) {
+        const node = stack.pop()!
+        visit(node)
+        stack.push(...node.children)
+    }
+}
+
+/** Element IDs that belong to the scope system for deployment-view filtering:
+ *  the system itself plus its containers. */
+function deploymentScopeIds(model: Model, softwareSystemId: string): Set<string> {
+    const ids = new Set<string>([softwareSystemId])
+    const sys = model.softwareSystems.find(s => s.id === softwareSystemId)
+    if (sys) for (const c of sys.containers) ids.add(c.id)
+    return ids
+}
+
+/** Expand `include *` for a deployment view: every deployment node in the
+ *  view's environment (plus its infrastructure nodes and instances). When the
+ *  view is scoped to a software system, only instances of that system (or its
+ *  containers) are kept, nodes whose subtree contains no kept instance are
+ *  dropped, and infrastructure nodes survive with their parent node. */
+function expandDeploymentWildcard(model: Model, view: View): ElementInView[] {
+    const env = model.deploymentEnvironments.find(e => e.name === view.environment)
+    if (!env) return []
+
+    const scopeIds = view.softwareSystemId ? deploymentScopeIds(model, view.softwareSystemId) : undefined
+
+    const ids: string[] = []
+    const addNode = (node: DeploymentNode): boolean => {
+        const keptChildIds: string[] = []
+        let hasKeptInstance = false
+
+        for (const inst of node.containerInstances) {
+            if (!scopeIds || scopeIds.has(inst.containerId)) {
+                keptChildIds.push(inst.id)
+                hasKeptInstance = true
+            }
+        }
+        for (const inst of node.softwareSystemInstances) {
+            if (!scopeIds || scopeIds.has(inst.softwareSystemId)) {
+                keptChildIds.push(inst.id)
+                hasKeptInstance = true
+            }
+        }
+
+        let hasKeptDescendant = hasKeptInstance
+        for (const child of node.children) {
+            if (addNode(child)) hasKeptDescendant = true
+        }
+
+        // Unscoped views keep every node; scoped views keep only subtrees
+        // that actually deploy something relevant.
+        if (!scopeIds || hasKeptDescendant) {
+            ids.push(node.id)
+            for (const infra of node.infrastructureNodes) ids.push(infra.id)
+            ids.push(...keptChildIds)
+            return true
+        }
+        return false
+    }
+
+    for (const node of env.deploymentNodes) addNode(node)
+
+    // Dedupe while preserving order (child recursion appends before parents,
+    // but ElementInView order does not matter to the canvas).
+    const seen = new Set<string>()
+    return ids.filter(id => (seen.has(id) ? false : (seen.add(id), true))).map(id => ({ id }))
+}
+
+/** Replicate model relationships between deployment instances within each
+ *  environment, mirroring Structurizr's implied instance relationships: if
+ *  container A -> container B exists and both have instances in the same
+ *  environment, each instance pair gets an implied relationship. */
+function addImpliedInstanceRelationships(model: Model): void {
+    for (const env of model.deploymentEnvironments) {
+        // Map: model element id -> instance ids within this environment
+        const instancesByElement = new Map<string, string[]>()
+        walkDeploymentNodes(env, node => {
+            for (const inst of node.containerInstances) {
+                const list = instancesByElement.get(inst.containerId) ?? []
+                list.push(inst.id)
+                instancesByElement.set(inst.containerId, list)
+            }
+            for (const inst of node.softwareSystemInstances) {
+                const list = instancesByElement.get(inst.softwareSystemId) ?? []
+                list.push(inst.id)
+                instancesByElement.set(inst.softwareSystemId, list)
+            }
+        })
+        if (instancesByElement.size === 0) continue
+
+        const explicitPairs = new Set(
+            model.relationships.filter(r => !r.implied).map(r => `${r.sourceId}→${r.destinationId}`)
+        )
+
+        const implied: Relationship[] = []
+        for (const rel of model.relationships) {
+            if (rel.implied) continue
+            const sourceInstances = instancesByElement.get(rel.sourceId)
+            const destInstances = instancesByElement.get(rel.destinationId)
+            if (!sourceInstances || !destInstances) continue
+            for (const src of sourceInstances) {
+                for (const dst of destInstances) {
+                    if (explicitPairs.has(`${src}→${dst}`)) continue
+                    implied.push({
+                        id: `rel-implied-${src}-${dst}`,
+                        sourceId: src,
+                        destinationId: dst,
+                        description: rel.description,
+                        technology: rel.technology,
+                        interactionStyle: rel.interactionStyle,
+                        lineStyle: rel.lineStyle,
+                        tags: [...rel.tags],
+                        properties: {},
+                        implied: true,
+                    })
+                }
+            }
+        }
+        model.relationships.push(...implied)
+    }
 }
 
 // ─── Public Types ────────────────────────────────────────────────────
@@ -259,6 +390,17 @@ export class ContextAwareParser {
         }
     }
 
+    /** Register a deployment-family element (environment, node, instance).
+     *  Unlike registerElement this never maps the display name, because
+     *  deployment names routinely duplicate model element names (an instance
+     *  shares its container's name) and must not shadow them in resolveRef. */
+    registerDeploymentElement(id: string, name: string, _type: string, varName?: string): void {
+        this.elementsById.set(id, { name, type: _type })
+        if (varName) {
+            this.varToId.set(varName, id)
+        }
+    }
+
     resolveRef(ref: string): string | undefined {
         if (this.varToId.has(ref)) return this.varToId.get(ref)
         if (this.nameToId.has(ref)) return this.nameToId.get(ref)
@@ -343,12 +485,15 @@ export class ContextAwareParser {
                 softwareSystems: [],
                 relationships: [],
                 groups: [],
+                deploymentEnvironments: [],
             },
             views: {
                 systemLandscapeViews: [],
                 systemContextViews: [],
                 containerViews: [],
                 componentViews: [],
+                dynamicViews: [],
+                deploymentViews: [],
                 configuration: {
                     styles: { elements: [], relationships: [] },
                 },
@@ -454,23 +599,33 @@ export function parse(input: string): ParseResult {
     // Combine lexer and parser errors
     const errors = [...lexResult.errors, ...result.errors]
 
+    // Post-process: replicate model relationships between deployment instances
+    // (Structurizr's implied instance relationships) BEFORE populating view
+    // relationships, so deployment views pick them up like any other.
+    const ws = result.workspace
+    addImpliedInstanceRelationships(ws.model)
+
     // Post-process: populate view.relationships from model relationships.
     // The DSL doesn't store relationship refs in views — Structurizr infers them.
     // We do the same: for each view, include any model relationship whose source
     // AND destination are both present in that view's element set.
-    const ws = result.workspace
+    // Dynamic views are excluded: their relationship list is an explicit,
+    // ordered interaction sequence built during parsing.
     const allViews = [
         ...ws.views.systemLandscapeViews,
         ...ws.views.systemContextViews,
         ...ws.views.containerViews,
         ...ws.views.componentViews,
+        ...ws.views.deploymentViews,
     ]
     for (const view of allViews) {
         const excluded = parser.getExcludedIdsForView(view)
         const hasWildcard = view.elements.some(e => e.id === '*')
         if (hasWildcard) {
             // Expand `include *` to all elements appropriate for this view type
-            let expanded = expandWildcard(ws.model, view)
+            let expanded = view.type === 'deployment'
+                ? expandDeploymentWildcard(ws.model, view)
+                : expandWildcard(ws.model, view)
             // Apply `exclude` directives after wildcard expansion
             if (excluded.size > 0) {
                 expanded = expanded.filter(e => !excluded.has(e.id))

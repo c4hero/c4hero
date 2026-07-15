@@ -14,6 +14,8 @@ interface ViewsContainer {
     systemContextViews: View[]
     containerViews: View[]
     componentViews: View[]
+    dynamicViews: View[]
+    deploymentViews: View[]
 }
 
 /** Generate a stable, unique view key when the DSL doesn't provide one.
@@ -26,13 +28,17 @@ function ensureViewKey(view: View, viewsContainer: ViewsContainer, elementRef: s
         view.type === 'systemLandscape' ? 'SystemLandscape'
         : view.type === 'systemContext' ? 'SystemContext'
         : view.type === 'container' ? 'Containers'
-        : 'Components'
+        : view.type === 'component' ? 'Components'
+        : view.type === 'dynamic' ? 'Dynamic'
+        : 'Deployment'
     const base = elementRef ? `${typeKey}-${elementRef}` : typeKey
     const existing = [
         ...viewsContainer.systemLandscapeViews,
         ...viewsContainer.systemContextViews,
         ...viewsContainer.containerViews,
         ...viewsContainer.componentViews,
+        ...viewsContainer.dynamicViews,
+        ...viewsContainer.deploymentViews,
     ]
     let candidate = base
     let suffix = 2
@@ -106,7 +112,23 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 views.configuration.themes = themes
                 continue
             }
-            if (kw === 'dynamic' || kw === 'deployment' || kw === 'filtered' || kw === 'custom') {
+            if (kw === 'dynamic') {
+                const view = parseDynamicView(p, model)
+                if (view) {
+                    ensureViewKey(view, views, view.softwareSystemId ?? view.containerId)
+                    views.dynamicViews.push(view)
+                }
+                continue
+            }
+            if (kw === 'deployment') {
+                const view = parseDeploymentView(p, model)
+                if (view) {
+                    ensureViewKey(view, views, view.softwareSystemId ?? view.environment)
+                    views.deploymentViews.push(view)
+                }
+                continue
+            }
+            if (kw === 'filtered' || kw === 'custom') {
                 p.advance()
                 while (p.check('STRING') || p.check('IDENTIFIER')) p.advance()
                 p.skipNewlines()
@@ -196,6 +218,241 @@ function parseElementView(p: ContextAwareParser, type: ViewType, model: Model): 
     return view
 }
 
+/** Parse `autoLayout [direction] [rankSep] [nodeSep]` into a view. */
+function parseAutoLayoutInto(p: ContextAwareParser, view: View): void {
+    p.advance() // consume 'autoLayout'
+    const layout: AutoLayout = { direction: 'TB' }
+    if (p.check('IDENTIFIER') || p.check('KEYWORD')) {
+        const dir = p.peekValue().toUpperCase()
+        if (dir === 'TB' || dir === 'BT' || dir === 'LR' || dir === 'RL') {
+            layout.direction = dir as LayoutDirection
+            p.advance()
+        }
+    }
+    if (p.check('NUMBER')) {
+        layout.rankSeparation = parseInt(p.advance().value, 10)
+    }
+    if (p.check('NUMBER')) {
+        layout.nodeSeparation = parseInt(p.advance().value, 10)
+    }
+    view.autoLayout = layout
+}
+
+/** Parse `dynamic <scope|*> [key] [description] { ... }`.
+ *
+ *  The body is an ordered sequence of `source -> destination ["description"]`
+ *  steps. Each step must reference a relationship that exists in the model
+ *  (Structurizr semantics); the view stores the relationship id plus the
+ *  step's order label and optional description override. View elements are
+ *  derived from the step endpoints. */
+function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
+    p.advance() // consume 'dynamic'
+
+    // Scope: `*` (unscoped), or a software system / container reference.
+    let scopeRef: string | undefined
+    if (p.check('STAR')) {
+        p.advance()
+    } else {
+        scopeRef = p.readOptionalStringOrIdentifier()
+    }
+
+    const key = p.readOptionalStringOrIdentifier() ?? ''
+    const positionalDescription = p.readOptionalString()
+
+    const view: View = {
+        type: 'dynamic',
+        key,
+        title: positionalDescription,
+        description: positionalDescription,
+        elements: [],
+        relationships: [],
+    }
+
+    if (scopeRef) {
+        const resolvedId = p.resolveRef(scopeRef)
+        const scopeType = resolvedId ? p.elementsById.get(resolvedId)?.type : undefined
+        if (scopeType === 'container') {
+            view.containerId = resolvedId
+        } else {
+            view.softwareSystemId = resolvedId ?? scopeRef
+        }
+    }
+
+    p.skipNewlines()
+    if (p.match('LBRACE')) {
+        const order = { next: 1 }
+        parseDynamicViewBody(p, view, model, order)
+        p.skipNewlines()
+        p.expect('RBRACE')
+    }
+
+    return view
+}
+
+function parseDynamicViewBody(p: ContextAwareParser, view: View, model: Model, order: { next: number }): void {
+    // Dedup against the view itself — this body recurses for parallel groups,
+    // and a snapshot set would miss elements added by inner/outer levels.
+    const addElement = (id: string) => {
+        if (!view.elements.some(e => e.id === id)) {
+            view.elements.push({ id })
+        }
+    }
+
+    while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
+        p.skipNewlines()
+        if (p.check('RBRACE') || p.peekType() === 'EOF') break
+
+        const token = p.peek()
+
+        if (token.type === 'COMMENT') { p.advance(); continue }
+
+        // Parallel-sequence group: Structurizr numbers these 2a/2b/…; we
+        // flatten them into the running sequence so no step is lost.
+        if (token.type === 'LBRACE') {
+            p.advance()
+            parseDynamicViewBody(p, view, model, order)
+            p.skipNewlines()
+            p.expect('RBRACE')
+            continue
+        }
+
+        if (token.type === 'KEYWORD') {
+            const kw = token.value.toLowerCase()
+
+            if (kw === 'autolayout') {
+                parseAutoLayoutInto(p, view)
+                continue
+            }
+            if (kw === 'title') {
+                p.advance()
+                view.title = p.readOptionalString()
+                continue
+            }
+            if (kw === 'description') {
+                p.advance()
+                view.description = p.readOptionalString()
+                continue
+            }
+            if (kw === 'animation' || kw === 'properties') {
+                p.advance()
+                p.skipNewlines()
+                p.skipBraceBlock()
+                continue
+            }
+            if (kw === 'default') {
+                p.advance()
+                continue
+            }
+        }
+
+        // Interaction step: `source -> destination ["description"]`
+        if ((token.type === 'IDENTIFIER' || token.type === 'KEYWORD') && p.tokens[p.pos + 1]?.type === 'ARROW') {
+            const sourceToken = p.advance()
+            p.advance() // consume ARROW
+            const destToken = p.peek()
+            if (destToken.type !== 'IDENTIFIER' && destToken.type !== 'KEYWORD') {
+                p.addError(`Expected interaction destination, got ${destToken.type}`, destToken)
+                p.skipToNextLine()
+                continue
+            }
+            p.advance()
+            const stepDescription = p.readOptionalString() || undefined
+
+            const sourceId = p.resolveRef(sourceToken.value)
+            const destId = p.resolveRef(destToken.value)
+            if (!sourceId || !destId) {
+                p.addError(`Unresolved reference in dynamic view: '${!sourceId ? sourceToken.value : destToken.value}'`, sourceToken)
+                continue
+            }
+
+            // The step must reference an existing model relationship. Prefer a
+            // description match when several connect the same pair.
+            const candidates = model.relationships.filter(
+                r => !r.implied && r.sourceId === sourceId && r.destinationId === destId
+            )
+            const rel = candidates.find(r => stepDescription && r.description === stepDescription) ?? candidates[0]
+            if (!rel) {
+                p.addError(
+                    `Dynamic view step references a relationship that does not exist in the model: '${sourceToken.value} -> ${destToken.value}'`,
+                    sourceToken
+                )
+                continue
+            }
+
+            view.relationships.push({
+                id: rel.id,
+                order: String(order.next++),
+                description: stepDescription,
+            })
+            addElement(sourceId)
+            addElement(destId)
+            continue
+        }
+
+        if (token.type === 'KEYWORD' || token.type === 'IDENTIFIER') {
+            p.advance()
+            p.skipUnknownDirective()
+            continue
+        }
+
+        p.advance()
+    }
+}
+
+/** Parse `deployment <scope|*> <environment> [key] [description] { ... }`.
+ *  The body is the standard view body (include/exclude/autoLayout/…). */
+function parseDeploymentView(p: ContextAwareParser, model: Model): View | null {
+    p.advance() // consume 'deployment'
+
+    let scopeRef: string | undefined
+    if (p.check('STAR')) {
+        p.advance()
+    } else {
+        scopeRef = p.readOptionalStringOrIdentifier()
+    }
+
+    // Environment: a string name, or an identifier assigned to a
+    // deploymentEnvironment (resolved back to the environment's name).
+    let environment = p.readOptionalStringOrIdentifier()
+    if (environment !== undefined) {
+        const resolved = p.resolveRef(environment)
+        if (resolved && p.elementsById.get(resolved)?.type === 'deploymentEnvironment') {
+            environment = p.elementsById.get(resolved)!.name
+        }
+    }
+
+    const key = p.readOptionalStringOrIdentifier() ?? ''
+    const positionalDescription = p.readOptionalString()
+
+    const view: View = {
+        type: 'deployment',
+        key,
+        title: positionalDescription,
+        description: positionalDescription,
+        environment,
+        elements: [],
+        relationships: [],
+    }
+
+    if (scopeRef) {
+        const resolvedId = p.resolveRef(scopeRef)
+        view.softwareSystemId = resolvedId ?? scopeRef
+    }
+
+    if (environment !== undefined && !model.deploymentEnvironments.some(e => e.name === environment)) {
+        p.addError(`Deployment view references unknown environment '${environment}'`, p.peek())
+    }
+
+    p.skipNewlines()
+    if (p.match('LBRACE')) {
+        parseViewBody(p, view, model)
+        p.skipNewlines()
+        p.expect('RBRACE')
+    }
+
+    return view
+}
+
 function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
         p.skipNewlines()
@@ -244,22 +501,7 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
             }
 
             if (kw === 'autolayout') {
-                p.advance()
-                const layout: AutoLayout = { direction: 'TB' }
-                if (p.check('IDENTIFIER') || p.check('KEYWORD')) {
-                    const dir = p.peekValue().toUpperCase()
-                    if (dir === 'TB' || dir === 'BT' || dir === 'LR' || dir === 'RL') {
-                        layout.direction = dir as LayoutDirection
-                        p.advance()
-                    }
-                }
-                if (p.check('NUMBER')) {
-                    layout.rankSeparation = parseInt(p.advance().value, 10)
-                }
-                if (p.check('NUMBER')) {
-                    layout.nodeSeparation = parseInt(p.advance().value, 10)
-                }
-                view.autoLayout = layout
+                parseAutoLayoutInto(p, view)
                 continue
             }
 
