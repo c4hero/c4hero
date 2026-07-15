@@ -15,7 +15,9 @@ export function generateDefaultViews(ws: Workspace): void {
         ws.views.systemLandscapeViews.length > 0 ||
         ws.views.systemContextViews.length > 0 ||
         ws.views.containerViews.length > 0 ||
-        ws.views.componentViews.length > 0
+        ws.views.componentViews.length > 0 ||
+        (ws.views.dynamicViews?.length ?? 0) > 0 ||
+        (ws.views.deploymentViews?.length ?? 0) > 0
     if (hasViews) return
 
     const allElements = collectAllElementsById(ws)
