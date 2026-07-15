@@ -13,6 +13,9 @@ import type {
     ElementStyle,
     RelationshipStyle,
     ViewConfiguration,
+    DeploymentEnvironment,
+    DeploymentNode,
+    InfrastructureNode,
 } from '@/types/model'
 
 const INDENT = '    ' // 4 spaces
@@ -58,6 +61,21 @@ class SerializerContext {
                     this.registerElement(comp.id)
                 }
             }
+        }
+
+        // Tolerate workspaces persisted before deployment support existed.
+        for (const env of model.deploymentEnvironments ?? []) {
+            this.registerDeploymentNodes(env.deploymentNodes)
+        }
+    }
+
+    private registerDeploymentNodes(nodes: DeploymentNode[]): void {
+        for (const node of nodes) {
+            this.registerElement(node.id)
+            for (const infra of node.infrastructureNodes) this.registerElement(infra.id)
+            for (const inst of node.containerInstances) this.registerElement(inst.id)
+            for (const inst of node.softwareSystemInstances) this.registerElement(inst.id)
+            this.registerDeploymentNodes(node.children)
         }
     }
 
@@ -194,16 +212,140 @@ class SerializerContext {
             }
         }
 
-        // Relationships
-        if (model.relationships.length > 0) {
+        // Deployment environments (before relationships — instance identifiers
+        // must be defined before any relationship lines that reference them)
+        for (const env of model.deploymentEnvironments ?? []) {
             this.emitBlank()
-            for (const rel of model.relationships) {
+            this.serializeDeploymentEnvironment(env)
+        }
+
+        // Relationships. Implied instance relationships are parser-derived
+        // (replicated from container/system relationships) — never emitted.
+        const explicitRels = model.relationships.filter(r => !r.implied)
+        if (explicitRels.length > 0) {
+            this.emitBlank()
+            for (const rel of explicitRels) {
                 this.serializeRelationship(rel)
             }
         }
 
         this.depth--
         this.emit('}')
+    }
+
+    // ─── Deployment ─────────────────────────────────────────────────
+
+    private serializeDeploymentEnvironment(env: DeploymentEnvironment): void {
+        this.emit(`deploymentEnvironment "${this.escapeString(env.name)}" {`)
+        this.depth++
+        for (let i = 0; i < env.deploymentNodes.length; i++) {
+            if (i > 0) this.emitBlank()
+            this.serializeDeploymentNode(env.deploymentNodes[i])
+        }
+        this.depth--
+        this.emit('}')
+    }
+
+    private serializeDeploymentNode(node: DeploymentNode): void {
+        const varName = this.idToVar.get(node.id)
+        const extraTags = this.getExtraTags(node.tags, ['Element', 'Deployment Node'])
+        const hasProperties = Object.keys(node.properties).length > 0
+
+        const parts: string[] = []
+        parts.push('deploymentNode')
+        parts.push(`"${this.escapeString(node.name)}"`)
+        if (node.description || node.technology || extraTags) {
+            parts.push(`"${this.escapeString(node.description ?? '')}"`)
+        }
+        if (node.technology || extraTags) {
+            parts.push(`"${this.escapeString(node.technology ?? '')}"`)
+        }
+        if (extraTags) parts.push(`"${extraTags}"`)
+
+        const prefix = varName ? `${varName} = ` : ''
+        this.emit(`${prefix}${parts.join(' ')} {`)
+        this.depth++
+
+        if (node.instances !== undefined) this.emit(`instances ${/^\d+$/.test(node.instances) ? node.instances : `"${this.escapeString(node.instances)}"`}`)
+        if (node.url) this.emit(`url "${this.escapeString(node.url)}"`)
+        if (hasProperties) this.serializeProperties(node.properties)
+
+        for (const infra of node.infrastructureNodes) {
+            this.serializeInfrastructureNode(infra)
+        }
+        for (const inst of node.softwareSystemInstances) {
+            this.serializeElementInstance('softwareSystemInstance', inst.id, inst.softwareSystemId, inst.tags, ['Software System Instance'], inst.url, inst.properties)
+        }
+        for (const inst of node.containerInstances) {
+            this.serializeElementInstance('containerInstance', inst.id, inst.containerId, inst.tags, ['Container Instance'], inst.url, inst.properties)
+        }
+        for (const child of node.children) {
+            this.serializeDeploymentNode(child)
+        }
+
+        this.depth--
+        this.emit('}')
+    }
+
+    private serializeInfrastructureNode(infra: InfrastructureNode): void {
+        const varName = this.idToVar.get(infra.id)
+        const extraTags = this.getExtraTags(infra.tags, ['Element', 'Infrastructure Node'])
+        const hasProperties = Object.keys(infra.properties).length > 0
+        const hasBlock = !!infra.url || hasProperties
+
+        const parts: string[] = []
+        parts.push('infrastructureNode')
+        parts.push(`"${this.escapeString(infra.name)}"`)
+        if (infra.description || infra.technology || extraTags) {
+            parts.push(`"${this.escapeString(infra.description ?? '')}"`)
+        }
+        if (infra.technology || extraTags) {
+            parts.push(`"${this.escapeString(infra.technology ?? '')}"`)
+        }
+        if (extraTags) parts.push(`"${extraTags}"`)
+
+        const prefix = varName ? `${varName} = ` : ''
+        if (hasBlock) {
+            this.emit(`${prefix}${parts.join(' ')} {`)
+            this.depth++
+            if (infra.url) this.emit(`url "${this.escapeString(infra.url)}"`)
+            if (hasProperties) this.serializeProperties(infra.properties)
+            this.depth--
+            this.emit('}')
+        } else {
+            this.emit(`${prefix}${parts.join(' ')}`)
+        }
+    }
+
+    private serializeElementInstance(
+        keyword: 'containerInstance' | 'softwareSystemInstance',
+        id: string,
+        referencedId: string,
+        tags: string[],
+        defaultTags: string[],
+        url: string | undefined,
+        properties: Record<string, string>,
+    ): void {
+        const varName = this.idToVar.get(id)
+        const ref = this.idToVar.get(referencedId) ?? referencedId
+        const extraTags = this.getExtraTags(tags, defaultTags)
+        const hasProperties = Object.keys(properties).length > 0
+        const hasBlock = !!url || hasProperties
+
+        const parts: string[] = [keyword, ref]
+        if (extraTags) parts.push(`"${extraTags}"`)
+
+        const prefix = varName ? `${varName} = ` : ''
+        if (hasBlock) {
+            this.emit(`${prefix}${parts.join(' ')} {`)
+            this.depth++
+            if (url) this.emit(`url "${this.escapeString(url)}"`)
+            if (hasProperties) this.serializeProperties(properties)
+            this.depth--
+            this.emit('}')
+        } else {
+            this.emit(`${prefix}${parts.join(' ')}`)
+        }
     }
 
     private serializePerson(person: Person): void {
@@ -429,6 +571,20 @@ class SerializerContext {
             needsBlank = true
         }
 
+        for (const view of views.dynamicViews ?? []) {
+            if (view.autoView) continue
+            if (needsBlank) this.emitBlank()
+            this.serializeDynamicView(view)
+            needsBlank = true
+        }
+
+        for (const view of views.deploymentViews ?? []) {
+            if (view.autoView) continue
+            if (needsBlank) this.emitBlank()
+            this.serializeView(view)
+            needsBlank = true
+        }
+
         // Styles
         if (this.hasStyles(views.configuration)) {
             if (needsBlank) this.emitBlank()
@@ -469,6 +625,14 @@ class SerializerContext {
                 const ref = this.idToVar.get(view.containerId) ?? view.containerId
                 parts.push(ref)
             }
+        } else if (view.type === 'deployment') {
+            parts.push('deployment')
+            if (view.softwareSystemId) {
+                parts.push(this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId)
+            } else {
+                parts.push('*')
+            }
+            parts.push(`"${this.escapeString(view.environment ?? '')}"`)
         }
 
         // Skip parser-synthesised keys so DSL without explicit view keys
@@ -501,6 +665,45 @@ class SerializerContext {
         }
 
         // Auto layout
+        if (view.autoLayout) {
+            this.serializeAutoLayout(view.autoLayout)
+        }
+
+        this.depth--
+        this.emit('}')
+    }
+
+    /** Dynamic views serialize as an ordered list of interaction steps
+     *  (`source -> destination "description"`), not as include lines. */
+    private serializeDynamicView(view: View): void {
+        const parts: string[] = ['dynamic']
+        const scopeId = view.softwareSystemId ?? view.containerId
+        if (scopeId) {
+            parts.push(this.idToVar.get(scopeId) ?? scopeId)
+        } else {
+            parts.push('*')
+        }
+        if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
+
+        this.emit(`${parts.join(' ')} {`)
+        this.depth++
+
+        if (view.title) this.emit(`title "${this.escapeString(view.title)}"`)
+        if (view.description) this.emit(`description "${this.escapeString(view.description)}"`)
+
+        const relById = new Map(this.workspace.model.relationships.map(r => [r.id, r]))
+        for (const step of view.relationships) {
+            const rel = relById.get(step.id)
+            if (!rel) continue
+            const sourceRef = this.idToVar.get(rel.sourceId) ?? rel.sourceId
+            const destRef = this.idToVar.get(rel.destinationId) ?? rel.destinationId
+            const description = step.description ?? rel.description
+            const line = description
+                ? `${sourceRef} -> ${destRef} "${this.escapeString(description)}"`
+                : `${sourceRef} -> ${destRef}`
+            this.emit(line)
+        }
+
         if (view.autoLayout) {
             this.serializeAutoLayout(view.autoLayout)
         }

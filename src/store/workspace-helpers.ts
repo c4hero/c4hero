@@ -124,8 +124,8 @@ export function elementExists(ws: Workspace, id: string): boolean {
   return getElementIndex(ws).has(id)
 }
 
-/** The four view-type array keys — used wherever we need to iterate or locate views by type. */
-export const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews'] as const
+/** The view-type array keys — used wherever we need to iterate or locate views by type. */
+export const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews'] as const
 
 /** Apply a callback to every view in the workspace (mutates views in place). */
 export function forEachView(ws: Workspace, fn: (v: View) => void): void {
@@ -154,6 +154,11 @@ const VIEW_ELEMENT_TYPES: Record<View['type'], ReadonlySet<ModelElement['type']>
   systemContext: new Set<ModelElement['type']>(['person', 'softwareSystem']),
   container: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container']),
   component: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container', 'component']),
+  // Dynamic views show whichever model elements participate in the interactions.
+  dynamic: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container', 'component']),
+  // Deployment views show deployment elements (nodes/instances), which are not
+  // ModelElements — plain model elements are never dropped into them directly.
+  deployment: new Set<ModelElement['type']>(),
 }
 
 /** True when a view of `viewType` is allowed to display an element of `elementType`. */
