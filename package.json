@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
-    "@sentry/react": "^10.64.0",
+    "@sentry/react": "^10.66.0",
     "@xyflow/react": "^12.11.2",
     "html-to-image": "^1.11.13",
     "immer": "^11.1.11",
