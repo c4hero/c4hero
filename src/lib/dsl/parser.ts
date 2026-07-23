@@ -7,9 +7,8 @@ import type {
     View,
     ElementInView,
     Relationship,
-    DeploymentNode,
-    DeploymentEnvironment,
 } from '@/types/model'
+import { walkDeploymentNodes, expandDeploymentElements } from '@/lib/deployment'
 import { lex } from './lexer'
 import type { Token, TokenType } from './lexer'
 import { parseViewsBody } from './parser-views'
@@ -115,78 +114,6 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
 }
 
 // ─── Deployment helpers ──────────────────────────────────────────────
-
-/** Depth-first walk over an environment's deployment node tree. */
-function walkDeploymentNodes(env: DeploymentEnvironment, visit: (node: DeploymentNode) => void): void {
-    const stack = [...env.deploymentNodes]
-    while (stack.length > 0) {
-        const node = stack.pop()!
-        visit(node)
-        stack.push(...node.children)
-    }
-}
-
-/** Element IDs that belong to the scope system for deployment-view filtering:
- *  the system itself plus its containers. */
-function deploymentScopeIds(model: Model, softwareSystemId: string): Set<string> {
-    const ids = new Set<string>([softwareSystemId])
-    const sys = model.softwareSystems.find(s => s.id === softwareSystemId)
-    if (sys) for (const c of sys.containers) ids.add(c.id)
-    return ids
-}
-
-/** Expand `include *` for a deployment view: every deployment node in the
- *  view's environment (plus its infrastructure nodes and instances). When the
- *  view is scoped to a software system, only instances of that system (or its
- *  containers) are kept, nodes whose subtree contains no kept instance are
- *  dropped, and infrastructure nodes survive with their parent node. */
-function expandDeploymentWildcard(model: Model, view: View): ElementInView[] {
-    const env = model.deploymentEnvironments.find(e => e.name === view.environment)
-    if (!env) return []
-
-    const scopeIds = view.softwareSystemId ? deploymentScopeIds(model, view.softwareSystemId) : undefined
-
-    const ids: string[] = []
-    const addNode = (node: DeploymentNode): boolean => {
-        const keptChildIds: string[] = []
-        let hasKeptInstance = false
-
-        for (const inst of node.containerInstances) {
-            if (!scopeIds || scopeIds.has(inst.containerId)) {
-                keptChildIds.push(inst.id)
-                hasKeptInstance = true
-            }
-        }
-        for (const inst of node.softwareSystemInstances) {
-            if (!scopeIds || scopeIds.has(inst.softwareSystemId)) {
-                keptChildIds.push(inst.id)
-                hasKeptInstance = true
-            }
-        }
-
-        let hasKeptDescendant = hasKeptInstance
-        for (const child of node.children) {
-            if (addNode(child)) hasKeptDescendant = true
-        }
-
-        // Unscoped views keep every node; scoped views keep only subtrees
-        // that actually deploy something relevant.
-        if (!scopeIds || hasKeptDescendant) {
-            ids.push(node.id)
-            for (const infra of node.infrastructureNodes) ids.push(infra.id)
-            ids.push(...keptChildIds)
-            return true
-        }
-        return false
-    }
-
-    for (const node of env.deploymentNodes) addNode(node)
-
-    // Dedupe while preserving order (child recursion appends before parents,
-    // but ElementInView order does not matter to the canvas).
-    const seen = new Set<string>()
-    return ids.filter(id => (seen.has(id) ? false : (seen.add(id), true))).map(id => ({ id }))
-}
 
 /** Replicate model relationships between deployment instances within each
  *  environment, mirroring Structurizr's implied instance relationships: if
@@ -624,7 +551,7 @@ export function parse(input: string): ParseResult {
         if (hasWildcard) {
             // Expand `include *` to all elements appropriate for this view type
             let expanded = view.type === 'deployment'
-                ? expandDeploymentWildcard(ws.model, view)
+                ? expandDeploymentElements(ws.model, view.environment, view.softwareSystemId)
                 : expandWildcard(ws.model, view)
             // Apply `exclude` directives after wildcard expansion
             if (excluded.size > 0) {

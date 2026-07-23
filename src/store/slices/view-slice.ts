@@ -25,12 +25,12 @@ export const createViewSlice: StateCreator<
 > = (set) => ({
   layoutVersion: 0,
 
-  addView: (type, scopeId, title) => {
+  addView: (type, scopeId, title, options) => {
     const key = nanoid(8)
     set((s) => {
       if (!s.workspace) return
       pushUndoSnapshot(s)
-      appendScopedView(s.workspace, type, scopeId, title ?? `New ${type} view`, key)
+      appendScopedView(s.workspace, type, scopeId, title ?? `New ${type} view`, key, options)
       s.activeViewKey = key
       s.selectedElementIds = []
       s.selectedRelationshipId = null
@@ -44,7 +44,7 @@ export const createViewSlice: StateCreator<
     const ws = s.workspace
     let found = false
     for (const arrKey of VIEW_ARRAY_KEYS) {
-      const idx = ws.views[arrKey].findIndex(v => v.key === key)
+      const idx = (ws.views[arrKey] ?? []).findIndex(v => v.key === key)
       if (idx !== -1) {
         pushUndoSnapshot(s)
         ws.views[arrKey].splice(idx, 1)
@@ -67,7 +67,7 @@ export const createViewSlice: StateCreator<
     if (!s.workspace) return
     const ws = s.workspace
     for (const arrKey of VIEW_ARRAY_KEYS) {
-      const v = ws.views[arrKey].find(v => v.key === key)
+      const v = (ws.views[arrKey] ?? []).find(v => v.key === key)
       if (v) {
         if (v.title === title) return // no-op: title unchanged
         pushUndoSnapshot(s)
@@ -83,7 +83,7 @@ export const createViewSlice: StateCreator<
       if (!s.workspace) return
       const ws = s.workspace
       for (const arrKey of VIEW_ARRAY_KEYS) {
-        const src = ws.views[arrKey].find(v => v.key === key)
+        const src = (ws.views[arrKey] ?? []).find(v => v.key === key)
         if (!src) continue
         pushUndoSnapshot(s)
         // Deep-copy via current() unwrap so the clone is fully detached from
@@ -108,7 +108,7 @@ export const createViewSlice: StateCreator<
   updateNodePosition: (nodeId, x, y) => set((s) => {
     if (!s.workspace || !s.activeViewKey) return
     for (const key of VIEW_ARRAY_KEYS) {
-      const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
+      const view = (s.workspace.views[key] ?? []).find(v => v.key === s.activeViewKey)
       if (!view) continue
       const el = view.elements.find(e => e.id === nodeId)
       if (!el) return
@@ -124,7 +124,7 @@ export const createViewSlice: StateCreator<
     if (!s.workspace || !s.activeViewKey) return
     const updateMap = new Map(updates.map(u => [u.id, u]))
     for (const key of VIEW_ARRAY_KEYS) {
-      const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
+      const view = (s.workspace.views[key] ?? []).find(v => v.key === s.activeViewKey)
       if (!view) continue
       for (const el of view.elements) {
         const u = updateMap.get(el.id)
@@ -140,7 +140,7 @@ export const createViewSlice: StateCreator<
   syncAutoLayoutPositions: (viewKey, updates) => set((s) => {
     if (!s.workspace || updates.size === 0) return
     for (const key of VIEW_ARRAY_KEYS) {
-      const view = s.workspace.views[key].find(v => v.key === viewKey)
+      const view = (s.workspace.views[key] ?? []).find(v => v.key === viewKey)
       if (!view) continue
       for (const el of view.elements) {
         // Only fill in missing positions; never override saved ones (those

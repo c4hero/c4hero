@@ -71,6 +71,8 @@ if (import.meta.env.DEV) {
       ...ws.views.systemContextViews.map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
       ...ws.views.containerViews.map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
       ...ws.views.componentViews.map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
+      ...(ws.views.dynamicViews ?? []).map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
+      ...(ws.views.deploymentViews ?? []).map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
     ]
   }
 }
