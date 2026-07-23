@@ -349,6 +349,8 @@ const VIEW_KIND_LABEL: Record<ViewType, string> = {
   systemContext: 'a system context',
   container: 'a container',
   component: 'a component',
+  dynamic: 'a dynamic',
+  deployment: 'a deployment',
 }
 
 /** Human-readable, one-line-per-op preview, resolving existing ids to names. */

@@ -15,6 +15,8 @@ const VIEW_TYPE_LABELS: Record<string, string> = {
   systemContext: 'System Context',
   container: 'Container',
   component: 'Component',
+  dynamic: 'Dynamic',
+  deployment: 'Deployment',
 }
 
 const LEVEL_BADGE: Record<string, string> = {
@@ -22,6 +24,8 @@ const LEVEL_BADGE: Record<string, string> = {
   systemContext: 'L1',
   container: 'L2',
   component: 'L3',
+  dynamic: 'Dyn',
+  deployment: 'Dep',
 }
 
 interface ViewSwitcherProps {

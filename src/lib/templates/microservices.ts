@@ -115,6 +115,7 @@ export function createMicroservicesTemplate(): Workspace {
         { id: 'r12', sourceId: 'userService', destinationId: 'rabbitMQ', description: 'Publishes user events', technology: 'AMQP', tags: ['Relationship'], properties: {} },
       ],
       groups: [],
+      deploymentEnvironments: [],
     },
     views: {
       systemLandscapeViews: [
@@ -160,6 +161,8 @@ export function createMicroservicesTemplate(): Workspace {
         },
       ],
       componentViews: [],
+      dynamicViews: [],
+      deploymentViews: [],
       configuration: {
         styles: {
           elements: [

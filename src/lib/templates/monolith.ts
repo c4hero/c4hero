@@ -91,6 +91,7 @@ export function createMonolithTemplate(): Workspace {
         { id: 'r9', sourceId: 'backendApp', destinationId: 'emailService', description: 'Sends emails via', technology: 'SMTP', tags: ['Relationship'], properties: {} },
       ],
       groups: [],
+      deploymentEnvironments: [],
     },
     views: {
       systemLandscapeViews: [
@@ -134,6 +135,8 @@ export function createMonolithTemplate(): Workspace {
         },
       ],
       componentViews: [],
+      dynamicViews: [],
+      deploymentViews: [],
       configuration: {
         styles: {
           elements: [

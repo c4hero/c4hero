@@ -29,12 +29,15 @@ export function makeWorkspace(): Workspace {
         { id: 'r2', sourceId: 'web', destinationId: 'db', tags: [], properties: {} }, // no description
       ],
       groups: [],
+      deploymentEnvironments: [],
     },
     views: {
       systemLandscapeViews: [],
       systemContextViews: [],
       containerViews: [],
       componentViews: [],
+      dynamicViews: [],
+      deploymentViews: [],
       configuration: { styles: { elements: [], relationships: [] } },
     },
   }

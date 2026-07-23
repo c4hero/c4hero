@@ -11,6 +11,8 @@ const VIEW_TYPE_LABELS: Record<string, string> = {
   systemContext: 'System Context',
   container: 'Container',
   component: 'Component',
+  dynamic: 'Dynamic',
+  deployment: 'Deployment',
 }
 
 export default function FloatingViewsPanel() {

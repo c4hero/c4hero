@@ -6,7 +6,9 @@ import type {
     Model,
     View,
     ElementInView,
+    Relationship,
 } from '@/types/model'
+import { walkDeploymentNodes, expandDeploymentElements } from '@/lib/deployment'
 import { lex } from './lexer'
 import type { Token, TokenType } from './lexer'
 import { parseViewsBody } from './parser-views'
@@ -109,6 +111,62 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
     }
 
     return ids.map(id => ({ id }))
+}
+
+// ─── Deployment helpers ──────────────────────────────────────────────
+
+/** Replicate model relationships between deployment instances within each
+ *  environment, mirroring Structurizr's implied instance relationships: if
+ *  container A -> container B exists and both have instances in the same
+ *  environment, each instance pair gets an implied relationship. */
+function addImpliedInstanceRelationships(model: Model): void {
+    for (const env of model.deploymentEnvironments) {
+        // Map: model element id -> instance ids within this environment
+        const instancesByElement = new Map<string, string[]>()
+        walkDeploymentNodes(env, node => {
+            for (const inst of node.containerInstances) {
+                const list = instancesByElement.get(inst.containerId) ?? []
+                list.push(inst.id)
+                instancesByElement.set(inst.containerId, list)
+            }
+            for (const inst of node.softwareSystemInstances) {
+                const list = instancesByElement.get(inst.softwareSystemId) ?? []
+                list.push(inst.id)
+                instancesByElement.set(inst.softwareSystemId, list)
+            }
+        })
+        if (instancesByElement.size === 0) continue
+
+        const explicitPairs = new Set(
+            model.relationships.filter(r => !r.implied).map(r => `${r.sourceId}→${r.destinationId}`)
+        )
+
+        const implied: Relationship[] = []
+        for (const rel of model.relationships) {
+            if (rel.implied) continue
+            const sourceInstances = instancesByElement.get(rel.sourceId)
+            const destInstances = instancesByElement.get(rel.destinationId)
+            if (!sourceInstances || !destInstances) continue
+            for (const src of sourceInstances) {
+                for (const dst of destInstances) {
+                    if (explicitPairs.has(`${src}→${dst}`)) continue
+                    implied.push({
+                        id: `rel-implied-${src}-${dst}`,
+                        sourceId: src,
+                        destinationId: dst,
+                        description: rel.description,
+                        technology: rel.technology,
+                        interactionStyle: rel.interactionStyle,
+                        lineStyle: rel.lineStyle,
+                        tags: [...rel.tags],
+                        properties: {},
+                        implied: true,
+                    })
+                }
+            }
+        }
+        model.relationships.push(...implied)
+    }
 }
 
 // ─── Public Types ────────────────────────────────────────────────────
@@ -259,6 +317,17 @@ export class ContextAwareParser {
         }
     }
 
+    /** Register a deployment-family element (environment, node, instance).
+     *  Unlike registerElement this never maps the display name, because
+     *  deployment names routinely duplicate model element names (an instance
+     *  shares its container's name) and must not shadow them in resolveRef. */
+    registerDeploymentElement(id: string, name: string, _type: string, varName?: string): void {
+        this.elementsById.set(id, { name, type: _type })
+        if (varName) {
+            this.varToId.set(varName, id)
+        }
+    }
+
     resolveRef(ref: string): string | undefined {
         if (this.varToId.has(ref)) return this.varToId.get(ref)
         if (this.nameToId.has(ref)) return this.nameToId.get(ref)
@@ -343,12 +412,15 @@ export class ContextAwareParser {
                 softwareSystems: [],
                 relationships: [],
                 groups: [],
+                deploymentEnvironments: [],
             },
             views: {
                 systemLandscapeViews: [],
                 systemContextViews: [],
                 containerViews: [],
                 componentViews: [],
+                dynamicViews: [],
+                deploymentViews: [],
                 configuration: {
                     styles: { elements: [], relationships: [] },
                 },
@@ -454,23 +526,33 @@ export function parse(input: string): ParseResult {
     // Combine lexer and parser errors
     const errors = [...lexResult.errors, ...result.errors]
 
+    // Post-process: replicate model relationships between deployment instances
+    // (Structurizr's implied instance relationships) BEFORE populating view
+    // relationships, so deployment views pick them up like any other.
+    const ws = result.workspace
+    addImpliedInstanceRelationships(ws.model)
+
     // Post-process: populate view.relationships from model relationships.
     // The DSL doesn't store relationship refs in views — Structurizr infers them.
     // We do the same: for each view, include any model relationship whose source
     // AND destination are both present in that view's element set.
-    const ws = result.workspace
+    // Dynamic views are excluded: their relationship list is an explicit,
+    // ordered interaction sequence built during parsing.
     const allViews = [
         ...ws.views.systemLandscapeViews,
         ...ws.views.systemContextViews,
         ...ws.views.containerViews,
         ...ws.views.componentViews,
+        ...ws.views.deploymentViews,
     ]
     for (const view of allViews) {
         const excluded = parser.getExcludedIdsForView(view)
         const hasWildcard = view.elements.some(e => e.id === '*')
         if (hasWildcard) {
             // Expand `include *` to all elements appropriate for this view type
-            let expanded = expandWildcard(ws.model, view)
+            let expanded = view.type === 'deployment'
+                ? expandDeploymentElements(ws.model, view.environment, view.softwareSystemId)
+                : expandWildcard(ws.model, view)
             // Apply `exclude` directives after wildcard expansion
             if (excluded.size > 0) {
                 expanded = expanded.filter(e => !excluded.has(e.id))

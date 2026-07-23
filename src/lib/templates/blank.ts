@@ -26,6 +26,7 @@ export function createBlankWorkspace(scope?: import('@/types/model').WorkspaceSc
         : [],
       relationships: [],
       groups: [],
+      deploymentEnvironments: [],
     },
     views: {
       systemLandscapeViews: isSoftwareSystem
@@ -55,6 +56,8 @@ export function createBlankWorkspace(scope?: import('@/types/model').WorkspaceSc
         : [],
       containerViews: [],
       componentViews: [],
+      dynamicViews: [],
+      deploymentViews: [],
       configuration: {
         styles: {
           elements: [],

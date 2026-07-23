@@ -400,6 +400,10 @@ export function isWorkspaceShape(obj: unknown): obj is Workspace {
   if (!Array.isArray(views.systemContextViews) || !views.systemContextViews.every(isViewShape)) return false
   if (!Array.isArray(views.containerViews) || !views.containerViews.every(isViewShape)) return false
   if (!Array.isArray(views.componentViews) || !views.componentViews.every(isViewShape)) return false
+  // Dynamic / deployment view arrays are validated only when present, so
+  // sidecars written before these view types existed still load.
+  if ('dynamicViews' in views && views.dynamicViews !== undefined && (!Array.isArray(views.dynamicViews) || !views.dynamicViews.every(isViewShape))) return false
+  if ('deploymentViews' in views && views.deploymentViews !== undefined && (!Array.isArray(views.deploymentViews) || !views.deploymentViews.every(isViewShape))) return false
   if (!isRecord(views.configuration) || !isRecord(views.configuration.styles)) return false
   const styles = views.configuration.styles
   if (!Array.isArray(styles.elements) || !styles.elements.every(isElementStyleShape)) return false
