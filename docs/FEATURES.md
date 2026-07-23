@@ -4,10 +4,12 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 
 ## C4 modelling
 
-- Visual editing for **people, software systems, containers, and components** — the full C4 element vocabulary.
-- Four view types: **system landscape, system context, container, and component**.
+- Visual editing for **people, software systems, containers, and components** — the full C4 element vocabulary, plus **deployment nodes, infrastructure nodes, and container / software-system instances**.
+- All six view types: **system landscape, system context, container, component, dynamic, and deployment**.
+- **Dynamic views** render an ordered interaction sequence — each step carries its numbered badge and an optional per-step description on the edge.
+- **Deployment views** render the deployment environment as nested deployment-node boundaries wrapping the container / system instances and infrastructure nodes that run inside them.
 - Drill-through navigation between views (zoom into a system → its containers; zoom into a container → its components). View history with back navigation.
-- **Boundaries are first-class.** Container and component views auto-render the parent system / container as a labelled boundary around its members.
+- **Boundaries are first-class.** Container and component views auto-render the parent system / container as a labelled boundary around its members; deployment views nest one boundary per deployment node.
 - **Groups** for ad-hoc clustering across element types.
 
 ## Structurizr DSL

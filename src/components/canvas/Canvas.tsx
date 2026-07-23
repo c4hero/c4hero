@@ -41,6 +41,7 @@ import {
   buildDrillableSet,
   buildBoundaryLayoutClusters,
 } from './canvasBuilders'
+import { buildDeploymentNodes, deploymentBoundaryMemberIds } from './deploymentBuilders'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -86,6 +87,8 @@ function getBoundaryMemberIds(workspace: Workspace | null | undefined, view: Vie
       .flatMap((system) => system.containers)
       .find((item) => item.id === parentId)
     for (const component of container?.components ?? []) memberIds.add(component.id)
+  } else if (view.type === 'deployment') {
+    return deploymentBoundaryMemberIds(workspace, view, parentId)
   }
 
   return memberIds
@@ -333,9 +336,13 @@ export default function Canvas() {
     if (!workspace || !view) return { initialNodes: [], initialEdges: [] }
     const direction = view.autoLayout?.direction ?? 'TB'
 
-    // 1. Build nodes with raw positions from view
+    // 1. Build nodes with raw positions from view. Deployment views resolve
+    //    their instance / infrastructure nodes through a dedicated builder
+    //    (deployment elements live outside the C4 element tree).
     const drillableIds = buildDrillableSet(workspace)
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
+    const rawNodes = view.type === 'deployment'
+      ? buildDeploymentNodes(workspace, view)
+      : buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
     const layoutNodes = carryForwardMeasurements(rawNodes, reactFlowInstance.getNodes())
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre

@@ -14,6 +14,10 @@ import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels
 interface RelationshipEdgeData {
   relationship: Relationship
   relationshipStyle?: RelationshipStyle
+  /** Dynamic views: the ordered interaction sequence label ("1", "2", …). */
+  order?: string
+  /** Dynamic views: per-step description overriding the model relationship's. */
+  stepDescription?: string
 }
 
 const FULL_LABEL_MAX_WIDTH = 200
@@ -51,6 +55,9 @@ function RelationshipEdge({
 }: EdgeProps & { data?: RelationshipEdgeData }) {
   const relationship = data?.relationship
   const relStyle = data?.relationshipStyle
+  const order = data?.order
+  // Dynamic-view steps may override the model relationship's description.
+  const effectiveDescription = data?.stepDescription ?? relationship?.description
   const emphasized = !!selected
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
@@ -99,17 +106,17 @@ function RelationshipEdge({
     sourceY,
     targetX,
     targetY,
-    description: relationship?.description,
+    description: effectiveDescription,
     technologies: technologyTokens,
     selected: emphasized,
     hovered,
   })
   const compactTechnologyTokens = technologyTokens.slice(0, COMPACT_TECH_CHIP_LIMIT)
   const hiddenTechnologyCount = Math.max(0, technologyTokens.length - compactTechnologyTokens.length)
-  const descriptionText = relationship?.description
+  const descriptionText = effectiveDescription
     ? (labelDensity === 'compact'
-        ? truncateEdgeLabel(relationship.description, COMPACT_DESCRIPTION_MAX_CHARS)
-        : relationship.description)
+        ? truncateEdgeLabel(effectiveDescription, COMPACT_DESCRIPTION_MAX_CHARS)
+        : effectiveDescription)
     : undefined
   const labelMaxWidth = labelDensity === 'compact' ? COMPACT_LABEL_MAX_WIDTH : FULL_LABEL_MAX_WIDTH
 
@@ -138,8 +145,37 @@ function RelationshipEdge({
         markerStart={emphasized ? 'url(#c4-dot-selected)' : 'url(#c4-dot)'}
         markerEnd={emphasized ? 'url(#c4-arrow-selected)' : 'url(#c4-arrow)'}
       />
+      {/* Dynamic-view interaction order badge — a numbered chip on the edge. */}
+      {order && (
+        <EdgeLabelRenderer>
+          <div
+            className="nodrag nopan"
+            aria-label={`Step ${order}`}
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 22}px)`,
+              minWidth: 20,
+              height: 20,
+              padding: '0 6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              lineHeight: '20px',
+              background: emphasized ? 'var(--canvas-selection, var(--color-accent))' : 'var(--canvas-edge, var(--color-edge))',
+              color: 'var(--color-bg-primary, #0b0f17)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+              pointerEvents: 'none',
+            }}
+          >
+            {order}
+          </div>
+        </EdgeLabelRenderer>
+      )}
       {/* Label — shown when either description or technology is present */}
-      {(relationship?.description || relationship?.technology) && (
+      {(effectiveDescription || relationship?.technology) && (
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto"
@@ -236,9 +272,9 @@ function RelationshipEdge({
               backdropFilter: 'blur(8px)',
             }}
           >
-            {relationship.description && (
+            {effectiveDescription && (
               <div className="text-[11px] font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                {relationship.description}
+                {order ? `${order}. ${effectiveDescription}` : effectiveDescription}
               </div>
             )}
             {technologyTokens.length > 0 && (

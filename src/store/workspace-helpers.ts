@@ -4,6 +4,7 @@ import type {
   ViewType, ElementInView,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
+import { expandDeploymentElements } from '@/lib/deployment'
 export type { CascadeImpact } from './workspace-types'
 
 /** Deep-clone an object that may be an Immer draft. structuredClone'ing a
@@ -22,6 +23,10 @@ export function allViewsOf(ws: Workspace): View[] {
     ...ws.views.systemContextViews,
     ...ws.views.containerViews,
     ...ws.views.componentViews,
+    // Nullish-guarded: workspaces persisted before dynamic/deployment support
+    // existed lack these arrays until re-serialized.
+    ...(ws.views.dynamicViews ?? []),
+    ...(ws.views.deploymentViews ?? []),
   ]
 }
 
@@ -130,7 +135,9 @@ export const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'c
 /** Apply a callback to every view in the workspace (mutates views in place). */
 export function forEachView(ws: Workspace, fn: (v: View) => void): void {
   for (const key of VIEW_ARRAY_KEYS) {
-    for (const v of ws.views[key]) fn(v)
+    // Nullish-guarded: a crash-recovery snapshot persisted before dynamic /
+    // deployment view arrays existed may lack these keys until re-serialized.
+    for (const v of ws.views[key] ?? []) fn(v)
   }
 }
 
@@ -346,23 +353,42 @@ export function appendScopedView(
   scopeId: string | undefined,
   title: string,
   key: string,
+  options?: { environment?: string },
 ): View {
-  const { elements, relationships } = buildInitialViewContent(ws.model, type, scopeId)
   const view: View = {
     type,
     key,
     title,
-    elements,
-    relationships,
+    elements: [],
+    relationships: [],
     autoLayout: { direction: 'TB' },
-    softwareSystemId: (type === 'systemContext' || type === 'container') ? scopeId : undefined,
+    softwareSystemId: (type === 'systemContext' || type === 'container' || type === 'deployment' || type === 'dynamic') ? scopeId : undefined,
     containerId: type === 'component' ? scopeId : undefined,
+    environment: type === 'deployment' ? options?.environment : undefined,
   }
+
+  if (type === 'deployment') {
+    // Seed with every deployment element of the environment (scoped when a
+    // system is given); relationships follow from the seeded element set.
+    view.elements = expandDeploymentElements(ws.model, options?.environment, scopeId)
+    const idSet = new Set(view.elements.map((e) => e.id))
+    view.relationships = ws.model.relationships
+      .filter((r) => idSet.has(r.sourceId) && idSet.has(r.destinationId))
+      .map((r) => ({ id: r.id }))
+  } else if (type !== 'dynamic') {
+    // Dynamic views start empty — interactions are authored step by step.
+    const { elements, relationships } = buildInitialViewContent(ws.model, type, scopeId)
+    view.elements = elements
+    view.relationships = relationships
+  }
+
   switch (type) {
     case 'systemLandscape': ws.views.systemLandscapeViews.push(view); break
     case 'systemContext': ws.views.systemContextViews.push(view); break
     case 'container': ws.views.containerViews.push(view); break
     case 'component': ws.views.componentViews.push(view); break
+    case 'dynamic': (ws.views.dynamicViews ??= []).push(view); break
+    case 'deployment': (ws.views.deploymentViews ??= []).push(view); break
   }
   return view
 }

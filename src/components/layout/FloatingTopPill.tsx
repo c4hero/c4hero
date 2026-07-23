@@ -93,7 +93,7 @@ export default function FloatingTopPill() {
           }
         }
         const elementCounts = Object.entries(counts).map(([type, count]) => ({ type, count }))
-        const allViews = [...ws.views.systemLandscapeViews, ...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews]
+        const allViews = [...ws.views.systemLandscapeViews, ...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews, ...(ws.views.dynamicViews ?? []), ...(ws.views.deploymentViews ?? [])]
         return { filename, label, scope: ws.scope, elementCounts, viewCount: allViews.length }
       } catch {
         return { filename, label, elementCounts: [], viewCount: 0 }
