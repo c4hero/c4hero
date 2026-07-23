@@ -156,7 +156,7 @@ export interface WorkspaceState extends UndoState {
   deleteRelationship: (id: string) => void
 
   // View management
-  addView: (type: ViewType, scopeId?: string, title?: string) => string
+  addView: (type: ViewType, scopeId?: string, title?: string, options?: { environment?: string }) => string
   deleteView: (key: string) => void
   renameView: (key: string, title: string) => void
   duplicateView: (key: string) => string

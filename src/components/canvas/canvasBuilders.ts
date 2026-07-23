@@ -8,6 +8,7 @@ import {
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
 import { CENTER_SLOT, handleId, pickSlots, type Side } from './handleSlots'
+import { buildDeploymentLayoutClusters, buildDeploymentBoundaryNodes } from './deploymentBuilders'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
@@ -116,6 +117,8 @@ export function buildDrillableSet(workspace: Workspace): Set<string> {
 
 /** Return the same boundary memberships buildBoundaryNodes will draw. */
 export function buildBoundaryLayoutClusters(workspace: Workspace, view: View): LayoutBoundaryCluster[] {
+  if (view.type === 'deployment') return buildDeploymentLayoutClusters(workspace, view)
+
   const viewElementIds = new Set(view.elements.map((element) => element.id))
   const clusters: LayoutBoundaryCluster[] = []
 
@@ -346,6 +349,8 @@ export function buildBoundaryNodes(
   laidOutNodes: Node[],
   groupNodes: Node[] = [],
 ): Node[] {
+  if (view.type === 'deployment') return buildDeploymentBoundaryNodes(workspace, view, laidOutNodes)
+
   const BOUNDARY_PADDING = 32
   // Header has 2 lines (name + type label) + internal padding; needs more
   // headroom than the side/bottom padding so the subtitle isn't covered by the
@@ -505,6 +510,8 @@ export function buildEdges(
     targetSide: string
     relStyle: ReturnType<typeof getRelationshipStyle>
     rel: NonNullable<ReturnType<typeof relationshipMap.get>>
+    order?: string
+    stepDescription?: string
   }
 
   const edgeInfos: EdgeInfo[] = []
@@ -524,7 +531,18 @@ export function buildEdges(
     const sourceSide = handles.sourceHandle.split('-')[0]
     const targetSide = handles.targetHandle.split('-')[0]
 
-    edgeInfos.push({ relId: rel.id, sourceId: rel.sourceId, targetId: rel.destinationId, sourceSide, targetSide, relStyle, rel })
+    edgeInfos.push({
+      relId: rel.id,
+      sourceId: rel.sourceId,
+      targetId: rel.destinationId,
+      sourceSide,
+      targetSide,
+      relStyle,
+      rel,
+      // Dynamic views: the ordered interaction label and per-step description.
+      order: viewRel.order,
+      stepDescription: viewRel.description,
+    })
   }
 
   // Second pass: count ALL edges per node+side (regardless of source/target direction),
@@ -594,7 +612,13 @@ export function buildEdges(
       sourceHandle: handleId(e.sourceSide, srcSlot, 'source'),
       targetHandle: handleId(e.targetSide, tgtSlot, 'target'),
       type: 'relationship',
-      data: { relationship: e.rel, relationshipStyle: e.relStyle, highlighted },
+      data: {
+        relationship: e.rel,
+        relationshipStyle: e.relStyle,
+        highlighted,
+        order: e.order,
+        stepDescription: e.stepDescription,
+      },
       className,
     })
   }
