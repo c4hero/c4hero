@@ -4,7 +4,11 @@ import {
   aiErrorMessage, applyEditPlan, summarizeSkips, flattenElements,
   type EditActions, type ApplyResult, type EditPlan,
 } from '@/lib/ai'
+import { checkModelIntegrity } from '@/lib/modelIntegrity'
+import { createLogger } from '@/lib/logger'
 import type { Workspace } from '@/types/model'
+
+const log = createLogger('aiHelpers')
 
 // ─── run state (shared by every feature body) ───────────────────────
 
@@ -70,6 +74,21 @@ export function storeEditActions(): EditActions {
   }
 }
 
+/** Dev/test-only integrity assertion: a successful store apply should never
+ *  leave the model in a structurally broken state. Gated on the env so this
+ *  check (and its import) has zero effect on the production bundle's
+ *  behavior. Call this after any store-mutating apply of an EditPlan
+ *  completes — including replay/rebuild paths outside applyPlanToStore. */
+export function assertPostApplyIntegrity(): void {
+  if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+    const after = useWorkspaceStore.getState().workspace
+    if (after) {
+      const violations = checkModelIntegrity(after)
+      if (violations.length) log.error('post-apply model integrity violations', { violations })
+    }
+  }
+}
+
 export function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched?: boolean }): ApplyResult {
   const s = useWorkspaceStore.getState()
   // Apply in batch mode so the per-op addContainer/addComponent don't jump the
@@ -82,16 +101,31 @@ export function applyPlanToStore(plan: EditPlan, ws: Workspace, opts?: { batched
   const liveBefore = s.workspace ?? ws
   const before = new Set(flattenElements(liveBefore).map((e) => e.id))
   const ownBatch = !opts?.batched
+  // Transactional guard: applyEditPlan is designed to NEVER throw, but this
+  // wrapper must still be provably safe against a defective store action (or a
+  // future regression) throwing mid-apply. Capture the pre-apply workspace ref
+  // before any mutation — including the batch's up-front undo snapshot — so a
+  // throw can be unwound completely.
+  const preWs = s.workspace
   if (ownBatch) s.setBatchApplying(true)
   let result: ApplyResult = { applied: [], appliedCount: 0, skippedCount: 0 }
   try {
     result = applyEditPlan(plan, storeEditActions(), liveBefore)
+  } catch (err) {
+    // Roll back the workspace to its pre-apply ref. When this call owns the
+    // batch, restoring the workspace ref makes it identical to `batchBaseWs`,
+    // so the `finally` below's setBatchApplying(false) sees an "unchanged"
+    // batch and restores the undo/redo stacks itself (ui-slice.ts) — no
+    // separate stack bookkeeping needed here.
+    if (preWs) useWorkspaceStore.getState().resetWorkspaceTo(preWs)
+    throw err
   } finally {
     if (ownBatch) s.setBatchApplying(false)
   }
   const updated = useWorkspaceStore.getState().workspace
   const newIds = updated ? flattenElements(updated).filter((e) => !before.has(e.id)).map((e) => e.id) : []
   if (newIds.length) useWorkspaceStore.getState().focusViewForElements(newIds)
+  assertPostApplyIntegrity()
   return result
 }
 

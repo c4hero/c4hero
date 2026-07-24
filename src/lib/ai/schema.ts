@@ -75,6 +75,36 @@ export const ELEMENT_STATUS_VALUES: ReadonlySet<string> = new Set(['Live', 'Plan
 /** Valid view-type values (mirrors ViewType). */
 export const VIEW_TYPE_VALUES: ReadonlySet<string> = new Set(['systemLandscape', 'systemContext', 'container', 'component'])
 
+// ─── Sanitizer caps ─────────────────────────────────────────────────
+// Bounds on op-count and text-field lengths to defend against runaway/adversarial model output.
+
+/** Maximum number of valid operations in a single plan. */
+export const MAX_PLAN_OPS = 300
+
+/** Maximum length (chars) for name fields. */
+export const MAX_NAME_LENGTH = 200
+
+/** Maximum length (chars) for description fields. */
+export const MAX_DESCRIPTION_LENGTH = 2000
+
+/** Maximum length (chars) for technology fields. */
+export const MAX_TECHNOLOGY_LENGTH = 100
+
+/** Maximum length (chars) for owner fields. */
+export const MAX_OWNER_LENGTH = 120
+
+/** Maximum length (chars) for title fields. */
+export const MAX_TITLE_LENGTH = 120
+
+/** Maximum length (chars) for id-like fields (ref, id, parent, source, destination, scope). */
+export const MAX_ID_FIELD_LENGTH = 512
+
+/** Maximum number of tags in a tags array. */
+export const MAX_TAGS_COUNT = 20
+
+/** Maximum length (chars) per tag. */
+export const MAX_TAG_LENGTH = 80
+
 export const editSchema = {
   type: 'object',
   additionalProperties: false,
@@ -104,6 +134,8 @@ function hasValidOpFieldTypes(value: Record<string, unknown>): boolean {
   // status enum value is validated leniently in the applier so a slightly-off
   // status doesn't discard an otherwise-valid update.
   if (value.tags !== undefined && !isStringArray(value.tags)) return false
+  if (value.location !== undefined && typeof value.location !== 'string') return false
+  if (value.viewType !== undefined && typeof value.viewType !== 'string') return false
   return value.status === undefined || typeof value.status === 'string'
 }
 
@@ -187,27 +219,109 @@ function dropLog(kind: string, kept: number, total: number): void {
   if (kept < total) log.warn(`Dropped ${total - kept} malformed ${kind} from the model response`, { kept, total })
 }
 
+/** Strip C0 control characters (U+0000 through U+001F) from a string, preserving
+ *  newline and tab when keepLinebreaks is true. */
+function stripControlChars(s: string, keepLinebreaks: boolean): string {
+  if (keepLinebreaks) {
+    // Keep \n (0x0A) and \t (0x09); strip the rest of C0 range (0x00-0x1F)
+    return s.split('').filter(c => {
+      const code = c.charCodeAt(0)
+      return code >= 0x20 || code === 0x09 || code === 0x0A
+    }).join('')
+  }
+  // Strip all C0 control characters (0x00-0x1F)
+  return s.split('').filter(c => c.charCodeAt(0) >= 0x20).join('')
+}
+
+/** Sanitize an EditOp: truncate text fields, strip control chars, enforce id-field
+ *  length limits, and cap tags. Returns the sanitized op or null if the op should
+ *  be dropped entirely (e.g., an id-field exceeds MAX_ID_FIELD_LENGTH). */
+export function sanitizeEditOp(op: EditOp): EditOp | null {
+  // Check id-fields first: if any exceed MAX_ID_FIELD_LENGTH, drop the whole op
+  const opAny = op as unknown as Record<string, unknown>
+  const idFields = ['ref', 'id', 'parent', 'source', 'destination', 'scope'] as const
+  for (const field of idFields) {
+    if (field in opAny && typeof opAny[field] === 'string') {
+      if ((opAny[field] as string).length > MAX_ID_FIELD_LENGTH) {
+        return null // Drop the whole op
+      }
+    }
+  }
+
+  const result: Record<string, unknown> = { ...op }
+
+  // Truncate and strip control chars from text fields
+  if (typeof result.name === 'string') {
+    result.name = stripControlChars(result.name, false).slice(0, MAX_NAME_LENGTH)
+  }
+  if (typeof result.description === 'string') {
+    result.description = stripControlChars(result.description, true).slice(0, MAX_DESCRIPTION_LENGTH)
+  }
+  if (typeof result.technology === 'string') {
+    result.technology = stripControlChars(result.technology, false).slice(0, MAX_TECHNOLOGY_LENGTH)
+  }
+  if (typeof result.owner === 'string') {
+    result.owner = stripControlChars(result.owner, false).slice(0, MAX_OWNER_LENGTH)
+  }
+  if (typeof result.title === 'string') {
+    result.title = stripControlChars(result.title, false).slice(0, MAX_TITLE_LENGTH)
+  }
+
+  // Sanitize tags: cap count, trim, drop empty/long tags
+  if (Array.isArray(result.tags)) {
+    const tags = result.tags
+      .slice(0, MAX_TAGS_COUNT)
+      .map((t) => {
+        if (typeof t === 'string') {
+          const trimmed = t.trim()
+          return trimmed.length <= MAX_TAG_LENGTH ? trimmed : null
+        }
+        return null
+      })
+      .filter((t): t is string => t !== null && t.length > 0)
+    result.tags = tags.length > 0 ? tags : undefined
+  }
+
+  return result as unknown as EditOp
+}
+
 /** Filter an `{ operations }` envelope down to valid operations. */
 export function toEditPlan(value: unknown): EditPlan {
   const ops = isRecord(value) && Array.isArray(value.operations) ? value.operations : []
-  const operations = ops.filter(isEditOp)
-  dropLog('operations', operations.length, ops.length)
-  return { operations }
+  const validOps = ops.filter(isEditOp)
+  const sanitized = validOps.map(sanitizeEditOp).filter((op): op is EditOp => op !== null)
+
+  // Cap at MAX_PLAN_OPS
+  if (sanitized.length > MAX_PLAN_OPS) {
+    dropLog('operations due to plan size cap', MAX_PLAN_OPS, sanitized.length)
+    sanitized.length = MAX_PLAN_OPS
+  }
+
+  dropLog('operations', sanitized.length, ops.length)
+  return { operations: sanitized }
 }
 
 export function toReviewFinding(value: unknown): ReviewFinding | null {
   if (!isRecord(value)) return null
   if (typeof value.title !== 'string' || typeof value.detail !== 'string' || typeof value.suggestion !== 'string') return null
   const severity: ReviewFinding['severity'] = value.severity === 'high' || value.severity === 'low' ? value.severity : 'medium'
-  const ops = Array.isArray(value.operations) ? value.operations.filter(isEditOp) : []
-  // Keep only options that have a label and at least one valid operation.
+
+  // Sanitize finding operations
+  const ops = Array.isArray(value.operations)
+    ? value.operations.filter(isEditOp).map(sanitizeEditOp).filter((op): op is EditOp => op !== null)
+    : []
+
+  // Keep only options that have a label and at least one valid operation
   const options = Array.isArray(value.options)
     ? value.options.flatMap((o): ReviewFixOption[] => {
         if (!isRecord(o) || typeof o.label !== 'string' || !o.label.trim()) return []
-        const oops = Array.isArray(o.operations) ? o.operations.filter(isEditOp) : []
+        const oops = Array.isArray(o.operations)
+          ? o.operations.filter(isEditOp).map(sanitizeEditOp).filter((op): op is EditOp => op !== null)
+          : []
         return oops.length ? [{ label: o.label, operations: oops }] : []
       })
     : []
+
   return {
     title: value.title,
     detail: value.detail,

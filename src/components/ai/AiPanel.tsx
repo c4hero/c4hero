@@ -16,7 +16,7 @@ import {
   type AiProvider, type AiFeatureId,
 } from '@/lib/ai'
 import { C, STYLE, headerRow, iconBtn } from './aiTheme'
-import { storeEditActions, applyPlanToStore, isAbortError } from './aiHelpers'
+import { storeEditActions, applyPlanToStore, assertPostApplyIntegrity, isAbortError } from './aiHelpers'
 import {
   FEATURE_TO_VIEW, VIEW_TITLE, TECH_INSTRUCTION, viewScopeIds,
   type AiView, type FindingItem, type LedgerEntry, type ReviewUndo,
@@ -350,6 +350,11 @@ function AppView({
     const base = baseline
     if (!base) return
     const store = useWorkspaceStore.getState()
+    // Transactional guard, same rationale as applyPlanToStore (aiHelpers.ts):
+    // capture the pre-replay workspace ref before the batch starts so a throw
+    // from resetWorkspaceTo or one of applyEditPlan's store actions can be
+    // fully unwound — no half-reset workspace, no dangling undo entry.
+    const preWs = store.workspace
     store.setBatchApplying(true)
     try {
       store.resetWorkspaceTo(base)
@@ -357,9 +362,16 @@ function AppView({
       // Replay skips are real information: a kept change whose target came from
       // a now-reverted entry quietly stops applying — say so.
       setSkipNotice(ops.length ? summarizeSkips(applyEditPlan({ operations: ops }, storeEditActions(), base)) : null)
+    } catch (err) {
+      // Roll back to the pre-replay workspace ref. As in applyPlanToStore, this
+      // makes the workspace ref === batchBaseWs so the setBatchApplying(false)
+      // below restores the undo/redo stacks to their pre-batch state itself.
+      if (preWs) useWorkspaceStore.getState().resetWorkspaceTo(preWs)
+      throw err
     } finally {
       store.setBatchApplying(false)
     }
+    assertPostApplyIntegrity()
     // Record the workspace this replay produced, so a subsequent undo can tell
     // whether the user has edited outside the review since.
     setExpectedWs(useWorkspaceStore.getState().workspace)
