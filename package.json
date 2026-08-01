@@ -37,7 +37,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "audit": "npm audit --audit-level=moderate",
+    "audit": "node scripts/audit-allowlist.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
@@ -80,8 +80,9 @@
   },
   "overrides": {
     "@rollup/plugin-terser": "^1.0.0",
-    "postcss": "^8.5.12",
+    "postcss": "^8.5.18",
     "serialize-javascript": "^7.0.5",
-    "undici": "^7.28.0"
+    "undici": "^7.28.0",
+    "react-router": "8.3.0"
   }
 }
