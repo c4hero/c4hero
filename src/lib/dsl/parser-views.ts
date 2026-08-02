@@ -164,7 +164,11 @@ function parseSystemLandscapeView(p: ContextAwareParser, model: Model): View | n
 function parseElementView(p: ContextAwareParser, type: ViewType, model: Model): View | null {
     p.advance() // consume keyword
 
-    const elementRef = p.readOptionalStringOrIdentifier()
+    // The scope may be a qualified path — `component pathways.navigatorApi` —
+    // in which case reading a single token would bind the view to the system
+    // and leave `.navigatorApi` sitting in the key slot.
+    const scope = p.readQualifiedRef({ allowString: true })
+    const elementRef = scope?.ref
     const key = p.readOptionalStringOrIdentifier() ?? ''
     const positionalDescription = p.readOptionalString()
 
@@ -177,8 +181,11 @@ function parseElementView(p: ContextAwareParser, type: ViewType, model: Model): 
         relationships: [],
     }
 
-    if (elementRef) {
+    if (elementRef && scope) {
         const resolvedId = p.resolveRef(elementRef)
+        if (!resolvedId && elementRef.includes('.')) {
+            p.addError(`Unresolved reference: '${elementRef}'`, scope.token)
+        }
         if (type === 'systemContext' || type === 'container') {
             view.softwareSystemId = resolvedId ?? elementRef
         } else if (type === 'component') {
@@ -223,9 +230,13 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
                             for (const id of expansion) view.elements.push({ id })
                             continue
                         }
-                        const ref = p.advance().value
-                        const resolvedId = p.resolveRef(ref)
-                        view.elements.push({ id: resolvedId ?? ref })
+                        const ref = p.readQualifiedRef({ allowString: true })
+                        if (!ref) { p.advance(); continue }
+                        const resolvedId = p.resolveRef(ref.ref)
+                        if (!resolvedId && ref.ref.includes('.')) {
+                            p.addError(`Unresolved reference: '${ref.ref}'`, ref.token)
+                        }
+                        view.elements.push({ id: resolvedId ?? ref.ref })
                     }
                 }
                 continue
@@ -235,9 +246,14 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
                 p.advance()
                 const excluded = p.viewExcludedIds.get(view) ?? new Set<string>()
                 while (p.check('STAR') || p.check('IDENTIFIER') || p.check('STRING') || p.check('KEYWORD')) {
-                    const ref = p.advance().value
-                    const resolvedId = p.resolveRef(ref)
-                    excluded.add(resolvedId ?? ref)
+                    if (p.check('STAR')) { excluded.add(p.advance().value); continue }
+                    const ref = p.readQualifiedRef({ allowString: true })
+                    if (!ref) { p.advance(); continue }
+                    const resolvedId = p.resolveRef(ref.ref)
+                    if (!resolvedId && ref.ref.includes('.')) {
+                        p.addError(`Unresolved reference: '${ref.ref}'`, ref.token)
+                    }
+                    excluded.add(resolvedId ?? ref.ref)
                 }
                 p.viewExcludedIds.set(view, excluded)
                 continue
@@ -339,10 +355,11 @@ function tryParseElementExpression(p: ContextAwareParser, model: Model): string[
     if (valueTok?.type !== 'IDENTIFIER' && valueTok?.type !== 'STRING' && valueTok?.type !== 'KEYWORD') return null
 
     const fieldName = p.tokens[p.pos + 2].value
-    const value = valueTok.value
 
-    // Commit: consume all 6 tokens
-    p.advance(); p.advance(); p.advance(); p.advance(); p.advance(); p.advance()
+    // Commit: consume `element . field = =`, then the value, which may itself be
+    // a qualified path (`element.parent==mpng.studentApp`).
+    p.advance(); p.advance(); p.advance(); p.advance(); p.advance()
+    const value = p.readQualifiedRef({ allowString: true })?.ref ?? p.advance().value
 
     return resolveExpression(fieldName, value, model, p)
 }

@@ -22,6 +22,7 @@ export function parseModelBody(p: ContextAwareParser, model: Model, groupRefIds?
             // Preprocessor directives (!include, !const, !var, !identifiers, !docs, !adrs).
             // c4hero doesn't evaluate them, but must consume the keyword plus any inline
             // arguments on the same line to avoid mis-parsing them as model elements.
+            p.noteDirective(token.value)
             p.advance()
             p.skipToNextLine()
             continue
@@ -102,6 +103,15 @@ export function parseModelBody(p: ContextAwareParser, model: Model, groupRefIds?
         }
 
         if (token.type === 'IDENTIFIER') {
+            // Relationship statements are detected up front because a qualified
+            // source (`mpng.gatewayApi -> ...`) puts a DOT, not an ARROW, right
+            // after the first identifier.
+            if (p.looksLikeRelationship()) {
+                const rel = parseRelationship(p)
+                if (rel) model.relationships.push(rel)
+                continue
+            }
+
             const saved = p.pos
             p.advance()
             p.skipNewlines()
@@ -132,20 +142,23 @@ export function parseModelBody(p: ContextAwareParser, model: Model, groupRefIds?
                 continue
             }
 
-            if (p.check('ARROW')) {
-                p.pos = saved
-                const rel = parseRelationship(p)
-                if (rel) model.relationships.push(rel)
-                continue
-            }
-
-            // Standalone identifier — if collecting group refs, resolve it
-            if (groupRefIds !== undefined) {
-                const resolvedId = p.resolveRef(token.value)
-                if (resolvedId) groupRefIds.push(resolvedId)
-            }
             p.pos = saved
-            p.advance()
+            // Standalone reference, possibly qualified (`mpng.gatewayApi`) —
+            // e.g. a group membership list.
+            const ref = p.readQualifiedRef()
+            if (ref) {
+                const resolvedId = p.resolveRef(ref.ref)
+                if (resolvedId) {
+                    if (groupRefIds !== undefined) groupRefIds.push(resolvedId)
+                } else if (ref.ref.includes('.')) {
+                    // A dotted token is unambiguously an element reference, so a
+                    // failure to resolve is a real error rather than an unknown
+                    // directive to skip over.
+                    p.addError(`Unresolved reference: '${ref.ref}'`, ref.token)
+                }
+            } else {
+                p.advance()
+            }
             // Stop before any inline `{` so we don't consume it with the rest of the line
             p.skipUnknownDirective()
             continue
@@ -162,7 +175,7 @@ function parsePerson(p: ContextAwareParser, varName?: string): Person | null {
     const description = p.readOptionalString() || undefined
     const tagsStr = p.readOptionalString()
 
-    const id = varName ?? nextId()
+    const id = p.allocateId(varName)
     const person: Person = {
         id,
         type: 'person',
@@ -191,7 +204,7 @@ function parseSoftwareSystem(p: ContextAwareParser, varName?: string, model?: Mo
     const description = p.readOptionalString() || undefined
     const tagsStr = p.readOptionalString()
 
-    const id = varName ?? nextId()
+    const id = p.allocateId(varName)
     const sys: SoftwareSystem = {
         id,
         type: 'softwareSystem',
@@ -202,12 +215,12 @@ function parseSoftwareSystem(p: ContextAwareParser, varName?: string, model?: Mo
         containers: [],
     }
 
-    p.registerElement(id, name, 'softwareSystem', varName)
+    const path = p.registerElement(id, name, 'softwareSystem', varName)
 
     p.skipNewlines()
     if (p.check('LBRACE')) {
         p.advance()
-        parseSoftwareSystemBody(p, sys, model)
+        parseSoftwareSystemBody(p, sys, model, path)
         p.skipNewlines()
         p.expect('RBRACE')
     }
@@ -215,7 +228,7 @@ function parseSoftwareSystem(p: ContextAwareParser, varName?: string, model?: Mo
     return sys
 }
 
-function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, model?: Model): void {
+function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, model?: Model, path?: string): void {
     p.depth++
     if (p.depth > MAX_DEPTH) { p.addError('Maximum nesting depth exceeded', p.peek()); p.depth--; return }
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
@@ -235,7 +248,7 @@ function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, mod
                 p.readOptionalString()
                 p.skipNewlines()
                 if (p.match('LBRACE')) {
-                    parseSoftwareSystemBody(p, sys, model)
+                    parseSoftwareSystemBody(p, sys, model, path)
                     p.skipNewlines()
                     p.expect('RBRACE')
                 }
@@ -243,7 +256,7 @@ function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, mod
             }
 
             if (kw === 'container') {
-                const container = parseContainer(p, undefined, model)
+                const container = parseContainer(p, undefined, model, path)
                 if (container) sys.containers.push(container)
                 continue
             }
@@ -262,6 +275,16 @@ function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, mod
         }
 
         if (token.type === 'IDENTIFIER') {
+            if (p.looksLikeRelationship()) {
+                if (model) {
+                    const rel = parseRelationship(p)
+                    if (rel) model.relationships.push(rel)
+                } else {
+                    p.skipToNextLine()
+                }
+                continue
+            }
+
             const saved = p.pos
             p.advance()
             p.skipNewlines()
@@ -274,24 +297,13 @@ function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, mod
                 if (p.check('KEYWORD')) {
                     const ekw = p.peekValue().toLowerCase()
                     if (ekw === 'container') {
-                        const container = parseContainer(p, vn, model)
+                        const container = parseContainer(p, vn, model, path)
                         if (container) sys.containers.push(container)
                     } else {
                         p.skipUnknownDirective()
                     }
                 } else {
                     p.skipUnknownDirective()
-                }
-                continue
-            }
-
-            if (p.check('ARROW')) {
-                p.pos = saved
-                if (model) {
-                    const rel = parseRelationship(p)
-                    if (rel) model.relationships.push(rel)
-                } else {
-                    p.skipToNextLine()
                 }
                 continue
             }
@@ -310,14 +322,14 @@ function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, mod
     p.depth--
 }
 
-function parseContainer(p: ContextAwareParser, varName?: string, model?: Model): Container | null {
+function parseContainer(p: ContextAwareParser, varName?: string, model?: Model, parentPath?: string): Container | null {
     p.advance() // consume 'container'
     const name = p.readString()
     const description = p.readOptionalString() || undefined
     const technology = p.readOptionalString() || undefined
     const tagsStr = p.readOptionalString()
 
-    const id = varName ?? nextId()
+    const id = p.allocateId(varName, parentPath)
     const container: Container = {
         id,
         type: 'container',
@@ -329,12 +341,12 @@ function parseContainer(p: ContextAwareParser, varName?: string, model?: Model):
         components: [],
     }
 
-    p.registerElement(id, name, 'container', varName)
+    const path = p.registerElement(id, name, 'container', varName, parentPath)
 
     p.skipNewlines()
     if (p.check('LBRACE')) {
         p.advance()
-        parseContainerBody(p, container, model)
+        parseContainerBody(p, container, model, path)
         p.skipNewlines()
         p.expect('RBRACE')
     }
@@ -342,7 +354,7 @@ function parseContainer(p: ContextAwareParser, varName?: string, model?: Model):
     return container
 }
 
-function parseContainerBody(p: ContextAwareParser, container: Container, model?: Model): void {
+function parseContainerBody(p: ContextAwareParser, container: Container, model?: Model, path?: string): void {
     p.depth++
     if (p.depth > MAX_DEPTH) { p.addError('Maximum nesting depth exceeded', p.peek()); p.depth--; return }
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
@@ -362,7 +374,7 @@ function parseContainerBody(p: ContextAwareParser, container: Container, model?:
                 p.readOptionalString()
                 p.skipNewlines()
                 if (p.match('LBRACE')) {
-                    parseContainerBody(p, container, model)
+                    parseContainerBody(p, container, model, path)
                     p.skipNewlines()
                     p.expect('RBRACE')
                 }
@@ -370,7 +382,7 @@ function parseContainerBody(p: ContextAwareParser, container: Container, model?:
             }
 
             if (kw === 'component') {
-                const comp = parseComponent(p)
+                const comp = parseComponent(p, undefined, path)
                 if (comp) container.components.push(comp)
                 continue
             }
@@ -386,6 +398,16 @@ function parseContainerBody(p: ContextAwareParser, container: Container, model?:
         }
 
         if (token.type === 'IDENTIFIER') {
+            if (p.looksLikeRelationship()) {
+                if (model) {
+                    const rel = parseRelationship(p)
+                    if (rel) model.relationships.push(rel)
+                } else {
+                    p.skipToNextLine()
+                }
+                continue
+            }
+
             const saved = p.pos
             p.advance()
             p.skipNewlines()
@@ -396,21 +418,10 @@ function parseContainerBody(p: ContextAwareParser, container: Container, model?:
                 const vn = token.value
 
                 if (p.check('KEYWORD') && p.peekValue().toLowerCase() === 'component') {
-                    const comp = parseComponent(p, vn)
+                    const comp = parseComponent(p, vn, path)
                     if (comp) container.components.push(comp)
                 } else {
                     p.skipUnknownDirective()
-                }
-                continue
-            }
-
-            if (p.check('ARROW')) {
-                p.pos = saved
-                if (model) {
-                    const rel = parseRelationship(p)
-                    if (rel) model.relationships.push(rel)
-                } else {
-                    p.skipToNextLine()
                 }
                 continue
             }
@@ -426,14 +437,14 @@ function parseContainerBody(p: ContextAwareParser, container: Container, model?:
     p.depth--
 }
 
-function parseComponent(p: ContextAwareParser, varName?: string): Component | null {
+function parseComponent(p: ContextAwareParser, varName?: string, parentPath?: string): Component | null {
     p.advance() // consume 'component'
     const name = p.readString()
     const description = p.readOptionalString() || undefined
     const technology = p.readOptionalString() || undefined
     const tagsStr = p.readOptionalString()
 
-    const id = varName ?? nextId()
+    const id = p.allocateId(varName, parentPath)
     const component: Component = {
         id,
         type: 'component',
@@ -444,7 +455,7 @@ function parseComponent(p: ContextAwareParser, varName?: string): Component | nu
         properties: {},
     }
 
-    p.registerElement(id, name, 'component', varName)
+    p.registerElement(id, name, 'component', varName, parentPath)
 
     p.skipNewlines()
     if (p.check('LBRACE')) {

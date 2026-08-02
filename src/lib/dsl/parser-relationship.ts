@@ -4,28 +4,38 @@ import type { Relationship, InteractionStyle, LineStyle } from '@/types/model'
 import type { ContextAwareParser } from './parser'
 
 export function parseRelationship(p: ContextAwareParser): Relationship | null {
-    const sourceToken = p.advance()
-    p.expect('ARROW')
-
-    const destToken = p.peek()
-    let destRef: string
-    if (destToken.type === 'IDENTIFIER' || destToken.type === 'KEYWORD') {
-        destRef = p.advance().value
-    } else {
-        p.addError(`Expected relationship destination, got ${destToken.type}`, destToken)
+    // Both endpoints may be qualified paths (`mpng.gatewayApi`,
+    // `pathways.navigatorApi.jwksController`), so consume the whole path —
+    // reading a single token would bind the relationship to the parent element
+    // and leave the remaining segments sitting in the description slot.
+    const source = p.readQualifiedRef()
+    if (!source) {
+        p.addError(`Expected relationship source, got ${p.peekType()}`, p.peek())
         p.skipToNextLine()
         return null
     }
+    const sourceToken = source.token
+    p.skipNewlines()
+    p.expect('ARROW')
+
+    const dest = p.readQualifiedRef()
+    if (!dest) {
+        p.addError(`Expected relationship destination, got ${p.peekType()}`, p.peek())
+        p.skipToNextLine()
+        return null
+    }
+    const destRef = dest.ref
+    const destToken = dest.token
 
     const description = p.readOptionalString() || undefined
     const technology = p.readOptionalString() || undefined
     const tagsStr = p.readOptionalString()
 
-    const sourceId = p.resolveRef(sourceToken.value)
+    const sourceId = p.resolveRef(source.ref)
     const destId = p.resolveRef(destRef)
 
     if (!sourceId) {
-        p.addError(`Unresolved reference: '${sourceToken.value}'`, sourceToken)
+        p.addError(`Unresolved reference: '${source.ref}'`, sourceToken)
     }
     if (!destId) {
         p.addError(`Unresolved reference: '${destRef}'`, destToken)
@@ -44,7 +54,7 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
     }
     const rel: Relationship = {
         id: `rel-${p.relCounter}`,
-        sourceId: sourceId ?? sourceToken.value,
+        sourceId: sourceId ?? source.ref,
         destinationId: destId ?? destRef,
         description,
         technology,

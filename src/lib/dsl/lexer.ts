@@ -323,11 +323,12 @@ export function lex(input: string): LexResult {
         }
 
         if (ch === '.') {
-            // The dot only ever appears in `element.type==X` / `element.parent==X`
-            // expressions inside `include` / `exclude` statements. Bare dots
-            // elsewhere were a lexer error before and still are after parsing
-            // (the parser will report "unexpected DOT" if it sees one outside
-            // an expression).
+            // The dot separates the segments of a hierarchical (qualified)
+            // identifier — `mpng.gatewayApi`, `pathways.navigatorApi.jwksController` —
+            // and also appears in `element.type==X` / `element.parent==X`
+            // expressions inside `include` / `exclude` statements. It stays a
+            // standalone token: the parser joins segments via readQualifiedRef()
+            // and tells the two forms apart by looking ahead for `==`.
             advance()
             tokens.push({ type: 'DOT', value: '.', line: startLine, column: startCol })
             continue
