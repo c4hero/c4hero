@@ -103,7 +103,8 @@ describe('relationship tag roundtrip', () => {
     const ws = makeWs()
     const dsl = serializeDSL(ws)
     // rel-2 has tag 'Secondary' and interactionStyle Asynchronous → block form
-    expect(dsl).toContain('interactionStyle Asynchronous')
+    // (interactionStyle travels as a property; Structurizr rejects the bare keyword)
+    expect(dsl).toContain('"c4hero.interactionStyle" "Asynchronous"')
     expect(dsl).toContain('tags "Secondary"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])

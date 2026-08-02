@@ -164,5 +164,32 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
         p.expect('RBRACE')
     }
 
+    applyRelationshipConventions(rel)
     return rel
+}
+
+/**
+ * Hoist the property-encoded `lineStyle` / `interactionStyle` back onto the
+ * relationship fields. Structurizr rejects both as bare keywords in a
+ * relationship body, so the serializer emits them as `c4hero.lineStyle` /
+ * `c4hero.interactionStyle` properties. The legacy bare keywords are still
+ * accepted by the block parser above and win when both forms appear; only
+ * valid enum members are hoisted — anything else stays a plain property so no
+ * value is silently lost.
+ */
+function applyRelationshipConventions(rel: Relationship): void {
+    const lineStyle = rel.properties['c4hero.lineStyle']
+    if (lineStyle !== undefined && rel.lineStyle === undefined) {
+        if (lineStyle === 'Curved' || lineStyle === 'Straight' || lineStyle === 'Orthogonal') {
+            rel.lineStyle = lineStyle
+            delete rel.properties['c4hero.lineStyle']
+        }
+    }
+    const interactionStyle = rel.properties['c4hero.interactionStyle']
+    if (interactionStyle !== undefined && rel.interactionStyle === undefined) {
+        if (interactionStyle === 'Synchronous' || interactionStyle === 'Asynchronous') {
+            rel.interactionStyle = interactionStyle
+            delete rel.properties['c4hero.interactionStyle']
+        }
+    }
 }

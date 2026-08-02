@@ -80,18 +80,44 @@ function systemNamed(model: Record<string, unknown>, name: string) {
     return (m?.softwareSystems ?? []).find(s => s.name === name)
 }
 
+interface ExportedRelationship {
+    description?: string
+    technology?: string
+    url?: string
+    tags?: string
+    properties?: Record<string, string>
+}
+
+/** Every relationship the real parser stored (it hangs them off the source element). */
+function allRelationships(model: Record<string, unknown>): ExportedRelationship[] {
+    const m = model.model as {
+        people?: { relationships?: ExportedRelationship[] }[]
+        softwareSystems?: { relationships?: ExportedRelationship[] }[]
+    } | undefined
+    return [
+        ...(m?.people ?? []).flatMap(p => p.relationships ?? []),
+        ...(m?.softwareSystems ?? []).flatMap(s => s.relationships ?? []),
+    ]
+}
+
 /** A workspace whose strings exercise everything Structurizr's tokenizer treats specially. */
 function hostileWorkspace(): Workspace {
     return {
         name: 'Hostile',
         description: '',
         model: {
-            people: [],
+            people: [
+                {
+                    id: 'user', type: 'person', name: 'Ops User',
+                    tags: ['Element', 'Person'], properties: {},
+                },
+            ],
             softwareSystems: [
                 {
                     id: 'sys', type: 'softwareSystem', name: 'Example System',
                     tags: ['Element', 'Software System', 'has,comma', 'has"quote'],
                     properties: {}, owner: 'Platform Team', location: 'External',
+                    status: 'Live',
                     containers: [
                         // The exact values from GH #109.
                         {
@@ -109,10 +135,30 @@ function hostileWorkspace(): Workspace {
                             description: 'tab\there', technology: 'literal \\n not newline',
                             tags: ['Element', 'Container'], properties: {}, components: [],
                         },
+                        // Backslash immediately before a quote — representable
+                        // (emitted as `\\"`, decoded as literal-\ + quote).
+                        {
+                            id: 'bsq', type: 'container', name: 'see "manual\\"',
+                            description: 'backslash before quote', technology: 'a\\"b',
+                            tags: ['Element', 'Container'], properties: {}, components: [],
+                        },
                     ],
                 },
             ],
-            relationships: [],
+            relationships: [
+                // Exercises every relationship field the serializer must encode:
+                // description/technology (with hostile strings), the
+                // property-encoded lineStyle/interactionStyle, url, a tag with
+                // a comma, and a user property.
+                {
+                    id: 'rel1', sourceId: 'user', destinationId: 'sys',
+                    description: 'Reads the "daily"\nreport', technology: 'SMB 3.0',
+                    tags: ['Relationship', 'nightly,batch'],
+                    properties: { 'sync.source': 'ldap' },
+                    interactionStyle: 'Asynchronous', lineStyle: 'Orthogonal',
+                    url: 'https://example.com/share',
+                },
+            ],
             groups: [],
         },
         views: {
@@ -192,6 +238,8 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
                 'Shared Folder X:',
                 'Say "hi"',
                 'two\nlines',
+                // Backslash-before-quote IS representable and survives byte-exact.
+                'see "manual\\"',
             ])
         })
 
@@ -200,6 +248,14 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
             const m = model.model as { softwareSystems: { containers: { name: string; technology?: string }[] }[] }
             const quoted = m.softwareSystems[0].containers.find(c => c.name === 'Say "hi"')
             expect(quoted?.technology).toBe('C:\\Program Files')
+        })
+
+        it('stores backslash-before-quote byte-exactly', () => {
+            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const m = model.model as { softwareSystems: { containers: { name: string; technology?: string }[] }[] }
+            const bsq = m.softwareSystems[0].containers.find(c => c.name === 'see "manual\\"')
+            expect(bsq).toBeDefined()
+            expect(bsq?.technology).toBe('a\\"b')
         })
 
         it('carries externality as the External tag', () => {
@@ -217,6 +273,36 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
             const tags = (systemNamed(model, 'Example System')?.tags ?? '').split(',')
             expect(tags).not.toContain('has')
             expect(tags).not.toContain('comma')
+        })
+
+        it('carries element status as a property the real parser can read', () => {
+            const model = exportModel(serializeDSL(hostileWorkspace()))
+            expect(systemNamed(model, 'Example System')?.properties?.['c4hero.status']).toBe('Live')
+        })
+
+        it('preserves relationship description, technology and url exactly', () => {
+            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const [rel] = allRelationships(model)
+            expect(rel).toBeDefined()
+            expect(rel.description).toBe('Reads the "daily"\nreport')
+            expect(rel.technology).toBe('SMB 3.0')
+            expect(rel.url).toBe('https://example.com/share')
+        })
+
+        it('carries lineStyle and interactionStyle as properties, next to user properties', () => {
+            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const [rel] = allRelationships(model)
+            expect(rel?.properties?.['c4hero.lineStyle']).toBe('Orthogonal')
+            expect(rel?.properties?.['c4hero.interactionStyle']).toBe('Asynchronous')
+            expect(rel?.properties?.['sync.source']).toBe('ldap')
+        })
+
+        it('does not split a relationship tag containing a comma into two tags', () => {
+            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const tags = (allRelationships(model)[0]?.tags ?? '').split(',')
+            expect(tags).not.toContain('nightly')
+            expect(tags).not.toContain('batch')
+            expect(tags).toContain('nightlybatch')
         })
     })
 })

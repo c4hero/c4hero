@@ -121,13 +121,41 @@ class SerializerContext {
     }
 
     /**
-     * Properties to emit. `owner` is not a Structurizr keyword, so it travels
-     * inside the `properties` block; the parser hoists it back to the field.
+     * Properties to emit for an element. `owner` and `status` are not
+     * Structurizr keywords (the real parser rejects them inside an element
+     * block), so they travel inside the `properties` block — `owner` under the
+     * bare `owner` key, `status` under `c4hero.status`; the parser hoists both
+     * back to their fields. Derived keys are emitted first and win over a
+     * colliding user property, so serialize → parse → serialize is
+     * byte-identical.
      */
-    private ownerAwareProperties(
-        el: { owner?: string; properties: Record<string, string> },
+    private elementProperties(
+        el: { owner?: string; status?: string; properties: Record<string, string> },
     ): Record<string, string> {
-        return el.owner ? { ...el.properties, owner: el.owner } : el.properties
+        const props: Record<string, string> = {}
+        if (el.owner) props.owner = el.owner
+        if (el.status) props['c4hero.status'] = el.status
+        for (const [key, val] of Object.entries(el.properties)) {
+            if (!(key in props)) props[key] = val
+        }
+        return props
+    }
+
+    /**
+     * Properties to emit for a relationship. `lineStyle` and `interactionStyle`
+     * are not Structurizr keywords in a relationship body (the real parser
+     * rejects them), so they travel as `c4hero.lineStyle` /
+     * `c4hero.interactionStyle` properties, with the same derived-first,
+     * derived-wins rules as elementProperties().
+     */
+    private relationshipProperties(rel: Relationship): Record<string, string> {
+        const props: Record<string, string> = {}
+        if (rel.lineStyle) props['c4hero.lineStyle'] = rel.lineStyle
+        if (rel.interactionStyle) props['c4hero.interactionStyle'] = rel.interactionStyle
+        for (const [key, val] of Object.entries(rel.properties)) {
+            if (!(key in props)) props[key] = val
+        }
+        return props
     }
 
     /** Emit a `properties { }` block for any user-defined key/value pairs. */
@@ -236,9 +264,9 @@ class SerializerContext {
     private serializePerson(person: Person): void {
         const varName = this.idToVar.get(person.id)
         const extraTags = this.locationAwareTags(person, ['Element', 'Person'])
-        const props = this.ownerAwareProperties(person)
+        const props = this.elementProperties(person)
         const hasProperties = Object.keys(props).length > 0
-        const hasBlock = !!person.url || !!person.status || hasProperties
+        const hasBlock = !!person.url || hasProperties
 
         const parts: string[] = []
         parts.push('person')
@@ -254,7 +282,6 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
-            if (person.status) this.emit(`status ${person.status}`)
             if (hasProperties) this.serializeProperties(props)
             this.depth--
             this.emit('}')
@@ -266,9 +293,9 @@ class SerializerContext {
     private serializeSoftwareSystem(sys: SoftwareSystem): void {
         const varName = this.idToVar.get(sys.id)
         const extraTags = this.locationAwareTags(sys, ['Element', 'Software System'])
-        const props = this.ownerAwareProperties(sys)
+        const props = this.elementProperties(sys)
         const hasProperties = Object.keys(props).length > 0
-        const hasBody = sys.containers.length > 0 || !!sys.url || !!sys.status || hasProperties
+        const hasBody = sys.containers.length > 0 || !!sys.url || hasProperties
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -285,7 +312,6 @@ class SerializerContext {
             this.depth++
 
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
-            if (sys.status) this.emit(`status ${sys.status}`)
             if (hasProperties) this.serializeProperties(props)
 
             for (let i = 0; i < sys.containers.length; i++) {
@@ -303,9 +329,9 @@ class SerializerContext {
     private serializeContainer(container: Container): void {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
-        const props = this.ownerAwareProperties(container)
+        const props = this.elementProperties(container)
         const hasProperties = Object.keys(props).length > 0
-        const hasBody = container.components.length > 0 || !!container.url || !!container.status || hasProperties
+        const hasBody = container.components.length > 0 || !!container.url || hasProperties
 
         const parts: string[] = []
         parts.push('container')
@@ -325,7 +351,6 @@ class SerializerContext {
             this.depth++
 
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
-            if (container.status) this.emit(`status ${container.status}`)
             if (hasProperties) this.serializeProperties(props)
             for (const comp of container.components) {
                 this.serializeComponent(comp)
@@ -341,9 +366,9 @@ class SerializerContext {
     private serializeComponent(comp: Component): void {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
-        const props = this.ownerAwareProperties(comp)
+        const props = this.elementProperties(comp)
         const hasProperties = Object.keys(props).length > 0
-        const hasBlock = !!comp.url || !!comp.status || hasProperties
+        const hasBlock = !!comp.url || hasProperties
 
         const parts: string[] = []
         parts.push('component')
@@ -362,7 +387,6 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (comp.url) this.emit(`url "${this.escapeString(comp.url)}"`)
-            if (comp.status) this.emit(`status ${comp.status}`)
             if (hasProperties) this.serializeProperties(props)
             this.depth--
             this.emit('}')
@@ -383,17 +407,17 @@ class SerializerContext {
         if (rel.technology) parts.push(`"${this.escapeString(rel.technology)}"`)
 
         const extraTags = this.getExtraTags(rel.tags, ['Relationship'])
-        const hasProperties = Object.keys(rel.properties).length > 0
-        const needsBlock = !!rel.interactionStyle || !!rel.url || !!rel.lineStyle || hasProperties
+        const props = this.relationshipProperties(rel)
+        const hasProperties = Object.keys(props).length > 0
+        const needsBlock = !!rel.url || hasProperties
 
         if (needsBlock) {
-            // Use block form when interactionStyle, url, lineStyle, or properties are present
+            // Use block form when url or properties (including the folded-in
+            // lineStyle/interactionStyle) are present
             this.emit(`${parts.join(' ')} {`)
             this.depth++
             if (rel.url) this.emit(`url "${this.escapeString(rel.url)}"`)
-            if (rel.interactionStyle) this.emit(`interactionStyle ${rel.interactionStyle}`)
-            if (rel.lineStyle) this.emit(`lineStyle ${rel.lineStyle}`)
-            if (hasProperties) this.serializeProperties(rel.properties)
+            if (hasProperties) this.serializeProperties(props)
             if (extraTags) this.emit(`tags "${extraTags}"`)
             this.depth--
             this.emit('}')
@@ -620,14 +644,19 @@ class SerializerContext {
      * Structurizr's tokenizer (verified against structurizr-java 5.0.2)
      * recognises exactly two escapes inside a quoted string: `\"` and `\n`.
      * Every other backslash is kept verbatim — `\\` is NOT collapsed to a
-     * single backslash the way JSON does it. Emitting JSON-style escapes
-     * therefore corrupts the value rather than protecting it.
+     * single backslash the way JSON does it, and after a missed escape the
+     * tokenizer consumes only the backslash, re-examining the next char.
+     * Emitting JSON-style escapes therefore corrupts the value rather than
+     * protecting it.
      *
-     * Because there is no way to escape a backslash, a backslash is
-     * unrepresentable in the two positions where it would be read as the
-     * start of an escape:
+     * A backslash before a quote IS representable: the quote's own `\"`
+     * escape leaves the backslash a literal miss, so raw `a\"b` emits as
+     * `a\\"b` and decodes back exactly. Because there is no way to escape a
+     * backslash itself, it stays unrepresentable in two positions where it
+     * would be read as (part of) an escape:
      *
-     *   - immediately before a `"` or an `n`, and
+     *   - immediately before an `n` (any run length — `\\n` still decodes
+     *     as literal-backslash + newline), and
      *   - at the very end of the value, where it escapes the closing quote
      *     and swallows the rest of the line ("Too many tokens").
      *
@@ -635,7 +664,7 @@ class SerializerContext {
      */
     private escapeString(s: string): string {
         return s
-            .replace(/\\+(?=["n])/g, '')
+            .replace(/\\+(?=n)/g, '')
             .replace(/\\+$/, '')
             .replace(/"/g, '\\"')
             .replace(/\r\n|\r|\n/g, '\\n')

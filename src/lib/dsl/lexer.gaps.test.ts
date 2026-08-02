@@ -22,6 +22,18 @@ describe('string escape sequences', () => {
     expect(tokens[0].value).toBe('a\\qb')
   })
 
+  it('consumes only the backslash on a missed escape, so the next char can start one', () => {
+    // `a\\"b`: the first backslash misses (next char is another backslash) and
+    // is consumed alone; the second then starts the `\"` escape. The real
+    // tokenizer does the same (verified via `export -f json`) — consuming two
+    // chars on a miss would swallow the second backslash and end the string at
+    // the quote.
+    const { tokens, errors } = lex('"a\\\\"b"')
+    expect(errors).toHaveLength(0)
+    expect(tokens[0].type).toBe('STRING')
+    expect(tokens[0].value).toBe('a\\"b')
+  })
+
   it('reports an unterminated string with its start position', () => {
     const { tokens, errors } = lex('model "abc')
     expect(errors).toHaveLength(1)

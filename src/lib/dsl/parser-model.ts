@@ -13,12 +13,13 @@ type Element = Person | SoftwareSystem | Container | Component
  * Map Structurizr-native encodings back onto c4hero's model fields.
  *
  * Structurizr has no `location` keyword (externality is the `External` tag)
- * and no `owner` keyword (ownership is a property), so the serializer emits
- * both that way. Undo them here so a round-trip is exact, and so files
- * authored in other Structurizr tools get the same interpretation.
+ * and no `owner` / `status` keywords (both travel as properties — `owner`
+ * bare, `status` as `c4hero.status`), so the serializer emits them that way.
+ * Undo them here so a round-trip is exact, and so files authored in other
+ * Structurizr tools get the same interpretation.
  *
- * The legacy bare `location` / `owner` keywords are still accepted by
- * parseElementPropertyOnElement for back-compat with older c4hero files;
+ * The legacy bare `location` / `owner` / `status` keywords are still accepted
+ * by parseElementPropertyOnElement for back-compat with older c4hero files;
  * this runs afterwards and only fills in what those did not set.
  */
 function applyStructurizrConventions(element: Element): void {
@@ -32,6 +33,15 @@ function applyStructurizrConventions(element: Element): void {
     if (element.properties.owner !== undefined && element.owner === undefined) {
         element.owner = element.properties.owner
         delete element.properties.owner
+    }
+    const status = element.properties['c4hero.status']
+    if (status !== undefined && element.status === undefined) {
+        // Only hoist valid enum members; anything else stays a plain property
+        // so no value is silently lost.
+        if (status === 'Live' || status === 'Planned' || status === 'Deprecated' || status === 'Removed') {
+            element.status = status
+            delete element.properties['c4hero.status']
+        }
     }
 }
 

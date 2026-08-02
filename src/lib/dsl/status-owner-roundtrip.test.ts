@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
-import type { Workspace, Person, SoftwareSystem, Container, Component } from '@/types/model'
+import type { Workspace, Person, SoftwareSystem, Container, Component, Relationship } from '@/types/model'
 
 // ─── Parsing ──────────────────────────────────────────────────────────────────
 
@@ -111,11 +111,13 @@ describe('status serialization', () => {
     }
   }
 
-  it('emits status keyword without quotes', () => {
+  it('emits status as a c4hero.status property, not a bare status keyword', () => {
+    // Real Structurizr rejects a bare `status` keyword inside an element
+    // block, so it travels as a "c4hero.status" property instead.
     const dsl = serializeDSL(makeWs({ status: 'Live' }))
-    expect(dsl).toContain('status Live')
-    // Must be a block form (has braces)
-    expect(dsl).toContain('{')
+    expect(dsl).not.toMatch(/^\s*status\s/m)
+    expect(dsl).toContain('properties {')
+    expect(dsl).toContain('"c4hero.status" "Live"')
   })
 
   it('does not emit status when undefined', () => {
@@ -294,5 +296,141 @@ describe('owner roundtrip', () => {
     const app = parsed.model.softwareSystems[0]
     expect(app.status).toBe('Live')
     expect(app.owner).toBe('Backend Team')
+  })
+})
+
+// ─── Reserved property key collisions ─────────────────────────────────────────
+
+describe('reserved property key collisions', () => {
+  function sysWs(sys: Partial<SoftwareSystem>): Workspace {
+    return {
+      name: 'Test',
+      model: {
+        people: [],
+        softwareSystems: [{ id: 'sys', type: 'softwareSystem', name: 'App', tags: ['Element', 'Software System'], properties: {}, containers: [], ...sys }],
+        relationships: [],
+        groups: [],
+      },
+      views: { systemLandscapeViews: [], systemContextViews: [], containerViews: [], componentViews: [], configuration: { styles: { elements: [], relationships: [] } } },
+    }
+  }
+
+  function relWs(rel: Partial<Relationship>): Workspace {
+    return {
+      name: 'Test',
+      model: {
+        people: [{ id: 'alice', type: 'person', name: 'Alice', tags: ['Element', 'Person'], properties: {} }],
+        softwareSystems: [{ id: 'sys', type: 'softwareSystem', name: 'App', tags: ['Element', 'Software System'], properties: {}, containers: [] }],
+        relationships: [{ id: 'rel-1', sourceId: 'alice', destinationId: 'sys', description: 'Uses', tags: ['Relationship'], properties: {}, ...rel }],
+        groups: [],
+      },
+      views: { systemLandscapeViews: [], systemContextViews: [], containerViews: [], componentViews: [], configuration: { styles: { elements: [], relationships: [] } } },
+    }
+  }
+
+  it('idempotence: a user property `owner` with no owner field round-trips byte-identical', () => {
+    const dsl1 = serializeDSL(sysWs({ properties: { owner: 'UserValue', z: '2' } }))
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('idempotence: a user property `c4hero.status` with no status field round-trips byte-identical', () => {
+    // 'UserValue' is not a valid status enum member, so the parser must leave
+    // it as a plain property rather than hoist (and then drop) it.
+    const dsl1 = serializeDSL(sysWs({ properties: { 'c4hero.status': 'UserValue' } }))
+    expect(dsl1).toContain('"c4hero.status" "UserValue"')
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.softwareSystems[0].status).toBeUndefined()
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('derived owner field wins over a colliding user property, byte-identically', () => {
+    const dsl1 = serializeDSL(sysWs({ owner: 'RealOwner', properties: { owner: 'UserProp', z: '2' } }))
+    expect(dsl1).toContain('"owner" "RealOwner"')
+    expect(dsl1).not.toContain('UserProp')
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.softwareSystems[0].owner).toBe('RealOwner')
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('derived status field wins over a colliding user property, byte-identically', () => {
+    const dsl1 = serializeDSL(sysWs({ status: 'Live', properties: { 'c4hero.status': 'UserValue' } }))
+    expect(dsl1).toContain('"c4hero.status" "Live"')
+    expect(dsl1).not.toContain('UserValue')
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.softwareSystems[0].status).toBe('Live')
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('idempotence: a user property `c4hero.lineStyle` with no lineStyle field round-trips byte-identical', () => {
+    const dsl1 = serializeDSL(relWs({ properties: { 'c4hero.lineStyle': 'UserValue' } }))
+    expect(dsl1).toContain('"c4hero.lineStyle" "UserValue"')
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.relationships[0].lineStyle).toBeUndefined()
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('derived lineStyle field wins over a colliding user property, byte-identically', () => {
+    const dsl1 = serializeDSL(relWs({ lineStyle: 'Orthogonal', properties: { 'c4hero.lineStyle': 'UserValue' } }))
+    expect(dsl1).toContain('"c4hero.lineStyle" "Orthogonal"')
+    expect(dsl1).not.toContain('UserValue')
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.relationships[0].lineStyle).toBe('Orthogonal')
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('derived interactionStyle field wins over a colliding user property, byte-identically', () => {
+    const dsl1 = serializeDSL(relWs({ interactionStyle: 'Synchronous', properties: { 'c4hero.interactionStyle': 'UserValue' } }))
+    expect(dsl1).toContain('"c4hero.interactionStyle" "Synchronous"')
+    expect(dsl1).not.toContain('UserValue')
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.relationships[0].interactionStyle).toBe('Synchronous')
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('legacy bare status keyword wins over the property form when both appear', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "App" {
+      status Planned
+      properties {
+        "c4hero.status" "Live"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(workspace.model.softwareSystems[0].status).toBe('Planned')
+  })
+
+  it('hoists a valid c4hero.status property onto the status field', () => {
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "App" {
+      properties {
+        "c4hero.status" "Deprecated"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const app = workspace.model.softwareSystems[0]
+    expect(app.status).toBe('Deprecated')
+    expect(app.properties['c4hero.status']).toBeUndefined()
   })
 })

@@ -6,10 +6,13 @@
 // points at the exact rule that broke.
 //
 // The rules (verified against structurizr-java 5.0.2):
-//   \" and \n are the only escapes; every other backslash is literal.
-//   A backslash before " or n, or at end of value, is unrepresentable.
+//   \" and \n are the only escapes; every other backslash is literal, and a
+//   missed escape consumes only the backslash (so `a\\"b` decodes to `a\"b`).
+//   A backslash before n, or at end of value, is unrepresentable; a backslash
+//   before a quote is representable (the quote's own escape covers it).
 //   Tags are comma-separated, so a comma inside a tag would split it.
-//   `location` and `owner` are not keywords.
+//   `location`, `owner`, `status`, `lineStyle` and `interactionStyle` are not
+//   keywords.
 
 import { describe, it, expect } from 'vitest'
 import { serializeDSL, parseDSL } from '@/lib/dsl'
@@ -63,12 +66,21 @@ describe('string encoding', () => {
     expect(dsl).not.toContain('X:\\"')
   })
 
-  it('drops a backslash that would start an escape sequence', () => {
-    const dsl = serializeDSL(wsWith({ containers: [container('a\\nb', { technology: 'x\\"y' })] }))
-    // Neither may survive as a backslash — Structurizr would read \n as a
-    // newline and \" as a quote, corrupting the value either way.
+  it('drops a backslash that would read as a newline escape', () => {
+    // `a\nb` emitted verbatim would decode as a real newline, corrupting the
+    // value — and there is no way to escape the backslash itself.
+    const dsl = serializeDSL(wsWith({ containers: [container('a\\nb')] }))
     expect(dsl).toContain('"anb"')
-    expect(dsl).toContain('"x\\"y"')
+  })
+
+  it('emits backslash-before-quote losslessly and restores it on parse', () => {
+    // Raw `x\"y` emits as `x\\"y`: the tokenizer reads the first backslash as
+    // a literal miss (consuming one char) and the second as the quote escape.
+    const dsl = serializeDSL(wsWith({ containers: [container('x\\"y')] }))
+    expect(dsl).toContain('"x\\\\"y"')
+    const parsed = parseDSL(dsl)
+    expect(parsed.errors).toEqual([])
+    expect(parsed.workspace.model.softwareSystems[0].containers[0].name).toBe('x\\"y')
   })
 
   it('encodes a real newline as \\n', () => {
@@ -136,6 +148,33 @@ describe('location and owner are not Structurizr keywords', () => {
     expect(sys.tags).not.toContain('External')
   })
 
+  it('emits status via properties and hoists it back on parse', () => {
+    const dsl = serializeDSL(wsWith({ status: 'Live' }))
+    expect(dsl).not.toMatch(/^\s*status\s/m)
+    expect(dsl).toContain('"c4hero.status" "Live"')
+
+    const parsed = parseDSL(dsl)
+    expect(parsed.errors).toEqual([])
+    const sys = parsed.workspace.model.softwareSystems[0]
+    expect(sys.status).toBe('Live')
+    expect(sys.properties['c4hero.status']).toBeUndefined()
+  })
+
+  it('still accepts the legacy bare status keyword on import', () => {
+    const { workspace, errors } = parseDSL(`
+workspace {
+  model {
+    s = softwareSystem "S" {
+      status Planned
+    }
+  }
+  views {}
+}
+`)
+    expect(errors).toEqual([])
+    expect(workspace.model.softwareSystems[0].status).toBe('Planned')
+  })
+
   it('still accepts the legacy bare owner keyword on import', () => {
     const { workspace, errors } = parseDSL(`
 workspace {
@@ -149,6 +188,66 @@ workspace {
 `)
     expect(errors).toEqual([])
     expect(workspace.model.softwareSystems[0].owner).toBe('Legacy Team')
+  })
+})
+
+describe('lineStyle and interactionStyle are not Structurizr relationship keywords', () => {
+  function relWs(): Workspace {
+    const ws = wsWith({})
+    ws.model.people.push({ id: 'u', type: 'person', name: 'U', tags: ['Element', 'Person'], properties: {} })
+    ws.model.relationships.push({
+      id: 'rel-1', sourceId: 'u', destinationId: 'sys',
+      description: 'Uses', technology: 'REST',
+      tags: ['Relationship', 'nightly,batch'],
+      properties: { 'sync.source': 'ldap' },
+      interactionStyle: 'Asynchronous', lineStyle: 'Orthogonal',
+    })
+    return ws
+  }
+
+  it('emits both via properties, never as bare keywords', () => {
+    const dsl = serializeDSL(relWs())
+    expect(dsl).not.toMatch(/^\s*lineStyle\s/m)
+    expect(dsl).not.toMatch(/^\s*interactionStyle\s/m)
+    expect(dsl).toContain('"c4hero.lineStyle" "Orthogonal"')
+    expect(dsl).toContain('"c4hero.interactionStyle" "Asynchronous"')
+    // User properties still travel alongside the derived ones.
+    expect(dsl).toContain('"sync.source" "ldap"')
+  })
+
+  it('hoists both back onto the fields on parse, leaving user properties alone', () => {
+    const parsed = parseDSL(serializeDSL(relWs()))
+    expect(parsed.errors).toEqual([])
+    const rel = parsed.workspace.model.relationships[0]
+    expect(rel.description).toBe('Uses')
+    expect(rel.technology).toBe('REST')
+    expect(rel.lineStyle).toBe('Orthogonal')
+    expect(rel.interactionStyle).toBe('Asynchronous')
+    expect(rel.properties).toEqual({ 'sync.source': 'ldap' })
+  })
+
+  it('still accepts the legacy bare keywords on import, and they win over the property form', () => {
+    const { workspace, errors } = parseDSL(`
+workspace {
+  model {
+    u = person "U"
+    s = softwareSystem "S"
+    u -> s "Uses" {
+      lineStyle Curved
+      interactionStyle Synchronous
+      properties {
+        "c4hero.lineStyle" "Orthogonal"
+        "c4hero.interactionStyle" "Asynchronous"
+      }
+    }
+  }
+  views {}
+}
+`)
+    expect(errors).toEqual([])
+    const rel = workspace.model.relationships[0]
+    expect(rel.lineStyle).toBe('Curved')
+    expect(rel.interactionStyle).toBe('Synchronous')
   })
 })
 
