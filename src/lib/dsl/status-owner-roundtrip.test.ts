@@ -138,9 +138,14 @@ describe('owner serialization', () => {
     }
   }
 
-  it('emits owner as quoted string', () => {
+  // `owner` is not a Structurizr keyword — a bare `owner "..."` line is a
+  // parse error there. It travels as a property instead, and the parser
+  // hoists it back onto the field.
+  it('emits owner inside a properties block, not as a bare keyword', () => {
     const dsl = serializeDSL(makeWs({ owner: 'Platform Team' }))
-    expect(dsl).toContain('owner "Platform Team"')
+    expect(dsl).toContain('properties {')
+    expect(dsl).toContain('"owner" "Platform Team"')
+    expect(dsl).not.toMatch(/^\s*owner "/m)
   })
 
   it('does not emit owner when undefined', () => {

@@ -103,6 +103,33 @@ class SerializerContext {
         }
     }
 
+    /**
+     * Tags to emit for an element that has a `location`.
+     *
+     * Structurizr removed the `location` keyword; externality is now carried
+     * by the `External` tag. c4hero keeps the field (it drives the UI and the
+     * model), and the parser maps the tag back on import.
+     */
+    private locationAwareTags(
+        el: { tags: string[]; location?: string },
+        defaults: string[],
+    ): string | undefined {
+        const tags = el.location === 'External' && !el.tags.includes('External')
+            ? [...el.tags, 'External']
+            : el.tags
+        return this.getExtraTags(tags, defaults)
+    }
+
+    /**
+     * Properties to emit. `owner` is not a Structurizr keyword, so it travels
+     * inside the `properties` block; the parser hoists it back to the field.
+     */
+    private ownerAwareProperties(
+        el: { owner?: string; properties: Record<string, string> },
+    ): Record<string, string> {
+        return el.owner ? { ...el.properties, owner: el.owner } : el.properties
+    }
+
     /** Emit a `properties { }` block for any user-defined key/value pairs. */
     private serializeProperties(props: Record<string, string>): void {
         const entries = Object.entries(props)
@@ -208,10 +235,10 @@ class SerializerContext {
 
     private serializePerson(person: Person): void {
         const varName = this.idToVar.get(person.id)
-        const extraTags = this.getExtraTags(person.tags, ['Element', 'Person'])
-        const isExternal = person.location === 'External'
-        const hasProperties = Object.keys(person.properties).length > 0
-        const hasBlock = isExternal || !!person.url || !!person.status || !!person.owner || hasProperties
+        const extraTags = this.locationAwareTags(person, ['Element', 'Person'])
+        const props = this.ownerAwareProperties(person)
+        const hasProperties = Object.keys(props).length > 0
+        const hasBlock = !!person.url || !!person.status || hasProperties
 
         const parts: string[] = []
         parts.push('person')
@@ -228,9 +255,7 @@ class SerializerContext {
             this.depth++
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
             if (person.status) this.emit(`status ${person.status}`)
-            if (person.owner) this.emit(`owner "${this.escapeString(person.owner)}"`)
-            if (isExternal) this.emit('location External')
-            if (hasProperties) this.serializeProperties(person.properties)
+            if (hasProperties) this.serializeProperties(props)
             this.depth--
             this.emit('}')
         } else {
@@ -240,10 +265,10 @@ class SerializerContext {
 
     private serializeSoftwareSystem(sys: SoftwareSystem): void {
         const varName = this.idToVar.get(sys.id)
-        const extraTags = this.getExtraTags(sys.tags, ['Element', 'Software System'])
-        const isExternal = sys.location === 'External'
-        const hasProperties = Object.keys(sys.properties).length > 0
-        const hasBody = sys.containers.length > 0 || isExternal || !!sys.url || !!sys.status || !!sys.owner || hasProperties
+        const extraTags = this.locationAwareTags(sys, ['Element', 'Software System'])
+        const props = this.ownerAwareProperties(sys)
+        const hasProperties = Object.keys(props).length > 0
+        const hasBody = sys.containers.length > 0 || !!sys.url || !!sys.status || hasProperties
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -261,9 +286,7 @@ class SerializerContext {
 
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
             if (sys.status) this.emit(`status ${sys.status}`)
-            if (sys.owner) this.emit(`owner "${this.escapeString(sys.owner)}"`)
-            if (isExternal) this.emit('location External')
-            if (hasProperties) this.serializeProperties(sys.properties)
+            if (hasProperties) this.serializeProperties(props)
 
             for (let i = 0; i < sys.containers.length; i++) {
                 if (i > 0) this.emitBlank()
@@ -280,8 +303,9 @@ class SerializerContext {
     private serializeContainer(container: Container): void {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
-        const hasProperties = Object.keys(container.properties).length > 0
-        const hasBody = container.components.length > 0 || !!container.url || !!container.status || !!container.owner || hasProperties
+        const props = this.ownerAwareProperties(container)
+        const hasProperties = Object.keys(props).length > 0
+        const hasBody = container.components.length > 0 || !!container.url || !!container.status || hasProperties
 
         const parts: string[] = []
         parts.push('container')
@@ -302,8 +326,7 @@ class SerializerContext {
 
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
             if (container.status) this.emit(`status ${container.status}`)
-            if (container.owner) this.emit(`owner "${this.escapeString(container.owner)}"`)
-            if (hasProperties) this.serializeProperties(container.properties)
+            if (hasProperties) this.serializeProperties(props)
             for (const comp of container.components) {
                 this.serializeComponent(comp)
             }
@@ -318,8 +341,9 @@ class SerializerContext {
     private serializeComponent(comp: Component): void {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
-        const hasProperties = Object.keys(comp.properties).length > 0
-        const hasBlock = !!comp.url || !!comp.status || !!comp.owner || hasProperties
+        const props = this.ownerAwareProperties(comp)
+        const hasProperties = Object.keys(props).length > 0
+        const hasBlock = !!comp.url || !!comp.status || hasProperties
 
         const parts: string[] = []
         parts.push('component')
@@ -339,8 +363,7 @@ class SerializerContext {
             this.depth++
             if (comp.url) this.emit(`url "${this.escapeString(comp.url)}"`)
             if (comp.status) this.emit(`status ${comp.status}`)
-            if (comp.owner) this.emit(`owner "${this.escapeString(comp.owner)}"`)
-            if (hasProperties) this.serializeProperties(comp.properties)
+            if (hasProperties) this.serializeProperties(props)
             this.depth--
             this.emit('}')
         } else {
@@ -513,7 +536,9 @@ class SerializerContext {
         const parts: string[] = ['autoLayout']
 
         if (layout.direction !== 'TB' || layout.rankSeparation !== undefined || layout.nodeSeparation !== undefined) {
-            parts.push(layout.direction)
+            // Structurizr accepts only lowercase rank directions (tb|bt|lr|rl)
+            // and rejects the uppercase form c4hero stores internally.
+            parts.push(layout.direction.toLowerCase())
         }
 
         if (layout.rankSeparation !== undefined) {
@@ -589,16 +614,43 @@ class SerializerContext {
 
     // ─── Helpers ────────────────────────────────────────────────────
 
+    /**
+     * Encode a value as the body of a Structurizr double-quoted string.
+     *
+     * Structurizr's tokenizer (verified against structurizr-java 5.0.2)
+     * recognises exactly two escapes inside a quoted string: `\"` and `\n`.
+     * Every other backslash is kept verbatim — `\\` is NOT collapsed to a
+     * single backslash the way JSON does it. Emitting JSON-style escapes
+     * therefore corrupts the value rather than protecting it.
+     *
+     * Because there is no way to escape a backslash, a backslash is
+     * unrepresentable in the two positions where it would be read as the
+     * start of an escape:
+     *
+     *   - immediately before a `"` or an `n`, and
+     *   - at the very end of the value, where it escapes the closing quote
+     *     and swallows the rest of the line ("Too many tokens").
+     *
+     * Those backslashes are dropped. Everything else round-trips exactly.
+     */
     private escapeString(s: string): string {
         return s
-            .replace(/\\/g, '\\\\')
+            .replace(/\\+(?=["n])/g, '')
+            .replace(/\\+$/, '')
             .replace(/"/g, '\\"')
-            .replace(/\n/g, '\\n')
-            .replace(/\t/g, '\\t')
+            .replace(/\r\n|\r|\n/g, '\\n')
     }
 
+    /**
+     * Structurizr splits a tag string on commas, so a tag containing a comma
+     * would silently become two tags. Drop commas rather than corrupt the set.
+     * Values still go through escapeString like every other quoted string.
+     */
     private getExtraTags(tags: string[], defaults: string[]): string | undefined {
-        const extra = tags.filter(t => !defaults.includes(t))
+        const extra = tags
+            .filter(t => !defaults.includes(t))
+            .map(t => this.escapeString(t.replace(/,/g, '')))
+            .filter(t => t.length > 0)
         if (extra.length === 0) return undefined
         return extra.join(',')
     }

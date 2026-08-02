@@ -9,6 +9,32 @@ import { parseRelationship } from './parser-relationship'
 
 type Element = Person | SoftwareSystem | Container | Component
 
+/**
+ * Map Structurizr-native encodings back onto c4hero's model fields.
+ *
+ * Structurizr has no `location` keyword (externality is the `External` tag)
+ * and no `owner` keyword (ownership is a property), so the serializer emits
+ * both that way. Undo them here so a round-trip is exact, and so files
+ * authored in other Structurizr tools get the same interpretation.
+ *
+ * The legacy bare `location` / `owner` keywords are still accepted by
+ * parseElementPropertyOnElement for back-compat with older c4hero files;
+ * this runs afterwards and only fills in what those did not set.
+ */
+function applyStructurizrConventions(element: Element): void {
+    if (element.type === 'person' || element.type === 'softwareSystem') {
+        const i = element.tags.indexOf('External')
+        if (i !== -1) {
+            element.location = 'External'
+            element.tags.splice(i, 1)
+        }
+    }
+    if (element.properties.owner !== undefined && element.owner === undefined) {
+        element.owner = element.properties.owner
+        delete element.properties.owner
+    }
+}
+
 export function parseModelBody(p: ContextAwareParser, model: Model, groupRefIds?: string[]): void {
     p.depth++
     if (p.depth > MAX_DEPTH) { p.addError('Maximum nesting depth exceeded', p.peek()); p.depth--; return }
@@ -195,6 +221,7 @@ function parsePerson(p: ContextAwareParser, varName?: string): Person | null {
         p.expect('RBRACE')
     }
 
+    applyStructurizrConventions(person)
     return person
 }
 
@@ -225,6 +252,7 @@ function parseSoftwareSystem(p: ContextAwareParser, varName?: string, model?: Mo
         p.expect('RBRACE')
     }
 
+    applyStructurizrConventions(sys)
     return sys
 }
 
@@ -351,6 +379,7 @@ function parseContainer(p: ContextAwareParser, varName?: string, model?: Model, 
         p.expect('RBRACE')
     }
 
+    applyStructurizrConventions(container)
     return container
 }
 
@@ -465,6 +494,7 @@ function parseComponent(p: ContextAwareParser, varName?: string, parentPath?: st
         p.expect('RBRACE')
     }
 
+    applyStructurizrConventions(component)
     return component
 }
 

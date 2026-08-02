@@ -37,6 +37,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:conformance": "vitest run src/lib/dsl/structurizr-conformance.test.ts",
     "audit": "node scripts/audit-allowlist.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },

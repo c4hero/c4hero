@@ -58,6 +58,38 @@ jobs:
           path: coverage/
           retention-days: 7
 
+  # Validates serializer output against the real Structurizr parser. Every
+  # other DSL test checks c4hero against itself, which is why GH #109 (invalid
+  # emitted DSL) passed CI for months.
+  dsl-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      # Pinned deliberately: the encoding rules the serializer targets were
+      # verified against this release (structurizr-java 5.0.2). A parser change
+      # should be an explicit bump, not a silent break on a Monday morning.
+      - name: Install Structurizr CLI
+        run: |
+          STRUCTURIZR_VERSION=2025.11.09
+          curl -sSL -o /tmp/structurizr-cli.zip \
+            "https://github.com/structurizr/cli/releases/download/v${STRUCTURIZR_VERSION}/structurizr-cli.zip"
+          unzip -q /tmp/structurizr-cli.zip -d .structurizr-cli
+          chmod +x .structurizr-cli/structurizr.sh
+          ./.structurizr-cli/structurizr.sh version
+      - name: Verify emitted DSL against the real Structurizr parser
+        env:
+          STRUCTURIZR_CONFORMANCE: '1'
+        run: npm run test:conformance
+
   e2e:
     runs-on: ubuntu-latest
     steps:

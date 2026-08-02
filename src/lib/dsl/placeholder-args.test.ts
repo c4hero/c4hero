@@ -78,7 +78,9 @@ workspace {
     expect(errors).toEqual([])
     const sys = workspace.model.softwareSystems[0]
     expect(sys.description).toBeUndefined()
-    expect(sys.tags).toContain('External')
+    // `External` is Structurizr's externality marker, so it lands on the
+    // location field rather than staying an opaque tag.
+    expect(sys.location).toBe('External')
   })
 
   it('relationship with empty description placeholder has undefined description', () => {

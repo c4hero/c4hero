@@ -152,18 +152,18 @@ export function lex(input: string): LexResult {
             if (peek() === '\\') {
                 advance()
                 const escaped = advance()
+                // Mirror Structurizr's tokenizer exactly (structurizr-java 5.0.2):
+                // `\"` and `\n` are the only escapes. `\\` is NOT collapsed and
+                // `\t` is not an escape — both stay verbatim, backslash included.
+                // Diverging here is what let the serializer emit JSON-style
+                // escapes that round-tripped in c4hero but corrupted the value
+                // in every other Structurizr tool.
                 switch (escaped) {
                     case 'n':
                         value += '\n'
                         break
-                    case 't':
-                        value += '\t'
-                        break
                     case '"':
                         value += '"'
-                        break
-                    case '\\':
-                        value += '\\'
                         break
                     default:
                         value += '\\' + escaped

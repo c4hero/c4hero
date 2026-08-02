@@ -5,11 +5,15 @@ import { lex } from './lexer'
 // tokens, and error positions.
 
 describe('string escape sequences', () => {
-  it('decodes \\n, \\t, \\" and \\\\ escapes inside strings', () => {
+  // Structurizr's tokenizer (structurizr-java 5.0.2) recognises only \" and
+  // \n. \t and \\ are NOT escapes — the backslash stays verbatim. c4hero used
+  // to decode all four JSON-style, which is why serializer output round-tripped
+  // here but was misread by every other Structurizr tool.
+  it('decodes only \\" and \\n; leaves \\t and \\\\ verbatim', () => {
     const { tokens, errors } = lex('"a\\nb\\tc\\"d\\\\e"')
     expect(errors).toHaveLength(0)
     expect(tokens[0].type).toBe('STRING')
-    expect(tokens[0].value).toBe('a\nb\tc"d\\e')
+    expect(tokens[0].value).toBe('a\nb\\tc"d\\\\e')
   })
 
   it('preserves the backslash for unknown escape sequences', () => {
