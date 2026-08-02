@@ -187,7 +187,10 @@ describe('element custom tag roundtrip', () => {
       model: {
         people: [],
         softwareSystems: [
-          { id: 'sys', type: 'softwareSystem', name: 'Payments', tags: ['Element', 'Software System', 'External'], properties: {}, containers: [] },
+          // 'External' is deliberately avoided here (see import-compat.test.ts):
+          // on a person/softwareSystem it is promoted to `location: 'External'`
+          // and removed from `tags` on import rather than kept as a plain tag.
+          { id: 'sys', type: 'softwareSystem', name: 'Payments', tags: ['Element', 'Software System', 'Legacy'], properties: {}, containers: [] },
         ],
         relationships: [],
         groups: [],
@@ -203,7 +206,7 @@ describe('element custom tag roundtrip', () => {
     const { workspace, errors } = parseDSL(serializeDSL(ws))
     expect(errors).toEqual([])
     const sys = workspace.model.softwareSystems.find(s => s.name === 'Payments')
-    expect(sys?.tags).toContain('External')
+    expect(sys?.tags).toContain('Legacy')
     expect(sys?.tags).toContain('Software System')
   })
 

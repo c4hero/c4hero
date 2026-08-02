@@ -195,6 +195,7 @@ function parsePerson(p: ContextAwareParser, varName?: string): Person | null {
         p.expect('RBRACE')
     }
 
+    applyExternalTagToLocation(person)
     return person
 }
 
@@ -225,6 +226,7 @@ function parseSoftwareSystem(p: ContextAwareParser, varName?: string, model?: Mo
         p.expect('RBRACE')
     }
 
+    applyExternalTagToLocation(sys)
     return sys
 }
 
@@ -555,7 +557,12 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
 }
 
 /** Parse a `properties { "key" "value" ... }` block and attach known
- *  keys to the element. Recognizes `c4hero.location` for Person/SoftwareSystem. */
+ *  keys to the element. Recognizes `c4hero.location` for Person/SoftwareSystem,
+ *  `owner` (real Structurizr rejects a bare `owner` keyword in element blocks,
+ *  so ownership is carried as a property instead), and `c4hero.status` (same
+ *  reasoning — `status` is not an accepted element-block keyword). A key is
+ *  only consumed (kept out of `element.properties`) when its value is valid;
+ *  an unrecognized enum value is left as a plain property so nothing is lost. */
 function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
         p.skipNewlines()
@@ -570,15 +577,43 @@ function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
             val = p.advance().value
         }
         if (val === undefined) continue
-        // Recognized: c4hero.location → element.location for persons/systems
         if (key === 'c4hero.location' && (element.type === 'person' || element.type === 'softwareSystem')) {
+            // Recognized: c4hero.location → element.location for persons/systems
             if (val === 'External') (element as Person | SoftwareSystem).location = 'External'
             else if (val === 'Internal') (element as Person | SoftwareSystem).location = 'Internal'
+        } else if (key === 'owner') {
+            element.owner = val
+        } else if (key === 'c4hero.status') {
+            if (val === 'Live' || val === 'Planned' || val === 'Deprecated' || val === 'Removed') {
+                element.status = val
+            } else {
+                element.properties[key] = val
+            }
         } else {
             // Generic passthrough to properties map
             element.properties[key] = val
         }
     }
+}
+
+/** Real Structurizr rejects the bare `location` keyword in element blocks, so the
+ *  serializer encodes an External person/softwareSystem as a plain `External` tag
+ *  instead. On import, promote that tag back to `location: 'External'` so it
+ *  round-trips through the UI's location radio group rather than showing up as a
+ *  duplicate user-visible tag chip. Containers and components have no `location`
+ *  field, so they keep `External` as an ordinary tag (callers never invoke this
+ *  helper for those types).
+ *
+ *  Precedence: an explicit `location` keyword (or `c4hero.location` property, for
+ *  legacy/back-compat DSL) already sets `element.location` while the block body is
+ *  parsed, before this runs post-parse — so if either was present, `location` is
+ *  already defined here and the tag is left untouched rather than being clobbered. */
+function applyExternalTagToLocation(element: Person | SoftwareSystem): void {
+    if (element.location !== undefined) return
+    const idx = element.tags.indexOf('External')
+    if (idx === -1) return
+    element.location = 'External'
+    element.tags.splice(idx, 1)
 }
 
 // Re-export Workspace for type compatibility with parseModelBody calls

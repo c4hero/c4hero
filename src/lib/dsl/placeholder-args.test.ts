@@ -69,7 +69,7 @@ workspace {
     const dsl = `
 workspace {
   model {
-    api = softwareSystem "API" "" "External,Software System"
+    api = softwareSystem "API" "" "Beta,Software System"
   }
   views {}
 }
@@ -78,7 +78,11 @@ workspace {
     expect(errors).toEqual([])
     const sys = workspace.model.softwareSystems[0]
     expect(sys.description).toBeUndefined()
-    expect(sys.tags).toContain('External')
+    // 'External' is deliberately avoided here (see import-compat.test.ts): on a
+    // person/softwareSystem it is promoted to `location: 'External'` and removed
+    // from `tags` rather than kept as a plain tag. Use a different custom tag so
+    // this test stays focused on the empty-placeholder normalization it covers.
+    expect(sys.tags).toContain('Beta')
   })
 
   it('relationship with empty description placeholder has undefined description', () => {

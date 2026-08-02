@@ -95,8 +95,31 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                         if (p.peek().type !== 'STRING' && p.peek().type !== 'IDENTIFIER') { p.advance(); continue }
                         const key = p.advance().value
                         const valTok = p.peek()
+                        let val: string | undefined
                         if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-                            rel.properties[key] = p.advance().value
+                            val = p.advance().value
+                        }
+                        if (val === undefined) continue
+                        // Real Structurizr rejects bare `lineStyle`/`interactionStyle` keywords
+                        // inside a relationship's `properties { }` block (only description, tags,
+                        // url, properties, perspectives are accepted there), so c4hero encodes
+                        // them as reserved property keys instead. Consume recognized keys with
+                        // valid enum values; fall back to a plain property so nothing is lost
+                        // for an unrecognized value.
+                        if (key === 'c4hero.lineStyle') {
+                            if (val === 'Curved' || val === 'Straight' || val === 'Orthogonal') {
+                                rel.lineStyle = val as LineStyle
+                            } else {
+                                rel.properties[key] = val
+                            }
+                        } else if (key === 'c4hero.interactionStyle') {
+                            if (val === 'Synchronous' || val === 'Asynchronous') {
+                                rel.interactionStyle = val as InteractionStyle
+                            } else {
+                                rel.properties[key] = val
+                            }
+                        } else {
+                            rel.properties[key] = val
                         }
                     }
                     if (p.check('RBRACE')) p.advance()
