@@ -3,19 +3,25 @@
  * rules (GROUND TRUTH block at the top of dsl-strings.ts -- do not
  * re-litigate it, encode it):
  *   - `\"` decodes to a literal quote
- *   - any other backslash (including `\n`, `\t` and a doubled `\\`) decodes
- *     to itself, literally -- it is never an escape. In particular
- *     Structurizr does NOT unescape backslash-n or backslash-t; a real
- *     newline inside a quoted string is a hard parse error, which is a
- *     separate concern from the two printable characters backslash + `n`.
+ *   - a backslash immediately followed by `n` decodes to a real newline --
+ *     MEASURED against the real CLI: `softwareSystem "A" "C:\new"` parses to
+ *     char codes 67,58,10,101,119 (`C:` + LF + `ew`), not the four literal
+ *     characters `\new`.
+ *   - any OTHER backslash (including one before `t`, or a second backslash
+ *     that only ever gets there because the first one wasn't `\"`/`\n`)
+ *     decodes to itself, literally. In particular Structurizr does NOT
+ *     unescape backslash-t: `softwareSystem "B" "C:\temp"` parses to char
+ *     codes 67,58,92,116,... (`C:\temp` literal).
  *
- * NOTE: an earlier version of this file (and of dsl-strings.ts) assumed
- * Structurizr unescapes backslash-n to a real newline and had
- * escapeDslString() strip backslash runs before `n` accordingly. That
- * assumption contradicted the measured GROUND TRUTH and has been reverted;
- * this file now asserts the corrected behaviour: escapeDslString() never
- * alters a backslash run adjacent to `n`, exactly like it never alters one
- * adjacent to `t`.
+ * Because real Structurizr unescapes `\n`, escapeDslString() must never emit
+ * a backslash immediately before `n` -- it strips the whole backslash run
+ * instead (see dsl-strings.ts). So for every value round-tripped through
+ * escapeDslString() in this file, decoding never actually observes a `\n`
+ * sequence: the assertions below prove BOTH halves independently -- that
+ * escapeDslString() sanitises backslash-before-n away, AND that if it ever
+ * didn't, this decoder (modelling the real parser) would turn it into a
+ * newline, which is exactly the corruption the sanitisation exists to
+ * prevent.
  *
  * This decoder is a small, independent implementation (not a call into
  * dsl-strings.ts) so this test is a genuine cross-check of what the
@@ -44,8 +50,17 @@ function decodeStructurizrQuotedText(inner: string): string {
             i += 2
             continue
         }
-        // Any other backslash -- including one immediately followed by `n`,
-        // by `t`, by another backslash, or by end-of-input -- is a literal
+        // MEASURED: real Structurizr unescapes a lone backslash-n into a
+        // real newline character (see file header). This is the ONLY
+        // two-char backslash sequence, besides `\"`, that decodes to
+        // anything other than itself.
+        if (ch === '\\' && inner[i + 1] === 'n') {
+            out += '\n'
+            i += 2
+            continue
+        }
+        // Any other backslash -- including one immediately followed by
+        // `t`, by another backslash, or by end-of-input -- is a literal
         // backslash character, not an escape.
         out += ch
         i++
@@ -54,25 +69,28 @@ function decodeStructurizrQuotedText(inner: string): string {
 }
 
 describe('decoding escapeDslString() output under real Structurizr rules', () => {
-    it('a value containing backslash-n: both characters survive emission and decoding unchanged', () => {
+    it('a value containing backslash-n: the backslash is stripped before emission, so decoding sees a bare "n", not a newline', () => {
         // Raw user value: "C:" + backslash + "new" -- a Windows path whose
-        // remainder happens to start with the letter n. Structurizr does
-        // NOT unescape backslash-n (see GROUND TRUTH), so this needs no
-        // sanitisation: the value round-trips exactly as written.
+        // remainder happens to start with the letter n (the exact GH #109
+        // repro). Structurizr DOES unescape backslash-n into a newline (see
+        // GROUND TRUTH), so escapeDslString() must strip the backslash
+        // before emission -- otherwise the real CLI would silently corrupt
+        // this into "C:" + LF + "ew".
         const raw = 'C:' + BACKSLASH + 'new'
 
         const emitted = escapeDslString(raw)
-        expect(emitted).toBe(raw)
+        expect(emitted).toBe('C:new')
+        expect(emitted).not.toContain(BACKSLASH)
 
         const decoded = decodeStructurizrQuotedText(emitted)
-        expect(decoded).toBe(raw)
+        expect(decoded).toBe('C:new')
         expect(decoded).not.toContain('\n')
     })
 
     it('a value containing backslash-t: stays a literal two-char sequence end to end', () => {
-        // Structurizr does NOT unescape backslash-t either, so the raw
-        // value survives emission and decoding completely unchanged --
-        // identical treatment to the backslash-n case above.
+        // Structurizr does NOT unescape backslash-t (measured), so the raw
+        // value survives emission and decoding completely unchanged -- the
+        // opposite treatment from the backslash-n case above.
         const raw = 'C:' + BACKSLASH + 'temp'
 
         const emitted = escapeDslString(raw)
@@ -95,28 +113,44 @@ describe('decoding escapeDslString() output under real Structurizr rules', () =>
         expect(decoded).toBe(raw)
     })
 
-    it('a doubled backslash immediately before "n": both backslashes survive, no run is stripped', () => {
-        // Unlike the (reverted) sanitisation assumption, escapeDslString()
-        // does not touch backslash runs adjacent to `n` at all -- the run
-        // passes through verbatim, same as any other backslash run.
+    it('a doubled backslash immediately before "n": the ENTIRE run is stripped, not just the last backslash', () => {
+        // Stripping only the last backslash of the run would leave a
+        // single backslash newly adjacent to "n" (`\\n` -> `\n`), which
+        // still decodes to a newline under the real parser. The whole run
+        // must go.
         const raw = 'X' + BACKSLASH + BACKSLASH + 'notes'
 
         const emitted = escapeDslString(raw)
-        expect(emitted).toBe(raw)
+        expect(emitted).toBe('Xnotes')
+        expect(emitted).not.toContain(BACKSLASH)
 
         const decoded = decodeStructurizrQuotedText(emitted)
-        expect(decoded).toBe(raw)
+        expect(decoded).toBe('Xnotes')
         expect(decoded).not.toContain('\n')
     })
 
-    it('a value combining backslash-n, backslash-t and a doubled backslash decodes unchanged', () => {
+    it('a value combining backslash-n, backslash-t and a doubled backslash: only the backslash-n run is stripped', () => {
         const raw = 'Path' + BACKSLASH + 'nnext' + BACKSLASH + 'temp' + BACKSLASH + BACKSLASH + 'end'
 
         const emitted = escapeDslString(raw)
-        expect(emitted).toBe(raw)
+        // "Path\nnext\temp\\end" -> the backslash before the first "n" is
+        // stripped ("Pathnnext"); "\temp" is untouched (t is not special);
+        // the doubled backslash before "end" is untouched (not before n).
+        expect(emitted).toBe('Pathnnext' + BACKSLASH + 'temp' + BACKSLASH + BACKSLASH + 'end')
+        expect(emitted).not.toContain(BACKSLASH + 'n')
 
         const decoded = decodeStructurizrQuotedText(emitted)
-        expect(decoded).toBe(raw)
+        expect(decoded).toBe(emitted)
         expect(decoded).not.toContain('\n')
+    })
+
+    it('would decode an UNSANITISED backslash-n straight into a newline (proves the decoder models the real parser, not just c4hero)', () => {
+        // This deliberately bypasses escapeDslString() to show what would
+        // happen if a backslash-n sequence ever reached the real CLI
+        // unsanitised -- pinning the measured GROUND TRUTH independently of
+        // whether escapeDslString() is doing its job.
+        const decoded = decodeStructurizrQuotedText('C:' + BACKSLASH + 'new')
+        expect(decoded).toBe('C:\new')
+        expect(decoded.charCodeAt(2)).toBe(10) // LF, matching the measured char codes
     })
 })

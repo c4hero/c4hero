@@ -268,14 +268,22 @@ describe('legacy detection does not misfire on modern backslash-adjacent values'
         expect(serializeDSL(parsed)).toBe(dsl1)
     })
 
-    it('round-trips a UNC-style value with an odd run next to "n" unchanged', () => {
+    it('sanitises (does not corrupt) a UNC-style value with an odd run next to "n", and is idempotent from there', () => {
         // Same shape as the "t" case above, but the lone backslash sits
         // next to `n` instead. Per GROUND TRUTH (dsl-strings.ts), real
-        // Structurizr does NOT unescape backslash-n any more than it
-        // unescapes backslash-t -- both stay two literal characters. So
-        // this value must round-trip unchanged exactly like the "t" case,
-        // with no special-casing of `n`.
+        // Structurizr DOES unescape backslash-n into a real newline
+        // (measured against the CLI), unlike backslash-t. A value ending
+        // in "...\notes.txt" would therefore be silently corrupted by the
+        // real CLI into "...\n" + "otes.txt" if emitted verbatim, so
+        // escapeDslString() strips that single backslash (the run
+        // immediately before "n") entirely -- it is not representable, so
+        // the round trip cannot reproduce the original raw bytes. What it
+        // must guarantee instead is that nothing is corrupted (no stray
+        // newline appears) and that serialization is idempotent from the
+        // first save onward. The leading doubled backslash (not adjacent
+        // to "n") is untouched, exactly like the bare "a\\b" case below.
         const original = BACKSLASH + BACKSLASH + 'SHARE-02' + BACKSLASH + 'notes.txt'
+        const sanitized = BACKSLASH + BACKSLASH + 'SHARE-02' + 'notes.txt'
 
         const ws = makeWorkspace()
         ws.model.people.push({
@@ -288,9 +296,10 @@ describe('legacy detection does not misfire on modern backslash-adjacent values'
         })
 
         const dsl1 = serializeDSL(ws)
+        expect(dsl1).not.toContain(BACKSLASH + 'n')
         const { workspace: parsed, errors } = parseDSL(dsl1)
         expect(errors).toEqual([])
-        expect(parsed.model.people.find(p => p.id === 'p1')?.description).toBe(original)
+        expect(parsed.model.people.find(p => p.id === 'p1')?.description).toBe(sanitized)
         expect(serializeDSL(parsed)).toBe(dsl1)
     })
 

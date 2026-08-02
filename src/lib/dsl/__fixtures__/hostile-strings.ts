@@ -4,10 +4,14 @@
 // about into one workspace: embedded double quotes, embedded newlines/tabs,
 // a trailing backslash (unrepresentable -- must be stripped, not doubled),
 // a mid-string Windows path (single backslashes are literal and must NOT be
-// escaped/doubled), tag lists with a comma and a quote, External people and
-// software systems, owner/status on an element, and lineStyle/
-// interactionStyle/url/tags/properties on a relationship. See
-// src/lib/dsl/dsl-strings.ts for the escaping ground truth this exercises.
+// escaped/doubled), a raw backslash immediately followed by "n" (real
+// Structurizr unescapes this into a newline -- the GH #109 Windows-path
+// domain: `\new`, `\nightly`, `\node_modules`, `\network` -- so the whole
+// backslash run must be stripped, not passed through), tag lists with a
+// comma and a quote, External people and software systems, owner/status on
+// an element, and lineStyle/interactionStyle/url/tags/properties on a
+// relationship. See src/lib/dsl/dsl-strings.ts for the escaping ground
+// truth this exercises.
 import type { Workspace } from '@/types/model'
 
 export function createHostileWorkspace(): Workspace {
@@ -53,6 +57,23 @@ export function createHostileWorkspace(): Workspace {
                             // DSL and must never be doubled by the serializer.
                             description: 'Serves C:\\Users\\svc over SMB',
                             technology: 'SMB/CIFS',
+                            tags: ['Element', 'Container'],
+                            properties: {},
+                            components: [],
+                        },
+                        {
+                            id: 'nightlySync',
+                            type: 'container',
+                            name: 'Nightly Sync',
+                            // GH #109 domain: raw backslash immediately followed by
+                            // "n" (Windows paths that happen to continue with the
+                            // letter n). Real Structurizr unescapes backslash-n into
+                            // a real newline (see GROUND TRUTH in dsl-strings.ts), so
+                            // escapeDslString() must strip the whole backslash run
+                            // rather than emit it verbatim -- otherwise the real CLI
+                            // would silently corrupt "C:\new" into "C:" + LF + "ew".
+                            description: 'Mirrors C:\\new to U:\\nightly overnight',
+                            technology: 'rsync',
                             tags: ['Element', 'Container'],
                             properties: {},
                             components: [],

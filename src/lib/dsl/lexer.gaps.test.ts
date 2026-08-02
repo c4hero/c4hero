@@ -5,12 +5,17 @@ import { lex } from './lexer'
 // tokens, and error positions.
 
 describe('string escape sequences', () => {
-  // Real Structurizr never unescapes backslash-n / backslash-t, and the
-  // modern serializer never doubles backslashes (see dsl-strings.ts) --
-  // `\"` is the only escape either era treats specially. This document has
-  // no legacy marker (no location/owner/etc. line, and its only backslash
-  // runs are odd-length ones next to `n`/`t`), so it is read as modern:
-  // `\n`/`\t`/`\\` all stay exactly the literal characters they are.
+  // Real Structurizr unescapes backslash-n into a real newline but never
+  // backslash-t (measured, see GROUND TRUTH in dsl-strings.ts). The modern
+  // serializer strips any backslash run immediately before `n` at emission
+  // time (dsl-strings.ts), so a document it writes never contains the
+  // sequence `\n` for the modern (no legacy keyword marker) lexer path to
+  // decode. c4hero's own lexer therefore deliberately leaves `\n` undecoded
+  // on the modern path (see detectLegacyEscapes doc comment in lexer.ts):
+  // there is nothing in a c4hero-authored modern document for it to
+  // decode. `\"` is the only escape the modern path treats specially; `\\`
+  // is never doubled by the serializer either, so it too stays literal
+  // here.
   it('keeps \\n, \\t and \\\\ as literal characters in a document with no legacy marker', () => {
     const { tokens, errors } = lex('"a\\nb\\tc\\"d\\\\e"')
     expect(errors).toHaveLength(0)

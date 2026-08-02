@@ -98,7 +98,15 @@ const RESERVED_KEYWORD_LINE = /^\s*(location|owner|status|lineStyle|interactionS
  *  newline before the closing quote is a hard error. Mirrors the ground
  *  truth in dsl-strings.ts and the dedicated tokenizer in
  *  strict-structurizr-tokenizer.test.ts, kept intentionally small here since
- *  this test only needs decoded values, not full statement tokenisation. */
+ *  this test only needs decoded values, not full statement tokenisation.
+ *  NOTE: real Structurizr also unescapes a lone backslash-n into a real
+ *  newline (measured, see dsl-strings.ts), but this decoder deliberately
+ *  does not model that: escapeDslString() guarantees emitted content never
+ *  contains a backslash immediately before "n" in the first place (see the
+ *  `content.includes('\\n')` invariant below), so there is nothing for this
+ *  whole-file scanner to decode differently -- any backslash it encounters
+ *  here is, by construction, never one that a real parser would treat as
+ *  the start of a `\n` escape. */
 function decodeQuotedValues(content: string): string[] {
     const values: string[] = []
     let i = 0
@@ -199,5 +207,34 @@ describe('Structurizr conformance corpus emission', () => {
         expect(errors).toEqual([])
         const second = serializeDSL(reparsed)
         expect(second).toBe(first)
+    })
+
+    it('the hostile fixture itself contains a raw backslash immediately before "n" (GH #109 coverage gate)', () => {
+        // This is a fixture-coverage assertion, not a serializer assertion:
+        // it fails if the hostile fixture stops exercising the GH #109
+        // Windows-path domain (a raw value with backslash-n in it), which
+        // would silently turn the `content.includes('\\n') === false`
+        // invariant above into a vacuous truth (true of any file, hostile
+        // or not, once nothing in the corpus contains the shape it's
+        // supposed to be guarding against).
+        const ws = createHostileWorkspace()
+        const rawValues: string[] = []
+        for (const person of ws.model.people) {
+            rawValues.push(person.name, person.description ?? '')
+        }
+        for (const system of ws.model.softwareSystems) {
+            rawValues.push(system.name, system.description ?? '')
+            for (const container of system.containers) {
+                rawValues.push(container.name, container.description ?? '')
+            }
+        }
+        for (const relationship of ws.model.relationships) {
+            rawValues.push(relationship.description ?? '')
+        }
+        const hasRawBackslashBeforeN = rawValues.some(value => /\\n/.test(value))
+        expect(
+            hasRawBackslashBeforeN,
+            'hostile fixture must contain at least one raw value with a backslash immediately before "n"'
+        ).toBe(true)
     })
 })

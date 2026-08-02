@@ -3,8 +3,11 @@
  * quoted-string handling exactly (ground truth in dsl-strings.ts):
  *   - a quoted string starts at `"`
  *   - `\"` yields a literal quote
- *   - ANY other backslash (not immediately followed by `"`) is a literal
- *     backslash character, never an escape
+ *   - `\n` (backslash immediately followed by `n`) yields a real newline --
+ *     MEASURED against the real CLI, not assumed (see dsl-strings.ts)
+ *   - ANY other backslash (not immediately followed by `"` or `n`) is a
+ *     literal backslash character, never an escape -- in particular `\t` is
+ *     NOT unescaped
  *   - a real newline before the closing quote is a hard parse error
  *
  * This is deliberately independent of c4hero's own lexer/parser
@@ -54,7 +57,20 @@ function tokenize(content: string): Token[] {
                     i += 2
                     continue
                 }
-                // Any other backslash is a literal backslash, not an escape.
+                // MEASURED: real Structurizr unescapes backslash-n into a
+                // real newline (see dsl-strings.ts GROUND TRUTH). The
+                // serializer never emits this sequence (it strips the
+                // backslash run first), so this branch should never fire
+                // over serializer output -- it exists so this tokenizer is
+                // a faithful model of the real parser, not just of what
+                // c4hero currently emits.
+                if (c === '\\' && content[i + 1] === 'n') {
+                    value += '\n'
+                    i += 2
+                    continue
+                }
+                // Any other backslash (including before `t`) is a literal
+                // backslash, not an escape.
                 value += c
                 i++
             }

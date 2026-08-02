@@ -113,8 +113,14 @@ const LEGACY_KEYWORD_LINE =
 
 /**
  * Detect whether `input` was produced by a pre-fix c4hero version that
- * doubled backslashes and unescaped `\n`/`\t` (real Structurizr does
- * neither -- see dsl-strings.ts).
+ * doubled backslashes and unescaped BOTH `\n` and `\t` on load (real
+ * Structurizr, measured, unescapes `\n` into a real newline but leaves
+ * `\t` as two literal characters -- see GROUND TRUTH in dsl-strings.ts).
+ * The modern serializer never emits a backslash immediately before `n`
+ * (it strips the run at emission time -- dsl-strings.ts), so a modern
+ * document never contains `\n` for this function or the lexer's modern
+ * path to worry about; the legacy path below still decodes it for
+ * pre-fix files that do contain it.
  *
  *   The document is legacy iff it contains at least one line matching
  *   LEGACY_KEYWORD_LINE above -- `location`/bare `owner`/`status`/
@@ -214,10 +220,19 @@ export function lex(input: string): LexResult {
                 if (escaped === '"') {
                     value += advance()
                 } else if (legacyEscapes && (escaped === '\\' || escaped === 'n' || escaped === 't')) {
-                    // Only pre-fix c4hero output unescapes these two-char
-                    // sequences; real Structurizr never does (see
-                    // dsl-strings.ts), so a modern document keeps them as
-                    // the two literal characters they are.
+                    // Pre-fix c4hero output unescaped all three of these
+                    // two-char sequences on load, so a legacy document must
+                    // still be decoded that way for backward compatibility.
+                    // Real Structurizr itself only unescapes `\n` (measured,
+                    // see GROUND TRUTH in dsl-strings.ts) and leaves `\\`/
+                    // `\t` as literal characters -- but that distinction is
+                    // moot here: the modern serializer never emits a
+                    // backslash before `n` at all (it strips the run at
+                    // emission time), so a MODERN document never contains
+                    // `\n` for this branch to see in the first place; this
+                    // branch only ever fires for legacy-marked documents,
+                    // where decoding `\n` here matches what the old,
+                    // now-removed sanitisation used to intend.
                     advance()
                     if (escaped === 'n') value += '\n'
                     else if (escaped === 't') value += '\t'
