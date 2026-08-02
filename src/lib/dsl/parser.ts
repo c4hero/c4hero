@@ -147,6 +147,17 @@ export class ContextAwareParser {
     varToId = new Map<string, string>()
     nameToId = new Map<string, string>()
     elementsById = new Map<string, { name: string; type: string }>()
+    // Qualified (hierarchical) paths — `mpng.gatewayApi`,
+    // `pathways.navigatorApi.jwksController` — to element id.
+    qualifiedToId = new Map<string, string>()
+
+    // Every id handed out so far. The same variable name may legally appear in
+    // several scopes when identifiers are hierarchical, so ids need dedup.
+    usedIds = new Set<string>()
+
+    /** Set by `!identifiers hierarchical`. Refs are resolved qualified-first
+     *  either way; the flag records the DSL's declared intent. */
+    hierarchicalIdentifiers = false
 
     relCounter = 0
 
@@ -251,19 +262,133 @@ export class ContextAwareParser {
 
     // ─── Registration ────────────────────────────────────────────────
 
-    registerElement(id: string, name: string, _type: string, varName?: string): void {
+    /**
+     * Pick a unique element id for a declaration. The DSL variable name is used
+     * verbatim when it's still free, so ids survive a serialize → parse
+     * roundtrip. When the same variable name is reused in another scope (legal
+     * with hierarchical identifiers — `ctk.gatewayApi` and `mpng.gatewayApi`
+     * both declare `gatewayApi`), fall back to the qualified path with dots
+     * replaced by underscores so the id stays a valid DSL identifier.
+     */
+    allocateId(varName: string | undefined, parentPath?: string): string {
+        if (!varName) {
+            let generated = nextId()
+            while (this.usedIds.has(generated)) generated = nextId()
+            this.usedIds.add(generated)
+            return generated
+        }
+        if (!this.usedIds.has(varName)) {
+            this.usedIds.add(varName)
+            return varName
+        }
+        const base = (parentPath ? `${parentPath}.${varName}` : varName).replace(/\./g, '_')
+        let candidate = base
+        let suffix = 2
+        while (this.usedIds.has(candidate)) candidate = `${base}_${suffix++}`
+        this.usedIds.add(candidate)
+        return candidate
+    }
+
+    /**
+     * Record an element under every name it can be referenced by, and return
+     * its own qualified path so children can build theirs.
+     *
+     * `parentPath` is the qualified path of the enclosing element (undefined at
+     * the top level). A container inside `mpng` is registered as both the bare
+     * `gatewayApi` and the qualified `mpng.gatewayApi`; bare names are ambiguous
+     * across scopes, which is why resolveRef() prefers the qualified match.
+     */
+    registerElement(id: string, name: string, _type: string, varName?: string, parentPath?: string): string {
         this.elementsById.set(id, { name, type: _type })
         this.nameToId.set(name, id)
         if (varName) {
             this.varToId.set(varName, id)
         }
+        const segment = varName ?? name
+        const path = parentPath ? `${parentPath}.${segment}` : segment
+        if (parentPath) {
+            this.qualifiedToId.set(path, id)
+            // Nested elements may also be referenced by display name
+            // (`mpng.Sequencer API`) when they have no variable name.
+            const namePath = `${parentPath}.${name}`
+            if (!this.qualifiedToId.has(namePath)) this.qualifiedToId.set(namePath, id)
+        }
+        return path
     }
 
     resolveRef(ref: string): string | undefined {
+        // Qualified paths win: the same bare variable name may be declared in
+        // several scopes, in which case varToId only remembers the last one.
+        const qualified = this.qualifiedToId.get(ref)
+        if (qualified !== undefined) return qualified
         if (this.varToId.has(ref)) return this.varToId.get(ref)
         if (this.nameToId.has(ref)) return this.nameToId.get(ref)
         if (this.elementsById.has(ref)) return ref
         return undefined
+    }
+
+    /** Record the effect of a preprocessor directive. The lexer folds the whole
+     *  line into the keyword's value, so `!identifiers hierarchical` arrives as
+     *  a single token. c4hero always registers bare *and* qualified names, so
+     *  the flag only records intent — resolution prefers qualified regardless. */
+    noteDirective(value: string): void {
+        if (/^!identifiers\b/.test(value) && /\bhierarchical\b/.test(value)) {
+            this.hierarchicalIdentifiers = true
+        }
+    }
+
+    // ─── Qualified (hierarchical) references ─────────────────────────
+
+    /** True when the token at `index` can be a segment of a qualified path.
+     *  Keywords are allowed because element variables may be named after them
+     *  (`spine.status`, `atk.default`). */
+    private isRefSegment(index: number): boolean {
+        const t = this.tokens[index]
+        return t !== undefined && (t.type === 'IDENTIFIER' || t.type === 'KEYWORD')
+    }
+
+    /** True when `DOT IDENT` at `dotIndex` is the head of a Structurizr
+     *  expression (`element.type==X`, `element.parent==Y`) rather than a
+     *  qualified path segment. */
+    private isExpressionTail(dotIndex: number): boolean {
+        return this.tokens[dotIndex + 2]?.type === 'EQUALS' && this.tokens[dotIndex + 3]?.type === 'EQUALS'
+    }
+
+    /**
+     * Consume an element reference — `IDENT (DOT IDENT)*` — and return the
+     * joined path plus the token it starts at (for error positions).
+     * Returns null when the current token cannot start a reference.
+     *
+     * `element.type==` / `element.parent==` expressions are left alone: the
+     * `==` lookahead stops the join, so `include` / `exclude` still hand those
+     * to the expression parser.
+     */
+    readQualifiedRef(options?: { allowString?: boolean }): { ref: string; token: Token } | null {
+        const start = this.peek()
+        const startsRef =
+            start.type === 'IDENTIFIER' ||
+            start.type === 'KEYWORD' ||
+            (options?.allowString === true && start.type === 'STRING')
+        if (!startsRef) return null
+        this.advance()
+        let ref = start.value
+        while (this.check('DOT') && this.isRefSegment(this.pos + 1) && !this.isExpressionTail(this.pos)) {
+            this.advance() // consume DOT
+            ref += '.' + this.advance().value
+        }
+        return { ref, token: start }
+    }
+
+    /** True when the statement at the current position is a relationship —
+     *  `ref (.ref)* ->`. Needed because a dotted source puts a DOT, not an
+     *  ARROW, immediately after the first identifier. Newlines before the arrow
+     *  are tolerated, as they were before qualified refs existed. */
+    looksLikeRelationship(): boolean {
+        if (!this.isRefSegment(this.pos)) return false
+        let i = this.pos + 1
+        while (this.tokens[i]?.type === 'DOT' && this.isRefSegment(i + 1)) i += 2
+        while (this.tokens[i]?.type === 'NEWLINE' || this.tokens[i]?.type === 'COMMENT') i++
+        return this.tokens[i]?.type === 'ARROW'
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────
@@ -384,6 +509,7 @@ export class ContextAwareParser {
                     }
                 } else if (token.value.startsWith('!')) {
                     // Preprocessor directive — consume keyword + inline args on this line
+                    this.noteDirective(token.value)
                     this.advance()
                     this.skipToNextLine()
                 } else if (kw === 'configuration') {
