@@ -117,11 +117,11 @@ class SerializerContext {
         let tags = el.tags
         if (el.location === 'External' && !tags.includes('External')) {
             tags = [...tags, 'External']
-        } else if (el.location === 'Internal' && tags.includes('External')) {
-            // Contradictory combination (explicit Internal + an External user
-            // tag, only reachable via legacy files): emitting the tag would
-            // flip the element to External on the next parse. The explicit
-            // field wins; the tag is dropped.
+        } else if (el.location !== undefined && el.location !== 'External' && tags.includes('External')) {
+            // Contradictory combination (an explicit non-External location —
+            // Internal or Unspecified — plus an External user tag): emitting
+            // the tag would flip the element to External on the next parse.
+            // The explicit field wins; the tag is dropped.
             tags = tags.filter(t => t !== 'External')
         }
         return this.getExtraTags(tags, defaults)
@@ -140,16 +140,10 @@ class SerializerContext {
     private elementProperties(
         el: { owner?: string; status?: string; properties: Record<string, string> },
     ): Record<string, string> {
-        // Null prototype: with a plain literal, `key in props` would also
-        // match inherited keys (`constructor`, `toString`, ...) and silently
-        // drop a user property with that name.
-        const props: Record<string, string> = Object.create(null)
-        if (el.owner) props.owner = el.owner
-        if (el.status) props['c4hero.status'] = el.status
-        for (const [key, val] of Object.entries(el.properties)) {
-            if (!(key in props)) props[key] = val
-        }
-        return props
+        return this.mergeDerivedProperties(
+            [['owner', el.owner], ['c4hero.status', el.status]],
+            el.properties,
+        )
     }
 
     /**
@@ -160,10 +154,27 @@ class SerializerContext {
      * derived-wins rules as elementProperties().
      */
     private relationshipProperties(rel: Relationship): Record<string, string> {
+        return this.mergeDerivedProperties(
+            [['c4hero.lineStyle', rel.lineStyle], ['c4hero.interactionStyle', rel.interactionStyle]],
+            rel.properties,
+        )
+    }
+
+    /**
+     * Merge derived (field-encoded) keys ahead of user properties. Null
+     * prototype so `key in props` cannot match inherited names like
+     * `constructor`; a derived key deliberately wins over a colliding user
+     * property so serialize → parse → serialize stays byte-identical.
+     */
+    private mergeDerivedProperties(
+        derived: ReadonlyArray<readonly [string, string | undefined]>,
+        user: Record<string, string>,
+    ): Record<string, string> {
         const props: Record<string, string> = Object.create(null)
-        if (rel.lineStyle) props['c4hero.lineStyle'] = rel.lineStyle
-        if (rel.interactionStyle) props['c4hero.interactionStyle'] = rel.interactionStyle
-        for (const [key, val] of Object.entries(rel.properties)) {
+        for (const [key, val] of derived) {
+            if (val) props[key] = val
+        }
+        for (const [key, val] of Object.entries(user)) {
             if (!(key in props)) props[key] = val
         }
         return props
@@ -589,23 +600,37 @@ class SerializerContext {
 
     // ─── Styles ─────────────────────────────────────────────────────
 
+    /**
+     * Styles whose tag survives sanitization. A selector that sanitizes to
+     * nothing (e.g. a tag of only commas) would emit `element "" {`, which
+     * the real parser rejects ("A tag must be specified") — skip it instead.
+     */
+    private emittableStyles(config: ViewConfiguration): { elements: ElementStyle[]; relationships: RelationshipStyle[] } {
+        return {
+            elements: config.styles.elements.filter(s => this.sanitizeTag(s.tag).length > 0),
+            relationships: config.styles.relationships.filter(s => this.sanitizeTag(s.tag).length > 0),
+        }
+    }
+
     private hasStyles(config: ViewConfiguration): boolean {
-        return config.styles.elements.length > 0 || config.styles.relationships.length > 0
+        const { elements, relationships } = this.emittableStyles(config)
+        return elements.length > 0 || relationships.length > 0
     }
 
     private serializeStyles(config: ViewConfiguration): void {
+        const { elements, relationships } = this.emittableStyles(config)
         this.emit('styles {')
         this.depth++
 
         let needsBlank = false
 
-        for (const style of config.styles.elements) {
+        for (const style of elements) {
             if (needsBlank) this.emitBlank()
             this.serializeElementStyle(style)
             needsBlank = true
         }
 
-        for (const style of config.styles.relationships) {
+        for (const style of relationships) {
             if (needsBlank) this.emitBlank()
             this.serializeRelationshipStyle(style)
             needsBlank = true
@@ -616,7 +641,7 @@ class SerializerContext {
     }
 
     private serializeElementStyle(style: ElementStyle): void {
-        this.emit(`element "${this.escapeStyleTag(style.tag)}" {`)
+        this.emit(`element "${this.sanitizeTag(style.tag)}" {`)
         this.depth++
 
         if (style.background !== undefined) this.emit(`background ${style.background}`)
@@ -634,7 +659,7 @@ class SerializerContext {
     }
 
     private serializeRelationshipStyle(style: RelationshipStyle): void {
-        this.emit(`relationship "${this.escapeStyleTag(style.tag)}" {`)
+        this.emit(`relationship "${this.sanitizeTag(style.tag)}" {`)
         this.depth++
 
         if (style.color !== undefined) this.emit(`color ${style.color}`)
@@ -683,25 +708,21 @@ class SerializerContext {
     }
 
     /**
-     * A style's tag selector must match the tag the element actually carries,
-     * so it goes through the same comma-stripping as getExtraTags — otherwise
-     * a style keyed on "has,comma" would silently detach from the element's
-     * renamed "hascomma" tag.
-     */
-    private escapeStyleTag(tag: string): string {
-        return this.escapeString(tag.replace(/,/g, ''))
-    }
-
-    /**
      * Structurizr splits a tag string on commas, so a tag containing a comma
      * would silently become two tags. Drop commas rather than corrupt the set
      * (warning the user about the rename is TEA-169). Values still go through
-     * escapeString like every other quoted string.
+     * escapeString like every other quoted string. Element tags and style tag
+     * selectors both use this, so a style keyed on "has,comma" stays attached
+     * to the element's renamed "hascomma" tag.
      */
+    private sanitizeTag(tag: string): string {
+        return this.escapeString(tag.replace(/,/g, ''))
+    }
+
     private getExtraTags(tags: string[], defaults: string[]): string | undefined {
         const extra = tags
             .filter(t => !defaults.includes(t))
-            .map(t => this.escapeString(t.replace(/,/g, '')))
+            .map(t => this.sanitizeTag(t))
             .filter(t => t.length > 0)
         if (extra.length === 0) return undefined
         return extra.join(',')

@@ -121,6 +121,17 @@ describe('tags', () => {
     expect(dsl).toContain('"A,B"')
   })
 
+  it('skips a style whose tag sanitizes to nothing instead of emitting element ""', () => {
+    // `element "" {` is rejected outright by the real parser ("A tag must
+    // be specified"), so a selector that sanitizes to empty must not emit.
+    const ws = wsWith({})
+    ws.views.configuration.styles.elements.push({ tag: ',', background: '#999999' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).not.toContain('element ""')
+    // It was the only style, so the styles block disappears entirely.
+    expect(dsl).not.toContain('styles {')
+  })
+
   it('strips the comma from a style tag selector so it still matches the renamed tag', () => {
     // Element tags have commas stripped, so a style keyed on the same tag
     // must be renamed identically or it silently detaches.
@@ -204,6 +215,17 @@ workspace {
     expect(serializeDSL(reparsed.workspace)).toBe(dsl1)
   })
 
+  it('an explicit Unspecified location also wins over an External tag on save', () => {
+    // Same contradiction rule as Internal: any explicit non-External
+    // location beats a stray External tag, so a save/reload cycle cannot
+    // silently flip the element to External.
+    const dsl = serializeDSL(wsWith({ location: 'Unspecified', tags: ['Element', 'Software System', 'External'] }))
+    expect(dsl).not.toContain('External')
+    const parsed = parseDSL(dsl)
+    expect(parsed.errors).toEqual([])
+    expect(parsed.workspace.model.softwareSystems[0].location).not.toBe('External')
+  })
+
   it('emits externality as the External tag and maps it back on parse', () => {
     const dsl = serializeDSL(wsWith({ location: 'External' }))
     expect(dsl).not.toContain('location External')
@@ -214,6 +236,31 @@ workspace {
     const sys = parsed.workspace.model.softwareSystems[0]
     expect(sys.location).toBe('External')
     expect(sys.tags).not.toContain('External')
+  })
+
+  it('stores a "__proto__" property as data on parse instead of setting the prototype', () => {
+    const source = `
+workspace {
+  model {
+    s = softwareSystem "S" {
+      properties {
+        "__proto__" "x"
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(source)
+    expect(errors).toEqual([])
+    const sys = workspace.model.softwareSystems[0]
+    expect(Object.getPrototypeOf(sys.properties)).toBe(Object.prototype)
+    expect(Object.entries(sys.properties)).toContainEqual(['__proto__', 'x'])
+
+    const dsl1 = serializeDSL(workspace)
+    expect(dsl1).toContain('"__proto__" "x"')
+    const reparsed = parseDSL(dsl1)
+    expect(serializeDSL(reparsed.workspace)).toBe(dsl1)
   })
 
   it('keeps a user property named after an Object.prototype member', () => {

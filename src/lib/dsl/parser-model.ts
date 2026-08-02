@@ -627,8 +627,12 @@ function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
             if (val === 'External') (element as Person | SoftwareSystem).location = 'External'
             else if (val === 'Internal') (element as Person | SoftwareSystem).location = 'Internal'
         } else {
-            // Generic passthrough to properties map
-            element.properties[key] = val
+            // Generic passthrough to properties map. defineProperty, not
+            // assignment: a "__proto__" key would otherwise set the object's
+            // prototype instead of storing the property.
+            Object.defineProperty(element.properties, key, {
+                value: val, enumerable: true, writable: true, configurable: true,
+            })
         }
     }
 }

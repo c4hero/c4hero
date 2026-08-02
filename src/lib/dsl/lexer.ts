@@ -104,6 +104,26 @@ export interface LexResult {
     errors: LexerError[]
 }
 
+/**
+ * Index just past the closing quote of the string literal opening at `start`
+ * (which must point at the opening `"`), or `input.length` if unterminated.
+ * Implements the same consume-one escape rule as readString below — `\"` and
+ * `\n` are the only two-char sequences; any other backslash is a literal
+ * consumed alone. Exported so non-tokenizing scanners (extractDsl in
+ * ai/dsl.ts) share the rule instead of hand-mirroring it.
+ */
+export function scanQuotedString(input: string, start: number): number {
+    let i = start + 1
+    while (i < input.length && input[i] !== '"') {
+        if (input[i] === '\\' && (input[i + 1] === '"' || input[i + 1] === 'n')) {
+            i += 2
+        } else {
+            i++
+        }
+    }
+    return i < input.length ? i + 1 : input.length
+}
+
 export function lex(input: string): LexResult {
     const tokens: Token[] = []
     const errors: LexerError[] = []

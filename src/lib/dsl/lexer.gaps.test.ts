@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { lex } from './lexer'
+import { lex, scanQuotedString } from './lexer'
 
 // Coverage-gap tests for the lexer: string escapes, comments, unusual
 // tokens, and error positions.
@@ -48,6 +48,26 @@ describe('string escape sequences', () => {
   it('handles an unterminated string ending in a backslash without crashing', () => {
     const { errors } = lex('"abc\\')
     expect(errors.some(e => e.message === 'Unterminated string literal')).toBe(true)
+  })
+})
+
+describe('scanQuotedString', () => {
+  // The exported boundary scanner must end strings exactly where readString
+  // does — extractDsl (ai/dsl.ts) relies on that agreement for brace counting.
+  it('agrees with the lexer on plain, escaped, and missed-escape strings', () => {
+    for (const [input, rest] of [
+      ['"plain" rest', ' rest'],
+      ['"say \\"hi\\"" rest', ' rest'],
+      ['"a\\\\"b" rest', ' rest'],  // the quote after \\ is escaped; string runs on to the quote after b
+      ['"a\\qb" rest', ' rest'],    // unknown escape: backslash literal
+    ] as const) {
+      expect(input.slice(scanQuotedString(input, 0))).toBe(rest)
+    }
+  })
+
+  it('returns input.length for an unterminated string', () => {
+    expect(scanQuotedString('"path C:\\\\"', 0)).toBe('"path C:\\\\"'.length)
+    expect(scanQuotedString('"abc\\', 0)).toBe('"abc\\'.length)
   })
 })
 

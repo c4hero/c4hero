@@ -90,7 +90,9 @@ jobs:
       - name: Install Structurizr CLI
         if: steps.structurizr-cache.outputs.cache-hit != 'true'
         run: |
-          curl -sSL -o /tmp/structurizr-cli.zip \
+          # -f: fail on an HTTP error instead of saving the error page as the
+          # zip and dying later at unzip with a cryptic signature error.
+          curl -fsSL -o /tmp/structurizr-cli.zip \
             "https://github.com/structurizr/cli/releases/download/v${STRUCTURIZR_VERSION}/structurizr-cli.zip"
           unzip -q /tmp/structurizr-cli.zip -d .structurizr-cli
           chmod +x .structurizr-cli/structurizr.sh

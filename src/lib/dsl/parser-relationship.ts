@@ -97,7 +97,12 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                         const key = p.advance().value
                         const valTok = p.peek()
                         if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-                            rel.properties[key] = p.advance().value
+                            // defineProperty, not assignment: a "__proto__"
+                            // key would otherwise set the object's prototype
+                            // instead of storing the property.
+                            Object.defineProperty(rel.properties, key, {
+                                value: p.advance().value, enumerable: true, writable: true, configurable: true,
+                            })
                         }
                     }
                     if (p.check('RBRACE')) p.advance()

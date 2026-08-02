@@ -64,6 +64,25 @@ describe('extractDsl', () => {
     expect(extractDsl(dsl + '\ntrailing prose')).toBe(dsl)
   })
 
+  it('anchor regex agrees with the lexer about a workspace name ending in backslashes', () => {
+    // `workspace "net\\" {` — per the consume-one rule the string swallows
+    // the quote and the brace, so there is no well-formed declaration to
+    // anchor on. extractDsl must fall back to returning everything (letting
+    // the parser report the real error), not pretend it found a block.
+    const text = 'workspace "net\\\\" {\n  model {\n    a = person "A"\n  }\n}\ntrailing prose'
+    expect(extractDsl(text)).toBe(text)
+  })
+
+  it('ignores a brace inside a mid-line # comment, like the lexer does', () => {
+    const dsl = 'workspace {\n  model {\n    a = person "A" # persona {details}\n  }\n}'
+    expect(extractDsl(dsl + '\nafter')).toBe(dsl)
+  })
+
+  it('does not treat a hex color as a # comment', () => {
+    const dsl = 'workspace {\n  views {\n    styles {\n      element "X" {\n        background #ffffff\n      }\n    }\n  }\n}'
+    expect(extractDsl(dsl + '\nmore')).toBe(dsl)
+  })
+
   it('agrees with the lexer that a trailing backslash swallows the closing quote', () => {
     // `"path C:\\"` is the GH #109 case: the tokenizer reads the first
     // backslash as literal and `\"` as an escaped quote, so the string never
