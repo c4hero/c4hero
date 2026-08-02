@@ -166,6 +166,15 @@ workspace {
     const sys = workspace.model.softwareSystems[0]
     expect(sys.location).toBe('Internal')
     expect(sys.tags).toContain('External')
+
+    // On save the field wins again: the tag is dropped rather than emitted,
+    // because an emitted External tag would flip the element to External on
+    // the next parse.
+    const dsl = serializeDSL(workspace)
+    expect(dsl).not.toContain('External')
+    const reparsed = parseDSL(dsl)
+    expect(reparsed.errors).toEqual([])
+    expect(reparsed.workspace.model.softwareSystems[0].location).not.toBe('External')
   })
 
   it('leaves an empty owner property as a property, so it survives round-trip', () => {
@@ -205,6 +214,18 @@ workspace {
     const sys = parsed.workspace.model.softwareSystems[0]
     expect(sys.location).toBe('External')
     expect(sys.tags).not.toContain('External')
+  })
+
+  it('keeps a user property named after an Object.prototype member', () => {
+    // The derived-vs-user merge must not treat inherited keys (constructor,
+    // toString, ...) as collisions.
+    const dsl = serializeDSL(wsWith({ properties: { constructor: 'x', toString: 'y' } }))
+    expect(dsl).toContain('"constructor" "x"')
+    expect(dsl).toContain('"toString" "y"')
+
+    const parsed = parseDSL(dsl)
+    expect(parsed.errors).toEqual([])
+    expect(serializeDSL(parsed.workspace)).toBe(dsl)
   })
 
   it('emits status via properties and hoists it back on parse', () => {

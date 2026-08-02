@@ -114,9 +114,16 @@ class SerializerContext {
         el: { tags: string[]; location?: string },
         defaults: string[],
     ): string | undefined {
-        const tags = el.location === 'External' && !el.tags.includes('External')
-            ? [...el.tags, 'External']
-            : el.tags
+        let tags = el.tags
+        if (el.location === 'External' && !tags.includes('External')) {
+            tags = [...tags, 'External']
+        } else if (el.location === 'Internal' && tags.includes('External')) {
+            // Contradictory combination (explicit Internal + an External user
+            // tag, only reachable via legacy files): emitting the tag would
+            // flip the element to External on the next parse. The explicit
+            // field wins; the tag is dropped.
+            tags = tags.filter(t => t !== 'External')
+        }
         return this.getExtraTags(tags, defaults)
     }
 
@@ -125,14 +132,18 @@ class SerializerContext {
      * Structurizr keywords (the real parser rejects them inside an element
      * block), so they travel inside the `properties` block — `owner` under the
      * bare `owner` key, `status` under `c4hero.status`; the parser hoists both
-     * back to their fields. Derived keys are emitted first and win over a
-     * colliding user property, so serialize → parse → serialize is
-     * byte-identical.
+     * back to their fields. Derived keys are emitted first and deliberately
+     * win over a colliding user property (the collision is only reachable by
+     * hand-writing a reserved key next to the legacy bare keyword), so
+     * serialize → parse → serialize is byte-identical.
      */
     private elementProperties(
         el: { owner?: string; status?: string; properties: Record<string, string> },
     ): Record<string, string> {
-        const props: Record<string, string> = {}
+        // Null prototype: with a plain literal, `key in props` would also
+        // match inherited keys (`constructor`, `toString`, ...) and silently
+        // drop a user property with that name.
+        const props: Record<string, string> = Object.create(null)
         if (el.owner) props.owner = el.owner
         if (el.status) props['c4hero.status'] = el.status
         for (const [key, val] of Object.entries(el.properties)) {
@@ -149,7 +160,7 @@ class SerializerContext {
      * derived-wins rules as elementProperties().
      */
     private relationshipProperties(rel: Relationship): Record<string, string> {
-        const props: Record<string, string> = {}
+        const props: Record<string, string> = Object.create(null)
         if (rel.lineStyle) props['c4hero.lineStyle'] = rel.lineStyle
         if (rel.interactionStyle) props['c4hero.interactionStyle'] = rel.interactionStyle
         for (const [key, val] of Object.entries(rel.properties)) {
@@ -661,6 +672,7 @@ class SerializerContext {
      *     and swallows the rest of the line ("Too many tokens").
      *
      * Those backslashes are dropped. Everything else round-trips exactly.
+     * The drop is silent for now; surfacing a save-time warning is TEA-169.
      */
     private escapeString(s: string): string {
         return s
@@ -682,8 +694,9 @@ class SerializerContext {
 
     /**
      * Structurizr splits a tag string on commas, so a tag containing a comma
-     * would silently become two tags. Drop commas rather than corrupt the set.
-     * Values still go through escapeString like every other quoted string.
+     * would silently become two tags. Drop commas rather than corrupt the set
+     * (warning the user about the rename is TEA-169). Values still go through
+     * escapeString like every other quoted string.
      */
     private getExtraTags(tags: string[], defaults: string[]): string | undefined {
         const extra = tags

@@ -3,6 +3,7 @@
 // helpers.
 
 import type { Workspace, Model, Group, Person, SoftwareSystem, Container, Component } from '@/types/model'
+import { isElementStatus } from '@/types/model'
 import type { ContextAwareParser } from './parser'
 import { nextId, MAX_DEPTH } from './parser'
 import { parseRelationship } from './parser-relationship'
@@ -28,6 +29,9 @@ function applyStructurizrConventions(element: Element): void {
         // Like every hoist below, only fill an unset field: an explicit legacy
         // `location Internal` line wins over an External tag, which then stays
         // in tags[] as an opaque user tag rather than being silently deleted.
+        // Known consequence of the hoist: canvas styles keyed on the
+        // "External" tag no longer match (style lookup reads tags only, not
+        // location) — tracked as TEA-168.
         if (i !== -1 && element.location === undefined) {
             element.location = 'External'
             element.tags.splice(i, 1)
@@ -43,7 +47,7 @@ function applyStructurizrConventions(element: Element): void {
     if (status !== undefined && element.status === undefined) {
         // Only hoist valid enum members; anything else stays a plain property
         // so no value is silently lost.
-        if (status === 'Live' || status === 'Planned' || status === 'Deprecated' || status === 'Removed') {
+        if (isElementStatus(status)) {
             element.status = status
             delete element.properties['c4hero.status']
         }
@@ -570,7 +574,7 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
         const val = p.peek()
         if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD' || val.type === 'STRING') {
             const s = p.advance().value
-            if (s === 'Live' || s === 'Planned' || s === 'Deprecated' || s === 'Removed') {
+            if (isElementStatus(s)) {
                 element.status = s
             }
         }

@@ -7,11 +7,15 @@
 // nothing about agreeing with anyone else.
 //
 // These tests use the Structurizr CLI as an independent oracle. They skip
-// when it is not installed so local `npm test` stays fast; CI installs it and
-// sets STRUCTURIZR_CLI, so the gate is enforced there.
+// when it is not installed so local `npm test` stays fast; CI installs it
+// into .structurizr-cli/ (the default path below) and sets
+// STRUCTURIZR_CONFORMANCE=1, so a missing CLI fails there instead of
+// skipping. Set STRUCTURIZR_CLI to point at an install elsewhere. Use the
+// same pinned version as ci.yml — the encoding rules were verified against
+// this release, so "latest" can drift from the oracle CI enforces:
 //
 //   curl -sSL -o cli.zip \
-//     https://github.com/structurizr/cli/releases/latest/download/structurizr-cli.zip
+//     https://github.com/structurizr/cli/releases/download/v2025.11.09/structurizr-cli.zip
 //   unzip cli.zip -d .structurizr-cli && chmod +x .structurizr-cli/structurizr.sh
 //
 // Note that validation alone is NOT sufficient. `container "X:\\"` passes

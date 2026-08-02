@@ -6,6 +6,19 @@ export type LayoutDirection = 'TB' | 'BT' | 'LR' | 'RL'
 export type ElementStatus = 'Live' | 'Planned' | 'Deprecated' | 'Removed'
 export type LineStyle = 'Curved' | 'Straight' | 'Orthogonal'
 
+// Runtime guards for the unions above. The DSL parser validates untrusted
+// input against these in two places each (legacy bare keyword + property
+// hoist), so they live next to the type to keep the lists from diverging.
+export function isElementStatus(v: string): v is ElementStatus {
+  return v === 'Live' || v === 'Planned' || v === 'Deprecated' || v === 'Removed'
+}
+export function isInteractionStyle(v: string): v is InteractionStyle {
+  return v === 'Synchronous' || v === 'Asynchronous'
+}
+export function isLineStyle(v: string): v is LineStyle {
+  return v === 'Curved' || v === 'Straight' || v === 'Orthogonal'
+}
+
 // ─── Elements ────────────────────────────────────────────────────────
 
 export interface BaseElement {

@@ -157,6 +157,9 @@ export function lex(input: string): LexResult {
                 // an escape of its own (`a\\"b` is literal-\ then \" → `a\"b`).
                 // Consuming two chars here is what made c4hero disagree with
                 // every other Structurizr tool on backslash-heavy values.
+                // Known consequence: files saved by pre-TEA-163 c4hero used
+                // JSON-style `\\`/`\t` escapes and now read back literally;
+                // detecting and migrating those legacy files is TEA-167.
                 const next = peekAt(1)
                 if (next === '"') {
                     advance()

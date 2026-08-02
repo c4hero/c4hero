@@ -1,6 +1,7 @@
 // DSL parser — relationship statement (`a -> b "..."`) handling.
 
-import type { Relationship, InteractionStyle, LineStyle } from '@/types/model'
+import type { Relationship } from '@/types/model'
+import { isInteractionStyle, isLineStyle } from '@/types/model'
 import type { ContextAwareParser } from './parser'
 
 export function parseRelationship(p: ContextAwareParser): Relationship | null {
@@ -110,8 +111,8 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                 const valTok = p.peek()
                 if (valTok.type === 'IDENTIFIER' || valTok.type === 'KEYWORD') {
                     const raw = p.advance().value
-                    if (raw === 'Synchronous' || raw === 'Asynchronous') {
-                        rel.interactionStyle = raw as InteractionStyle
+                    if (isInteractionStyle(raw)) {
+                        rel.interactionStyle = raw
                     }
                 }
                 continue
@@ -144,8 +145,8 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                 const valTok = p.peek()
                 if (valTok.type === 'IDENTIFIER' || valTok.type === 'KEYWORD') {
                     const raw = p.advance().value
-                    if (raw === 'Curved' || raw === 'Straight' || raw === 'Orthogonal') {
-                        rel.lineStyle = raw as LineStyle
+                    if (isLineStyle(raw)) {
+                        rel.lineStyle = raw
                     }
                 }
                 continue
@@ -179,17 +180,13 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
  */
 function applyRelationshipConventions(rel: Relationship): void {
     const lineStyle = rel.properties['c4hero.lineStyle']
-    if (lineStyle !== undefined && rel.lineStyle === undefined) {
-        if (lineStyle === 'Curved' || lineStyle === 'Straight' || lineStyle === 'Orthogonal') {
-            rel.lineStyle = lineStyle
-            delete rel.properties['c4hero.lineStyle']
-        }
+    if (lineStyle !== undefined && rel.lineStyle === undefined && isLineStyle(lineStyle)) {
+        rel.lineStyle = lineStyle
+        delete rel.properties['c4hero.lineStyle']
     }
     const interactionStyle = rel.properties['c4hero.interactionStyle']
-    if (interactionStyle !== undefined && rel.interactionStyle === undefined) {
-        if (interactionStyle === 'Synchronous' || interactionStyle === 'Asynchronous') {
-            rel.interactionStyle = interactionStyle
-            delete rel.properties['c4hero.interactionStyle']
-        }
+    if (interactionStyle !== undefined && rel.interactionStyle === undefined && isInteractionStyle(interactionStyle)) {
+        rel.interactionStyle = interactionStyle
+        delete rel.properties['c4hero.interactionStyle']
     }
 }
