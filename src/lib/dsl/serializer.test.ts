@@ -199,14 +199,16 @@ describe('Serializer — escaping special characters', () => {
     expect(dsl).toContain('\\"special\\"')
   })
 
-  it('escapes backslash characters in names', () => {
+  it('does not double backslash characters in names', () => {
     const ws = makeWorkspace()
     ws.model.people.push({
       id: 'bp', type: 'person', name: 'Alice\\Bob', tags: ['Element', 'Person'], properties: {},
     })
     const dsl = serializeDSL(ws)
-    // Backslash must be doubled in the serialized output
-    expect(dsl).toContain('person "Alice\\\\Bob"')
+    // A doubled backslash before a closing quote breaks Structurizr's
+    // tokenisation (see dsl-strings.ts), so the serializer must emit a
+    // single backslash here, not two.
+    expect(dsl).toContain('person "Alice\\Bob"')
   })
 
   it('backslash in name survives serialize → parse roundtrip', () => {

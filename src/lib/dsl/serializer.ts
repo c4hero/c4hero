@@ -14,6 +14,7 @@ import type {
     RelationshipStyle,
     ViewConfiguration,
 } from '@/types/model'
+import { escapeDslString, sanitizeTag } from './dsl-strings'
 
 const INDENT = '    ' // 4 spaces
 
@@ -589,17 +590,28 @@ class SerializerContext {
 
     // ─── Helpers ────────────────────────────────────────────────────
 
+    // Thin wrapper kept so every call site above reads `this.escapeString(...)`
+    // without a wider diff; the real implementation lives in dsl-strings.ts
+    // and matches exactly what the real Structurizr parser accepts.
     private escapeString(s: string): string {
-        return s
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"')
-            .replace(/\n/g, '\\n')
-            .replace(/\t/g, '\\t')
+        return escapeDslString(s)
     }
 
     private getExtraTags(tags: string[], defaults: string[]): string | undefined {
-        const extra = tags.filter(t => !defaults.includes(t))
+        const seen = new Set<string>()
+        const extra: string[] = []
+        for (const tag of tags) {
+            if (defaults.includes(tag)) continue
+            const sanitized = sanitizeTag(tag)
+            if (sanitized === '') continue
+            if (seen.has(sanitized)) continue
+            seen.add(sanitized)
+            extra.push(sanitized)
+        }
         if (extra.length === 0) return undefined
-        return extra.join(',')
+        // Tags have no escape mechanism for a comma (see dsl-strings.ts), but
+        // the tag list itself is embedded inside a quoted string, so each
+        // tag still needs quote-escaping before being joined.
+        return extra.map(t => escapeDslString(t)).join(',')
     }
 }
