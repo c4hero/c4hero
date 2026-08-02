@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Corrected the documented AI feature set. The 0.3.0 notes and the README both
+  described a **From your code** repo scan that proposes elements from a local
+  repository. That feature was never shipped — no implementation exists — so the
+  claim has been removed from both. It remains a candidate for a future release
+  rather than something you can use today.
+
 ## [0.3.0] - 2026-07-07
 
 Adds an optional, bring-your-own-key AI assistant. It stays inert until you enter
@@ -30,8 +40,6 @@ to the provider you choose — c4hero never sees your key or your model data.
   options to pick from — or write your own — and every change applies as you
   approve it (model health climbs live), with a revert ledger to undo any single
   change or all of them.
-- **From your code** — scan a local repository (File System Access API) and
-  propose elements and relationships.
 - **Describe a change** — build or edit the model from a plain-English prompt.
 - **Inspector AI** — per-field auto-suggestions for empty descriptions and
   technologies, plus vocabulary-constrained tag suggestions.
