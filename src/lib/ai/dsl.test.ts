@@ -55,9 +55,22 @@ describe('extractDsl', () => {
     expect(extractDsl(dsl + '\nmore')).toBe(dsl)
   })
 
-  it('handles a string ending in an escaped backslash', () => {
+  it('treats a backslash before a quote the way the lexer does (consume-one)', () => {
+    // In `"see \\"manual\\""` the first backslash is literal and the second
+    // escapes the quote, so the string continues to the final quote. A
+    // two-char-per-backslash scanner would end the string early and
+    // miscount the braces that follow.
+    const dsl = 'workspace {\n  model {\n    a = person "A" "see \\\\"manual\\\\""\n  }\n}'
+    expect(extractDsl(dsl + '\ntrailing prose')).toBe(dsl)
+  })
+
+  it('agrees with the lexer that a trailing backslash swallows the closing quote', () => {
+    // `"path C:\\"` is the GH #109 case: the tokenizer reads the first
+    // backslash as literal and `\"` as an escaped quote, so the string never
+    // closes and the block is unbalanced. extractDsl must fall back to
+    // returning everything rather than pretending the block closed.
     const dsl = 'workspace {\n  model {\n    a = person "A" "path C:\\\\"\n  }\n}'
-    expect(extractDsl(dsl + '\ntrailing')).toBe(dsl)
+    expect(extractDsl(dsl + '\ntrailing')).toBe(dsl + '\ntrailing')
   })
 
   it('does not let a brace in a description truncate the block', () => {

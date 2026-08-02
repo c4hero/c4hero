@@ -39,9 +39,16 @@ export function extractDsl(text: string): string {
     // Skip braces inside a quoted string literal (a name/description like
     // "the closing } symbol") — counting them would close the block early.
     if (inString) {
-      // A backslash escapes the next char; consume it so an escaped backslash
-      // (e.g. "C:\\") doesn't make the following quote look escaped and strand us.
-      if (ch === '\\') { i++; continue }
+      // Mirror the DSL lexer's consume-one rule (lexer.ts readString): a
+      // backslash only escapes a following quote; before anything else it is
+      // a literal character and the next char is re-examined, so `\\"` reads
+      // as literal-backslash + escaped quote and the string continues.
+      // Consuming two chars here would end the string where the lexer does
+      // not, and the two would disagree about which braces are inside it.
+      if (ch === '\\') {
+        if (unfenced[i + 1] === '"') i++
+        continue
+      }
       if (ch === '"') inString = false
       lineStart = false
       continue

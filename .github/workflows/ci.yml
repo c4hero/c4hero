@@ -63,6 +63,12 @@ jobs:
   # emitted DSL) passed CI for months.
   dsl-conformance:
     runs-on: ubuntu-latest
+    env:
+      # Pinned deliberately: the encoding rules the serializer targets were
+      # verified against this release (structurizr-java 5.0.2). A parser change
+      # should be an explicit bump, not a silent break on a Monday morning.
+      # Single source of truth for both the cache key and the download URL.
+      STRUCTURIZR_VERSION: 2025.11.09
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -74,20 +80,16 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: npm ci
-      # Pinned deliberately: the encoding rules the serializer targets were
-      # verified against this release (structurizr-java 5.0.2). A parser change
-      # should be an explicit bump, not a silent break on a Monday morning.
       # Cached by version so a GitHub-releases hiccup can't fail the build.
       - name: Cache Structurizr CLI
         id: structurizr-cache
         uses: actions/cache@v5
         with:
           path: .structurizr-cli
-          key: structurizr-cli-2025.11.09
+          key: structurizr-cli-${{ env.STRUCTURIZR_VERSION }}
       - name: Install Structurizr CLI
         if: steps.structurizr-cache.outputs.cache-hit != 'true'
         run: |
-          STRUCTURIZR_VERSION=2025.11.09
           curl -sSL -o /tmp/structurizr-cli.zip \
             "https://github.com/structurizr/cli/releases/download/v${STRUCTURIZR_VERSION}/structurizr-cli.zip"
           unzip -q /tmp/structurizr-cli.zip -d .structurizr-cli

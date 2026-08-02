@@ -27,8 +27,11 @@ function applyStructurizrConventions(element: Element): void {
     if (element.type === 'person' || element.type === 'softwareSystem') {
         const i = element.tags.indexOf('External')
         // Like every hoist below, only fill an unset field: an explicit legacy
-        // `location Internal` line wins over an External tag, which then stays
-        // in tags[] as an opaque user tag rather than being silently deleted.
+        // `location Internal` line wins over an External tag, which is kept in
+        // the in-memory model. On save the serializer resolves the
+        // contradiction in the field's favour and does not re-emit the tag
+        // (see locationAwareTags) — emitting it would flip the element to
+        // External on the next parse.
         // Known consequence of the hoist: canvas styles keyed on the
         // "External" tag no longer match (style lookup reads tags only, not
         // location) — tracked as TEA-168.
