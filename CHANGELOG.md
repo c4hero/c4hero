@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **DSL escaping** — string values now escape the way Structurizr does: `\"` for
+  a double quote, with backslashes not doubled. Values that cannot be represented
+  in a quoted string — a trailing backslash, a real newline or tab, a comma inside
+  a tag — are now sanitised rather than emitted as broken DSL. Tags go through the
+  same sanitising path, so a comma no longer splits a tag in two.
+- **External elements** — people and software systems marked as external now carry
+  Structurizr's `External` tag instead of the non-existent `location` keyword. The
+  location control in the UI is unchanged, and `location Internal`/`location External`
+  is still accepted when reading a file. Files written by older c4hero versions
+  still load with their original values.
+- **Ownership and styling** — ownership, status, line style, and interaction style
+  now round-trip through a `properties { }` block instead of keywords Structurizr
+  rejects. The old keywords are still accepted when reading DSL for back-compat.
+- **CI conformance gate** — a required Structurizr conformance check now runs in CI,
+  validating serializer output with the real Structurizr CLI (pinned version
+  v2025.11.09) to ensure emitted DSL is always valid.
 - Corrected the documented AI feature set. The 0.3.0 notes and the README both
   described a **From your code** repo scan that proposes elements from a local
   repository. That feature was never shipped — no implementation exists — so the
