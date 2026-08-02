@@ -114,56 +114,50 @@ const LEGACY_KEYWORD_LINE =
 /**
  * Detect whether `input` was produced by a pre-fix c4hero version that
  * doubled backslashes and unescaped `\n`/`\t` (real Structurizr does
- * neither -- see dsl-strings.ts). The rule, applied once per `lex()` call:
+ * neither -- see dsl-strings.ts).
  *
- *   The document is legacy iff
- *     (i)  every backslash found inside a quoted string literal is
- *          immediately followed by one of `"`, `\`, `n`, `t` (i.e. there is
- *          no backslash that could only make sense as a literal Windows
- *          path separator or similar), AND
- *     (ii) at least one `\\` (doubled-backslash) sequence occurs inside a
- *          string literal, OR the document contains at least one line
- *          matching LEGACY_KEYWORD_LINE above.
+ *   The document is legacy iff it contains at least one line matching
+ *   LEGACY_KEYWORD_LINE above -- `location`/bare `owner`/`status`/
+ *   `lineStyle`/`interactionStyle` are never emitted by any DSL writer
+ *   except pre-fix c4hero (real Structurizr rejects them outright inside
+ *   element/relationship blocks -- see GROUND TRUTH in dsl-strings.ts), so
+ *   this line's presence is unambiguous, positive proof of pre-fix origin.
  *
- * Known false positive (documented, not fixed -- the rule is a heuristic):
- * a modern file whose only backslash sequences happen to look like `\\`
- * (e.g. a value that legitimately ends in two literal backslash characters
- * followed by `n`/`t`/`"`/`\`, such as `"a\\\\"` meaning two literal
- * backslashes) will be misdetected as legacy and have its backslashes
- * halved on load. This is considered acceptable: such values are rare, and
- * the alternative (never detecting legacy files) would break every
- * pre-existing c4hero-authored DSL file on disk.
+ * The keyword-line marker is the ONLY signal used. An earlier version of
+ * this function also treated a `\\` (doubled-backslash) sighting inside a
+ * string, or a backslash-run-parity argument, as a second, independent
+ * legacy signal. Both were content-based heuristics operating on the same
+ * bytes a real value can legitimately contain, so they were provably
+ * unsound: `serializeDSL` never doubles a backslash and never escapes
+ * anything but a literal quote (see dsl-strings.ts), so ANY backslash
+ * pattern -- one run, many runs, odd length, even length, adjacent to `n`/
+ * `t`/`"`/another `\`, anywhere in the document -- can legitimately appear
+ * in a modern value (e.g. a Windows UNC path `\\HOST-01\temp`, or a value
+ * that is simply two literal backslashes `a\\b`). There is no backslash
+ * shape a content-based heuristic can treat as "legacy evidence" without
+ * also matching some real modern value and corrupting it on load. Only the
+ * keyword-line marker is structurally impossible for the modern serializer
+ * to produce, so it is the only condition allowed to flip this flag.
+ *
+ * Residual, deliberately accepted ambiguity (documented per the task, not
+ * an oversight): a genuinely pre-fix file whose ONLY legacy artefacts are
+ * escape sequences inside string values -- a doubled `\\` for a real
+ * backslash, or a `\n`/`\t` for a real newline/tab -- with NO
+ * location/owner/status/lineStyle/interactionStyle line anywhere in the
+ * whole document, is no longer detected as legacy. Its doubled backslashes
+ * and `\n`/`\t` sequences load as the literal characters they are, not as
+ * the halved backslash / decoded newline-tab the pre-fix writer intended.
+ * This is the necessary trade-off for eliminating the false positive: any
+ * content-based rule permissive enough to catch that residual case is also
+ * permissive enough to silently corrupt a modern value that happens to
+ * contain the same bytes, which is strictly worse (active, silent data
+ * loss on every save/reload of a document nobody wrote with a legacy tool,
+ * vs. a one-time, non-destructive miss on the increasingly rare file that
+ * both predates the fix AND never uses `location`/`owner`/`status`/
+ * `lineStyle`/`interactionStyle` anywhere).
  */
 export function detectLegacyEscapes(input: string): boolean {
-    let i = 0
-    const n = input.length
-    let allBackslashesValid = true
-    let sawDoubleBackslash = false
-
-    while (i < n) {
-        if (input[i] !== '"') {
-            i++
-            continue
-        }
-        i++ // consume opening quote
-        while (i < n && input[i] !== '"') {
-            if (input[i] === '\\') {
-                const next = input[i + 1]
-                if (next === '"' || next === '\\' || next === 'n' || next === 't') {
-                    if (next === '\\') sawDoubleBackslash = true
-                    i += 2
-                    continue
-                }
-                allBackslashesValid = false
-                i += 1
-                continue
-            }
-            i++
-        }
-        i++ // consume closing quote (or run off the end if unterminated)
-    }
-
-    return allBackslashesValid && (sawDoubleBackslash || LEGACY_KEYWORD_LINE.test(input))
+    return LEGACY_KEYWORD_LINE.test(input)
 }
 
 export function lex(input: string): LexResult {

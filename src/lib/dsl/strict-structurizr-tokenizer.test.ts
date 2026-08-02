@@ -1,12 +1,10 @@
 /**
  * A minimal, test-only tokenizer that mimics the REAL Structurizr DSL lexer's
- * quoted-string handling exactly (ground truth in dsl-strings.ts, measured
- * against the pinned CLI v2025.11.09):
+ * quoted-string handling exactly (ground truth in dsl-strings.ts):
  *   - a quoted string starts at `"`
  *   - `\"` yields a literal quote
- *   - `\n` yields a real newline (Structurizr DOES unescape this)
- *   - ANY other backslash (not immediately followed by `"` or `n`) is a
- *     literal backslash character, never an escape
+ *   - ANY other backslash (not immediately followed by `"`) is a literal
+ *     backslash character, never an escape
  *   - a real newline before the closing quote is a hard parse error
  *
  * This is deliberately independent of c4hero's own lexer/parser
@@ -53,16 +51,6 @@ function tokenize(content: string): Token[] {
                 }
                 if (c === '\\' && content[i + 1] === '"') {
                     value += '"'
-                    i += 2
-                    continue
-                }
-                if (c === '\\' && content[i + 1] === 'n') {
-                    // Structurizr unescapes backslash-n to a real newline;
-                    // the serializer sanitizes this pattern away before it
-                    // ever reaches this tokenizer (see
-                    // stripBackslashesBeforeN in dsl-strings.ts), but the
-                    // oracle still has to model the real parser correctly.
-                    value += '\n'
                     i += 2
                     continue
                 }

@@ -5,11 +5,29 @@ import { lex } from './lexer'
 // tokens, and error positions.
 
 describe('string escape sequences', () => {
-  it('decodes \\n, \\t, \\" and \\\\ escapes inside strings', () => {
+  // Real Structurizr never unescapes backslash-n / backslash-t, and the
+  // modern serializer never doubles backslashes (see dsl-strings.ts) --
+  // `\"` is the only escape either era treats specially. This document has
+  // no legacy marker (no location/owner/etc. line, and its only backslash
+  // runs are odd-length ones next to `n`/`t`), so it is read as modern:
+  // `\n`/`\t`/`\\` all stay exactly the literal characters they are.
+  it('keeps \\n, \\t and \\\\ as literal characters in a document with no legacy marker', () => {
     const { tokens, errors } = lex('"a\\nb\\tc\\"d\\\\e"')
     expect(errors).toHaveLength(0)
     expect(tokens[0].type).toBe('STRING')
-    expect(tokens[0].value).toBe('a\nb\tc"d\\e')
+    expect(tokens[0].value).toBe('a\\nb\\tc"d\\\\e')
+  })
+
+  // A document carrying a real legacy marker (a bare `location` line, which
+  // real Structurizr rejects and only pre-fix c4hero ever emitted) is
+  // decoded under the legacy scheme for its whole extent: `\n`/`\t` unescape
+  // to real newline/tab and `\\` halves to a single backslash.
+  it('decodes \\n, \\t and \\\\ when the document carries a legacy keyword marker', () => {
+    const dsl = 'model {\n  p = person "a\\nb\\tc\\\\d" {\n    location External\n  }\n}'
+    const { tokens, errors } = lex(dsl)
+    expect(errors).toHaveLength(0)
+    const str = tokens.find(t => t.type === 'STRING' && t.value.startsWith('a'))
+    expect(str?.value).toBe('a\nb\tc\\d')
   })
 
   it('preserves the backslash for unknown escape sequences', () => {
