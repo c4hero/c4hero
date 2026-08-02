@@ -111,11 +111,14 @@ describe('status serialization', () => {
     }
   }
 
-  it('emits status keyword without quotes', () => {
+  it('emits status as a c4hero.status property, not a bare status keyword', () => {
+    // Real Structurizr rejects the bare `status` keyword inside an element
+    // block, so it must be carried as a "c4hero.status" property instead.
     const dsl = serializeDSL(makeWs({ status: 'Live' }))
-    expect(dsl).toContain('status Live')
-    // Must be a block form (has braces)
-    expect(dsl).toContain('{')
+    expect(dsl).not.toMatch(/^\s*status\s/m)
+    expect(dsl).toContain('"c4hero.status" "Live"')
+    // Must be a block form (has braces) containing a properties block
+    expect(dsl).toContain('properties {')
   })
 
   it('does not emit status when undefined', () => {
@@ -138,9 +141,13 @@ describe('owner serialization', () => {
     }
   }
 
-  it('emits owner as quoted string', () => {
+  it('emits owner as an "owner" property inside a properties block, not a bare keyword', () => {
+    // Real Structurizr rejects the bare `owner` keyword inside an element
+    // block, so it must be carried as an "owner" property instead.
     const dsl = serializeDSL(makeWs({ owner: 'Platform Team' }))
-    expect(dsl).toContain('owner "Platform Team"')
+    expect(dsl).not.toMatch(/^\s*owner\s/m)
+    expect(dsl).toContain('"owner" "Platform Team"')
+    expect(dsl).toContain('properties {')
   })
 
   it('does not emit owner when undefined', () => {

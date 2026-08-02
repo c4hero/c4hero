@@ -37,10 +37,14 @@ function makeWs(overrides: Partial<Relationship> = {}): Workspace {
 }
 
 describe('interactionStyle roundtrip', () => {
+  // Real Structurizr rejects the bare `interactionStyle` keyword inside a
+  // relationship block, so it is carried as a "c4hero.interactionStyle"
+  // property instead.
   it('Asynchronous survives serialize → parse', () => {
     const ws = makeWs({ interactionStyle: 'Asynchronous' })
     const dsl = serializeDSL(ws)
-    expect(dsl).toContain('interactionStyle Asynchronous')
+    expect(dsl).not.toMatch(/^\s*interactionStyle\s/m)
+    expect(dsl).toContain('"c4hero.interactionStyle" "Asynchronous"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
     const rel = workspace.model.relationships[0] as Relationship | undefined
@@ -50,7 +54,8 @@ describe('interactionStyle roundtrip', () => {
   it('Synchronous survives serialize → parse', () => {
     const ws = makeWs({ interactionStyle: 'Synchronous' })
     const dsl = serializeDSL(ws)
-    expect(dsl).toContain('interactionStyle Synchronous')
+    expect(dsl).not.toMatch(/^\s*interactionStyle\s/m)
+    expect(dsl).toContain('"c4hero.interactionStyle" "Synchronous"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
     const rel = workspace.model.relationships[0] as Relationship | undefined
@@ -85,7 +90,7 @@ describe('relationship url roundtrip', () => {
     const ws = makeWs({ url: 'https://example.com', interactionStyle: 'Asynchronous' })
     const dsl = serializeDSL(ws)
     expect(dsl).toContain('url "https://example.com"')
-    expect(dsl).toContain('interactionStyle Asynchronous')
+    expect(dsl).toContain('"c4hero.interactionStyle" "Asynchronous"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
     const rel = workspace.model.relationships[0] as Relationship | undefined
@@ -130,10 +135,13 @@ describe('relationship technology-only roundtrip', () => {
 })
 
 describe('relationship lineStyle roundtrip', () => {
+  // Real Structurizr rejects the bare `lineStyle` keyword inside a
+  // relationship block, so it is carried as a "c4hero.lineStyle" property.
   it('Curved serializes and parses back', () => {
     const ws = makeWs({ lineStyle: 'Curved' })
     const dsl = serializeDSL(ws)
-    expect(dsl).toContain('lineStyle Curved')
+    expect(dsl).not.toMatch(/^\s*lineStyle\s/m)
+    expect(dsl).toContain('"c4hero.lineStyle" "Curved"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
     const rel = workspace.model.relationships[0] as Relationship | undefined
@@ -143,7 +151,8 @@ describe('relationship lineStyle roundtrip', () => {
   it('Orthogonal serializes and parses back', () => {
     const ws = makeWs({ lineStyle: 'Orthogonal' })
     const dsl = serializeDSL(ws)
-    expect(dsl).toContain('lineStyle Orthogonal')
+    expect(dsl).not.toMatch(/^\s*lineStyle\s/m)
+    expect(dsl).toContain('"c4hero.lineStyle" "Orthogonal"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
     const rel = workspace.model.relationships[0] as Relationship | undefined
@@ -153,7 +162,8 @@ describe('relationship lineStyle roundtrip', () => {
   it('Straight serializes and parses back', () => {
     const ws = makeWs({ lineStyle: 'Straight' })
     const dsl = serializeDSL(ws)
-    expect(dsl).toContain('lineStyle Straight')
+    expect(dsl).not.toMatch(/^\s*lineStyle\s/m)
+    expect(dsl).toContain('"c4hero.lineStyle" "Straight"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
     const rel = workspace.model.relationships[0] as Relationship | undefined
@@ -174,8 +184,8 @@ describe('relationship lineStyle roundtrip', () => {
   it('lineStyle and interactionStyle both survive roundtrip', () => {
     const ws = makeWs({ lineStyle: 'Curved', interactionStyle: 'Asynchronous' })
     const dsl = serializeDSL(ws)
-    expect(dsl).toContain('lineStyle Curved')
-    expect(dsl).toContain('interactionStyle Asynchronous')
+    expect(dsl).toContain('"c4hero.lineStyle" "Curved"')
+    expect(dsl).toContain('"c4hero.interactionStyle" "Asynchronous"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
     const rel = workspace.model.relationships[0] as Relationship | undefined

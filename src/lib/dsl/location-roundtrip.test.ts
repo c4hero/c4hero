@@ -64,21 +64,27 @@ workspace {
   })
 })
 
-describe('serializer emits native location keyword', () => {
-  it('External person serializes as "location External" not properties block', () => {
+describe('serializer emits External as a tag, not a location keyword', () => {
+  // Real Structurizr rejects the bare `location` keyword inside an element
+  // block (only description, tags, url, properties, perspectives are
+  // accepted), so c4hero encodes External as an ordinary `External` tag
+  // instead, routed through the same tag-sanitising path as every other tag.
+  it('External person serializes with an External tag, no location keyword', () => {
     const ws = makeWs()
     const dsl = serializeDSL(ws)
-    expect(dsl).toContain('location External')
+    expect(dsl).not.toMatch(/^\s*location\s/m)
     expect(dsl).not.toContain('c4hero.location')
+    expect(dsl).toMatch(/person "Alice" "" "External"/)
   })
 
-  it('External softwareSystem serializes as "location External" not properties block', () => {
+  it('External softwareSystem serializes with an External tag, no location keyword', () => {
     const ws = makeWs()
     const dsl = serializeDSL(ws)
-    // Both person Alice and system ExtSys are External; both should use location External
-    const locationCount = (dsl.match(/location External/g) ?? []).length
-    expect(locationCount).toBe(2)
+    expect(dsl).not.toMatch(/^\s*location\s/m)
     expect(dsl).not.toContain('"c4hero.location"')
+    // Both person Alice and system ExtSys are External; both should carry the tag
+    const externalTagCount = (dsl.match(/"External"/g) ?? []).length
+    expect(externalTagCount).toBe(2)
   })
 })
 
@@ -107,23 +113,20 @@ describe('External location roundtrip', () => {
   })
 })
 
-describe('serializer does not emit unnecessary empty string placeholders', () => {
-  it('External person with no description serializes without "" before the block', () => {
+describe('serializer emits the inline 3-argument form for external-only elements', () => {
+  it('External person with no description serializes inline, no block', () => {
     const ws = makeWs()
     const dsl = serializeDSL(ws)
-    // alice is External so has a block body; she has no description.
-    // The serializer must NOT emit person "Alice" "" { location External }
-    // It should emit person "Alice" { location External }
-    expect(dsl).not.toMatch(/person "Alice" "" \{/)
-    expect(dsl).toMatch(/person "Alice" \{/)
+    // alice is only External (no url/status/owner/properties), so being
+    // external must NOT force a block body -- it becomes the inline
+    // 3-argument form: name, empty description, tags.
+    expect(dsl).toMatch(/alice = person "Alice" "" "External"\s*$/m)
   })
 
-  it('External softwareSystem with no description serializes without "" before the block', () => {
+  it('External softwareSystem with no description serializes inline, no block', () => {
     const ws = makeWs()
     const dsl = serializeDSL(ws)
-    // ExtSys is External so has a block body; it has no description.
-    expect(dsl).not.toMatch(/softwareSystem "ExtSys" "" \{/)
-    expect(dsl).toMatch(/softwareSystem "ExtSys" \{/)
+    expect(dsl).toMatch(/ext = softwareSystem "ExtSys" "" "External"\s*$/m)
   })
 
   it('External person with no description roundtrips with location and no description', () => {

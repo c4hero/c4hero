@@ -102,8 +102,10 @@ describe('relationship tag roundtrip', () => {
   it('block extra tags survive serialize → parse (with interactionStyle)', () => {
     const ws = makeWs()
     const dsl = serializeDSL(ws)
-    // rel-2 has tag 'Secondary' and interactionStyle Asynchronous → block form
-    expect(dsl).toContain('interactionStyle Asynchronous')
+    // rel-2 has tag 'Secondary' and interactionStyle Asynchronous → block form.
+    // interactionStyle is carried as a "c4hero.interactionStyle" property since
+    // real Structurizr rejects the bare keyword inside a relationship block.
+    expect(dsl).toContain('"c4hero.interactionStyle" "Asynchronous"')
     expect(dsl).toContain('tags "Secondary"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])

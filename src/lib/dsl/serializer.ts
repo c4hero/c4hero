@@ -104,6 +104,32 @@ class SerializerContext {
         }
     }
 
+    /** Merge derived reserved-key properties (owner, status) with the element's
+     *  own user-defined properties into a single new object, without mutating
+     *  the workspace model. Real Structurizr rejects the bare `owner`/`status`
+     *  keywords inside an element block (only `description`, `tags`, `url`,
+     *  `properties`, `perspectives` are accepted there), so c4hero carries them
+     *  as `"owner"` / `"c4hero.status"` properties instead (see parser-model.ts
+     *  for the read-back side). Derived values win over any same-named
+     *  user-defined property. */
+    private mergeElementProperties(element: { properties: Record<string, string>; owner?: string; status?: string }): Record<string, string> {
+        const merged: Record<string, string> = { ...element.properties }
+        if (element.owner) merged.owner = element.owner
+        if (element.status) merged['c4hero.status'] = element.status
+        return merged
+    }
+
+    /** Same merging as {@link mergeElementProperties} but for relationships:
+     *  real Structurizr rejects bare `lineStyle`/`interactionStyle` keywords
+     *  inside a relationship block, so they are carried as `"c4hero.lineStyle"`
+     *  / `"c4hero.interactionStyle"` properties instead. */
+    private mergeRelationshipProperties(rel: Relationship): Record<string, string> {
+        const merged: Record<string, string> = { ...rel.properties }
+        if (rel.lineStyle) merged['c4hero.lineStyle'] = rel.lineStyle
+        if (rel.interactionStyle) merged['c4hero.interactionStyle'] = rel.interactionStyle
+        return merged
+    }
+
     /** Emit a `properties { }` block for any user-defined key/value pairs. */
     private serializeProperties(props: Record<string, string>): void {
         const entries = Object.entries(props)
@@ -209,10 +235,18 @@ class SerializerContext {
 
     private serializePerson(person: Person): void {
         const varName = this.idToVar.get(person.id)
-        const extraTags = this.getExtraTags(person.tags, ['Element', 'Person'])
         const isExternal = person.location === 'External'
-        const hasProperties = Object.keys(person.properties).length > 0
-        const hasBlock = isExternal || !!person.url || !!person.status || !!person.owner || hasProperties
+        // Real Structurizr rejects the bare `location` keyword inside an element
+        // block, so an External person is instead tagged `External` and routed
+        // through the same tag-sanitising/dedup path as any other tag (an
+        // element that already carries the tag emits it exactly once). The tag
+        // is promoted back to `location: 'External'` on import — see
+        // applyExternalTagToLocation() in parser-model.ts.
+        const tagsForExtra = isExternal ? [...person.tags, 'External'] : person.tags
+        const extraTags = this.getExtraTags(tagsForExtra, ['Element', 'Person'])
+        const properties = this.mergeElementProperties(person)
+        const hasProperties = Object.keys(properties).length > 0
+        const hasBlock = !!person.url || hasProperties
 
         const parts: string[] = []
         parts.push('person')
@@ -228,10 +262,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
-            if (person.status) this.emit(`status ${person.status}`)
-            if (person.owner) this.emit(`owner "${this.escapeString(person.owner)}"`)
-            if (isExternal) this.emit('location External')
-            if (hasProperties) this.serializeProperties(person.properties)
+            if (hasProperties) this.serializeProperties(properties)
             this.depth--
             this.emit('}')
         } else {
@@ -241,10 +272,14 @@ class SerializerContext {
 
     private serializeSoftwareSystem(sys: SoftwareSystem): void {
         const varName = this.idToVar.get(sys.id)
-        const extraTags = this.getExtraTags(sys.tags, ['Element', 'Software System'])
         const isExternal = sys.location === 'External'
-        const hasProperties = Object.keys(sys.properties).length > 0
-        const hasBody = sys.containers.length > 0 || isExternal || !!sys.url || !!sys.status || !!sys.owner || hasProperties
+        // See serializePerson() for why External is emitted as a tag, not a
+        // `location` keyword.
+        const tagsForExtra = isExternal ? [...sys.tags, 'External'] : sys.tags
+        const extraTags = this.getExtraTags(tagsForExtra, ['Element', 'Software System'])
+        const properties = this.mergeElementProperties(sys)
+        const hasProperties = Object.keys(properties).length > 0
+        const hasBody = sys.containers.length > 0 || !!sys.url || hasProperties
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -261,10 +296,7 @@ class SerializerContext {
             this.depth++
 
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
-            if (sys.status) this.emit(`status ${sys.status}`)
-            if (sys.owner) this.emit(`owner "${this.escapeString(sys.owner)}"`)
-            if (isExternal) this.emit('location External')
-            if (hasProperties) this.serializeProperties(sys.properties)
+            if (hasProperties) this.serializeProperties(properties)
 
             for (let i = 0; i < sys.containers.length; i++) {
                 if (i > 0) this.emitBlank()
@@ -281,8 +313,9 @@ class SerializerContext {
     private serializeContainer(container: Container): void {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
-        const hasProperties = Object.keys(container.properties).length > 0
-        const hasBody = container.components.length > 0 || !!container.url || !!container.status || !!container.owner || hasProperties
+        const properties = this.mergeElementProperties(container)
+        const hasProperties = Object.keys(properties).length > 0
+        const hasBody = container.components.length > 0 || !!container.url || hasProperties
 
         const parts: string[] = []
         parts.push('container')
@@ -302,9 +335,7 @@ class SerializerContext {
             this.depth++
 
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
-            if (container.status) this.emit(`status ${container.status}`)
-            if (container.owner) this.emit(`owner "${this.escapeString(container.owner)}"`)
-            if (hasProperties) this.serializeProperties(container.properties)
+            if (hasProperties) this.serializeProperties(properties)
             for (const comp of container.components) {
                 this.serializeComponent(comp)
             }
@@ -319,8 +350,9 @@ class SerializerContext {
     private serializeComponent(comp: Component): void {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
-        const hasProperties = Object.keys(comp.properties).length > 0
-        const hasBlock = !!comp.url || !!comp.status || !!comp.owner || hasProperties
+        const properties = this.mergeElementProperties(comp)
+        const hasProperties = Object.keys(properties).length > 0
+        const hasBlock = !!comp.url || hasProperties
 
         const parts: string[] = []
         parts.push('component')
@@ -339,9 +371,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (comp.url) this.emit(`url "${this.escapeString(comp.url)}"`)
-            if (comp.status) this.emit(`status ${comp.status}`)
-            if (comp.owner) this.emit(`owner "${this.escapeString(comp.owner)}"`)
-            if (hasProperties) this.serializeProperties(comp.properties)
+            if (hasProperties) this.serializeProperties(properties)
             this.depth--
             this.emit('}')
         } else {
@@ -361,17 +391,16 @@ class SerializerContext {
         if (rel.technology) parts.push(`"${this.escapeString(rel.technology)}"`)
 
         const extraTags = this.getExtraTags(rel.tags, ['Relationship'])
-        const hasProperties = Object.keys(rel.properties).length > 0
-        const needsBlock = !!rel.interactionStyle || !!rel.url || !!rel.lineStyle || hasProperties
+        const properties = this.mergeRelationshipProperties(rel)
+        const hasProperties = Object.keys(properties).length > 0
+        const needsBlock = !!rel.url || hasProperties
 
         if (needsBlock) {
-            // Use block form when interactionStyle, url, lineStyle, or properties are present
+            // Use block form when url or (merged) properties are present.
             this.emit(`${parts.join(' ')} {`)
             this.depth++
             if (rel.url) this.emit(`url "${this.escapeString(rel.url)}"`)
-            if (rel.interactionStyle) this.emit(`interactionStyle ${rel.interactionStyle}`)
-            if (rel.lineStyle) this.emit(`lineStyle ${rel.lineStyle}`)
-            if (hasProperties) this.serializeProperties(rel.properties)
+            if (hasProperties) this.serializeProperties(properties)
             if (extraTags) this.emit(`tags "${extraTags}"`)
             this.depth--
             this.emit('}')
@@ -514,7 +543,11 @@ class SerializerContext {
         const parts: string[] = ['autoLayout']
 
         if (layout.direction !== 'TB' || layout.rankSeparation !== undefined || layout.nodeSeparation !== undefined) {
-            parts.push(layout.direction)
+            // Structurizr requires the rank direction lowercase (tb|bt|lr|rl);
+            // an uppercase direction like `LR` is rejected by the real parser.
+            // The parser upper-cases on read (parser-views.ts), so the
+            // in-memory LayoutDirection value and round-trip are unaffected.
+            parts.push(layout.direction.toLowerCase())
         }
 
         if (layout.rankSeparation !== undefined) {
