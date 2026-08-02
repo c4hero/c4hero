@@ -605,7 +605,7 @@ class SerializerContext {
     }
 
     private serializeElementStyle(style: ElementStyle): void {
-        this.emit(`element "${this.escapeString(style.tag)}" {`)
+        this.emit(`element "${this.escapeStyleTag(style.tag)}" {`)
         this.depth++
 
         if (style.background !== undefined) this.emit(`background ${style.background}`)
@@ -623,7 +623,7 @@ class SerializerContext {
     }
 
     private serializeRelationshipStyle(style: RelationshipStyle): void {
-        this.emit(`relationship "${this.escapeString(style.tag)}" {`)
+        this.emit(`relationship "${this.escapeStyleTag(style.tag)}" {`)
         this.depth++
 
         if (style.color !== undefined) this.emit(`color ${style.color}`)
@@ -668,6 +668,16 @@ class SerializerContext {
             .replace(/\\+$/, '')
             .replace(/"/g, '\\"')
             .replace(/\r\n|\r|\n/g, '\\n')
+    }
+
+    /**
+     * A style's tag selector must match the tag the element actually carries,
+     * so it goes through the same comma-stripping as getExtraTags — otherwise
+     * a style keyed on "has,comma" would silently detach from the element's
+     * renamed "hascomma" tag.
+     */
+    private escapeStyleTag(tag: string): string {
+        return this.escapeString(tag.replace(/,/g, ''))
     }
 
     /**

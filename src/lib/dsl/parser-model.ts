@@ -25,12 +25,17 @@ type Element = Person | SoftwareSystem | Container | Component
 function applyStructurizrConventions(element: Element): void {
     if (element.type === 'person' || element.type === 'softwareSystem') {
         const i = element.tags.indexOf('External')
-        if (i !== -1) {
+        // Like every hoist below, only fill an unset field: an explicit legacy
+        // `location Internal` line wins over an External tag, which then stays
+        // in tags[] as an opaque user tag rather than being silently deleted.
+        if (i !== -1 && element.location === undefined) {
             element.location = 'External'
             element.tags.splice(i, 1)
         }
     }
-    if (element.properties.owner !== undefined && element.owner === undefined) {
+    // Empty values stay plain properties: the serializer only re-emits a
+    // truthy owner field, so hoisting `"owner" ""` would drop it on save.
+    if (element.properties.owner && element.owner === undefined) {
         element.owner = element.properties.owner
         delete element.properties.owner
     }

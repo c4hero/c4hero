@@ -231,8 +231,14 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
     // Validation is not enough: "X:\\" validates fine and stores a corrupted
     // value. These assert what the real parser actually built.
     describe('value fidelity', () => {
+        // Every test reads the same export; one CLI (JVM) run instead of ten.
+        let memo: Record<string, unknown> | undefined
+        function hostileModel(): Record<string, unknown> {
+            memo ??= exportModel(serializeDSL(hostileWorkspace()))
+            return memo
+        }
         it('preserves hostile container strings exactly, modulo unrepresentable backslashes', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             expect(containerNames(model)).toEqual([
                 // Trailing backslash is unrepresentable in Structurizr DSL and is dropped.
                 'Shared Folder X:',
@@ -244,14 +250,14 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         })
 
         it('keeps an interior backslash single, not doubled', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             const m = model.model as { softwareSystems: { containers: { name: string; technology?: string }[] }[] }
             const quoted = m.softwareSystems[0].containers.find(c => c.name === 'Say "hi"')
             expect(quoted?.technology).toBe('C:\\Program Files')
         })
 
         it('stores backslash-before-quote byte-exactly', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             const m = model.model as { softwareSystems: { containers: { name: string; technology?: string }[] }[] }
             const bsq = m.softwareSystems[0].containers.find(c => c.name === 'see "manual\\"')
             expect(bsq).toBeDefined()
@@ -259,29 +265,29 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         })
 
         it('carries externality as the External tag', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             expect(systemNamed(model, 'Example System')?.tags).toContain('External')
         })
 
         it('carries owner as a property the real parser can read', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             expect(systemNamed(model, 'Example System')?.properties?.owner).toBe('Platform Team')
         })
 
         it('does not split a tag containing a comma into two tags', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             const tags = (systemNamed(model, 'Example System')?.tags ?? '').split(',')
             expect(tags).not.toContain('has')
             expect(tags).not.toContain('comma')
         })
 
         it('carries element status as a property the real parser can read', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             expect(systemNamed(model, 'Example System')?.properties?.['c4hero.status']).toBe('Live')
         })
 
         it('preserves relationship description, technology and url exactly', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             const [rel] = allRelationships(model)
             expect(rel).toBeDefined()
             expect(rel.description).toBe('Reads the "daily"\nreport')
@@ -290,7 +296,7 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         })
 
         it('carries lineStyle and interactionStyle as properties, next to user properties', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             const [rel] = allRelationships(model)
             expect(rel?.properties?.['c4hero.lineStyle']).toBe('Orthogonal')
             expect(rel?.properties?.['c4hero.interactionStyle']).toBe('Asynchronous')
@@ -298,7 +304,7 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         })
 
         it('does not split a relationship tag containing a comma into two tags', () => {
-            const model = exportModel(serializeDSL(hostileWorkspace()))
+            const model = hostileModel()
             const tags = (allRelationships(model)[0]?.tags ?? '').split(',')
             expect(tags).not.toContain('nightly')
             expect(tags).not.toContain('batch')

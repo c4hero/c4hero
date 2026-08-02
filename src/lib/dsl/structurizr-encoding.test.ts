@@ -120,6 +120,19 @@ describe('tags', () => {
     const dsl = serializeDSL(wsWith({ tags: ['Element', 'Software System', 'A', 'B'] }))
     expect(dsl).toContain('"A,B"')
   })
+
+  it('strips the comma from a style tag selector so it still matches the renamed tag', () => {
+    // Element tags have commas stripped, so a style keyed on the same tag
+    // must be renamed identically or it silently detaches.
+    const ws = wsWith({ tags: ['Element', 'Software System', 'has,comma'] })
+    ws.views.configuration.styles.elements.push({ tag: 'has,comma', background: '#999999' })
+    ws.views.configuration.styles.relationships.push({ tag: 'slow,path', color: '#ff0000' })
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('element "hascomma"')
+    expect(dsl).toContain('relationship "slowpath"')
+    expect(dsl).not.toContain('"has,comma"')
+    expect(dsl).not.toContain('"slow,path"')
+  })
 })
 
 describe('location and owner are not Structurizr keywords', () => {
@@ -134,6 +147,52 @@ describe('location and owner are not Structurizr keywords', () => {
     expect(sys.owner).toBe('Platform Team')
     // ...and does not linger as a stray property, so the round-trip is exact.
     expect(sys.properties.owner).toBeUndefined()
+  })
+
+  it('an explicit legacy location Internal wins over an External tag on import', () => {
+    // A contradictory legacy file: the bare keyword is the more explicit
+    // signal, so it wins and the tag stays put as an opaque user tag.
+    const { workspace, errors } = parseDSL(`
+workspace {
+  model {
+    s = softwareSystem "S" "" "External" {
+      location Internal
+    }
+  }
+  views {}
+}
+`)
+    expect(errors).toEqual([])
+    const sys = workspace.model.softwareSystems[0]
+    expect(sys.location).toBe('Internal')
+    expect(sys.tags).toContain('External')
+  })
+
+  it('leaves an empty owner property as a property, so it survives round-trip', () => {
+    // The serializer only re-emits a truthy owner field; hoisting "" would
+    // drop the property on the next save.
+    const source = `
+workspace {
+  model {
+    s = softwareSystem "S" {
+      properties {
+        "owner" ""
+      }
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(source)
+    expect(errors).toEqual([])
+    const sys = workspace.model.softwareSystems[0]
+    expect(sys.owner).toBeUndefined()
+    expect(sys.properties.owner).toBe('')
+
+    const dsl1 = serializeDSL(workspace)
+    expect(dsl1).toContain('"owner" ""')
+    const reparsed = parseDSL(dsl1)
+    expect(serializeDSL(reparsed.workspace)).toBe(dsl1)
   })
 
   it('emits externality as the External tag and maps it back on parse', () => {
