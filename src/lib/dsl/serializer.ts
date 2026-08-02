@@ -110,10 +110,23 @@ class SerializerContext {
      *  keywords inside an element block (only `description`, `tags`, `url`,
      *  `properties`, `perspectives` are accepted there), so c4hero carries them
      *  as `"owner"` / `"c4hero.status"` properties instead (see parser-model.ts
-     *  for the read-back side). Derived values win over any same-named
-     *  user-defined property. */
+     *  for the read-back side).
+     *
+     *  COLLISION RULE (for idempotence): reserved keys ("owner", "c4hero.status")
+     *  are removed from the user-property spread before appending derived values.
+     *  This ensures that derived values unambiguously win and key order stays
+     *  identical across serialize → parse → serialize cycles. User properties that
+     *  collide with reserved keys are silently dropped; the derived value takes
+     *  precedence. */
     private mergeElementProperties(element: { properties: Record<string, string>; owner?: string; status?: string }): Record<string, string> {
-        const merged: Record<string, string> = { ...element.properties }
+        // Start with user properties, excluding reserved keys to avoid collisions
+        const merged: Record<string, string> = {}
+        for (const [key, val] of Object.entries(element.properties)) {
+            if (key !== 'owner' && key !== 'c4hero.status') {
+                merged[key] = val
+            }
+        }
+        // Append derived values, which unambiguously win any user property with the same key
         if (element.owner) merged.owner = element.owner
         if (element.status) merged['c4hero.status'] = element.status
         return merged
@@ -122,9 +135,22 @@ class SerializerContext {
     /** Same merging as {@link mergeElementProperties} but for relationships:
      *  real Structurizr rejects bare `lineStyle`/`interactionStyle` keywords
      *  inside a relationship block, so they are carried as `"c4hero.lineStyle"`
-     *  / `"c4hero.interactionStyle"` properties instead. */
+     *  / `"c4hero.interactionStyle"` properties instead.
+     *
+     *  COLLISION RULE (for idempotence): reserved keys ("c4hero.lineStyle",
+     *  "c4hero.interactionStyle") are removed from the user-property spread
+     *  before appending derived values. This ensures that derived values
+     *  unambiguously win and key order stays identical across serialize → parse →
+     *  serialize cycles. */
     private mergeRelationshipProperties(rel: Relationship): Record<string, string> {
-        const merged: Record<string, string> = { ...rel.properties }
+        // Start with user properties, excluding reserved keys to avoid collisions
+        const merged: Record<string, string> = {}
+        for (const [key, val] of Object.entries(rel.properties)) {
+            if (key !== 'c4hero.lineStyle' && key !== 'c4hero.interactionStyle') {
+                merged[key] = val
+            }
+        }
+        // Append derived values, which unambiguously win any user property with the same key
         if (rel.lineStyle) merged['c4hero.lineStyle'] = rel.lineStyle
         if (rel.interactionStyle) merged['c4hero.interactionStyle'] = rel.interactionStyle
         return merged
