@@ -38,6 +38,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "audit": "node scripts/audit-allowlist.mjs",
+    "dsl:conformance:emit": "vitest run src/lib/dsl/conformance-emit.test.ts",
+    "dsl:conformance": "npm run dsl:conformance:emit && node scripts/structurizr-conformance.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {

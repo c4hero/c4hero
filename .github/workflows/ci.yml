@@ -99,6 +99,31 @@ jobs:
       - run: npm ci
       - run: npm run audit
 
+  structurizr-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      # Cache the downloaded/extracted pinned Structurizr CLI across runs --
+      # the archive itself is git-ignored (.structurizr-cli/), not committed.
+      - uses: actions/cache@v4
+        with:
+          path: .structurizr-cli
+          key: structurizr-cli-v2025.11.09
+      - run: npm run dsl:conformance:emit
+      # Prove the gate can actually fail before trusting it to pass: this
+      # exits 0 only if the real CLI rejects a deliberately invalid file.
+      - run: node scripts/structurizr-conformance.mjs --self-test
+      - run: node scripts/structurizr-conformance.mjs
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:

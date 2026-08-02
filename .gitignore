@@ -47,3 +47,7 @@ scorecard-fixes.md
 *.sln
 *.sw?
 coverage/
+
+# Structurizr conformance gate: generated DSL corpus and downloaded/cached CLI
+.conformance-dsl/
+.structurizr-cli/
