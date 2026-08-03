@@ -197,19 +197,10 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
 
     it('the IcePanel landscape model re-serializes to DSL Structurizr accepts', () => {
         const ws = icePanelWorkspace()
-        // Two exclusions, both tracked elsewhere and neither a string/keyword
-        // problem:
-        //
-        //  - groups serialize as a trailing block of bare identifier
-        //    references, which Structurizr rejects outright (TEA-164).
-        //  - the source file's own systemContext/container view keys contain
+        // The source file's own systemContext/container view keys contain
         //    spaces ("Label 602"), which Structurizr rejects at line 814 of
         //    the fixture itself — before c4hero touches it. Reproducing an
         //    invalid key faithfully is not this ticket's bug.
-        //
-        // What remains is the 1060-line real-world model, which is what the
-        // escaping/location/owner fixes here are responsible for.
-        ws.model.groups = []
         ws.views.systemLandscapeViews = []
         ws.views.systemContextViews = []
         ws.views.containerViews = []
@@ -225,11 +216,33 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect(validate(source)).toContain('View keys can only contain')
     })
 
-    // Locks in the known-broken group emission so it cannot regress further,
-    // and trips the moment TEA-164 fixes it — at which point fold the groups
-    // back into the test above and delete this one.
-    it.fails('TEA-164: groups still emit bare refs that Structurizr rejects', () => {
-        expect(validate(serializeDSL(icePanelWorkspace()))).toBeNull()
+    it('nested model, container and component groups serialize to DSL Structurizr accepts', () => {
+        const { workspace, errors } = parseDSL(`
+workspace "Grouped" {
+  model {
+    properties {
+      "structurizr.groupSeparator" "/"
+    }
+    group "Zone" {
+      group "Team" {
+        sys = softwareSystem "System" {
+          group "Applications" {
+            web = container "Web" {
+              group "Layers" {
+                ui = component "UI"
+                api = component "API"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  views {}
+}
+`)
+        expect(errors).toEqual([])
+        expect(validate(serializeDSL(workspace))).toBeNull()
     })
 
     // Validation is not enough: "X:\\" validates fine and stores a corrupted

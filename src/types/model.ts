@@ -58,6 +58,10 @@ export interface Group {
   id: string
   name: string
   elementIds: string[]
+  /** Explicit hierarchy retained from nested Structurizr group blocks.
+   *  Older c4hero workspaces omit this; strict subset membership still lets
+   *  the serializer infer their hierarchy. */
+  parentId?: string
 }
 
 export type ModelElement = Person | SoftwareSystem | Container | Component

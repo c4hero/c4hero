@@ -4,6 +4,9 @@ import { saveToLocalStorage, getCurrentFileHandle, writeToCurrentHandle, writeSi
 import { getCurrentDirHandle, writeDSLFile, writeSidecarFile } from '@/lib/folderIO'
 import { serializeDSL } from '@/lib/dsl'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('useAutoSave')
 
 const scheduleIdle = typeof requestIdleCallback === 'function'
   ? requestIdleCallback
@@ -51,20 +54,27 @@ export function useAutoSave() {
         const filename = state.activeWorkspaceFilename
 
         if (hasSingleFile || (dirHandle && filename)) {
-          const dsl = serializeDSL(state.workspace)
-          const sidecar = extractSidecar(state.workspace)
+          try {
+            const dsl = serializeDSL(state.workspace)
+            const sidecar = extractSidecar(state.workspace)
 
-          if (hasSingleFile) {
-            writeToCurrentHandle(dsl)
-            if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+            if (hasSingleFile) {
+              writeToCurrentHandle(dsl)
+              if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+            }
+
+            if (dirHandle && filename) {
+              writeDSLFile(filename, dsl)
+              if (sidecar) writeSidecarFile(filename, serializeSidecar(sidecar))
+            }
+
+            useWorkspaceStore.getState().setLastSavedUndoLength(state.undoStack.length)
+          } catch (error) {
+            // Manual save/export surfaces the same actionable message. Avoid
+            // turning an invalid legacy overlap into an unhandled idle-task
+            // exception while still leaving the workspace marked unsaved.
+            log.warn('Automatic DSL save blocked', error)
           }
-
-          if (dirHandle && filename) {
-            writeDSLFile(filename, dsl)
-            if (sidecar) writeSidecarFile(filename, serializeSidecar(sidecar))
-          }
-
-          useWorkspaceStore.getState().setLastSavedUndoLength(state.undoStack.length)
         }
       }) as unknown as number
     }, 1000)

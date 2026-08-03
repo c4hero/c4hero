@@ -57,7 +57,12 @@ function applyStructurizrConventions(element: Element): void {
     }
 }
 
-export function parseModelBody(p: ContextAwareParser, model: Model, groupRefIds?: string[]): void {
+export function parseModelBody(
+    p: ContextAwareParser,
+    model: Model,
+    groupRefIds?: string[],
+    parentGroupId?: string,
+): void {
     p.depth++
     if (p.depth > MAX_DEPTH) { p.addError('Maximum nesting depth exceeded', p.peek()); p.depth--; return }
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
@@ -99,12 +104,13 @@ export function parseModelBody(p: ContextAwareParser, model: Model, groupRefIds?
             if (kw === 'group') {
                 p.advance()
                 const groupName = p.readOptionalString() ?? `Group ${model.groups.length + 1}`
+                const groupId = nextId()
                 p.skipNewlines()
                 if (p.match('LBRACE')) {
                     const memberRefs: string[] = []
                     const beforePeople = model.people.length
                     const beforeSystems = model.softwareSystems.length
-                    parseModelBody(p, model, memberRefs)
+                    parseModelBody(p, model, memberRefs, groupId)
                     p.skipNewlines()
                     p.expect('RBRACE')
                     const definedIds = [
@@ -112,7 +118,8 @@ export function parseModelBody(p: ContextAwareParser, model: Model, groupRefIds?
                         ...model.softwareSystems.slice(beforeSystems).map(s => s.id),
                     ]
                     const allIds = [...new Set([...definedIds, ...memberRefs])]
-                    const group: Group = { id: nextId(), name: groupName, elementIds: allIds }
+                    const group: Group = { id: groupId, name: groupName, elementIds: allIds }
+                    if (parentGroupId) group.parentId = parentGroupId
                     model.groups.push(group)
                 }
                 continue
@@ -278,7 +285,13 @@ function parseSoftwareSystem(p: ContextAwareParser, varName?: string, model?: Mo
     return sys
 }
 
-function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, model?: Model, path?: string): void {
+function parseSoftwareSystemBody(
+    p: ContextAwareParser,
+    sys: SoftwareSystem,
+    model?: Model,
+    path?: string,
+    parentGroupId?: string,
+): void {
     p.depth++
     if (p.depth > MAX_DEPTH) { p.addError('Maximum nesting depth exceeded', p.peek()); p.depth--; return }
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
@@ -295,12 +308,23 @@ function parseSoftwareSystemBody(p: ContextAwareParser, sys: SoftwareSystem, mod
 
             if (kw === 'group') {
                 p.advance()
-                p.readOptionalString()
+                const groupName = p.readOptionalString() ?? `Group ${(model?.groups.length ?? 0) + 1}`
+                const groupId = nextId()
                 p.skipNewlines()
                 if (p.match('LBRACE')) {
-                    parseSoftwareSystemBody(p, sys, model, path)
+                    const beforeContainers = sys.containers.length
+                    parseSoftwareSystemBody(p, sys, model, path, groupId)
                     p.skipNewlines()
                     p.expect('RBRACE')
+                    if (model) {
+                        const group: Group = {
+                            id: groupId,
+                            name: groupName,
+                            elementIds: sys.containers.slice(beforeContainers).map(container => container.id),
+                        }
+                        if (parentGroupId) group.parentId = parentGroupId
+                        model.groups.push(group)
+                    }
                 }
                 continue
             }
@@ -405,7 +429,13 @@ function parseContainer(p: ContextAwareParser, varName?: string, model?: Model, 
     return container
 }
 
-function parseContainerBody(p: ContextAwareParser, container: Container, model?: Model, path?: string): void {
+function parseContainerBody(
+    p: ContextAwareParser,
+    container: Container,
+    model?: Model,
+    path?: string,
+    parentGroupId?: string,
+): void {
     p.depth++
     if (p.depth > MAX_DEPTH) { p.addError('Maximum nesting depth exceeded', p.peek()); p.depth--; return }
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
@@ -422,18 +452,29 @@ function parseContainerBody(p: ContextAwareParser, container: Container, model?:
 
             if (kw === 'group') {
                 p.advance()
-                p.readOptionalString()
+                const groupName = p.readOptionalString() ?? `Group ${(model?.groups.length ?? 0) + 1}`
+                const groupId = nextId()
                 p.skipNewlines()
                 if (p.match('LBRACE')) {
-                    parseContainerBody(p, container, model, path)
+                    const beforeComponents = container.components.length
+                    parseContainerBody(p, container, model, path, groupId)
                     p.skipNewlines()
                     p.expect('RBRACE')
+                    if (model) {
+                        const group: Group = {
+                            id: groupId,
+                            name: groupName,
+                            elementIds: container.components.slice(beforeComponents).map(component => component.id),
+                        }
+                        if (parentGroupId) group.parentId = parentGroupId
+                        model.groups.push(group)
+                    }
                 }
                 continue
             }
 
             if (kw === 'component') {
-                const comp = parseComponent(p, undefined, path)
+                const comp = parseComponent(p, undefined, path, model)
                 if (comp) container.components.push(comp)
                 continue
             }
@@ -469,7 +510,7 @@ function parseContainerBody(p: ContextAwareParser, container: Container, model?:
                 const vn = token.value
 
                 if (p.check('KEYWORD') && p.peekValue().toLowerCase() === 'component') {
-                    const comp = parseComponent(p, vn, path)
+                    const comp = parseComponent(p, vn, path, model)
                     if (comp) container.components.push(comp)
                 } else {
                     p.skipUnknownDirective()
@@ -488,7 +529,7 @@ function parseContainerBody(p: ContextAwareParser, container: Container, model?:
     p.depth--
 }
 
-function parseComponent(p: ContextAwareParser, varName?: string, parentPath?: string): Component | null {
+function parseComponent(p: ContextAwareParser, varName?: string, parentPath?: string, model?: Model): Component | null {
     p.advance() // consume 'component'
     const name = p.readString()
     const description = p.readOptionalString() || undefined
@@ -511,7 +552,7 @@ function parseComponent(p: ContextAwareParser, varName?: string, parentPath?: st
     p.skipNewlines()
     if (p.check('LBRACE')) {
         p.advance()
-        parseSimpleElementBlock(p, component)
+        parseSimpleElementBlock(p, component, model)
         p.skipNewlines()
         p.expect('RBRACE')
     }
@@ -520,7 +561,7 @@ function parseComponent(p: ContextAwareParser, varName?: string, parentPath?: st
     return component
 }
 
-function parseSimpleElementBlock(p: ContextAwareParser, element: Person | Component): void {
+function parseSimpleElementBlock(p: ContextAwareParser, element: Person | Component, model?: Model): void {
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
         p.skipNewlines()
         if (p.check('RBRACE') || p.peekType() === 'EOF') break
@@ -536,6 +577,14 @@ function parseSimpleElementBlock(p: ContextAwareParser, element: Person | Compon
 
         if (token.type === 'KEYWORD') {
             const kw = token.value.toLowerCase()
+            if (kw === 'group' && element.type === 'component') {
+                p.advance()
+                const groupName = p.readOptionalString()
+                if (groupName && model) {
+                    model.groups.push({ id: nextId(), name: groupName, elementIds: [element.id] })
+                }
+                continue
+            }
             if (kw === 'tags' || kw === 'description' || kw === 'technology' || kw === 'url' || kw === 'properties' || kw === 'perspectives' || kw === 'location' || kw === 'status' || kw === 'owner') {
                 parseElementPropertyOnElement(p, element, kw)
                 continue

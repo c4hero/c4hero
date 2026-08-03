@@ -35,8 +35,14 @@ export const createGroupSlice: StateCreator<
 
   deleteGroup: (id) => set((s) => {
     if (!s.workspace) return
-    if (!s.workspace.model.groups.some(g => g.id === id)) return
+    const deleted = s.workspace.model.groups.find(g => g.id === id)
+    if (!deleted) return
     pushUndoSnapshot(s)
+    for (const group of s.workspace.model.groups) {
+      if (group.parentId !== id) continue
+      if (deleted.parentId) group.parentId = deleted.parentId
+      else delete group.parentId
+    }
     s.workspace.model.groups = s.workspace.model.groups.filter(g => g.id !== id)
     if (s.selectedGroupId === id) s.selectedGroupId = null
   }),

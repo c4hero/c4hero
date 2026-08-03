@@ -13,9 +13,36 @@ import type {
     ElementStyle,
     RelationshipStyle,
     ViewConfiguration,
+    Group,
+    ModelElement,
 } from '@/types/model'
 
 const INDENT = '    ' // 4 spaces
+const GROUP_SEPARATOR = '/'
+
+interface ScopedGroup<T extends ModelElement> {
+    group: Group
+    globalMemberIds: Set<string>
+    memberIds: Set<string>
+    members: T[]
+    children: ScopedGroup<T>[]
+    order: number
+}
+
+interface GroupScope<T extends ModelElement> {
+    ungrouped: T[]
+    roots: ScopedGroup<T>[]
+    nested: boolean
+}
+
+/** Raised when c4hero's richer boundary model cannot be represented by
+ * Structurizr's single hierarchical group path per element. */
+export class GroupSerializationError extends Error {
+    constructor(message: string) {
+        super(message)
+        this.name = 'GroupSerializationError'
+    }
+}
 
 // ─── Public API ─────────────────────────────────────────────────────
 
@@ -37,10 +64,202 @@ class SerializerContext {
 
     // Track all element IDs for relationship serialization
     private allElementIds = new Set<string>()
+    private topLevelGroups: GroupScope<Person | SoftwareSystem>
+    private containerGroups = new Map<string, GroupScope<Container>>()
+    private componentGroups = new Map<string, GroupScope<Component>>()
+    private hasNestedGroups = false
 
     constructor(workspace: Workspace) {
         this.workspace = workspace
         this.buildIdMaps()
+        this.topLevelGroups = this.buildGroupScope(
+            [...workspace.model.people, ...workspace.model.softwareSystems],
+            true,
+        )
+        this.hasNestedGroups ||= this.topLevelGroups.nested
+        for (const sys of workspace.model.softwareSystems) {
+            const containers = this.buildGroupScope(sys.containers)
+            this.containerGroups.set(sys.id, containers)
+            this.hasNestedGroups ||= containers.nested
+            for (const container of sys.containers) {
+                const components = this.buildGroupScope(container.components)
+                this.componentGroups.set(container.id, components)
+                this.hasNestedGroups ||= components.nested
+            }
+        }
+        if (this.hasNestedGroups) {
+            const badName = workspace.model.groups.find(group => group.name.includes(GROUP_SEPARATOR))
+            if (badName) {
+                throw new GroupSerializationError(
+                    `Cannot export nested group "${badName.name}": group names may not contain `
+                    + `the configured separator "${GROUP_SEPARATOR}". Rename the group first.`,
+                )
+            }
+        }
+    }
+
+    /**
+     * Project flat c4hero group membership into the one group path Structurizr
+     * permits at a single abstraction scope. Disjoint sets are siblings and a
+     * proper subset is a nested group. Explicit parentId retains nesting when
+     * parent and child aggregate to equal sets; unrelated crossing or equal
+     * sets would require two paths, so fail instead of silently degrading the
+     * exported model.
+     */
+    private buildGroupScope<T extends ModelElement>(
+        elements: T[],
+        includeGloballyEmpty = false,
+    ): GroupScope<T> {
+        const elementIds = new Set(elements.map(element => element.id))
+        const groups: ScopedGroup<T>[] = this.workspace.model.groups
+            .map((group, order) => ({
+                group,
+                globalMemberIds: new Set(group.elementIds),
+                memberIds: new Set(group.elementIds.filter(id => elementIds.has(id))),
+                members: [],
+                children: [],
+                order,
+            }))
+            .filter(scoped => scoped.memberIds.size > 0 || (includeGloballyEmpty && scoped.group.elementIds.length === 0))
+
+        const allGroupsById = new Map(this.workspace.model.groups.map(group => [group.id, group]))
+        const scopedById = new Map(groups.map(group => [group.group.id, group]))
+        for (const scoped of groups) {
+            const seen = new Set([scoped.group.id])
+            let parentId = scoped.group.parentId
+            while (parentId) {
+                if (seen.has(parentId)) {
+                    throw new GroupSerializationError(
+                        `Cannot export group "${scoped.group.name}": its parent hierarchy contains a cycle.`,
+                    )
+                }
+                seen.add(parentId)
+                const parent = allGroupsById.get(parentId)
+                if (!parent) {
+                    throw new GroupSerializationError(
+                        `Cannot export group "${scoped.group.name}": parent group ${parentId} does not exist.`,
+                    )
+                }
+                parentId = parent.parentId
+            }
+        }
+        const isExplicitDescendant = (child: Group, ancestor: Group): boolean => {
+            const seen = new Set<string>()
+            let parentId = child.parentId
+            while (parentId) {
+                if (parentId === ancestor.id) return true
+                if (seen.has(parentId)) {
+                    throw new GroupSerializationError(
+                        `Cannot export group "${child.name}": its parent hierarchy contains a cycle.`,
+                    )
+                }
+                seen.add(parentId)
+                const parent = allGroupsById.get(parentId)
+                if (!parent) {
+                    throw new GroupSerializationError(
+                        `Cannot export group "${child.name}": parent group ${parentId} does not exist.`,
+                    )
+                }
+                parentId = parent.parentId
+            }
+            return false
+        }
+
+        for (const child of groups) {
+            if (!child.group.parentId) continue
+            const explicitParent = allGroupsById.get(child.group.parentId)
+            if (!explicitParent) {
+                throw new GroupSerializationError(
+                    `Cannot export group "${child.group.name}": parent group ${child.group.parentId} does not exist.`,
+                )
+            }
+            const parentIds = new Set(explicitParent.elementIds)
+            if (![...child.globalMemberIds].every(id => parentIds.has(id))) {
+                throw new GroupSerializationError(
+                    `Cannot export nested group "${child.group.name}": its parent "${explicitParent.name}" `
+                    + 'does not contain all of its members.',
+                )
+            }
+        }
+
+        for (let i = 0; i < groups.length; i++) {
+            for (let j = i + 1; j < groups.length; j++) {
+                const a = groups[i]
+                const b = groups[j]
+                const intersection = [...a.memberIds].filter(id => b.memberIds.has(id))
+                if (intersection.length === 0) continue
+
+                if (isExplicitDescendant(a.group, b.group) || isExplicitDescendant(b.group, a.group)) continue
+
+                const aInsideB = a.globalMemberIds.size < b.globalMemberIds.size
+                    && [...a.globalMemberIds].every(id => b.globalMemberIds.has(id))
+                const bInsideA = b.globalMemberIds.size < a.globalMemberIds.size
+                    && [...b.globalMemberIds].every(id => a.globalMemberIds.has(id))
+                if (aInsideB || bInsideA) continue
+
+                const names = intersection.map(id => this.elementName(id)).join(', ')
+                throw new GroupSerializationError(
+                    `Cannot export groups "${a.group.name}" and "${b.group.name}": `
+                    + `${names} ${intersection.length === 1 ? 'belongs' : 'belong'} to both groups, `
+                    + 'but neither group is nested inside the other. Make the groups disjoint or one a strict subset of the other.',
+                )
+            }
+        }
+
+        const parent = new Map<ScopedGroup<T>, ScopedGroup<T>>()
+        for (const child of groups) {
+            if (child.group.parentId) {
+                const explicitParent = scopedById.get(child.group.parentId)
+                if (explicitParent) {
+                    parent.set(child, explicitParent)
+                    continue
+                }
+            }
+            const candidates = groups
+                .filter(candidate => candidate !== child
+                    && child.globalMemberIds.size < candidate.globalMemberIds.size
+                    && [...child.globalMemberIds].every(id => candidate.globalMemberIds.has(id)))
+                .sort((a, b) => a.globalMemberIds.size - b.globalMemberIds.size || a.order - b.order)
+            if (candidates[0]) parent.set(child, candidates[0])
+        }
+
+        for (const group of groups) {
+            const p = parent.get(group)
+            if (p) p.children.push(group)
+        }
+        for (const group of groups) group.children.sort((a, b) => a.order - b.order)
+
+        for (const element of elements) {
+            const memberships = groups
+                .filter(group => group.memberIds.has(element.id))
+                .sort((a, b) => {
+                    if (isExplicitDescendant(a.group, b.group)) return -1
+                    if (isExplicitDescendant(b.group, a.group)) return 1
+                    return a.globalMemberIds.size - b.globalMemberIds.size || a.order - b.order
+                })
+            if (memberships[0]) memberships[0].members.push(element)
+        }
+
+        const ungrouped = elements.filter(element => !groups.some(group => group.memberIds.has(element.id)))
+        const roots = groups.filter(group => !parent.has(group)).sort((a, b) => a.order - b.order)
+        const nested = parent.size > 0
+
+        return { ungrouped, roots, nested }
+    }
+
+    private elementName(id: string): string {
+        for (const person of this.workspace.model.people) {
+            if (person.id === id) return `"${person.name}"`
+        }
+        for (const sys of this.workspace.model.softwareSystems) {
+            if (sys.id === id) return `"${sys.name}"`
+            for (const container of sys.containers) {
+                if (container.id === id) return `"${container.name}"`
+                const component = container.components.find(item => item.id === id)
+                if (component) return `"${component.name}"`
+            }
+        }
+        return `element ${id}`
     }
 
     private buildIdMaps(): void {
@@ -250,34 +469,12 @@ class SerializerContext {
 
         const model = this.workspace.model
 
-        // People
-        for (const person of model.people) {
-            this.serializePerson(person)
-        }
-
-        if (model.people.length > 0 && model.softwareSystems.length > 0) {
+        if (this.hasNestedGroups) {
+            this.serializeProperties({ 'structurizr.groupSeparator': GROUP_SEPARATOR })
             this.emitBlank()
         }
 
-        // Software Systems
-        for (let i = 0; i < model.softwareSystems.length; i++) {
-            if (i > 0) this.emitBlank()
-            this.serializeSoftwareSystem(model.softwareSystems[i])
-        }
-
-        // Groups
-        if (model.groups.length > 0) {
-            this.emitBlank()
-            for (const group of model.groups) {
-                this.emit(`group "${this.escapeString(group.name)}" {`)
-                this.depth++
-                for (const elementId of group.elementIds) {
-                    this.emit(this.idToVar.get(elementId) ?? elementId)
-                }
-                this.depth--
-                this.emit('}')
-            }
-        }
+        this.serializeGroupScope(this.topLevelGroups, element => this.serializeModelElement(element))
 
         // Relationships
         if (model.relationships.length > 0) {
@@ -289,6 +486,49 @@ class SerializerContext {
 
         this.depth--
         this.emit('}')
+    }
+
+    private serializeGroupScope<T extends ModelElement>(
+        scope: GroupScope<T>,
+        serializeElement: (element: T) => void,
+    ): void {
+        let emitted = false
+        for (const group of scope.roots) {
+            if (emitted) this.emitBlank()
+            this.serializeGroup(group, serializeElement)
+            emitted = true
+        }
+        if (emitted && scope.ungrouped.length > 0) this.emitBlank()
+        for (const element of scope.ungrouped) {
+            serializeElement(element)
+            emitted = true
+        }
+    }
+
+    private serializeGroup<T extends ModelElement>(
+        scoped: ScopedGroup<T>,
+        serializeElement: (element: T) => void,
+    ): void {
+        this.emit(`group "${this.escapeString(scoped.group.name)}" {`)
+        this.depth++
+        let emitted = false
+        for (const child of scoped.children) {
+            if (emitted) this.emitBlank()
+            this.serializeGroup(child, serializeElement)
+            emitted = true
+        }
+        if (emitted && scoped.members.length > 0) this.emitBlank()
+        for (const element of scoped.members) {
+            serializeElement(element)
+            emitted = true
+        }
+        this.depth--
+        this.emit('}')
+    }
+
+    private serializeModelElement(element: Person | SoftwareSystem): void {
+        if (element.type === 'person') this.serializePerson(element)
+        else this.serializeSoftwareSystem(element)
     }
 
     private serializePerson(person: Person): void {
@@ -344,10 +584,8 @@ class SerializerContext {
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
             if (hasProperties) this.serializeProperties(props)
 
-            for (let i = 0; i < sys.containers.length; i++) {
-                if (i > 0) this.emitBlank()
-                this.serializeContainer(sys.containers[i])
-            }
+            const scope = this.containerGroups.get(sys.id)
+            if (scope) this.serializeGroupScope(scope, container => this.serializeContainer(container))
 
             this.depth--
             this.emit('}')
@@ -382,9 +620,8 @@ class SerializerContext {
 
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
             if (hasProperties) this.serializeProperties(props)
-            for (const comp of container.components) {
-                this.serializeComponent(comp)
-            }
+            const scope = this.componentGroups.get(container.id)
+            if (scope) this.serializeGroupScope(scope, comp => this.serializeComponent(comp))
 
             this.depth--
             this.emit('}')
