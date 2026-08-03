@@ -161,18 +161,26 @@ class SerializerContext {
     }
 
     /**
-     * Merge derived (field-encoded) keys ahead of user properties. Null
-     * prototype so `key in props` cannot match inherited names like
-     * `constructor`; a derived key deliberately wins over a colliding user
-     * property so serialize → parse → serialize stays byte-identical.
+     * Merge derived (field-encoded) keys ahead of user properties. A reserved
+     * key always occupies its leading slot — filled from the field when set
+     * (deliberately winning over a colliding user property), else from a user
+     * property with that key. The fixed position matters: parsing hoists a
+     * valid reserved-key property onto its field and forgets where it sat in
+     * the block, so only a position-independent emission order keeps
+     * serialize → parse → serialize byte-identical. Null prototype so
+     * `key in props` cannot match inherited names like `constructor`.
      */
     private mergeDerivedProperties(
         derived: ReadonlyArray<readonly [string, string | undefined]>,
         user: Record<string, string>,
     ): Record<string, string> {
         const props: Record<string, string> = Object.create(null)
-        for (const [key, val] of derived) {
-            if (val) props[key] = val
+        for (const [key, fieldVal] of derived) {
+            if (fieldVal) {
+                props[key] = fieldVal
+            } else if (Object.prototype.hasOwnProperty.call(user, key)) {
+                props[key] = user[key]
+            }
         }
         for (const [key, val] of Object.entries(user)) {
             if (!(key in props)) props[key] = val
@@ -498,10 +506,11 @@ class SerializerContext {
             needsBlank = true
         }
 
-        // Styles
-        if (this.hasStyles(views.configuration)) {
+        // Styles — sanitize and filter once; emission reuses the result.
+        const styles = this.emittableStyles(views.configuration)
+        if (styles.elements.length > 0 || styles.relationships.length > 0) {
             if (needsBlank) this.emitBlank()
-            this.serializeStyles(views.configuration)
+            this.serializeStyles(styles)
             needsBlank = true
         }
 
@@ -601,38 +610,40 @@ class SerializerContext {
     // ─── Styles ─────────────────────────────────────────────────────
 
     /**
-     * Styles whose tag survives sanitization. A selector that sanitizes to
+     * Styles whose tag survives sanitization, paired with the sanitized
+     * selector so it is computed exactly once. A selector that sanitizes to
      * nothing (e.g. a tag of only commas) would emit `element "" {`, which
      * the real parser rejects ("A tag must be specified") — skip it instead.
      */
-    private emittableStyles(config: ViewConfiguration): { elements: ElementStyle[]; relationships: RelationshipStyle[] } {
+    private emittableStyles(config: ViewConfiguration): {
+        elements: Array<{ style: ElementStyle; tag: string }>
+        relationships: Array<{ style: RelationshipStyle; tag: string }>
+    } {
+        const sanitize = <T extends { tag: string }>(styles: T[]) =>
+            styles
+                .map(style => ({ style, tag: this.sanitizeTag(style.tag) }))
+                .filter(s => s.tag.length > 0)
         return {
-            elements: config.styles.elements.filter(s => this.sanitizeTag(s.tag).length > 0),
-            relationships: config.styles.relationships.filter(s => this.sanitizeTag(s.tag).length > 0),
+            elements: sanitize(config.styles.elements),
+            relationships: sanitize(config.styles.relationships),
         }
     }
 
-    private hasStyles(config: ViewConfiguration): boolean {
-        const { elements, relationships } = this.emittableStyles(config)
-        return elements.length > 0 || relationships.length > 0
-    }
-
-    private serializeStyles(config: ViewConfiguration): void {
-        const { elements, relationships } = this.emittableStyles(config)
+    private serializeStyles(styles: ReturnType<SerializerContext['emittableStyles']>): void {
         this.emit('styles {')
         this.depth++
 
         let needsBlank = false
 
-        for (const style of elements) {
+        for (const { style, tag } of styles.elements) {
             if (needsBlank) this.emitBlank()
-            this.serializeElementStyle(style)
+            this.serializeElementStyle(style, tag)
             needsBlank = true
         }
 
-        for (const style of relationships) {
+        for (const { style, tag } of styles.relationships) {
             if (needsBlank) this.emitBlank()
-            this.serializeRelationshipStyle(style)
+            this.serializeRelationshipStyle(style, tag)
             needsBlank = true
         }
 
@@ -640,8 +651,8 @@ class SerializerContext {
         this.emit('}')
     }
 
-    private serializeElementStyle(style: ElementStyle): void {
-        this.emit(`element "${this.sanitizeTag(style.tag)}" {`)
+    private serializeElementStyle(style: ElementStyle, tag: string): void {
+        this.emit(`element "${tag}" {`)
         this.depth++
 
         if (style.background !== undefined) this.emit(`background ${style.background}`)
@@ -658,8 +669,8 @@ class SerializerContext {
         this.emit('}')
     }
 
-    private serializeRelationshipStyle(style: RelationshipStyle): void {
-        this.emit(`relationship "${this.sanitizeTag(style.tag)}" {`)
+    private serializeRelationshipStyle(style: RelationshipStyle, tag: string): void {
+        this.emit(`relationship "${tag}" {`)
         this.depth++
 
         if (style.color !== undefined) this.emit(`color ${style.color}`)

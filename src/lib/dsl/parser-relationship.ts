@@ -3,6 +3,7 @@
 import type { Relationship } from '@/types/model'
 import { isInteractionStyle, isLineStyle } from '@/types/model'
 import type { ContextAwareParser } from './parser'
+import { setUserProperty } from './parser'
 
 export function parseRelationship(p: ContextAwareParser): Relationship | null {
     // Both endpoints may be qualified paths (`mpng.gatewayApi`,
@@ -97,12 +98,7 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                         const key = p.advance().value
                         const valTok = p.peek()
                         if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-                            // defineProperty, not assignment: a "__proto__"
-                            // key would otherwise set the object's prototype
-                            // instead of storing the property.
-                            Object.defineProperty(rel.properties, key, {
-                                value: p.advance().value, enumerable: true, writable: true, configurable: true,
-                            })
+                            setUserProperty(rel.properties, key, p.advance().value)
                         }
                     }
                     if (p.check('RBRACE')) p.advance()

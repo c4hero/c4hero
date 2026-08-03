@@ -5,7 +5,7 @@
 import type { Workspace, Model, Group, Person, SoftwareSystem, Container, Component } from '@/types/model'
 import { isElementStatus } from '@/types/model'
 import type { ContextAwareParser } from './parser'
-import { nextId, MAX_DEPTH } from './parser'
+import { nextId, MAX_DEPTH, setUserProperty } from './parser'
 import { parseRelationship } from './parser-relationship'
 
 type Element = Person | SoftwareSystem | Container | Component
@@ -622,17 +622,17 @@ function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
             val = p.advance().value
         }
         if (val === undefined) continue
-        // Recognized: c4hero.location → element.location for persons/systems
-        if (key === 'c4hero.location' && (element.type === 'person' || element.type === 'softwareSystem')) {
-            if (val === 'External') (element as Person | SoftwareSystem).location = 'External'
-            else if (val === 'Internal') (element as Person | SoftwareSystem).location = 'Internal'
+        // Recognized: c4hero.location → element.location for persons/systems.
+        // Hoist only a valid, hoistable value into a still-unset field; any
+        // other combination stays a plain property so no value is silently
+        // lost (same rule as the c4hero.status hoist).
+        if (key === 'c4hero.location'
+            && (element.type === 'person' || element.type === 'softwareSystem')
+            && (val === 'External' || val === 'Internal')
+            && (element as Person | SoftwareSystem).location === undefined) {
+            (element as Person | SoftwareSystem).location = val
         } else {
-            // Generic passthrough to properties map. defineProperty, not
-            // assignment: a "__proto__" key would otherwise set the object's
-            // prototype instead of storing the property.
-            Object.defineProperty(element.properties, key, {
-                value: val, enumerable: true, writable: true, configurable: true,
-            })
+            setUserProperty(element.properties, key, val)
         }
     }
 }

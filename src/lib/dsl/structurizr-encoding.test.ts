@@ -215,6 +215,32 @@ workspace {
     expect(serializeDSL(reparsed.workspace)).toBe(dsl1)
   })
 
+  it('keeps an unhoistable c4hero.location value as a plain property', () => {
+    // Only External/Internal hoist onto the field; anything else must stay a
+    // property so no value is silently lost.
+    const { workspace, errors } = parseDSL(`
+workspace {
+  model {
+    s = softwareSystem "S" {
+      properties {
+        "c4hero.location" "Unspecified"
+      }
+    }
+  }
+  views {}
+}
+`)
+    expect(errors).toEqual([])
+    const sys = workspace.model.softwareSystems[0]
+    expect(sys.location).toBeUndefined()
+    expect(sys.properties['c4hero.location']).toBe('Unspecified')
+
+    const dsl1 = serializeDSL(workspace)
+    expect(dsl1).toContain('"c4hero.location" "Unspecified"')
+    const reparsed = parseDSL(dsl1)
+    expect(serializeDSL(reparsed.workspace)).toBe(dsl1)
+  })
+
   it('an explicit Unspecified location also wins over an External tag on save', () => {
     // Same contradiction rule as Internal: any explicit non-External
     // location beats a stray External tag, so a save/reload cycle cannot

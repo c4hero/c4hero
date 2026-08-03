@@ -395,6 +395,25 @@ describe('reserved property key collisions', () => {
     expect(serializeDSL(parsed)).toBe(dsl1)
   })
 
+  it('round-trips byte-identical when a hoistable user property is not first in its block', () => {
+    // The reserved key claims its leading slot even when supplied as a user
+    // property: parsing hoists it onto the field and forgets its position,
+    // so a positional emission would reorder the block on the second save.
+    const dsl1 = serializeDSL(sysWs({ properties: { z: '2', owner: 'UserValue' } }))
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.softwareSystems[0].owner).toBe('UserValue')
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('round-trips byte-identical when a hoistable relationship property is not first', () => {
+    const dsl1 = serializeDSL(relWs({ properties: { other: 'x', 'c4hero.lineStyle': 'Curved' } }))
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.relationships[0].lineStyle).toBe('Curved')
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
   it('legacy bare status keyword wins over the property form when both appear', () => {
     const dsl = `
 workspace {
