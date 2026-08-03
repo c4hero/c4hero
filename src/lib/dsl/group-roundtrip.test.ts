@@ -1,101 +1,272 @@
 import { describe, it, expect } from 'vitest'
-import { parseDSL } from '@/lib/dsl'
-import { serialize } from '@/lib/dsl/serializer'
-import type { Workspace } from '@/types/model'
+import { parseDSL, serializeDSL, GroupSerializationError } from '@/lib/dsl'
 
-describe('group roundtrip', () => {
-  it('group block with member references survives serialize → parse', () => {
-    const dsl = `
+describe('Structurizr-conformant group roundtrip', () => {
+  it('emits declarations inside their group instead of post-hoc references', () => {
+    const { workspace, errors } = parseDSL(`
 workspace "Test" {
   model {
-    alice = person "Alice"
-    api = softwareSystem "API"
     group "Frontend Team" {
-      alice
+      alice = person "Alice"
     }
+    api = softwareSystem "API"
   }
   views {}
 }
-`
-    const { workspace, errors } = parseDSL(dsl)
+`)
     expect(errors).toEqual([])
 
-    // Re-serialize and re-parse
-    const dsl2 = serialize(workspace)
-    const { workspace: ws2, errors: errors2 } = parseDSL(dsl2)
-    expect(errors2).toEqual([])
+    const dsl = serializeDSL(workspace)
+    expect(dsl).toContain('group "Frontend Team" {\n            alice = person "Alice"\n        }')
+    expect(dsl.indexOf('group "Frontend Team"')).toBeLessThan(dsl.indexOf('alice = person "Alice"'))
 
-    // Group should be preserved
-    expect(ws2.model.groups).toHaveLength(1)
-    expect(ws2.model.groups[0].name).toBe('Frontend Team')
-
-    // Group should reference Alice by ID
-    const alice = ws2.model.people.find(p => p.name === 'Alice')
-    expect(alice).toBeDefined()
-    expect(ws2.model.groups[0].elementIds).toContain(alice!.id)
+    const reparsed = parseDSL(dsl)
+    expect(reparsed.errors).toEqual([])
+    expect(reparsed.workspace.model.groups).toHaveLength(1)
+    expect(reparsed.workspace.model.groups[0]).toMatchObject({
+      name: 'Frontend Team',
+      elementIds: ['alice'],
+    })
   })
 
-  it('multiple groups with different members survive roundtrip', () => {
-    const dsl = `
+  it('keeps disjoint groups as siblings', () => {
+    const { workspace, errors } = parseDSL(`
 workspace "Multi-group" {
   model {
-    alice = person "Alice"
-    bob = person "Bob"
-    api = softwareSystem "API"
-    store = softwareSystem "Store"
-
     group "Users" {
-      alice
-      bob
+      alice = person "Alice"
+      bob = person "Bob"
     }
     group "Systems" {
-      api
-      store
+      api = softwareSystem "API"
+      store = softwareSystem "Store"
+    }
+  }
+  views {}
+}
+`)
+    expect(errors).toEqual([])
+
+    const dsl = serializeDSL(workspace)
+    expect(dsl).toContain('group "Users"')
+    expect(dsl).toContain('group "Systems"')
+    const reparsed = parseDSL(dsl)
+    expect(reparsed.errors).toEqual([])
+    expect(reparsed.workspace.model.groups).toHaveLength(2)
+    expect(reparsed.workspace.model.groups.find(g => g.name === 'Users')?.elementIds).toHaveLength(2)
+    expect(reparsed.workspace.model.groups.find(g => g.name === 'Systems')?.elementIds).toHaveLength(2)
+  })
+
+  it('preserves an intentional empty group', () => {
+    const { workspace, errors } = parseDSL(`
+workspace "Test" {
+  model {
+    group "Empty Group" {
+    }
+  }
+  views {}
+}
+`)
+    expect(errors).toEqual([])
+
+    const dsl = serializeDSL(workspace)
+    expect(dsl).toContain('group "Empty Group" {\n        }')
+    const reparsed = parseDSL(dsl)
+    expect(reparsed.errors).toEqual([])
+    expect(reparsed.workspace.model.groups[0]).toMatchObject({ name: 'Empty Group', elementIds: [] })
+  })
+
+  it('infers nested groups from strict subset membership and emits the separator', () => {
+    const { workspace, errors } = parseDSL(`
+workspace "Nested" {
+  model {
+    properties {
+      "structurizr.groupSeparator" "/"
+    }
+    group "Outer" {
+      c = softwareSystem "C"
+      group "Inner" {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+      }
+    }
+  }
+  views {}
+}
+`)
+    expect(errors).toEqual([])
+    expect(workspace.model.groups.find(g => g.name === 'Inner')?.elementIds).toEqual(['a', 'b'])
+    expect(new Set(workspace.model.groups.find(g => g.name === 'Outer')?.elementIds)).toEqual(new Set(['a', 'b', 'c']))
+
+    const dsl = serializeDSL(workspace)
+    expect(dsl).toContain('"structurizr.groupSeparator" "/"')
+    expect(dsl).toMatch(/group "Outer" \{[\s\S]*group "Inner" \{[\s\S]*a = softwareSystem/)
+
+    const reparsed = parseDSL(dsl)
+    expect(reparsed.errors).toEqual([])
+    expect(reparsed.workspace.model.groups.find(g => g.name === 'Inner')?.elementIds).toEqual(['a', 'b'])
+    expect(new Set(reparsed.workspace.model.groups.find(g => g.name === 'Outer')?.elementIds)).toEqual(new Set(['a', 'b', 'c']))
+  })
+
+  it('retains explicit nesting when parent and child have equal aggregate members', () => {
+    const parsed = parseDSL(`
+workspace {
+  model {
+    properties {
+      "structurizr.groupSeparator" "/"
+    }
+    group "Outer" {
+      group "Inner" {
+        a = softwareSystem "A"
+      }
+    }
+  }
+  views {}
+}
+`)
+    expect(parsed.errors).toEqual([])
+    const inner = parsed.workspace.model.groups.find(g => g.name === 'Inner')
+    const outer = parsed.workspace.model.groups.find(g => g.name === 'Outer')
+    expect(inner?.parentId).toBe(outer?.id)
+
+    const dsl = serializeDSL(parsed.workspace)
+    expect(dsl).toMatch(/group "Outer" \{\s+group "Inner" \{\s+a = softwareSystem/s)
+    const reparsed = parseDSL(dsl)
+    expect(reparsed.errors).toEqual([])
+    const reparsedInner = reparsed.workspace.model.groups.find(g => g.name === 'Inner')
+    const reparsedOuter = reparsed.workspace.model.groups.find(g => g.name === 'Outer')
+    expect(reparsedInner?.parentId).toBe(reparsedOuter?.id)
+  })
+
+  it('retains container- and component-level group blocks', () => {
+    const source = `
+workspace "Scoped" {
+  model {
+    sys = softwareSystem "System" {
+      group "Applications" {
+        web = container "Web" {
+          group "Layers" {
+            ui = component "UI"
+            api = component "API"
+          }
+        }
+        db = container "Database"
+      }
     }
   }
   views {}
 }
 `
-    const { workspace, errors } = parseDSL(dsl)
-    expect(errors).toEqual([])
-    expect(workspace.model.groups).toHaveLength(2)
+    const parsed = parseDSL(source)
+    expect(parsed.errors).toEqual([])
+    expect(parsed.workspace.model.groups.find(g => g.name === 'Applications')?.elementIds).toEqual(['web', 'db'])
+    expect(parsed.workspace.model.groups.find(g => g.name === 'Layers')?.elementIds).toEqual(['ui', 'api'])
 
-    const dsl2 = serialize(workspace)
-    const { workspace: ws2, errors: errors2 } = parseDSL(dsl2)
-    expect(errors2).toEqual([])
+    const dsl = serializeDSL(parsed.workspace)
+    expect(dsl).toMatch(/softwareSystem "System" \{[\s\S]*group "Applications" \{[\s\S]*web = container/)
+    expect(dsl).toMatch(/web = container "Web" \{[\s\S]*group "Layers" \{[\s\S]*ui = component/)
 
-    expect(ws2.model.groups).toHaveLength(2)
-    const users = ws2.model.groups.find(g => g.name === 'Users')
-    const systems = ws2.model.groups.find(g => g.name === 'Systems')
-    expect(users).toBeDefined()
-    expect(systems).toBeDefined()
-    expect(users!.elementIds).toHaveLength(2)
-    expect(systems!.elementIds).toHaveLength(2)
+    const reparsed = parseDSL(dsl)
+    expect(reparsed.errors).toEqual([])
+    expect(reparsed.workspace.model.groups.find(g => g.name === 'Applications')?.elementIds).toEqual(['web', 'db'])
+    expect(reparsed.workspace.model.groups.find(g => g.name === 'Layers')?.elementIds).toEqual(['ui', 'api'])
   })
 
-  it('empty group survives serialize → parse', () => {
-    const workspace: Workspace = {
-      name: 'Test',
-      model: {
-        people: [],
-        softwareSystems: [],
-        relationships: [],
-        groups: [{ id: 'g1', name: 'Empty Group', elementIds: [] }],
-      },
-      views: {
-        systemLandscapeViews: [],
-        systemContextViews: [],
-        containerViews: [],
-        componentViews: [],
-        configuration: { styles: { elements: [], relationships: [] } },
-      },
+  it('normalizes an inline component group to a valid group block', () => {
+    const parsed = parseDSL(`
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      web = container "Web" {
+        adapter = component "Adapter" {
+          group "Adapters"
+        }
+      }
     }
-    const dsl = serialize(workspace)
-    expect(dsl).toContain('group "Empty Group" {')
+  }
+  views {}
+}
+`)
+    expect(parsed.errors).toEqual([])
+    expect(parsed.workspace.model.groups.find(g => g.name === 'Adapters')?.elementIds).toEqual(['adapter'])
+    expect(serializeDSL(parsed.workspace)).toMatch(/group "Adapters" \{\s+adapter = component/)
+  })
 
-    const { workspace: reparsed, errors } = parseDSL(dsl)
-    expect(errors).toEqual([])
-    expect(reparsed.model.groups).toHaveLength(1)
-    expect(reparsed.model.groups[0]).toMatchObject({ name: 'Empty Group', elementIds: [] })
+  it('preserves a hierarchy whose parent also has members at another abstraction scope', () => {
+    const parsed = parseDSL(`
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      web = container "Web"
+      api = container "API"
+    }
+  }
+  views {}
+}
+`)
+    expect(parsed.errors).toEqual([])
+    parsed.workspace.model.groups = [
+      { id: 'inner', name: 'Applications', elementIds: ['web', 'api'] },
+      { id: 'outer', name: 'Secure Zone', elementIds: ['sys', 'web', 'api'] },
+    ]
+
+    const dsl = serializeDSL(parsed.workspace)
+    expect(dsl).toMatch(/softwareSystem "System" \{[\s\S]*group "Secure Zone" \{[\s\S]*group "Applications"/)
+    expect(parseDSL(dsl).errors).toEqual([])
+  })
+
+  it('blocks crossing memberships with an actionable error', () => {
+    const parsed = parseDSL(`
+workspace {
+  model {
+    a = softwareSystem "A"
+    b = softwareSystem "B"
+    c = softwareSystem "C"
+  }
+  views {}
+}
+`)
+    parsed.workspace.model.groups = [
+      { id: 'one', name: 'One', elementIds: ['a', 'b'] },
+      { id: 'two', name: 'Two', elementIds: ['b', 'c'] },
+    ]
+
+    expect(() => serializeDSL(parsed.workspace)).toThrow(GroupSerializationError)
+    expect(() => serializeDSL(parsed.workspace)).toThrow(/groups "One" and "Two".*"B" belongs to both/s)
+  })
+
+  it('blocks equal memberships because neither group is a strict parent', () => {
+    const parsed = parseDSL(`
+workspace {
+  model {
+    a = softwareSystem "A"
+  }
+  views {}
+}
+`)
+    parsed.workspace.model.groups = [
+      { id: 'one', name: 'One', elementIds: ['a'] },
+      { id: 'two', name: 'Two', elementIds: ['a'] },
+    ]
+
+    expect(() => serializeDSL(parsed.workspace)).toThrow(/groups "One" and "Two"/)
+  })
+
+  it('blocks separator characters in nested group names', () => {
+    const parsed = parseDSL(`
+workspace {
+  model {
+    a = softwareSystem "A"
+    b = softwareSystem "B"
+  }
+  views {}
+}
+`)
+    parsed.workspace.model.groups = [
+      { id: 'inner', name: 'Inner/Team', elementIds: ['a'] },
+      { id: 'outer', name: 'Outer', elementIds: ['a', 'b'] },
+    ]
+
+    expect(() => serializeDSL(parsed.workspace)).toThrow(/group names may not contain.*separator/s)
   })
 })

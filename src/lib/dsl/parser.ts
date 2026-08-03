@@ -137,6 +137,15 @@ export function nextId(): string {
 
 export const MAX_DEPTH = 50
 
+/**
+ * Store a parsed user property. defineProperty, not assignment: a
+ * "__proto__" key would otherwise set the object's prototype instead of
+ * storing the property. Every properties-block parser must use this.
+ */
+export function setUserProperty(props: Record<string, string>, key: string, value: string): void {
+    Object.defineProperty(props, key, { value, enumerable: true, writable: true, configurable: true })
+}
+
 export class ContextAwareParser {
     tokens: Token[]
     pos = 0

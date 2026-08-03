@@ -21,7 +21,9 @@ workspace "Name" {
   }
 }
 Rules: identifiers are lowercase, no spaces. Wrap multi-word names in quotes.
-A container's third quoted string is its technology. Relationships use ->.`
+A container's third quoted string is its technology. Relationships use ->.
+Inside quoted strings only \\" and \\n are escapes: write a backslash as a
+single literal \\ (never doubled, never \\t) and a tab as a real tab.`
 
 // ─── Generate ───────────────────────────────────────────────────────
 

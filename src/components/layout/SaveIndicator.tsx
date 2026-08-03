@@ -36,10 +36,11 @@ export default function SaveIndicator() {
     const workspace = useWorkspaceStore.getState().workspace
     if (!workspace) return
     setSaveStatus('saving')
-    const wsName = workspace.name ?? 'workspace'
-    const dsl = serializeDSL(workspace)
-    const ok = await saveDSLFile(dsl, `${wsName}.dsl`)
-    if (ok) {
+    try {
+      const wsName = workspace.name ?? 'workspace'
+      const dsl = serializeDSL(workspace)
+      const ok = await saveDSLFile(dsl, `${wsName}.dsl`)
+      if (!ok) throw new Error('Save failed')
       const n = useWorkspaceStore.getState().undoStack.length
       setSavedUndoLength(n)
       useWorkspaceStore.getState().setLastSavedUndoLength(n)
@@ -47,9 +48,9 @@ export default function SaveIndicator() {
       announce('File saved')
       if (savedFlashTimer.current) clearTimeout(savedFlashTimer.current)
       savedFlashTimer.current = setTimeout(() => setSaveStatus('idle'), 2000)
-    } else {
+    } catch (error) {
       setSaveStatus('error')
-      announce('Save failed')
+      announce(error instanceof Error ? error.message : 'Save failed')
       if (savedFlashTimer.current) clearTimeout(savedFlashTimer.current)
       savedFlashTimer.current = setTimeout(() => setSaveStatus('idle'), 3000)
     }

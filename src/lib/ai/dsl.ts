@@ -2,6 +2,8 @@
 // markdown code fences (```dsl … ``` or ``` … ```) and add a sentence of
 // preamble; this pulls out the workspace block. Pure + unit-tested.
 
+import { scanQuotedString } from '@/lib/dsl/lexer'
+
 /** Strip a single surrounding markdown code fence, if present. */
 export function stripCodeFence(text: string): string {
   const trimmed = text.trim()
@@ -19,8 +21,13 @@ export function extractDsl(text: string): string {
 
   // Anchor on the actual `workspace [ "name" [ "desc" ] ] {` declaration, not a
   // stray mention of the word in prose ("Here is your workspace:") which would
-  // otherwise splice the preamble into the returned DSL.
-  const decl = /\bworkspace\b\s*(?:"(?:[^"\\]|\\.)*"\s*)*\{/.exec(unfenced)
+  // otherwise splice the preamble into the returned DSL. The string pattern
+  // encodes the lexer's consume-one rule deterministically: a backslash
+  // before a quote is ONLY consumable as the `\"` pair (the lookahead keeps
+  // backtracking from reinterpreting it as a lone char), any other backslash
+  // is a lone literal, so the anchor agrees with the parser about where the
+  // name/description strings end.
+  const decl = /\bworkspace\b\s*(?:"(?:\\"|\\(?!")|[^"\\])*"\s*)*\{/.exec(unfenced)
   if (!decl) {
     // No real block — fall back to the first bare mention so the parser can
     // report a precise error, or return everything when there's none.
@@ -32,27 +39,19 @@ export function extractDsl(text: string): string {
   const openIdx = start + decl[0].length - 1
 
   let depth = 0
-  let inString = false
-  let lineStart = true // first non-space on a line — needed for `#` comments
   for (let i = openIdx; i < unfenced.length; i++) {
     const ch = unfenced[i]
-    // Skip braces inside a quoted string literal (a name/description like
-    // "the closing } symbol") — counting them would close the block early.
-    if (inString) {
-      // A backslash escapes the next char; consume it so an escaped backslash
-      // (e.g. "C:\\") doesn't make the following quote look escaped and strand us.
-      if (ch === '\\') { i++; continue }
-      if (ch === '"') inString = false
-      lineStart = false
-      continue
-    }
+    // Skip string literals wholesale (a name/description like "the closing }
+    // symbol") — counting their braces would close the block early.
+    // scanQuotedString implements the lexer's consume-one escape rule, so
+    // this scanner and the parser always agree about where a string ends.
+    if (ch === '"') { i = scanQuotedString(unfenced, i) - 1; continue }
     // Skip Structurizr DSL comments — a brace inside one must not be counted.
-    if (ch === '\n') { lineStart = true; continue }
-    if (ch === '/' && unfenced[i + 1] === '/') { const nl = unfenced.indexOf('\n', i); if (nl === -1) break; i = nl; lineStart = true; continue }
-    if (ch === '#' && lineStart) { const nl = unfenced.indexOf('\n', i); if (nl === -1) break; i = nl; lineStart = true; continue }
-    if (ch === '/' && unfenced[i + 1] === '*') { const end = unfenced.indexOf('*/', i + 2); if (end === -1) break; i = end + 1; lineStart = false; continue }
-    if (ch !== ' ' && ch !== '\t') lineStart = false
-    if (ch === '"') { inString = true; continue }
+    if (ch === '/' && unfenced[i + 1] === '/') { const nl = unfenced.indexOf('\n', i); if (nl === -1) break; i = nl; continue }
+    // `#` opens a comment anywhere on a line unless it starts a hex color
+    // like #ffffff — the same disambiguation the lexer uses.
+    if (ch === '#' && !/[0-9a-fA-F]/.test(unfenced[i + 1] ?? '')) { const nl = unfenced.indexOf('\n', i); if (nl === -1) break; i = nl; continue }
+    if (ch === '/' && unfenced[i + 1] === '*') { const end = unfenced.indexOf('*/', i + 2); if (end === -1) break; i = end + 1; continue }
     if (ch === '{') depth++
     else if (ch === '}') {
       depth--

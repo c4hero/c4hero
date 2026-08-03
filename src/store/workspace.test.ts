@@ -66,6 +66,21 @@ describe('Group store actions', () => {
     expect(ws.model.groups).toHaveLength(0)
   })
 
+  it('deleteGroup reparents explicit child groups', () => {
+    const ws = useWorkspaceStore.getState().workspace!
+    ws.model.groups = [
+      { id: 'outer', name: 'Outer', elementIds: ['alice', 'api'] },
+      { id: 'middle', name: 'Middle', elementIds: ['alice'], parentId: 'outer' },
+      { id: 'inner', name: 'Inner', elementIds: ['alice'], parentId: 'middle' },
+    ]
+
+    useWorkspaceStore.getState().deleteGroup('middle')
+    expect(useWorkspaceStore.getState().workspace!.model.groups.find(g => g.id === 'inner')?.parentId).toBe('outer')
+
+    useWorkspaceStore.getState().deleteGroup('outer')
+    expect(useWorkspaceStore.getState().workspace!.model.groups.find(g => g.id === 'inner')?.parentId).toBeUndefined()
+  })
+
   it('deleteGroup clears selectedGroupId if it was the deleted group', () => {
     useWorkspaceStore.getState().addGroup('Team', ['alice'])
     const id = useWorkspaceStore.getState().workspace!.model.groups[0].id

@@ -1,7 +1,9 @@
 // DSL parser — relationship statement (`a -> b "..."`) handling.
 
-import type { Relationship, InteractionStyle, LineStyle } from '@/types/model'
+import type { Relationship } from '@/types/model'
+import { isInteractionStyle, isLineStyle } from '@/types/model'
 import type { ContextAwareParser } from './parser'
+import { setUserProperty } from './parser'
 
 export function parseRelationship(p: ContextAwareParser): Relationship | null {
     // Both endpoints may be qualified paths (`mpng.gatewayApi`,
@@ -96,7 +98,7 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                         const key = p.advance().value
                         const valTok = p.peek()
                         if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-                            rel.properties[key] = p.advance().value
+                            setUserProperty(rel.properties, key, p.advance().value)
                         }
                     }
                     if (p.check('RBRACE')) p.advance()
@@ -110,8 +112,8 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                 const valTok = p.peek()
                 if (valTok.type === 'IDENTIFIER' || valTok.type === 'KEYWORD') {
                     const raw = p.advance().value
-                    if (raw === 'Synchronous' || raw === 'Asynchronous') {
-                        rel.interactionStyle = raw as InteractionStyle
+                    if (isInteractionStyle(raw)) {
+                        rel.interactionStyle = raw
                     }
                 }
                 continue
@@ -144,8 +146,8 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                 const valTok = p.peek()
                 if (valTok.type === 'IDENTIFIER' || valTok.type === 'KEYWORD') {
                     const raw = p.advance().value
-                    if (raw === 'Curved' || raw === 'Straight' || raw === 'Orthogonal') {
-                        rel.lineStyle = raw as LineStyle
+                    if (isLineStyle(raw)) {
+                        rel.lineStyle = raw
                     }
                 }
                 continue
@@ -164,5 +166,28 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
         p.expect('RBRACE')
     }
 
+    applyRelationshipConventions(rel)
     return rel
+}
+
+/**
+ * Hoist the property-encoded `lineStyle` / `interactionStyle` back onto the
+ * relationship fields. Structurizr rejects both as bare keywords in a
+ * relationship body, so the serializer emits them as `c4hero.lineStyle` /
+ * `c4hero.interactionStyle` properties. The legacy bare keywords are still
+ * accepted by the block parser above and win when both forms appear; only
+ * valid enum members are hoisted — anything else stays a plain property so no
+ * value is silently lost.
+ */
+function applyRelationshipConventions(rel: Relationship): void {
+    const lineStyle = rel.properties['c4hero.lineStyle']
+    if (lineStyle !== undefined && rel.lineStyle === undefined && isLineStyle(lineStyle)) {
+        rel.lineStyle = lineStyle
+        delete rel.properties['c4hero.lineStyle']
+    }
+    const interactionStyle = rel.properties['c4hero.interactionStyle']
+    if (interactionStyle !== undefined && rel.interactionStyle === undefined && isInteractionStyle(interactionStyle)) {
+        rel.interactionStyle = interactionStyle
+        delete rel.properties['c4hero.interactionStyle']
+    }
 }

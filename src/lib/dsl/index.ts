@@ -13,6 +13,7 @@ import { serialize } from './serializer'
 import { generateDefaultViews } from './auto-views'
 
 export type { ParseError }
+export { GroupSerializationError } from './serializer'
 
 export interface ParseDSLResult {
     workspace: Workspace

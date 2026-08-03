@@ -13,9 +13,36 @@ import type {
     ElementStyle,
     RelationshipStyle,
     ViewConfiguration,
+    Group,
+    ModelElement,
 } from '@/types/model'
 
 const INDENT = '    ' // 4 spaces
+const GROUP_SEPARATOR = '/'
+
+interface ScopedGroup<T extends ModelElement> {
+    group: Group
+    globalMemberIds: Set<string>
+    memberIds: Set<string>
+    members: T[]
+    children: ScopedGroup<T>[]
+    order: number
+}
+
+interface GroupScope<T extends ModelElement> {
+    ungrouped: T[]
+    roots: ScopedGroup<T>[]
+    nested: boolean
+}
+
+/** Raised when c4hero's richer boundary model cannot be represented by
+ * Structurizr's single hierarchical group path per element. */
+export class GroupSerializationError extends Error {
+    constructor(message: string) {
+        super(message)
+        this.name = 'GroupSerializationError'
+    }
+}
 
 // ─── Public API ─────────────────────────────────────────────────────
 
@@ -37,10 +64,202 @@ class SerializerContext {
 
     // Track all element IDs for relationship serialization
     private allElementIds = new Set<string>()
+    private topLevelGroups: GroupScope<Person | SoftwareSystem>
+    private containerGroups = new Map<string, GroupScope<Container>>()
+    private componentGroups = new Map<string, GroupScope<Component>>()
+    private hasNestedGroups = false
 
     constructor(workspace: Workspace) {
         this.workspace = workspace
         this.buildIdMaps()
+        this.topLevelGroups = this.buildGroupScope(
+            [...workspace.model.people, ...workspace.model.softwareSystems],
+            true,
+        )
+        this.hasNestedGroups ||= this.topLevelGroups.nested
+        for (const sys of workspace.model.softwareSystems) {
+            const containers = this.buildGroupScope(sys.containers)
+            this.containerGroups.set(sys.id, containers)
+            this.hasNestedGroups ||= containers.nested
+            for (const container of sys.containers) {
+                const components = this.buildGroupScope(container.components)
+                this.componentGroups.set(container.id, components)
+                this.hasNestedGroups ||= components.nested
+            }
+        }
+        if (this.hasNestedGroups) {
+            const badName = workspace.model.groups.find(group => group.name.includes(GROUP_SEPARATOR))
+            if (badName) {
+                throw new GroupSerializationError(
+                    `Cannot export nested group "${badName.name}": group names may not contain `
+                    + `the configured separator "${GROUP_SEPARATOR}". Rename the group first.`,
+                )
+            }
+        }
+    }
+
+    /**
+     * Project flat c4hero group membership into the one group path Structurizr
+     * permits at a single abstraction scope. Disjoint sets are siblings and a
+     * proper subset is a nested group. Explicit parentId retains nesting when
+     * parent and child aggregate to equal sets; unrelated crossing or equal
+     * sets would require two paths, so fail instead of silently degrading the
+     * exported model.
+     */
+    private buildGroupScope<T extends ModelElement>(
+        elements: T[],
+        includeGloballyEmpty = false,
+    ): GroupScope<T> {
+        const elementIds = new Set(elements.map(element => element.id))
+        const groups: ScopedGroup<T>[] = this.workspace.model.groups
+            .map((group, order) => ({
+                group,
+                globalMemberIds: new Set(group.elementIds),
+                memberIds: new Set(group.elementIds.filter(id => elementIds.has(id))),
+                members: [],
+                children: [],
+                order,
+            }))
+            .filter(scoped => scoped.memberIds.size > 0 || (includeGloballyEmpty && scoped.group.elementIds.length === 0))
+
+        const allGroupsById = new Map(this.workspace.model.groups.map(group => [group.id, group]))
+        const scopedById = new Map(groups.map(group => [group.group.id, group]))
+        for (const scoped of groups) {
+            const seen = new Set([scoped.group.id])
+            let parentId = scoped.group.parentId
+            while (parentId) {
+                if (seen.has(parentId)) {
+                    throw new GroupSerializationError(
+                        `Cannot export group "${scoped.group.name}": its parent hierarchy contains a cycle.`,
+                    )
+                }
+                seen.add(parentId)
+                const parent = allGroupsById.get(parentId)
+                if (!parent) {
+                    throw new GroupSerializationError(
+                        `Cannot export group "${scoped.group.name}": parent group ${parentId} does not exist.`,
+                    )
+                }
+                parentId = parent.parentId
+            }
+        }
+        const isExplicitDescendant = (child: Group, ancestor: Group): boolean => {
+            const seen = new Set<string>()
+            let parentId = child.parentId
+            while (parentId) {
+                if (parentId === ancestor.id) return true
+                if (seen.has(parentId)) {
+                    throw new GroupSerializationError(
+                        `Cannot export group "${child.name}": its parent hierarchy contains a cycle.`,
+                    )
+                }
+                seen.add(parentId)
+                const parent = allGroupsById.get(parentId)
+                if (!parent) {
+                    throw new GroupSerializationError(
+                        `Cannot export group "${child.name}": parent group ${parentId} does not exist.`,
+                    )
+                }
+                parentId = parent.parentId
+            }
+            return false
+        }
+
+        for (const child of groups) {
+            if (!child.group.parentId) continue
+            const explicitParent = allGroupsById.get(child.group.parentId)
+            if (!explicitParent) {
+                throw new GroupSerializationError(
+                    `Cannot export group "${child.group.name}": parent group ${child.group.parentId} does not exist.`,
+                )
+            }
+            const parentIds = new Set(explicitParent.elementIds)
+            if (![...child.globalMemberIds].every(id => parentIds.has(id))) {
+                throw new GroupSerializationError(
+                    `Cannot export nested group "${child.group.name}": its parent "${explicitParent.name}" `
+                    + 'does not contain all of its members.',
+                )
+            }
+        }
+
+        for (let i = 0; i < groups.length; i++) {
+            for (let j = i + 1; j < groups.length; j++) {
+                const a = groups[i]
+                const b = groups[j]
+                const intersection = [...a.memberIds].filter(id => b.memberIds.has(id))
+                if (intersection.length === 0) continue
+
+                if (isExplicitDescendant(a.group, b.group) || isExplicitDescendant(b.group, a.group)) continue
+
+                const aInsideB = a.globalMemberIds.size < b.globalMemberIds.size
+                    && [...a.globalMemberIds].every(id => b.globalMemberIds.has(id))
+                const bInsideA = b.globalMemberIds.size < a.globalMemberIds.size
+                    && [...b.globalMemberIds].every(id => a.globalMemberIds.has(id))
+                if (aInsideB || bInsideA) continue
+
+                const names = intersection.map(id => this.elementName(id)).join(', ')
+                throw new GroupSerializationError(
+                    `Cannot export groups "${a.group.name}" and "${b.group.name}": `
+                    + `${names} ${intersection.length === 1 ? 'belongs' : 'belong'} to both groups, `
+                    + 'but neither group is nested inside the other. Make the groups disjoint or one a strict subset of the other.',
+                )
+            }
+        }
+
+        const parent = new Map<ScopedGroup<T>, ScopedGroup<T>>()
+        for (const child of groups) {
+            if (child.group.parentId) {
+                const explicitParent = scopedById.get(child.group.parentId)
+                if (explicitParent) {
+                    parent.set(child, explicitParent)
+                    continue
+                }
+            }
+            const candidates = groups
+                .filter(candidate => candidate !== child
+                    && child.globalMemberIds.size < candidate.globalMemberIds.size
+                    && [...child.globalMemberIds].every(id => candidate.globalMemberIds.has(id)))
+                .sort((a, b) => a.globalMemberIds.size - b.globalMemberIds.size || a.order - b.order)
+            if (candidates[0]) parent.set(child, candidates[0])
+        }
+
+        for (const group of groups) {
+            const p = parent.get(group)
+            if (p) p.children.push(group)
+        }
+        for (const group of groups) group.children.sort((a, b) => a.order - b.order)
+
+        for (const element of elements) {
+            const memberships = groups
+                .filter(group => group.memberIds.has(element.id))
+                .sort((a, b) => {
+                    if (isExplicitDescendant(a.group, b.group)) return -1
+                    if (isExplicitDescendant(b.group, a.group)) return 1
+                    return a.globalMemberIds.size - b.globalMemberIds.size || a.order - b.order
+                })
+            if (memberships[0]) memberships[0].members.push(element)
+        }
+
+        const ungrouped = elements.filter(element => !groups.some(group => group.memberIds.has(element.id)))
+        const roots = groups.filter(group => !parent.has(group)).sort((a, b) => a.order - b.order)
+        const nested = parent.size > 0
+
+        return { ungrouped, roots, nested }
+    }
+
+    private elementName(id: string): string {
+        for (const person of this.workspace.model.people) {
+            if (person.id === id) return `"${person.name}"`
+        }
+        for (const sys of this.workspace.model.softwareSystems) {
+            if (sys.id === id) return `"${sys.name}"`
+            for (const container of sys.containers) {
+                if (container.id === id) return `"${container.name}"`
+                const component = container.components.find(item => item.id === id)
+                if (component) return `"${component.name}"`
+            }
+        }
+        return `element ${id}`
     }
 
     private buildIdMaps(): void {
@@ -101,6 +320,91 @@ class SerializerContext {
         if (this.lines.length > 0 && this.lines[this.lines.length - 1] !== '') {
             this.lines.push('')
         }
+    }
+
+    /**
+     * Tags to emit for an element that has a `location`.
+     *
+     * Structurizr removed the `location` keyword; externality is now carried
+     * by the `External` tag. c4hero keeps the field (it drives the UI and the
+     * model), and the parser maps the tag back on import.
+     */
+    private locationAwareTags(
+        el: { tags: string[]; location?: string },
+        defaults: string[],
+    ): string | undefined {
+        let tags = el.tags
+        if (el.location === 'External' && !tags.includes('External')) {
+            tags = [...tags, 'External']
+        } else if (el.location !== undefined && el.location !== 'External' && tags.includes('External')) {
+            // Contradictory combination (an explicit non-External location —
+            // Internal or Unspecified — plus an External user tag): emitting
+            // the tag would flip the element to External on the next parse.
+            // The explicit field wins; the tag is dropped.
+            tags = tags.filter(t => t !== 'External')
+        }
+        return this.getExtraTags(tags, defaults)
+    }
+
+    /**
+     * Properties to emit for an element. `owner` and `status` are not
+     * Structurizr keywords (the real parser rejects them inside an element
+     * block), so they travel inside the `properties` block — `owner` under the
+     * bare `owner` key, `status` under `c4hero.status`; the parser hoists both
+     * back to their fields. Derived keys are emitted first and deliberately
+     * win over a colliding user property (the collision is only reachable by
+     * hand-writing a reserved key next to the legacy bare keyword), so
+     * serialize → parse → serialize is byte-identical.
+     */
+    private elementProperties(
+        el: { owner?: string; status?: string; properties: Record<string, string> },
+    ): Record<string, string> {
+        return this.mergeDerivedProperties(
+            [['owner', el.owner], ['c4hero.status', el.status]],
+            el.properties,
+        )
+    }
+
+    /**
+     * Properties to emit for a relationship. `lineStyle` and `interactionStyle`
+     * are not Structurizr keywords in a relationship body (the real parser
+     * rejects them), so they travel as `c4hero.lineStyle` /
+     * `c4hero.interactionStyle` properties, with the same derived-first,
+     * derived-wins rules as elementProperties().
+     */
+    private relationshipProperties(rel: Relationship): Record<string, string> {
+        return this.mergeDerivedProperties(
+            [['c4hero.lineStyle', rel.lineStyle], ['c4hero.interactionStyle', rel.interactionStyle]],
+            rel.properties,
+        )
+    }
+
+    /**
+     * Merge derived (field-encoded) keys ahead of user properties. A reserved
+     * key always occupies its leading slot — filled from the field when set
+     * (deliberately winning over a colliding user property), else from a user
+     * property with that key. The fixed position matters: parsing hoists a
+     * valid reserved-key property onto its field and forgets where it sat in
+     * the block, so only a position-independent emission order keeps
+     * serialize → parse → serialize byte-identical. Null prototype so
+     * `key in props` cannot match inherited names like `constructor`.
+     */
+    private mergeDerivedProperties(
+        derived: ReadonlyArray<readonly [string, string | undefined]>,
+        user: Record<string, string>,
+    ): Record<string, string> {
+        const props: Record<string, string> = Object.create(null)
+        for (const [key, fieldVal] of derived) {
+            if (fieldVal) {
+                props[key] = fieldVal
+            } else if (Object.prototype.hasOwnProperty.call(user, key)) {
+                props[key] = user[key]
+            }
+        }
+        for (const [key, val] of Object.entries(user)) {
+            if (!(key in props)) props[key] = val
+        }
+        return props
     }
 
     /** Emit a `properties { }` block for any user-defined key/value pairs. */
@@ -165,34 +469,12 @@ class SerializerContext {
 
         const model = this.workspace.model
 
-        // People
-        for (const person of model.people) {
-            this.serializePerson(person)
-        }
-
-        if (model.people.length > 0 && model.softwareSystems.length > 0) {
+        if (this.hasNestedGroups) {
+            this.serializeProperties({ 'structurizr.groupSeparator': GROUP_SEPARATOR })
             this.emitBlank()
         }
 
-        // Software Systems
-        for (let i = 0; i < model.softwareSystems.length; i++) {
-            if (i > 0) this.emitBlank()
-            this.serializeSoftwareSystem(model.softwareSystems[i])
-        }
-
-        // Groups
-        if (model.groups.length > 0) {
-            this.emitBlank()
-            for (const group of model.groups) {
-                this.emit(`group "${this.escapeString(group.name)}" {`)
-                this.depth++
-                for (const elementId of group.elementIds) {
-                    this.emit(this.idToVar.get(elementId) ?? elementId)
-                }
-                this.depth--
-                this.emit('}')
-            }
-        }
+        this.serializeGroupScope(this.topLevelGroups, element => this.serializeModelElement(element))
 
         // Relationships
         if (model.relationships.length > 0) {
@@ -206,12 +488,55 @@ class SerializerContext {
         this.emit('}')
     }
 
+    private serializeGroupScope<T extends ModelElement>(
+        scope: GroupScope<T>,
+        serializeElement: (element: T) => void,
+    ): void {
+        let emitted = false
+        for (const group of scope.roots) {
+            if (emitted) this.emitBlank()
+            this.serializeGroup(group, serializeElement)
+            emitted = true
+        }
+        if (emitted && scope.ungrouped.length > 0) this.emitBlank()
+        for (const element of scope.ungrouped) {
+            serializeElement(element)
+            emitted = true
+        }
+    }
+
+    private serializeGroup<T extends ModelElement>(
+        scoped: ScopedGroup<T>,
+        serializeElement: (element: T) => void,
+    ): void {
+        this.emit(`group "${this.escapeString(scoped.group.name)}" {`)
+        this.depth++
+        let emitted = false
+        for (const child of scoped.children) {
+            if (emitted) this.emitBlank()
+            this.serializeGroup(child, serializeElement)
+            emitted = true
+        }
+        if (emitted && scoped.members.length > 0) this.emitBlank()
+        for (const element of scoped.members) {
+            serializeElement(element)
+            emitted = true
+        }
+        this.depth--
+        this.emit('}')
+    }
+
+    private serializeModelElement(element: Person | SoftwareSystem): void {
+        if (element.type === 'person') this.serializePerson(element)
+        else this.serializeSoftwareSystem(element)
+    }
+
     private serializePerson(person: Person): void {
         const varName = this.idToVar.get(person.id)
-        const extraTags = this.getExtraTags(person.tags, ['Element', 'Person'])
-        const isExternal = person.location === 'External'
-        const hasProperties = Object.keys(person.properties).length > 0
-        const hasBlock = isExternal || !!person.url || !!person.status || !!person.owner || hasProperties
+        const extraTags = this.locationAwareTags(person, ['Element', 'Person'])
+        const props = this.elementProperties(person)
+        const hasProperties = Object.keys(props).length > 0
+        const hasBlock = !!person.url || hasProperties
 
         const parts: string[] = []
         parts.push('person')
@@ -227,10 +552,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
-            if (person.status) this.emit(`status ${person.status}`)
-            if (person.owner) this.emit(`owner "${this.escapeString(person.owner)}"`)
-            if (isExternal) this.emit('location External')
-            if (hasProperties) this.serializeProperties(person.properties)
+            if (hasProperties) this.serializeProperties(props)
             this.depth--
             this.emit('}')
         } else {
@@ -240,10 +562,10 @@ class SerializerContext {
 
     private serializeSoftwareSystem(sys: SoftwareSystem): void {
         const varName = this.idToVar.get(sys.id)
-        const extraTags = this.getExtraTags(sys.tags, ['Element', 'Software System'])
-        const isExternal = sys.location === 'External'
-        const hasProperties = Object.keys(sys.properties).length > 0
-        const hasBody = sys.containers.length > 0 || isExternal || !!sys.url || !!sys.status || !!sys.owner || hasProperties
+        const extraTags = this.locationAwareTags(sys, ['Element', 'Software System'])
+        const props = this.elementProperties(sys)
+        const hasProperties = Object.keys(props).length > 0
+        const hasBody = sys.containers.length > 0 || !!sys.url || hasProperties
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -260,15 +582,10 @@ class SerializerContext {
             this.depth++
 
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
-            if (sys.status) this.emit(`status ${sys.status}`)
-            if (sys.owner) this.emit(`owner "${this.escapeString(sys.owner)}"`)
-            if (isExternal) this.emit('location External')
-            if (hasProperties) this.serializeProperties(sys.properties)
+            if (hasProperties) this.serializeProperties(props)
 
-            for (let i = 0; i < sys.containers.length; i++) {
-                if (i > 0) this.emitBlank()
-                this.serializeContainer(sys.containers[i])
-            }
+            const scope = this.containerGroups.get(sys.id)
+            if (scope) this.serializeGroupScope(scope, container => this.serializeContainer(container))
 
             this.depth--
             this.emit('}')
@@ -280,8 +597,9 @@ class SerializerContext {
     private serializeContainer(container: Container): void {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
-        const hasProperties = Object.keys(container.properties).length > 0
-        const hasBody = container.components.length > 0 || !!container.url || !!container.status || !!container.owner || hasProperties
+        const props = this.elementProperties(container)
+        const hasProperties = Object.keys(props).length > 0
+        const hasBody = container.components.length > 0 || !!container.url || hasProperties
 
         const parts: string[] = []
         parts.push('container')
@@ -301,12 +619,9 @@ class SerializerContext {
             this.depth++
 
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
-            if (container.status) this.emit(`status ${container.status}`)
-            if (container.owner) this.emit(`owner "${this.escapeString(container.owner)}"`)
-            if (hasProperties) this.serializeProperties(container.properties)
-            for (const comp of container.components) {
-                this.serializeComponent(comp)
-            }
+            if (hasProperties) this.serializeProperties(props)
+            const scope = this.componentGroups.get(container.id)
+            if (scope) this.serializeGroupScope(scope, comp => this.serializeComponent(comp))
 
             this.depth--
             this.emit('}')
@@ -318,8 +633,9 @@ class SerializerContext {
     private serializeComponent(comp: Component): void {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
-        const hasProperties = Object.keys(comp.properties).length > 0
-        const hasBlock = !!comp.url || !!comp.status || !!comp.owner || hasProperties
+        const props = this.elementProperties(comp)
+        const hasProperties = Object.keys(props).length > 0
+        const hasBlock = !!comp.url || hasProperties
 
         const parts: string[] = []
         parts.push('component')
@@ -338,9 +654,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
             if (comp.url) this.emit(`url "${this.escapeString(comp.url)}"`)
-            if (comp.status) this.emit(`status ${comp.status}`)
-            if (comp.owner) this.emit(`owner "${this.escapeString(comp.owner)}"`)
-            if (hasProperties) this.serializeProperties(comp.properties)
+            if (hasProperties) this.serializeProperties(props)
             this.depth--
             this.emit('}')
         } else {
@@ -360,17 +674,17 @@ class SerializerContext {
         if (rel.technology) parts.push(`"${this.escapeString(rel.technology)}"`)
 
         const extraTags = this.getExtraTags(rel.tags, ['Relationship'])
-        const hasProperties = Object.keys(rel.properties).length > 0
-        const needsBlock = !!rel.interactionStyle || !!rel.url || !!rel.lineStyle || hasProperties
+        const props = this.relationshipProperties(rel)
+        const hasProperties = Object.keys(props).length > 0
+        const needsBlock = !!rel.url || hasProperties
 
         if (needsBlock) {
-            // Use block form when interactionStyle, url, lineStyle, or properties are present
+            // Use block form when url or properties (including the folded-in
+            // lineStyle/interactionStyle) are present
             this.emit(`${parts.join(' ')} {`)
             this.depth++
             if (rel.url) this.emit(`url "${this.escapeString(rel.url)}"`)
-            if (rel.interactionStyle) this.emit(`interactionStyle ${rel.interactionStyle}`)
-            if (rel.lineStyle) this.emit(`lineStyle ${rel.lineStyle}`)
-            if (hasProperties) this.serializeProperties(rel.properties)
+            if (hasProperties) this.serializeProperties(props)
             if (extraTags) this.emit(`tags "${extraTags}"`)
             this.depth--
             this.emit('}')
@@ -429,10 +743,11 @@ class SerializerContext {
             needsBlank = true
         }
 
-        // Styles
-        if (this.hasStyles(views.configuration)) {
+        // Styles — sanitize and filter once; emission reuses the result.
+        const styles = this.emittableStyles(views.configuration)
+        if (styles.elements.length > 0 || styles.relationships.length > 0) {
             if (needsBlank) this.emitBlank()
-            this.serializeStyles(views.configuration)
+            this.serializeStyles(styles)
             needsBlank = true
         }
 
@@ -513,7 +828,9 @@ class SerializerContext {
         const parts: string[] = ['autoLayout']
 
         if (layout.direction !== 'TB' || layout.rankSeparation !== undefined || layout.nodeSeparation !== undefined) {
-            parts.push(layout.direction)
+            // Structurizr accepts only lowercase rank directions (tb|bt|lr|rl)
+            // and rejects the uppercase form c4hero stores internally.
+            parts.push(layout.direction.toLowerCase())
         }
 
         if (layout.rankSeparation !== undefined) {
@@ -529,25 +846,41 @@ class SerializerContext {
 
     // ─── Styles ─────────────────────────────────────────────────────
 
-    private hasStyles(config: ViewConfiguration): boolean {
-        return config.styles.elements.length > 0 || config.styles.relationships.length > 0
+    /**
+     * Styles whose tag survives sanitization, paired with the sanitized
+     * selector so it is computed exactly once. A selector that sanitizes to
+     * nothing (e.g. a tag of only commas) would emit `element "" {`, which
+     * the real parser rejects ("A tag must be specified") — skip it instead.
+     */
+    private emittableStyles(config: ViewConfiguration): {
+        elements: Array<{ style: ElementStyle; tag: string }>
+        relationships: Array<{ style: RelationshipStyle; tag: string }>
+    } {
+        const sanitize = <T extends { tag: string }>(styles: T[]) =>
+            styles
+                .map(style => ({ style, tag: this.sanitizeTag(style.tag) }))
+                .filter(s => s.tag.length > 0)
+        return {
+            elements: sanitize(config.styles.elements),
+            relationships: sanitize(config.styles.relationships),
+        }
     }
 
-    private serializeStyles(config: ViewConfiguration): void {
+    private serializeStyles(styles: ReturnType<SerializerContext['emittableStyles']>): void {
         this.emit('styles {')
         this.depth++
 
         let needsBlank = false
 
-        for (const style of config.styles.elements) {
+        for (const { style, tag } of styles.elements) {
             if (needsBlank) this.emitBlank()
-            this.serializeElementStyle(style)
+            this.serializeElementStyle(style, tag)
             needsBlank = true
         }
 
-        for (const style of config.styles.relationships) {
+        for (const { style, tag } of styles.relationships) {
             if (needsBlank) this.emitBlank()
-            this.serializeRelationshipStyle(style)
+            this.serializeRelationshipStyle(style, tag)
             needsBlank = true
         }
 
@@ -555,8 +888,8 @@ class SerializerContext {
         this.emit('}')
     }
 
-    private serializeElementStyle(style: ElementStyle): void {
-        this.emit(`element "${this.escapeString(style.tag)}" {`)
+    private serializeElementStyle(style: ElementStyle, tag: string): void {
+        this.emit(`element "${tag}" {`)
         this.depth++
 
         if (style.background !== undefined) this.emit(`background ${style.background}`)
@@ -573,8 +906,8 @@ class SerializerContext {
         this.emit('}')
     }
 
-    private serializeRelationshipStyle(style: RelationshipStyle): void {
-        this.emit(`relationship "${this.escapeString(style.tag)}" {`)
+    private serializeRelationshipStyle(style: RelationshipStyle, tag: string): void {
+        this.emit(`relationship "${tag}" {`)
         this.depth++
 
         if (style.color !== undefined) this.emit(`color ${style.color}`)
@@ -589,16 +922,56 @@ class SerializerContext {
 
     // ─── Helpers ────────────────────────────────────────────────────
 
+    /**
+     * Encode a value as the body of a Structurizr double-quoted string.
+     *
+     * Structurizr's tokenizer (verified against structurizr-java 5.0.2)
+     * recognises exactly two escapes inside a quoted string: `\"` and `\n`.
+     * Every other backslash is kept verbatim — `\\` is NOT collapsed to a
+     * single backslash the way JSON does it, and after a missed escape the
+     * tokenizer consumes only the backslash, re-examining the next char.
+     * Emitting JSON-style escapes therefore corrupts the value rather than
+     * protecting it.
+     *
+     * A backslash before a quote IS representable: the quote's own `\"`
+     * escape leaves the backslash a literal miss, so raw `a\"b` emits as
+     * `a\\"b` and decodes back exactly. Because there is no way to escape a
+     * backslash itself, it stays unrepresentable in two positions where it
+     * would be read as (part of) an escape:
+     *
+     *   - immediately before an `n` (any run length — `\\n` still decodes
+     *     as literal-backslash + newline), and
+     *   - at the very end of the value, where it escapes the closing quote
+     *     and swallows the rest of the line ("Too many tokens").
+     *
+     * Those backslashes are dropped. Everything else round-trips exactly.
+     * The drop is silent for now; surfacing a save-time warning is TEA-169.
+     */
     private escapeString(s: string): string {
         return s
-            .replace(/\\/g, '\\\\')
+            .replace(/\\+(?=n)/g, '')
+            .replace(/\\+$/, '')
             .replace(/"/g, '\\"')
-            .replace(/\n/g, '\\n')
-            .replace(/\t/g, '\\t')
+            .replace(/\r\n|\r|\n/g, '\\n')
+    }
+
+    /**
+     * Structurizr splits a tag string on commas, so a tag containing a comma
+     * would silently become two tags. Drop commas rather than corrupt the set
+     * (warning the user about the rename is TEA-169). Values still go through
+     * escapeString like every other quoted string. Element tags and style tag
+     * selectors both use this, so a style keyed on "has,comma" stays attached
+     * to the element's renamed "hascomma" tag.
+     */
+    private sanitizeTag(tag: string): string {
+        return this.escapeString(tag.replace(/,/g, ''))
     }
 
     private getExtraTags(tags: string[], defaults: string[]): string | undefined {
-        const extra = tags.filter(t => !defaults.includes(t))
+        const extra = tags
+            .filter(t => !defaults.includes(t))
+            .map(t => this.sanitizeTag(t))
+            .filter(t => t.length > 0)
         if (extra.length === 0) return undefined
         return extra.join(',')
     }

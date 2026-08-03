@@ -1,21 +1,37 @@
 import { describe, it, expect } from 'vitest'
-import { lex } from './lexer'
+import { lex, scanQuotedString } from './lexer'
 
 // Coverage-gap tests for the lexer: string escapes, comments, unusual
 // tokens, and error positions.
 
 describe('string escape sequences', () => {
-  it('decodes \\n, \\t, \\" and \\\\ escapes inside strings', () => {
+  // Structurizr's tokenizer (structurizr-java 5.0.2) recognises only \" and
+  // \n. \t and \\ are NOT escapes — the backslash stays verbatim. c4hero used
+  // to decode all four JSON-style, which is why serializer output round-tripped
+  // here but was misread by every other Structurizr tool.
+  it('decodes only \\" and \\n; leaves \\t and \\\\ verbatim', () => {
     const { tokens, errors } = lex('"a\\nb\\tc\\"d\\\\e"')
     expect(errors).toHaveLength(0)
     expect(tokens[0].type).toBe('STRING')
-    expect(tokens[0].value).toBe('a\nb\tc"d\\e')
+    expect(tokens[0].value).toBe('a\nb\\tc"d\\\\e')
   })
 
   it('preserves the backslash for unknown escape sequences', () => {
     const { tokens, errors } = lex('"a\\qb"')
     expect(errors).toHaveLength(0)
     expect(tokens[0].value).toBe('a\\qb')
+  })
+
+  it('consumes only the backslash on a missed escape, so the next char can start one', () => {
+    // `a\\"b`: the first backslash misses (next char is another backslash) and
+    // is consumed alone; the second then starts the `\"` escape. The real
+    // tokenizer does the same (verified via `export -f json`) — consuming two
+    // chars on a miss would swallow the second backslash and end the string at
+    // the quote.
+    const { tokens, errors } = lex('"a\\\\"b"')
+    expect(errors).toHaveLength(0)
+    expect(tokens[0].type).toBe('STRING')
+    expect(tokens[0].value).toBe('a\\"b')
   })
 
   it('reports an unterminated string with its start position', () => {
@@ -32,6 +48,26 @@ describe('string escape sequences', () => {
   it('handles an unterminated string ending in a backslash without crashing', () => {
     const { errors } = lex('"abc\\')
     expect(errors.some(e => e.message === 'Unterminated string literal')).toBe(true)
+  })
+})
+
+describe('scanQuotedString', () => {
+  // The exported boundary scanner must end strings exactly where readString
+  // does — extractDsl (ai/dsl.ts) relies on that agreement for brace counting.
+  it('agrees with the lexer on plain, escaped, and missed-escape strings', () => {
+    for (const [input, rest] of [
+      ['"plain" rest', ' rest'],
+      ['"say \\"hi\\"" rest', ' rest'],
+      ['"a\\\\"b" rest', ' rest'],  // the quote after \\ is escaped; string runs on to the quote after b
+      ['"a\\qb" rest', ' rest'],    // unknown escape: backslash literal
+    ] as const) {
+      expect(input.slice(scanQuotedString(input, 0))).toBe(rest)
+    }
+  })
+
+  it('returns input.length for an unterminated string', () => {
+    expect(scanQuotedString('"path C:\\\\"', 0)).toBe('"path C:\\\\"'.length)
+    expect(scanQuotedString('"abc\\', 0)).toBe('"abc\\'.length)
   })
 })
 

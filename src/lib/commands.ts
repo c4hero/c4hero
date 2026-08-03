@@ -14,6 +14,7 @@ import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
+import { announce } from '@/lib/announce'
 import type { ReactFlowInstance } from '@xyflow/react'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -374,10 +375,14 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       execute: async () => {
         const s = store()
         if (!s.workspace) return
-        const dsl = serializeDSL(s.workspace)
-        await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)
-        const sidecar = extractSidecar(s.workspace)
-        if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+        try {
+          const dsl = serializeDSL(s.workspace)
+          await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)
+          const sidecar = extractSidecar(s.workspace)
+          if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+        } catch (error) {
+          announce(error instanceof Error ? error.message : 'Save failed')
+        }
       },
     },
     {
@@ -389,7 +394,11 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       execute: async () => {
         const s = store()
         if (!s.workspace) return
-        await saveDSLFile(serializeDSL(s.workspace), `${s.workspace.name ?? 'workspace'}.dsl`)
+        try {
+          await saveDSLFile(serializeDSL(s.workspace), `${s.workspace.name ?? 'workspace'}.dsl`)
+        } catch (error) {
+          announce(error instanceof Error ? error.message : 'Export failed')
+        }
       },
     },
     {
