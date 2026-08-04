@@ -82,7 +82,7 @@
     "@rollup/plugin-terser": "^1.0.0",
     "postcss": "^8.5.18",
     "serialize-javascript": "^7.0.5",
-    "undici": "^7.28.0",
+    "undici": "^7.29.0",
     "react-router": "8.3.0"
   }
 }
