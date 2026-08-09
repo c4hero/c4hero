@@ -10,6 +10,7 @@ import { createLogger } from '@/lib/logger'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
 import { isCanvasRoute } from '@/lib/routes'
+import { announce } from '@/lib/announce'
 
 const log = createLogger('keyboard')
 
@@ -80,10 +81,14 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   },
   'mod+s': (store) => {
     if (store.workspace) {
-      const dsl = serializeDSL(store.workspace)
-      saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)
-      const sidecar = extractSidecar(store.workspace)
-      if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+      try {
+        const dsl = serializeDSL(store.workspace)
+        saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)
+        const sidecar = extractSidecar(store.workspace)
+        if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+      } catch (error) {
+        announce(error instanceof Error ? error.message : 'Save failed')
+      }
     }
   },
   'mod+o': (store) => {

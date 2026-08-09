@@ -50,4 +50,22 @@ describe('buildGroupNodes', () => {
     expect(outer).toBeTruthy()
     expect(inner!.position.y - outer!.position.y).toBeGreaterThanOrEqual(52)
   })
+
+  it('renders explicit nesting when parent and child have equal members', () => {
+    const workspace = ws()
+    workspace.model.groups = [
+      { id: 'outer', name: 'Outer', elementIds: ['a', 'b'] },
+      { id: 'inner', name: 'Inner', elementIds: ['a', 'b'], parentId: 'outer' },
+    ]
+    const result = buildGroupNodes(workspace, workspace.model.groups, [
+      el('a', 100, 100),
+      el('b', 350, 100),
+    ])
+
+    const inner = result.find((node) => node.id === 'group-inner')
+    const outer = result.find((node) => node.id === 'group-outer')
+    expect(inner).toBeTruthy()
+    expect(outer).toBeTruthy()
+    expect(inner!.position.y - outer!.position.y).toBeGreaterThanOrEqual(52)
+  })
 })

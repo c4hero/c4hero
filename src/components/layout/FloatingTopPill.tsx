@@ -148,36 +148,50 @@ export default function FloatingTopPill() {
 
   async function handleExport(format: 'dsl' | 'png' | 'svg', theme: ExportTheme = 'dark') {
     if (!workspace) return
-    switch (format) {
-      case 'dsl':
-        await saveDSLFile(serializeDSL(workspace), `${wsName}.dsl`)
-        break
-      case 'png': {
-        const blob = await exportCanvasAsPNG(theme)
-        if (blob) downloadBlob(blob, `${wsName}-${theme}.png`)
-        break
+    try {
+      switch (format) {
+        case 'dsl':
+          await saveDSLFile(serializeDSL(workspace), `${wsName}.dsl`)
+          break
+        case 'png': {
+          const blob = await exportCanvasAsPNG(theme)
+          if (blob) downloadBlob(blob, `${wsName}-${theme}.png`)
+          break
+        }
+        case 'svg': {
+          const svg = exportCanvasAsSVG(theme)
+          if (svg) downloadFile(svg, `${wsName}-${theme}.svg`, 'image/svg+xml')
+          break
+        }
       }
-      case 'svg': {
-        const svg = exportCanvasAsSVG(theme)
-        if (svg) downloadFile(svg, `${wsName}-${theme}.svg`, 'image/svg+xml')
-        break
-      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Export failed'
+      setCopyToast(message)
+      announce(message)
+      setTimeout(() => setCopyToast(null), 4000)
     }
   }
 
   async function handleCopy(type: 'png-dark' | 'png-light' | 'png-current' | 'dsl') {
     if (!workspace) return
-    let ok = false
-    if (type === 'png-dark') ok = await copyCanvasAsPNG('dark')
-    else if (type === 'png-light') ok = await copyCanvasAsPNG('light')
-    else if (type === 'png-current') ok = await copyCanvasAsPNG('current')
-    else if (type === 'dsl') ok = await copyTextToClipboard(serializeDSL(workspace))
-    const themeLabel = type === 'png-dark' ? 'dark' : type === 'png-light' ? 'light' : 'current'
-    const label = type === 'dsl' ? 'DSL' : `PNG (${themeLabel})`
-    const msg = ok ? `Copied ${label}` : 'Copy failed'
-    setCopyToast(msg)
-    announce(msg)
-    setTimeout(() => setCopyToast(null), 2000)
+    try {
+      let ok = false
+      if (type === 'png-dark') ok = await copyCanvasAsPNG('dark')
+      else if (type === 'png-light') ok = await copyCanvasAsPNG('light')
+      else if (type === 'png-current') ok = await copyCanvasAsPNG('current')
+      else if (type === 'dsl') ok = await copyTextToClipboard(serializeDSL(workspace))
+      const themeLabel = type === 'png-dark' ? 'dark' : type === 'png-light' ? 'light' : 'current'
+      const label = type === 'dsl' ? 'DSL' : `PNG (${themeLabel})`
+      const msg = ok ? `Copied ${label}` : 'Copy failed'
+      setCopyToast(msg)
+      announce(msg)
+      setTimeout(() => setCopyToast(null), 2000)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Copy failed'
+      setCopyToast(message)
+      announce(message)
+      setTimeout(() => setCopyToast(null), 4000)
+    }
   }
 
   return (

@@ -104,6 +104,31 @@ export interface LexResult {
     errors: LexerError[]
 }
 
+/**
+ * The consume-one escape rule in one place: the step length at position `i`
+ * inside a quoted string is 2 when a backslash begins one of the two real
+ * escapes (`\"` or `\n`), else 1 — a backslash before anything else is a
+ * literal consumed alone. readString and scanQuotedString both step with
+ * this, so the tokenizer and boundary scanner cannot drift apart.
+ */
+export function escapeStep(input: string, i: number): 1 | 2 {
+    return input[i] === '\\' && (input[i + 1] === '"' || input[i + 1] === 'n') ? 2 : 1
+}
+
+/**
+ * Index just past the closing quote of the string literal opening at `start`
+ * (which must point at the opening `"`), or `input.length` if unterminated.
+ * Exported so non-tokenizing scanners (extractDsl in ai/dsl.ts) share the
+ * escape rule instead of hand-mirroring it.
+ */
+export function scanQuotedString(input: string, start: number): number {
+    let i = start + 1
+    while (i < input.length && input[i] !== '"') {
+        i += escapeStep(input, i)
+    }
+    return i < input.length ? i + 1 : input.length
+}
+
 export function lex(input: string): LexResult {
     const tokens: Token[] = []
     const errors: LexerError[] = []
@@ -149,25 +174,22 @@ export function lex(input: string): LexResult {
         advance() // consume opening "
         let value = ''
         while (pos < input.length && peek() !== '"') {
-            if (peek() === '\\') {
+            // Mirror Structurizr's tokenizer exactly (structurizr-java 5.0.2):
+            // `\"` and `\n` are the only escapes; `\\` is NOT collapsed and
+            // `\t` is not an escape. On a miss, only the backslash itself is
+            // consumed — the next char is re-examined, because it may start
+            // an escape of its own (`a\\"b` is literal-\ then \" → `a\"b`).
+            // escapeStep (above) is the single home of that rule; consuming
+            // two chars here is what made c4hero disagree with every other
+            // Structurizr tool on backslash-heavy values.
+            // Known consequence: files saved by pre-TEA-163 c4hero used
+            // JSON-style `\\`/`\t` escapes and now read back literally;
+            // detecting and migrating those legacy files is TEA-167.
+            if (escapeStep(input, pos) === 2) {
+                const escaped = peekAt(1)
                 advance()
-                const escaped = advance()
-                switch (escaped) {
-                    case 'n':
-                        value += '\n'
-                        break
-                    case 't':
-                        value += '\t'
-                        break
-                    case '"':
-                        value += '"'
-                        break
-                    case '\\':
-                        value += '\\'
-                        break
-                    default:
-                        value += '\\' + escaped
-                }
+                advance()
+                value += escaped === 'n' ? '\n' : '"'
             } else {
                 value += advance()
             }

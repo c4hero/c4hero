@@ -216,7 +216,13 @@ function groupIsNestedInside(
   child: ModelGroup,
   parent: ModelGroup,
 ): boolean {
-  if (child.id === parent.id || child.elementIds.length >= parent.elementIds.length) return false
+  if (child.id === parent.id) return false
+  // Parsed Structurizr DSL can contain a parent whose only contents are one
+  // nested group, so both aggregate member sets are equal. Retain that
+  // explicit hierarchy; strict subset inference remains the back-compat path
+  // for older c4hero workspaces without parentId.
+  if (child.parentId === parent.id) return true
+  if (child.elementIds.length >= parent.elementIds.length) return false
   const parentIds = new Set(parent.elementIds)
   return child.elementIds.every((id) => parentIds.has(id))
 }

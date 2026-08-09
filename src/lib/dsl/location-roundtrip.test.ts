@@ -28,7 +28,12 @@ function makeWs(): Workspace {
   }
 }
 
-describe('native location keyword parsing', () => {
+// Structurizr removed the `location` keyword; externality is the `External`
+// tag. c4hero keeps the model field (it drives the canvas — see
+// canvasBuilders.ts:69 and SystemNode/PersonNode) and maps it to the tag on
+// the way out, back to the field on the way in. The bare keyword is still
+// accepted on import so older c4hero files keep loading.
+describe('legacy location keyword parsing (import back-compat)', () => {
   it('person block with location External is parsed correctly', () => {
     const dsl = `
 workspace {
@@ -64,21 +69,22 @@ workspace {
   })
 })
 
-describe('serializer emits native location keyword', () => {
-  it('External person serializes as "location External" not properties block', () => {
-    const ws = makeWs()
-    const dsl = serializeDSL(ws)
-    expect(dsl).toContain('location External')
+describe('serializer emits the External tag, never the location keyword', () => {
+  it('does not emit the removed location keyword', () => {
+    const dsl = serializeDSL(makeWs())
+    expect(dsl).not.toContain('location External')
+    expect(dsl).not.toContain('location Internal')
     expect(dsl).not.toContain('c4hero.location')
   })
 
-  it('External softwareSystem serializes as "location External" not properties block', () => {
-    const ws = makeWs()
-    const dsl = serializeDSL(ws)
-    // Both person Alice and system ExtSys are External; both should use location External
-    const locationCount = (dsl.match(/location External/g) ?? []).length
-    expect(locationCount).toBe(2)
-    expect(dsl).not.toContain('"c4hero.location"')
+  it('tags both External elements and leaves Internal ones untagged', () => {
+    const dsl = serializeDSL(makeWs())
+    expect(dsl).toContain('person "Alice" "" "External"')
+    expect(dsl).toContain('softwareSystem "ExtSys" "" "External"')
+    // Internal is the default and needs no representation.
+    expect(dsl).toContain('person "Bob"')
+    expect(dsl).not.toMatch(/"Bob".*External/)
+    expect(dsl).not.toMatch(/"IntSys".*External/)
   })
 })
 
@@ -108,22 +114,20 @@ describe('External location roundtrip', () => {
 })
 
 describe('serializer does not emit unnecessary empty string placeholders', () => {
-  it('External person with no description serializes without "" before the block', () => {
-    const ws = makeWs()
-    const dsl = serializeDSL(ws)
-    // alice is External so has a block body; she has no description.
-    // The serializer must NOT emit person "Alice" "" { location External }
-    // It should emit person "Alice" { location External }
-    expect(dsl).not.toMatch(/person "Alice" "" \{/)
-    expect(dsl).toMatch(/person "Alice" \{/)
+  it('opens no block body for an element whose only extra is externality', () => {
+    const dsl = serializeDSL(makeWs())
+    // Externality is now a positional tag, so no braces are needed at all.
+    expect(dsl).not.toMatch(/person "Alice"[^\n]*\{/)
+    expect(dsl).not.toMatch(/softwareSystem "ExtSys"[^\n]*\{/)
   })
 
-  it('External softwareSystem with no description serializes without "" before the block', () => {
-    const ws = makeWs()
-    const dsl = serializeDSL(ws)
-    // ExtSys is External so has a block body; it has no description.
-    expect(dsl).not.toMatch(/softwareSystem "ExtSys" "" \{/)
-    expect(dsl).toMatch(/softwareSystem "ExtSys" \{/)
+  it('emits an empty description only where a later positional arg needs it', () => {
+    const dsl = serializeDSL(makeWs())
+    // tags are the 3rd positional arg, so the description slot must be filled
+    // for Alice/ExtSys — but Bob and IntSys have no trailing arg and get none.
+    expect(dsl).toContain('person "Alice" "" "External"')
+    expect(dsl).not.toMatch(/person "Bob" ""/)
+    expect(dsl).not.toMatch(/softwareSystem "IntSys" ""/)
   })
 
   it('External person with no description roundtrips with location and no description', () => {

@@ -103,7 +103,8 @@ describe('relationship tag roundtrip', () => {
     const ws = makeWs()
     const dsl = serializeDSL(ws)
     // rel-2 has tag 'Secondary' and interactionStyle Asynchronous → block form
-    expect(dsl).toContain('interactionStyle Asynchronous')
+    // (interactionStyle travels as a property; Structurizr rejects the bare keyword)
+    expect(dsl).toContain('"c4hero.interactionStyle" "Asynchronous"')
     expect(dsl).toContain('tags "Secondary"')
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
@@ -187,7 +188,7 @@ describe('element custom tag roundtrip', () => {
       model: {
         people: [],
         softwareSystems: [
-          { id: 'sys', type: 'softwareSystem', name: 'Payments', tags: ['Element', 'Software System', 'External'], properties: {}, containers: [] },
+          { id: 'sys', type: 'softwareSystem', name: 'Payments', tags: ['Element', 'Software System', 'Critical'], properties: {}, containers: [] },
         ],
         relationships: [],
         groups: [],
@@ -203,7 +204,10 @@ describe('element custom tag roundtrip', () => {
     const { workspace, errors } = parseDSL(serializeDSL(ws))
     expect(errors).toEqual([])
     const sys = workspace.model.softwareSystems.find(s => s.name === 'Payments')
-    expect(sys?.tags).toContain('External')
+    // A genuinely opaque tag stays a tag. `External` is deliberately not used
+    // here — it is Structurizr's externality marker and maps to `location`,
+    // which location-roundtrip.test.ts covers.
+    expect(sys?.tags).toContain('Critical')
     expect(sys?.tags).toContain('Software System')
   })
 

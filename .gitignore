@@ -47,3 +47,6 @@ scorecard-fixes.md
 *.sln
 *.sw?
 coverage/
+
+# Structurizr CLI used by the DSL conformance tests (see structurizr-conformance.test.ts)
+.structurizr-cli/
