@@ -1,21 +1,27 @@
 import { Handle, Position, useNodeId, useStore } from '@xyflow/react'
 import { useMemo } from 'react'
+import {
+  CENTER_SLOT,
+  SIDES,
+  SLOTS,
+  handleId as makeHandleId,
+  handleSide,
+  handleSlot,
+  slotOffset,
+  type Side,
+} from '../handleSlots'
 
 /**
  * Handle naming convention:
  *   {side}-{slot}-{type}
  *   side: top | bottom | left | right
- *   slot: a (25%) | b (50%, center) | c (75%)
+ *   slot: one of the seven positions in `handleSlots.SLOTS`
  *   type: source | target
  *
- * Center handles (b) always show on node hover.
- * Side handles (a, c) show when that side already has a connection.
+ * The centre slot always shows on node hover. The other six stay hidden until
+ * an edge actually lands on them, so a node with two connections shows two
+ * extra points rather than a picket fence of six.
  */
-
-const SIDES = ['top', 'bottom', 'left', 'right'] as const
-const SLOTS = ['a', 'b', 'c'] as const
-
-type Side = (typeof SIDES)[number]
 
 const POSITION_MAP: Record<Side, Position> = {
   top: Position.Top,
@@ -24,15 +30,8 @@ const POSITION_MAP: Record<Side, Position> = {
   right: Position.Right,
 }
 
-/** Percentage offset from the side start for each slot */
-const SLOT_OFFSET: Record<string, string> = {
-  a: '25%',
-  b: '50%',
-  c: '75%',
-}
-
 function getHandleStyle(side: Side, slot: string): React.CSSProperties {
-  const offset = SLOT_OFFSET[slot]
+  const offset = slotOffset(slot)
   if (side === 'top' || side === 'bottom') {
     return { left: offset }
   }
@@ -56,44 +55,52 @@ export default function NodeHandles() {
       prev.every((e, i) => e.id === next[i].id && e.sourceHandle === next[i].sourceHandle && e.targetHandle === next[i].targetHandle),
   )
 
-  // Determine which sides have existing connections
-  const occupiedSides = useMemo(() => {
-    const sides = new Set<Side>()
-    if (!nodeId) return sides
-    for (const edge of connectedEdges) {
-      if (edge.source === nodeId && edge.sourceHandle) {
-        const side = edge.sourceHandle.split('-')[0] as Side
-        if (SIDES.includes(side)) sides.add(side)
-      }
-      if (edge.target === nodeId && edge.targetHandle) {
-        const side = edge.targetHandle.split('-')[0] as Side
-        if (SIDES.includes(side)) sides.add(side)
-      }
+  // Slots this node's own edges land on, keyed by side. A slot counts as
+  // occupied whichever end of the edge it is — the source dot and the target
+  // drop zone at a given point reveal together.
+  const occupiedSlots = useMemo(() => {
+    const occupied = new Map<Side, Set<string>>()
+    if (!nodeId) return occupied
+
+    const occupy = (handleId: string) => {
+      const side = handleSide(handleId)
+      const slot = handleSlot(handleId)
+      if (!side || !slot) return
+      const slots = occupied.get(side) ?? new Set<string>()
+      slots.add(slot)
+      occupied.set(side, slots)
     }
-    return sides
+
+    for (const edge of connectedEdges) {
+      if (edge.source === nodeId && edge.sourceHandle) occupy(edge.sourceHandle)
+      if (edge.target === nodeId && edge.targetHandle) occupy(edge.targetHandle)
+    }
+    return occupied
   }, [nodeId, connectedEdges])
 
   return (
     <>
       {SIDES.map((side) => {
         const pos = POSITION_MAP[side]
-        const sideOccupied = occupiedSides.has(side)
+        const sideSlots = occupiedSlots.get(side)
 
         return SLOTS.map((slot) => {
-          const isCenter = slot === 'b'
-          const sourceId = `${side}-${slot}-source`
-          const targetId = `${side}-${slot}-target`
+          const isCenter = slot === CENTER_SLOT
+          const shown = isCenter || sideSlots?.has(slot) === true
+          const sourceId = makeHandleId(side, slot, 'source')
+          const targetId = makeHandleId(side, slot, 'target')
 
-          // Center handles always visible on hover; side handles only if occupied
+          // Centre handles always visible on hover; the rest only once an edge
+          // uses them.
           const sourceClass = isCenter
             ? 'c4-handle c4-handle-visible !border-0'
-            : sideOccupied
+            : shown
             ? 'c4-handle c4-handle-visible c4-handle-extra !border-0'
             : 'c4-handle c4-handle-visible c4-handle-hidden-extra !border-0'
 
           const targetClass = isCenter
             ? 'c4-handle c4-handle-target !border-0'
-            : sideOccupied
+            : shown
             ? 'c4-handle c4-handle-target !border-0'
             : 'c4-handle c4-handle-target c4-handle-hidden-extra !border-0'
 

@@ -227,7 +227,88 @@ test.describe('Node Connections', () => {
     expect(await workspace.getEdgeCount()).toBe(2)
   })
 
+  test('a connection point grows under the cursor without sliding off the border', async ({ workspace }) => {
+    await workspace.loadSample()
+
+    const node = workspace.page.locator('.react-flow__node').first()
+    const nodeId = await node.getAttribute('data-id')
+    await node.locator('.c4-node').hover()
+
+    for (const side of ['right', 'bottom']) {
+      const dot = workspace.page.locator(`[data-nodeid="${nodeId}"][data-handleid="${side}-b-source"]`).first()
+      const before = await dot.boundingBox()
+      await dot.hover({ force: true })
+      await workspace.page.waitForTimeout(300)
+      const after = await dot.boundingBox()
+      if (!before || !after) throw new Error(`No bounding box for the ${side} handle`)
+
+      // It should get bigger...
+      expect(after.width).toBeGreaterThan(before.width)
+      // ...around the same point. React Flow centres handles on the border with
+      // a percentage translate; a hover transform overrides that and the dot
+      // jumps out from under the cursor.
+      const centre = (box: { x: number; y: number; width: number; height: number }) =>
+        ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
+      expect(Math.abs(centre(after).x - centre(before).x)).toBeLessThan(0.5)
+      expect(Math.abs(centre(after).y - centre(before).y)).toBeLessThan(0.5)
+
+      await workspace.page.mouse.move(5, 5)
+      await node.locator('.c4-node').hover()
+    }
+  })
+
   // ─── Handle slot distribution ─────────────────────────────────────────────
+
+  test('six relationships into one system land on six separate connection points', async ({ workspace }) => {
+    // GH #108: past the third edge, connections used to stack back onto the
+    // points already taken and the lines crossed each other.
+    const callers = ['one', 'two', 'three', 'four', 'five', 'six']
+    await workspace.parseAndLoad(`workspace "Six Integrations" {
+  model {
+    hub = softwareSystem "Hub"
+${callers.map((id) => `    ${id} = softwareSystem "System ${id}"`).join('\n')}
+
+${callers.map((id) => `    ${id} -> hub "Integrates with"`).join('\n')}
+  }
+  views {
+    systemLandscape landscape "Landscape" {
+      include *
+      autolayout lr
+    }
+  }
+}`)
+
+    await expect(workspace.page.locator('.react-flow__edge')).toHaveCount(6)
+
+    // Stack the callers in a column directly to the left of the hub, close
+    // enough that every relationship enters the hub's left side — the shape a
+    // context view takes when one system has a lot of integrations.
+    await workspace.page.evaluate((ids) => {
+      const store = (window as Record<string, unknown>).__testStore as () => {
+        updateNodePositions: (updates: Array<{ id: string; x: number; y: number }>) => void
+      }
+      store().updateNodePositions([
+        { id: 'hub', x: 900, y: 500 },
+        ...ids.map((id, i) => ({ id, x: 0, y: 380 + i * 60 })),
+      ])
+    }, callers)
+    await workspace.page.waitForTimeout(300)
+
+    // Every edge ends at its own point on the hub — the last coordinate pair in
+    // the path data is where the arrow touches the node.
+    const endpoints = await workspace.page.$$eval('.react-flow__edge path[marker-end]', (paths) =>
+      paths.map((path) => {
+        const numbers = (path.getAttribute('d') ?? '').match(/-?\d+(\.\d+)?/g) ?? []
+        return numbers.slice(-2).map((n) => Math.round(Number(n))).join(',')
+      }),
+    )
+    expect(endpoints).toHaveLength(6)
+    expect(new Set(endpoints).size).toBe(6)
+
+    // ...and the hub reveals a connection point for each of them.
+    const occupied = workspace.page.locator('[data-nodeid="hub"].c4-handle-extra:not(.c4-handle-hidden-extra)')
+    await expect(occupied).toHaveCount(6)
+  })
 
   test('two connections on same side of a node use different handle slots', async ({ workspace }) => {
     await workspace.loadBlank()

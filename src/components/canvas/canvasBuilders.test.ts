@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildNodes } from './canvasBuilders'
+import type { Node } from '@xyflow/react'
+import { buildEdges, buildNodes } from './canvasBuilders'
+import { handleSide, handleSlot } from './handleSlots'
 import type { HighlightFilters } from '@/lib/highlight'
 import { THEMES } from '@/lib/themes'
 import type { ElementStyle, Workspace } from '@/types/model'
@@ -92,5 +94,93 @@ describe('buildNodes theme styles', () => {
     const style = renderedStyle([vipStyle], THEMES.structurizr, ['Element', 'Person', 'VIP'])
     expect(style.background).toBe('#441155')
     expect(style.stroke).toBe('#dd77ff')
+  })
+})
+
+/** Hub system with `callerCount` systems wired into it from the left, so every
+ *  one of those relationships lands on the hub's left side. */
+function hubWorkspace(callerCount: number): Workspace {
+  const callers = Array.from({ length: callerCount }, (_, i) => `caller${i}`)
+  return {
+    name: 'Hub test',
+    model: {
+      people: [],
+      softwareSystems: [
+        { id: 'hub', type: 'softwareSystem', name: 'Hub', tags: ['Element', 'Software System'], properties: {}, containers: [] },
+        ...callers.map((id) => ({
+          id, type: 'softwareSystem' as const, name: id, tags: ['Element', 'Software System'], properties: {}, containers: [],
+        })),
+      ],
+      relationships: callers.map((id) => ({
+        id: `rel-${id}`, sourceId: id, destinationId: 'hub', tags: ['Relationship'], properties: {},
+      })),
+      groups: [],
+    },
+    views: {
+      systemLandscapeViews: [
+        {
+          type: 'systemLandscape',
+          key: 'landscape',
+          elements: [{ id: 'hub' }, ...callers.map((id) => ({ id }))],
+          relationships: callers.map((id) => ({ id: `rel-${id}` })),
+        },
+      ],
+      systemContextViews: [],
+      containerViews: [],
+      componentViews: [],
+      configuration: { styles: { elements: [], relationships: [] } },
+    },
+  }
+}
+
+/** Callers stacked in a column to the left of the hub. */
+function hubNodes(callerCount: number): Node[] {
+  return [
+    { id: 'hub', type: 'softwareSystem', position: { x: 1200, y: 600 }, data: {} },
+    ...Array.from({ length: callerCount }, (_, i) => ({
+      id: `caller${i}`,
+      type: 'softwareSystem',
+      position: { x: 0, y: i * 200 },
+      data: {},
+    })),
+  ]
+}
+
+function hubEdges(callerCount: number) {
+  const ws = hubWorkspace(callerCount)
+  return buildEdges(ws, ws.views.systemLandscapeViews[0], hubNodes(callerCount), NO_FILTERS)
+}
+
+describe('buildEdges handle routing', () => {
+  it('gives six relationships entering one side six distinct handles', () => {
+    // GH #108: past three, edges used to stack back onto the same pixels.
+    const edges = hubEdges(6)
+    expect(edges).toHaveLength(6)
+
+    const targets = edges.map((e) => e.targetHandle)
+    expect(new Set(targets).size).toBe(6)
+    for (const handle of targets) {
+      expect(handleSide(handle!)).toBe('left')
+    }
+  })
+
+  it('still routes a lone relationship through the centre slot', () => {
+    const [edge] = hubEdges(1)
+    expect(edge.sourceHandle).toBe('right-b-source')
+    expect(edge.targetHandle).toBe('left-b-target')
+  })
+
+  it('routes two and three relationships through the slots they always used', () => {
+    expect(hubEdges(2).map((e) => e.targetHandle)).toEqual(['left-a-target', 'left-c-target'])
+    expect(hubEdges(3).map((e) => e.targetHandle)).toEqual(['left-a-target', 'left-b-target', 'left-c-target'])
+  })
+
+  it('only ever names handles the renderer knows how to draw', () => {
+    for (const edge of hubEdges(7)) {
+      for (const handle of [edge.sourceHandle, edge.targetHandle]) {
+        expect(handleSide(handle!)).not.toBeNull()
+        expect(handleSlot(handle!)).not.toBeNull()
+      }
+    }
   })
 })
