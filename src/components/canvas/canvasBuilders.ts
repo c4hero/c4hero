@@ -7,6 +7,7 @@ import {
   groupSpansBoundaryClusters,
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
+import { CENTER_SLOT, handleId, pickSlots, type Side } from './handleSlots'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
@@ -73,8 +74,16 @@ function getChildCount(element: ModelElement): number | undefined {
   return undefined
 }
 
+function centerPair(sourceSide: Side, targetSide: Side) {
+  return {
+    sourceHandle: handleId(sourceSide, CENTER_SLOT, 'source'),
+    targetHandle: handleId(targetSide, CENTER_SLOT, 'target'),
+  }
+}
+
 /** Pick the best source/target handle sides based on relative node positions.
- *  Uses center slot (b) by default. Handle ID format: {side}-{slot}-{type} */
+ *  Uses the center slot; buildEdges spreads them apart afterwards when several
+ *  edges share a side. Handle ID format: {side}-{slot}-{type} */
 function computeHandlePair(
   srcPos: { x: number; y: number },
   dstPos: { x: number; y: number },
@@ -82,20 +91,11 @@ function computeHandlePair(
   const dx = dstPos.x - srcPos.x
   const dy = dstPos.y - srcPos.y
 
-  // Use the dominant axis to pick sides, default to center slot (b)
+  // Use the dominant axis to pick sides
   if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx > 0) {
-      return { sourceHandle: 'right-b-source', targetHandle: 'left-b-target' }
-    } else {
-      return { sourceHandle: 'left-b-source', targetHandle: 'right-b-target' }
-    }
-  } else {
-    if (dy > 0) {
-      return { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
-    } else {
-      return { sourceHandle: 'top-b-source', targetHandle: 'bottom-b-target' }
-    }
+    return dx > 0 ? centerPair('right', 'left') : centerPair('left', 'right')
   }
+  return dy > 0 ? centerPair('bottom', 'top') : centerPair('top', 'bottom')
 }
 
 /** Pre-compute the set of element IDs that can be drilled into (have a child view).
@@ -480,28 +480,6 @@ export function buildBoundaryNodes(
   return boundaries
 }
 
-/** Distribute multiple edges on the same side across 3 slots (a–c) */
-const SLOTS = ['a', 'b', 'c'] as const
-
-/**
- * Pick N slots from the 3 available, centered on b.
- * N=1→[b], N=2→[a,c], N=3→[a,b,c],
- * N>3→cycle through all 3.
- */
-function pickSlots(n: number): string[] {
-  if (n <= 0) return []
-  const all = SLOTS as unknown as string[]
-  if (n >= all.length) {
-    // More edges than slots: assign all slots then cycle
-    return Array.from({ length: n }, (_, i) => all[i % all.length])
-  }
-  const spread: Record<number, string[]> = {
-    1: ['b'],
-    2: ['a', 'c'],
-  }
-  return spread[n] ?? all
-}
-
 /** Build edges using final node positions for optimal handle routing. */
 export function buildEdges(
   workspace: Workspace,
@@ -540,7 +518,7 @@ export function buildEdges(
     const dstPos = posMap.get(rel.destinationId)
     const handles = srcPos && dstPos
       ? computeHandlePair(srcPos, dstPos)
-      : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
+      : centerPair('bottom', 'top')
 
     // Extract side name (e.g. "right" from "right-b-source")
     const sourceSide = handles.sourceHandle.split('-')[0]
@@ -597,8 +575,8 @@ export function buildEdges(
   const edges: Edge[] = []
   for (let i = 0; i < edgeInfos.length; i++) {
     const e = edgeInfos[i]
-    const srcSlot = sourceSlots.get(i) ?? 'b'
-    const tgtSlot = targetSlots.get(i) ?? 'b'
+    const srcSlot = sourceSlots.get(i) ?? CENTER_SLOT
+    const tgtSlot = targetSlots.get(i) ?? CENTER_SLOT
 
     const techHighlighted = techActive && isHighlightedRel(e.rel, filters)
     const endpointsHighlighted = highlightedNodeIds.has(e.sourceId) && highlightedNodeIds.has(e.targetId)
@@ -613,8 +591,8 @@ export function buildEdges(
       id: e.rel.id,
       source: e.sourceId,
       target: e.targetId,
-      sourceHandle: `${e.sourceSide}-${srcSlot}-source`,
-      targetHandle: `${e.targetSide}-${tgtSlot}-target`,
+      sourceHandle: handleId(e.sourceSide, srcSlot, 'source'),
+      targetHandle: handleId(e.targetSide, tgtSlot, 'target'),
       type: 'relationship',
       data: { relationship: e.rel, relationshipStyle: e.relStyle, highlighted },
       className,

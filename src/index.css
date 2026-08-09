@@ -2200,15 +2200,10 @@ body {
   border-bottom-color: var(--node-glow, var(--canvas-selection, var(--color-accent))) !important;
 }
 
-/* Extra handles (slot a, c) on occupied sides show on hover */
+/* Extra handles on occupied slots show on hover */
 .c4-handle-extra {
   width: 6px;
   height: 6px;
-}
-
-/* Extra handles on unoccupied sides stay hidden even on hover */
-.c4-node:hover .c4-handle-hidden-extra {
-  opacity: 0 !important;
 }
 
 .c4-handle-visible:hover {
@@ -2225,11 +2220,17 @@ body {
   pointer-events: none !important;
 }
 
-/* Hidden extra targets stay hidden */
-.c4-handle-target.c4-handle-hidden-extra {
+/* Unused slots collapse to nothing: invisible but still-clickable handles would
+   line the node border with dead zones that start a connection instead of
+   dragging the node — and there are six of them per side now. */
+.c4-handle-hidden-extra {
   width: 0 !important;
   height: 0 !important;
   pointer-events: none !important;
+}
+
+.c4-node:hover .c4-handle-hidden-extra {
+  opacity: 0 !important;
 }
 
 /* When React Flow v12 is in connecting mode, valid target handles get class .connectionindicator.

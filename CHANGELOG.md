@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Crowded nodes no longer stack their connections.** Each side of a node now
+  offers seven connection points instead of three, so a system with several
+  integrations fans them out along its edge rather than routing the fourth
+  relationship onto the same pixels as the first. Diagrams with one, two or
+  three connections on a side are unchanged. Reported in
+  [#108](https://github.com/c4hero/c4hero/issues/108).
 - Corrected the documented AI feature set. The 0.3.0 notes and the README both
   described a **From your code** repo scan that proposes elements from a local
   repository. That feature was never shipped — no implementation exists — so the

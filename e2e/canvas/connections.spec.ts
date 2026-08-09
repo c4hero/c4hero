@@ -229,6 +229,57 @@ test.describe('Node Connections', () => {
 
   // ─── Handle slot distribution ─────────────────────────────────────────────
 
+  test('six relationships into one system land on six separate connection points', async ({ workspace }) => {
+    // GH #108: past the third edge, connections used to stack back onto the
+    // points already taken and the lines crossed each other.
+    const callers = ['one', 'two', 'three', 'four', 'five', 'six']
+    await workspace.parseAndLoad(`workspace "Six Integrations" {
+  model {
+    hub = softwareSystem "Hub"
+${callers.map((id) => `    ${id} = softwareSystem "System ${id}"`).join('\n')}
+
+${callers.map((id) => `    ${id} -> hub "Integrates with"`).join('\n')}
+  }
+  views {
+    systemLandscape landscape "Landscape" {
+      include *
+      autolayout lr
+    }
+  }
+}`)
+
+    await expect(workspace.page.locator('.react-flow__edge')).toHaveCount(6)
+
+    // Stack the callers in a column directly to the left of the hub, close
+    // enough that every relationship enters the hub's left side — the shape a
+    // context view takes when one system has a lot of integrations.
+    await workspace.page.evaluate((ids) => {
+      const store = (window as Record<string, unknown>).__testStore as () => {
+        updateNodePositions: (updates: Array<{ id: string; x: number; y: number }>) => void
+      }
+      store().updateNodePositions([
+        { id: 'hub', x: 900, y: 500 },
+        ...ids.map((id, i) => ({ id, x: 0, y: 380 + i * 60 })),
+      ])
+    }, callers)
+    await workspace.page.waitForTimeout(300)
+
+    // Every edge ends at its own point on the hub — the last coordinate pair in
+    // the path data is where the arrow touches the node.
+    const endpoints = await workspace.page.$$eval('.react-flow__edge path[marker-end]', (paths) =>
+      paths.map((path) => {
+        const numbers = (path.getAttribute('d') ?? '').match(/-?\d+(\.\d+)?/g) ?? []
+        return numbers.slice(-2).map((n) => Math.round(Number(n))).join(',')
+      }),
+    )
+    expect(endpoints).toHaveLength(6)
+    expect(new Set(endpoints).size).toBe(6)
+
+    // ...and the hub reveals a connection point for each of them.
+    const occupied = workspace.page.locator('[data-nodeid="hub"].c4-handle-extra:not(.c4-handle-hidden-extra)')
+    await expect(occupied).toHaveCount(6)
+  })
+
   test('two connections on same side of a node use different handle slots', async ({ workspace }) => {
     await workspace.loadBlank()
 
