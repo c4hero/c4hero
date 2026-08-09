@@ -2182,7 +2182,7 @@ body {
   background: var(--color-border);
   border-radius: 50%;
   opacity: 0;
-  transition: opacity 150ms ease, background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+  transition: opacity 150ms ease, background 150ms ease, width 150ms ease, height 150ms ease, box-shadow 150ms ease;
 }
 
 /* Center handles (slot b) show on node hover */
@@ -2206,10 +2206,21 @@ body {
   height: 6px;
 }
 
+/* Grow the box rather than scaling it. React Flow centres each handle on the
+   border with a percentage translate, which re-derives itself from the new
+   size — a transform would either replace that translate or scale about the
+   pre-translate origin, and either way the dot slides out from under the
+   cursor as it grows. */
 .c4-handle-visible:hover {
-  transform: scale(1.5);
+  width: 12px;
+  height: 12px;
   background: var(--canvas-selection, var(--color-accent-hover)) !important;
   box-shadow: 0 0 10px color-mix(in srgb, var(--canvas-selection, var(--color-accent-hover)) 60%, transparent) !important;
+}
+
+.c4-handle-extra:hover {
+  width: 9px;
+  height: 9px;
 }
 
 .c4-handle-target {
