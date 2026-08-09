@@ -51,7 +51,7 @@ test.describe('Right Panel', () => {
 
   test('relationship controls stay neutral by default and can be reset to defaults', async ({ workspace }) => {
     await workspace.loadSample()
-    await workspace.page.locator('[aria-label^="Edge from "]').first().click({ force: true })
+    await workspace.clickRelationship()
 
     const defaultInteraction = workspace.page.getByRole('button', { name: 'Interaction style: Default' })
     const asyncInteraction = workspace.page.getByRole('button', { name: 'Interaction style: Asynchronous' })

@@ -413,6 +413,70 @@ export class WorkspaceHelper {
     await this.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
   }
 
+  // loadSample() resolves once .react-flow is visible, but React Flow is still
+  // running its fitView animation at that point. Any screen coordinate read before
+  // it settles refers to a viewport that has already moved on.
+  async waitForCanvasSettled() {
+    await this.page.waitForFunction(
+      () => {
+        const viewport = document.querySelector('.react-flow__viewport') as HTMLElement | null
+        if (!viewport) return false
+        const state = window as unknown as { __c4Viewport?: { transform: string; stable: number } }
+        const transform = viewport.style.transform
+        const seen = state.__c4Viewport
+        if (!seen || seen.transform !== transform) {
+          state.__c4Viewport = { transform, stable: 1 }
+          return false
+        }
+        seen.stable += 1
+        return seen.stable >= 3
+      },
+      null,
+      { polling: 100, timeout: 10_000 },
+    )
+  }
+
+  // Selecting an edge by clicking a bounding-box centre does not work: an edge
+  // label sits at the path midpoint and covers it, and parts of the path run
+  // underneath the nodes it connects. Both depend on layout geometry, which varies
+  // with viewport and font metrics, so any fixed point is a coin flip across
+  // environments. Probe along the path instead and click the first point that
+  // actually hit-tests to this edge.
+  async clickRelationship(index = 0) {
+    const path = this.page.locator('.react-flow__edge-interaction').nth(index)
+    await expect(path).toBeAttached()
+    await this.waitForCanvasSettled()
+
+    const found = await path.evaluate((el) => {
+      const p = el as SVGPathElement
+      const m = p.getScreenCTM()
+      if (!m) return { point: null, probes: ['path is not rendered'] }
+      const total = p.getTotalLength()
+      const probes: string[] = []
+      // Midpoint outwards: the middle of an edge is the part least likely to be
+      // occluded by the nodes at either end.
+      for (const f of [0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8]) {
+        const at = p.getPointAtLength(total * f)
+        const x = at.x * m.a + at.y * m.c + m.e
+        const y = at.x * m.b + at.y * m.d + m.f
+        const hit = document.elementFromPoint(x, y)
+        if (hit === p) return { point: { x, y }, probes }
+        probes.push(`${f}: ${hit ? `${hit.tagName}.${hit.getAttribute('class') ?? ''}` : 'null'}`)
+      }
+      return { point: null, probes }
+    })
+
+    if (!found.point) {
+      throw new Error(
+        `No point on edge ${index} hit-tests to the edge itself. Probed:\n  ${found.probes.join('\n  ')}`,
+      )
+    }
+
+    await this.page.mouse.click(found.point.x, found.point.y)
+    // Fail here rather than at a downstream assertion if the click did not select.
+    await expect(this.page.locator('.react-flow__edge.selected')).toHaveCount(1)
+  }
+
   async getElementByName(name: string) {
     const ws = await this.getWorkspace()
     if (!ws) return undefined
