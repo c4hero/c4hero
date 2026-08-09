@@ -182,7 +182,11 @@ export function buildNodes(
         onDrillIn,
         highlighted,
         viewCount: viewCountMap.get(element.id) ?? 1,
+        locked: viewEl.locked === true,
       },
+      // A locked node holds its place against Auto-arrange, so it should hold it
+      // against a stray drag too.
+      draggable: viewEl.locked === true ? false : undefined,
       // Highlighter focus mode: matched nodes get the highlighted ring; the rest
       // fade to ghost context. When no facets are active, every node renders
       // normally (no class either way).

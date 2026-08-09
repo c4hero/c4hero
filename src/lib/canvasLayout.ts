@@ -398,9 +398,14 @@ export function spaceOverlayClusters(
  *  undefined get a fresh dagre placement. This is what makes adding a single
  *  new element feel local: the rest of the graph doesn't shift.
  *
- *  `pinned=true` is a separate concept — it means "survive a full re-layout"
- *  (used by `resetAndRelayout`, which clears x/y on unpinned nodes so they
- *  flow back into a fresh dagre run).
+ *  `locked=true` is a separate concept — it means "survive a full re-layout".
+ *  It needs nothing here: `resetAndRelayout` and `setLayoutDirection` clear x/y
+ *  on every *unlocked* element, so a locked one still holds a saved position
+ *  when this runs and is frozen by the rule above, while everything else flows
+ *  back into a fresh dagre run.
+ *
+ *  (`pinned` is a third thing again, and not a layout concept at all — it marks
+ *  a position as hand-authored so the sidecar knows to persist it.)
  *
  *  Coordinate-frame stitching: dagre lays out from its own origin, so its
  *  output coordinates have no relation to the saved positions of frozen nodes.

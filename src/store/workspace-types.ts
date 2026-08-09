@@ -185,6 +185,10 @@ export interface WorkspaceState extends UndoState {
   setLayoutDirection: (viewKey: string, direction: 'TB' | 'BT' | 'LR' | 'RL') => void
   /** Reset all node positions and optionally change layout direction in a single undo step */
   resetAndRelayout: (viewKey: string, direction?: 'TB' | 'BT' | 'LR' | 'RL') => void
+  /** Lock or unlock elements in a view: locked nodes hold their position
+   *  through Auto-arrange and can't be dragged. */
+  setElementsLocked: (viewKey: string, ids: string[], locked: boolean) => void
+  unlockAllInView: (viewKey: string) => void
 
   // Layout epoch — increments on explicit relayout/direction change so Canvas can refit
   layoutVersion: number

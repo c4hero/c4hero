@@ -89,8 +89,14 @@ export interface ElementInView {
   id: string
   x?: number
   y?: number
-  /** True when the user has manually dragged this node */
+  /** True when the user has manually dragged this node. Marks x/y as
+   *  hand-authored, which is what the sidecar persists. */
   pinned?: boolean
+  /** True when the user has locked this node in place. A locked node keeps its
+   *  x/y through a full re-layout (Auto-arrange, layout-direction change) and
+   *  can't be dragged until it's unlocked. Distinct from `pinned`: dragging
+   *  something records a position, it doesn't defend it. */
+  locked?: boolean
 }
 
 export interface RelationshipInView {

@@ -460,3 +460,60 @@ describe('applyAutoLayout with measured node sizes', () => {
     expect(Math.max(...centers) - Math.min(...centers)).toBeLessThan(0.5)
   })
 })
+
+describe('locked elements through a full re-layout', () => {
+  /** What Auto-arrange does to a view: drop the positions of everything that
+   *  isn't locked, then lay the view out again. Mirrors resetAndRelayout. */
+  function clearUnlockedPositions(view: View): void {
+    for (const el of view.elements) {
+      if (el.locked) continue
+      el.x = undefined
+      el.y = undefined
+      el.pinned = undefined
+    }
+  }
+
+  it('leaves a locked node exactly where it was and reflows the rest around it', () => {
+    const view = makeView(['a', 'b', 'c'])
+    for (const el of view.elements) { el.x = 500; el.y = 500 }
+    const locked = view.elements.find((el) => el.id === 'b')!
+    locked.locked = true
+    locked.x = 1234
+    locked.y = 5678
+
+    clearUnlockedPositions(view)
+
+    const nodes = [makeNode('a'), makeNode('b'), makeNode('c')]
+    nodes[1].position = { x: 1234, y: 5678 }
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'b', target: 'c' },
+    ]
+
+    const laidOut = applyAutoLayout(nodes, edges, view, [])
+
+    const b = laidOut.find((n) => n.id === 'b')!
+    expect(b.position).toEqual({ x: 1234, y: 5678 })
+
+    // The unlocked pair got fresh placement rather than staying stacked at 500.
+    for (const id of ['a', 'c']) {
+      const node = laidOut.find((n) => n.id === id)!
+      expect(node.position).not.toEqual({ x: 500, y: 500 })
+    }
+  })
+
+  it('relays out everything when no element is locked', () => {
+    const view = makeView(['a', 'b'])
+    for (const el of view.elements) { el.x = 500; el.y = 500 }
+
+    clearUnlockedPositions(view)
+
+    const laidOut = applyAutoLayout(
+      [makeNode('a'), makeNode('b')],
+      [{ id: 'e1', source: 'a', target: 'b' }],
+      view,
+      [],
+    )
+    expect(laidOut.map((n) => n.position)).not.toContainEqual({ x: 500, y: 500 })
+  })
+})

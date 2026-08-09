@@ -14,8 +14,20 @@ export type ViewSlice = Pick<WorkspaceState,
   | 'addView' | 'deleteView' | 'renameView' | 'duplicateView'
   | 'toggleElementInView' | 'removeElementsFromView' | 'setLayoutDirection' | 'resetAndRelayout'
   | 'updateNodePosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
+  | 'setElementsLocked' | 'unlockAllInView'
   | 'layoutVersion'
 >
+
+/** Drop the saved positions a full re-layout is meant to discard, leaving
+ *  locked elements exactly where the user put them. */
+function clearUnlockedPositions(view: View): void {
+  for (const el of view.elements) {
+    if (el.locked) continue
+    el.x = undefined
+    el.y = undefined
+    el.pinned = undefined
+  }
+}
 
 export const createViewSlice: StateCreator<
   WorkspaceState,
@@ -112,6 +124,9 @@ export const createViewSlice: StateCreator<
       if (!view) continue
       const el = view.elements.find(e => e.id === nodeId)
       if (!el) return
+      // Locked nodes are marked undraggable in React Flow; this is the backstop
+      // for any path that moves nodes without going through a drag handle.
+      if (el.locked) return
       el.x = x
       el.y = y
       el.pinned = true
@@ -127,6 +142,7 @@ export const createViewSlice: StateCreator<
       const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
       if (!view) continue
       for (const el of view.elements) {
+        if (el.locked) continue
         const u = updateMap.get(el.id)
         if (!u) continue
         el.x = u.x
@@ -219,12 +235,7 @@ export const createViewSlice: StateCreator<
     if (!view) return
     pushUndoSnapshot(s)
     view.autoLayout = { ...view.autoLayout, direction }
-    // Reset positions and pinned flags to trigger full re-layout
-    for (const el of view.elements) {
-      el.x = undefined
-      el.y = undefined
-      el.pinned = undefined
-    }
+    clearUnlockedPositions(view)
     s.layoutVersion += 1
   }),
 
@@ -233,14 +244,35 @@ export const createViewSlice: StateCreator<
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     pushUndoSnapshot(s)
-    for (const el of view.elements) {
-      el.x = undefined
-      el.y = undefined
-      el.pinned = undefined
-    }
+    clearUnlockedPositions(view)
     if (direction) {
       view.autoLayout = { ...view.autoLayout, direction }
     }
     s.layoutVersion += 1
+  }),
+
+  setElementsLocked: (viewKey, ids, locked) => set((s) => {
+    if (!s.workspace || ids.length === 0) return
+    const view = findViewHelper(s.workspace, viewKey)
+    if (!view) return
+    const targets = new Set(ids)
+    const changed = view.elements.filter(
+      (el) => targets.has(el.id) && (el.locked ?? false) !== locked,
+    )
+    if (changed.length === 0) return
+    pushUndoSnapshot(s)
+    for (const el of changed) {
+      el.locked = locked || undefined
+    }
+  }),
+
+  unlockAllInView: (viewKey) => set((s) => {
+    if (!s.workspace) return
+    const view = findViewHelper(s.workspace, viewKey)
+    if (!view) return
+    const locked = view.elements.filter((el) => el.locked)
+    if (locked.length === 0) return
+    pushUndoSnapshot(s)
+    for (const el of locked) el.locked = undefined
   }),
 })

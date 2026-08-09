@@ -15,6 +15,8 @@ import {
   ArrowRight,
   ArrowDown,
   Layers,
+  Lock,
+  LockOpen,
   Trash2,
   ChevronDown,
 } from 'lucide-react'
@@ -60,10 +62,22 @@ export default function MultiSelectBar() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
+  const setElementsLocked = useWorkspaceStore((s) => s.setElementsLocked)
   const reactFlow = useReactFlow()
   const [alignOpen, setAlignOpen] = useState(false)
   const [primaryPointerDown, setPrimaryPointerDown] = useState(false)
   const count = selectedElementIds.length
+
+  // One button, two jobs: lock the selection unless it's already all locked,
+  // in which case the obvious next action is to release it.
+  const allLocked = useMemo(() => {
+    if (!workspace || !activeViewKey || selectedElementIds.length === 0) return false
+    const view = getActiveView(workspace, activeViewKey)
+    if (!view) return false
+    const selected = new Set(selectedElementIds)
+    const inView = view.elements.filter((el) => selected.has(el.id))
+    return inView.length > 0 && inView.every((el) => el.locked)
+  }, [workspace, activeViewKey, selectedElementIds])
 
   useEffect(() => {
     const release = () => setPrimaryPointerDown(false)
@@ -441,6 +455,25 @@ export default function MultiSelectBar() {
             </>
           )}
         </div>
+
+        {sep}
+
+        {/* Lock / unlock */}
+        <button
+          className="hover-lift"
+          style={{ ...btnStyle, color: allLocked ? 'var(--color-accent)' : btnStyle.color }}
+          aria-pressed={allLocked}
+          title={allLocked
+            ? `Unlock ${count} elements`
+            : `Lock ${count} elements in place — Auto-arrange and dragging leave them alone`}
+          onClick={() => {
+            if (!activeViewKey) return
+            setElementsLocked(activeViewKey, selectedElementIds, !allLocked)
+          }}
+        >
+          {allLocked ? <Lock size={14} /> : <LockOpen size={14} />}
+          <span>{allLocked ? 'Unlock' : 'Lock'}</span>
+        </button>
 
         {sep}
 

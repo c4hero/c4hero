@@ -31,6 +31,7 @@ interface SidecarRelationship {
 
 interface SidecarViewElement {
   pinned?: boolean
+  locked?: boolean
   x?: number
   y?: number
 }
@@ -62,6 +63,7 @@ function isSidecarRelationship(value: unknown): value is SidecarRelationship {
 function isSidecarViewElement(value: unknown): value is SidecarViewElement {
   if (!isRecord(value)) return false
   if ('pinned' in value && value.pinned !== undefined && typeof value.pinned !== 'boolean') return false
+  if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('x' in value && value.x !== undefined && !isFiniteNumber(value.x)) return false
   if ('y' in value && value.y !== undefined && !isFiniteNumber(value.y)) return false
   return true
@@ -91,13 +93,16 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
   // migration of existing sidecar files written by older versions of c4hero.
 
-  // Views: pinned elements
+  // Views: hand-placed and locked elements. A lock is worth persisting on its
+  // own — it survives a re-layout, so it has to survive a reload.
   const views: Record<string, SidecarView> = {}
   for (const view of allViewsOf(workspace)) {
     const viewElements: Record<string, SidecarViewElement> = {}
     for (const el of view.elements) {
-      if (el.pinned) {
-        const entry: SidecarViewElement = { pinned: true }
+      if (el.pinned || el.locked) {
+        const entry: SidecarViewElement = {}
+        if (el.pinned) entry.pinned = true
+        if (el.locked) entry.locked = true
         if (el.x !== undefined) entry.x = el.x
         if (el.y !== undefined) entry.y = el.y
         viewElements[el.id] = entry
@@ -159,18 +164,18 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     }
   }
 
-  // Views: pinned
+  // Views: hand-placed and locked elements
   if (sidecar.views) {
     for (const view of allViewsOf(workspace)) {
       const viewData = sidecar.views[view.key]
       if (!viewData?.elements) continue
       for (const el of view.elements) {
         const elData = viewData.elements[el.id]
-        if (elData?.pinned) {
-          el.pinned = true
-          if (isFiniteNumber(elData.x)) el.x = elData.x
-          if (isFiniteNumber(elData.y)) el.y = elData.y
-        }
+        if (!elData?.pinned && !elData?.locked) continue
+        if (elData.pinned) el.pinned = true
+        if (elData.locked) el.locked = true
+        if (isFiniteNumber(elData.x)) el.x = elData.x
+        if (isFiniteNumber(elData.y)) el.y = elData.y
       }
     }
   }

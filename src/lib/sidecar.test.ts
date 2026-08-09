@@ -299,3 +299,56 @@ describe('sidecarName', () => {
     expect(sidecarName('line\nbreak.dsl')).toBe('line_break.c4hero.json')
   })
 })
+
+describe('locked view elements round-trip', () => {
+  it('captures a locked element even when it was never dragged', () => {
+    const ws = makeWorkspace()
+    const el = ws.views.systemLandscapeViews[0].elements[0]
+    el.locked = true
+    el.x = 300
+    el.y = 400
+
+    const result = extractSidecar(ws)
+    expect(result!.views?.['sl1']?.elements?.['alice']).toEqual({ locked: true, x: 300, y: 400 })
+  })
+
+  it('keeps pinned and locked apart', () => {
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews[0].elements[0].pinned = true
+
+    const result = extractSidecar(ws)
+    expect(result!.views?.['sl1']?.elements?.['alice']?.locked).toBeUndefined()
+  })
+
+  it('restores a lock and its position on load', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { elements: { alice: { locked: true, x: 12, y: 34 } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].elements[0]).toMatchObject({ locked: true, x: 12, y: 34 })
+    expect(ws.views.systemLandscapeViews[0].elements[0].pinned).toBeUndefined()
+  })
+
+  it('survives a serialize/parse cycle', () => {
+    const ws = makeWorkspace()
+    const el = ws.views.systemLandscapeViews[0].elements[0]
+    el.locked = true
+    el.x = 88
+    el.y = 99
+
+    const reloaded = makeWorkspace()
+    applySidecar(reloaded, parseSidecar(serializeSidecar(extractSidecar(ws)!))!)
+    expect(reloaded.views.systemLandscapeViews[0].elements[0]).toMatchObject({ locked: true, x: 88, y: 99 })
+  })
+
+  it('reads a sidecar written before locking existed', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: true, x: 5, y: 6 } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].elements[0]).toMatchObject({ pinned: true, x: 5, y: 6 })
+    expect(ws.views.systemLandscapeViews[0].elements[0].locked).toBeUndefined()
+  })
+})
