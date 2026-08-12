@@ -68,16 +68,18 @@ export default function MultiSelectBar() {
   const [primaryPointerDown, setPrimaryPointerDown] = useState(false)
   const count = selectedElementIds.length
 
+  const lockedIds = useMemo(() => {
+    if (!workspace || !activeViewKey || selectedElementIds.length === 0) return new Set<string>()
+    const view = getActiveView(workspace, activeViewKey)
+    if (!view) return new Set<string>()
+    const selected = new Set(selectedElementIds)
+    return new Set(view.elements.filter((el) => selected.has(el.id) && el.locked).map((el) => el.id))
+  }, [workspace, activeViewKey, selectedElementIds])
+
   // One button, two jobs: lock the selection unless it's already all locked,
   // in which case the obvious next action is to release it.
-  const allLocked = useMemo(() => {
-    if (!workspace || !activeViewKey || selectedElementIds.length === 0) return false
-    const view = getActiveView(workspace, activeViewKey)
-    if (!view) return false
-    const selected = new Set(selectedElementIds)
-    const inView = view.elements.filter((el) => selected.has(el.id))
-    return inView.length > 0 && inView.every((el) => el.locked)
-  }, [workspace, activeViewKey, selectedElementIds])
+  const allLocked = selectedElementIds.length > 0 && lockedIds.size === selectedElementIds.length
+  const someLocked = lockedIds.size > 0 && !allLocked
 
   useEffect(() => {
     const release = () => setPrimaryPointerDown(false)
@@ -137,7 +139,10 @@ export default function MultiSelectBar() {
   const alignOpenDownward = top < ALIGN_FLYOUT_H + 16
 
   function getSelectedLayoutPositions(): LayoutPosition[] {
-    const rfNodes = reactFlow.getNodes().filter(n => selectedElementIds.includes(n.id))
+    // Locked nodes are excluded outright — they don't participate in the
+    // alignment/distribution math and applyLayoutPositions never learns
+    // their id, so it can't force their on-screen position either.
+    const rfNodes = reactFlow.getNodes().filter(n => selectedElementIds.includes(n.id) && !lockedIds.has(n.id))
     const zoom = reactFlow.getZoom() || 1
     return rfNodes.map(n => ({
       id: n.id,
@@ -461,17 +466,19 @@ export default function MultiSelectBar() {
         {/* Lock / unlock */}
         <button
           className="hover-lift"
-          style={{ ...btnStyle, color: allLocked ? 'var(--color-accent)' : btnStyle.color }}
-          aria-pressed={allLocked}
+          style={{ ...btnStyle, color: (allLocked || someLocked) ? 'var(--color-accent)' : btnStyle.color }}
+          aria-pressed={someLocked ? 'mixed' : allLocked}
           title={allLocked
             ? `Unlock ${count} elements`
-            : `Lock ${count} elements in place — Auto-arrange and dragging leave them alone`}
+            : someLocked
+              ? `${lockedIds.size} of ${count} elements are locked — click to lock the rest`
+              : `Lock ${count} elements in place — Auto-arrange and dragging leave them alone`}
           onClick={() => {
             if (!activeViewKey) return
             setElementsLocked(activeViewKey, selectedElementIds, !allLocked)
           }}
         >
-          {allLocked ? <Lock size={14} /> : <LockOpen size={14} />}
+          {(allLocked || someLocked) ? <Lock size={14} /> : <LockOpen size={14} />}
           <span>{allLocked ? 'Unlock' : 'Lock'}</span>
         </button>
 

@@ -303,17 +303,18 @@ export default function FloatingToolRail() {
                   <div style={{ height: 1, background: 'var(--color-border)', margin: '3px 6px' }} />
                   <button
                     className="flyout-item"
+                    aria-label={`Unlock all, ${lockedCount} locked`}
                     onClick={() => {
                       if (!activeViewKey) return
                       unlockAllInView(activeViewKey)
                       setArrangePanelOpen(false)
                     }}
                   >
-                    <span style={{ color: 'var(--color-text-muted)', display: 'flex' }}>
+                    <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', display: 'flex' }}>
                       <LockOpen size={14} />
                     </span>
-                    Unlock all
-                    <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                    <span aria-hidden="true">Unlock all</span>
+                    <span aria-hidden="true" style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
                       {lockedCount}
                     </span>
                   </button>

@@ -583,14 +583,19 @@ export default function Canvas() {
         requestAnimationFrame(rebuildOverlays)
       }
     } else {
-      // Non-structural change (e.g. new relationship, style update, rename).
-      // Only update edges and refresh node data without replacing positions.
+      // Non-structural change (e.g. new relationship, style update, rename,
+      // lock toggle). Only update edges and refresh node data without
+      // replacing positions.
       setEdges(initialEdges)
       setNodes((prev) => {
         const byId = new Map(initialNodes.map(n => [n.id, n]))
         return prev.map(n => {
           const next = byId.get(n.id)
-          return next ? { ...n, data: next.data, className: next.className } : n
+          // draggable must be carried over here too: locking a node changes
+          // its computed draggable flag (canvasBuilders.ts) but not the
+          // structural signal above, so this is the only branch that ever
+          // applies it to an already-mounted node.
+          return next ? { ...n, data: next.data, className: next.className, draggable: next.draggable } : n
         })
       })
       requestAnimationFrame(rebuildOverlays)
@@ -735,9 +740,16 @@ export default function Canvas() {
       dragMemberIds.add(groupNodeId)
     }
 
+    // Locked members hold their position through a group/boundary drag same
+    // as they do through Auto-arrange: leave them out of memberStart so
+    // onNodeDrag's translation never touches them.
+    const lockedIds = new Set(
+      (viewRef.current?.elements ?? []).filter((el) => el.locked).map((el) => el.id),
+    )
+
     const memberStart = new Map<string, { x: number; y: number }>()
     for (const n of reactFlowInstance.getNodes()) {
-      if (dragMemberIds.has(n.id)) memberStart.set(n.id, { x: n.position.x, y: n.position.y })
+      if (dragMemberIds.has(n.id) && !lockedIds.has(n.id)) memberStart.set(n.id, { x: n.position.x, y: n.position.y })
     }
     overlayDragRef.current = {
       nodeId: node.id,

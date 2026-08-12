@@ -171,9 +171,13 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       if (!viewData?.elements) continue
       for (const el of view.elements) {
         const elData = viewData.elements[el.id]
-        if (!elData?.pinned && !elData?.locked) continue
-        if (elData.pinned) el.pinned = true
-        if (elData.locked) el.locked = true
+        // An entry with explicit pinned:false / locked:false is well-formed
+        // per isSidecarViewElement — checking the entry's presence rather
+        // than the truthiness of its fields is what makes that entry's x/y
+        // apply instead of being silently dropped alongside the false flags.
+        if (!elData) continue
+        if (elData.pinned !== undefined) el.pinned = elData.pinned || undefined
+        if (elData.locked !== undefined) el.locked = elData.locked || undefined
         if (isFiniteNumber(elData.x)) el.x = elData.x
         if (isFiniteNumber(elData.y)) el.y = elData.y
       }

@@ -46,6 +46,43 @@ async function autoArrange(workspace: { page: import('@playwright/test').Page },
   await workspace.page.waitForTimeout(600)
 }
 
+/** A node's own flow-space position, read from the inline transform React
+ *  Flow puts directly on `.react-flow__node`. Unlike a DOM bounding box,
+ *  this is immune to viewport pan/zoom (applied separately to the ancestor
+ *  `.react-flow__viewport`), so it can tell "the node moved" apart from
+ *  "the drag attempt fell through to a pane pan instead". */
+async function nodeFlowPosition(page: import('@playwright/test').Page, id: string) {
+  return page.evaluate((nodeId) => {
+    const node = document.querySelector(`.react-flow__node[data-id="${nodeId}"]`) as HTMLElement | null
+    if (!node) throw new Error(`node not found: ${nodeId}`)
+    const transform = getComputedStyle(node).transform
+    if (transform === 'none') return { x: 0, y: 0 }
+    const matrix = new DOMMatrixReadOnly(transform)
+    return { x: matrix.m41, y: matrix.m42 }
+  }, id)
+}
+
+/** A click point on a group overlay that isn't over one of its member
+ *  nodes, so the drag grabs the group instead of a member underneath it. */
+async function groupDragPoint(page: import('@playwright/test').Page, groupId: string) {
+  return page.evaluate((id) => {
+    const node = document.querySelector(`[data-id="group-${id}"]`) as HTMLElement | null
+    if (!node) throw new Error('group node not found')
+    const rect = node.getBoundingClientRect()
+    const candidates = [
+      { x: rect.right - 12, y: rect.bottom - 12 },
+      { x: rect.left + 12, y: rect.top + 12 },
+      { x: rect.left + rect.width / 2, y: rect.top + 12 },
+      { x: rect.right - 12, y: rect.top + rect.height / 2 },
+    ]
+    for (const point of candidates) {
+      const target = document.elementFromPoint(point.x, point.y) as HTMLElement | null
+      if (target?.closest(`[data-id="group-${id}"]`)) return point
+    }
+    return candidates[0]
+  }, groupId)
+}
+
 test.describe('Node locking', () => {
   test('a locked node keeps its exact position through Auto-arrange', async ({ workspace }) => {
     await workspace.parseAndLoad(DSL)
@@ -80,7 +117,19 @@ test.describe('Node locking', () => {
     await workspace.page.getByRole('button', { name: 'Lock position', exact: true }).click()
     const before = await canvasPosition(workspace, 'api')
 
+    // Locking happens on an already-mounted node — the store-sync effect's
+    // non-structural branch has to carry the new `draggable: false` over to
+    // it, or the DOM node keeps dragging even though the store rejects the
+    // write. Check the node's own flow-space transform (not a DOM bounding
+    // box, which also shifts if the drag attempt falls through to a pane
+    // pan instead of being a no-op) so a regression there can't hide behind
+    // a store-only check.
+    const flowBefore = await nodeFlowPosition(workspace.page, 'api')
     await workspace.dragNodeBy('API', { x: 150, y: 120 })
+    const flowAfter = await nodeFlowPosition(workspace.page, 'api')
+    expect(flowAfter.x).toBeCloseTo(flowBefore.x, 0)
+    expect(flowAfter.y).toBeCloseTo(flowBefore.y, 0)
+
     expect(await canvasPosition(workspace, 'api')).toMatchObject({ x: before!.x, y: before!.y })
 
     // The canvas says so, visibly — and without needing a hover. `toBeVisible`
@@ -137,5 +186,42 @@ test.describe('Node locking', () => {
     expect((await canvasPosition(workspace, 'api'))?.locked).toBe(false)
     expect((await canvasPosition(workspace, 'db'))?.locked).toBe(false)
     await expect(workspace.page.locator('.c4-node-lock')).toHaveCount(0)
+  })
+
+  test('dragging a group leaves a locked member behind while the rest follow', async ({ workspace }) => {
+    await workspace.parseAndLoad(DSL)
+    await workspace.fitView()
+
+    await workspace.clickNode('API')
+    await workspace.page.getByRole('button', { name: 'Lock position', exact: true }).click()
+
+    const groupId = await workspace.page.evaluate(() =>
+      (window as unknown as { __testAddGroup?: (n: string, i: string[]) => string })
+        .__testAddGroup?.('Backend', ['web', 'api']),
+    )
+    expect(groupId).toBeTruthy()
+    await workspace.page.waitForTimeout(300)
+
+    const apiBefore = await nodeFlowPosition(workspace.page, 'api')
+    const webBefore = await nodeFlowPosition(workspace.page, 'web')
+    const apiStoreBefore = await canvasPosition(workspace, 'api')
+
+    const dragPoint = await groupDragPoint(workspace.page, groupId as string)
+    await workspace.page.mouse.move(dragPoint.x, dragPoint.y)
+    await workspace.page.mouse.down()
+    await workspace.page.mouse.move(dragPoint.x + 140, dragPoint.y + 110, { steps: 12 })
+    await workspace.page.mouse.up()
+    await workspace.page.waitForTimeout(300)
+
+    const apiAfter = await nodeFlowPosition(workspace.page, 'api')
+    const webAfter = await nodeFlowPosition(workspace.page, 'web')
+
+    // The locked member never moved, on screen or in the store...
+    expect(apiAfter.x).toBeCloseTo(apiBefore.x, 0)
+    expect(apiAfter.y).toBeCloseTo(apiBefore.y, 0)
+    expect(await canvasPosition(workspace, 'api')).toMatchObject({ x: apiStoreBefore!.x, y: apiStoreBefore!.y })
+
+    // ...while its unlocked group-mate followed the drag.
+    expect(Math.abs(webAfter.x - webBefore.x)).toBeGreaterThan(50)
   })
 })

@@ -19,8 +19,9 @@ export type ViewSlice = Pick<WorkspaceState,
 >
 
 /** Drop the saved positions a full re-layout is meant to discard, leaving
- *  locked elements exactly where the user put them. */
-function clearUnlockedPositions(view: View): void {
+ *  locked elements exactly where the user put them. Exported so tests can
+ *  exercise the real implementation instead of a hand-copied stand-in. */
+export function clearUnlockedPositions(view: View): void {
   for (const el of view.elements) {
     if (el.locked) continue
     el.x = undefined

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { Node, Edge } from '@xyflow/react'
 import type { View, Group, Workspace } from '@/types/model'
 import { buildBoundaryLayoutClusters, buildBoundaryNodes, buildGroupNodes } from '@/components/canvas/canvasBuilders'
+import { clearUnlockedPositions } from '@/store/slices/view-slice'
 import { applyAutoLayout, spaceOverlayClusters } from './canvasLayout'
 
 function makeNode(id: string): Node {
@@ -462,16 +463,9 @@ describe('applyAutoLayout with measured node sizes', () => {
 })
 
 describe('locked elements through a full re-layout', () => {
-  /** What Auto-arrange does to a view: drop the positions of everything that
-   *  isn't locked, then lay the view out again. Mirrors resetAndRelayout. */
-  function clearUnlockedPositions(view: View): void {
-    for (const el of view.elements) {
-      if (el.locked) continue
-      el.x = undefined
-      el.y = undefined
-      el.pinned = undefined
-    }
-  }
+  // Uses the real clearUnlockedPositions from view-slice.ts — what
+  // resetAndRelayout/setLayoutDirection actually call — rather than a
+  // hand-copied stand-in, so a regression there fails this suite too.
 
   it('leaves a locked node exactly where it was and reflows the rest around it', () => {
     const view = makeView(['a', 'b', 'c'])

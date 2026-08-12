@@ -138,6 +138,20 @@ describe('applySidecar', () => {
     expect(ws.views.systemLandscapeViews[0].elements[0].y).toBeUndefined()
   })
 
+  it('still applies x/y from an entry whose pinned and locked are explicitly false', () => {
+    // isSidecarViewElement explicitly allows pinned/locked === false as
+    // well-formed — an entry shaped like this shouldn't have its x/y
+    // silently dropped just because neither flag is truthy.
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: false, locked: false, x: 42, y: 84 } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].elements[0]).toMatchObject({ x: 42, y: 84 })
+    expect(ws.views.systemLandscapeViews[0].elements[0].pinned).toBeFalsy()
+    expect(ws.views.systemLandscapeViews[0].elements[0].locked).toBeFalsy()
+  })
+
   it('is a no-op when version !== 1', () => {
     const ws = makeWorkspace()
     applySidecar(ws, { version: 99 as 1, elements: { alice: { status: 'Removed' } } })
