@@ -496,6 +496,104 @@ describe('locked elements through a full re-layout', () => {
     }
   })
 
+  it('reflows nodes two or more hops from the locked node instead of parking them', () => {
+    // customer -> web -> api -> db with api locked: customer and db have no
+    // direct edge to the lock, but they're in its component, so they belong
+    // in the dagre flow — not dumped into the disconnected-nodes parking row.
+    const ids = ['customer', 'web', 'api', 'db']
+    const view = makeView(ids)
+    const locked = view.elements.find((el) => el.id === 'api')!
+    locked.locked = true
+    locked.x = 2000
+    locked.y = 900
+
+    clearUnlockedPositions(view)
+
+    const edges: Edge[] = [
+      { id: 'e1', source: 'customer', target: 'web' },
+      { id: 'e2', source: 'web', target: 'api' },
+      { id: 'e3', source: 'api', target: 'db' },
+    ]
+    const nodes = ids.map(makeNode)
+    nodes[2].position = { x: 2000, y: 900 } // buildNodes seeds saved positions
+    const laidOut = applyAutoLayout(nodes, edges, view, [], 'LR')
+
+    expect(laidOut.find((n) => n.id === 'api')!.position).toEqual({ x: 2000, y: 900 })
+
+    // Left-to-right chain: each node sits strictly right of its predecessor.
+    // The parking row would put customer/db at the frozen bbox's left edge.
+    const xs = ids.map((id) => laidOut.find((n) => n.id === id)!.position.x)
+    for (let i = 1; i < xs.length; i++) {
+      expect(xs[i]).toBeGreaterThan(xs[i - 1])
+    }
+  })
+
+  it('keeps two locked nodes fixed without dropping reflowed nodes on either of them', () => {
+    const ids = ['a', 'b', 'c', 'd']
+    const view = makeView(ids)
+    for (const [id, x, y] of [['a', 0, 0], ['d', 3000, 1500]] as const) {
+      const el = view.elements.find((e) => e.id === id)!
+      el.locked = true
+      el.x = x
+      el.y = y
+    }
+
+    clearUnlockedPositions(view)
+
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'b', target: 'c' },
+      { id: 'e3', source: 'c', target: 'd' },
+    ]
+    const nodes = ids.map(makeNode)
+    nodes[0].position = { x: 0, y: 0 }
+    nodes[3].position = { x: 3000, y: 1500 }
+    const laidOut = applyAutoLayout(nodes, edges, view, [], 'LR')
+
+    expect(laidOut.find((n) => n.id === 'a')!.position).toEqual({ x: 0, y: 0 })
+    expect(laidOut.find((n) => n.id === 'd')!.position).toEqual({ x: 3000, y: 1500 })
+
+    // Neither reflowed node may cover a locked one (default node size 200x100).
+    const nodesOverlap = (p: Node, q: Node) =>
+      p.position.x < q.position.x + 200 && p.position.x + 200 > q.position.x &&
+      p.position.y < q.position.y + 100 && p.position.y + 100 > q.position.y
+    for (const movedId of ['b', 'c']) {
+      const moved = laidOut.find((n) => n.id === movedId)!
+      for (const lockedId of ['a', 'd']) {
+        const fixed = laidOut.find((n) => n.id === lockedId)!
+        expect(nodesOverlap(moved, fixed)).toBe(false)
+      }
+    }
+  })
+
+  it('parks a component with no locked member below the locked content, layout intact', () => {
+    // a -> b is anchored by locked a; x -> y is a separate component with no
+    // lock, so it parks below the frozen bbox — as a unit, not node-by-node.
+    const ids = ['a', 'b', 'x', 'y']
+    const view = makeView(ids)
+    const locked = view.elements.find((el) => el.id === 'a')!
+    locked.locked = true
+    locked.x = 100
+    locked.y = 100
+
+    clearUnlockedPositions(view)
+
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'x', target: 'y' },
+    ]
+    const nodes = ids.map(makeNode)
+    nodes[0].position = { x: 100, y: 100 }
+    const laidOut = applyAutoLayout(nodes, edges, view, [], 'LR')
+
+    const x = laidOut.find((n) => n.id === 'x')!
+    const y = laidOut.find((n) => n.id === 'y')!
+    // Below the frozen bbox (locked a's bottom edge is 100 + 100)...
+    expect(Math.min(x.position.y, y.position.y)).toBeGreaterThanOrEqual(200)
+    // ...with the component's internal left-to-right structure preserved.
+    expect(y.position.x).toBeGreaterThan(x.position.x + 200)
+  })
+
   it('relays out everything when no element is locked', () => {
     const view = makeView(['a', 'b'])
     for (const el of view.elements) { el.x = 500; el.y = 500 }

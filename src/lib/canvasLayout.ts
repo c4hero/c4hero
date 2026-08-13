@@ -229,7 +229,11 @@ function separateOverlayClusters(
     .filter((cluster) => cluster.memberIds.size > 0)
 
   const overlayClusters = [...boundaryOverlayClusters, ...groupClusters]
-  if (overlayClusters.length === 0) return nodes
+  // With no overlays and no frozen nodes, dagre's own spacing is already
+  // collision-free. Frozen nodes change that: reflowed nodes are stitched onto
+  // their frame by translation and can land on one, so the loose-node
+  // separation below has to run even in a group-less, boundary-less view.
+  if (overlayClusters.length === 0 && frozenIds.size === 0) return nodes
 
   const parentById = new Map<string, string | null>()
   for (const cluster of overlayClusters) {
@@ -409,10 +413,15 @@ export function spaceOverlayClusters(
  *
  *  Coordinate-frame stitching: dagre lays out from its own origin, so its
  *  output coordinates have no relation to the saved positions of frozen nodes.
- *  When at least one node is frozen, we pick it as an anchor and translate
- *  dagre's output for unfrozen nodes by `(savedAnchor - dagreAnchor)` so the
- *  new nodes land in the existing cluster's coordinate frame rather than far
- *  off near the dagre origin.
+ *  Stitching happens per connected component. A component that contains frozen
+ *  nodes is translated by the average `(saved - dagre)` offset of those nodes,
+ *  so its unfrozen members land in the existing frame (splitting the error
+ *  between multiple frozen anchors rather than obeying only the first). A
+ *  component with no frozen member can't be stitched — dagre placed it
+ *  relative to its own origin, typically far from the content the user is
+ *  looking at — so it's parked, internal layout intact, just below the frozen
+ *  bbox. Residual collisions against frozen nodes are resolved by the final
+ *  cluster-separation pass, which treats frozen nodes as immovable.
  *
  *  Groups are expressed as dagre compound-graph parents so that members cluster
  *  together in the final layout and the group rectangle (drawn afterwards around
@@ -495,68 +504,112 @@ export function applyAutoLayout(
 
   dagre.layout(g)
 
-  // Stitch dagre's output frame onto the existing frozen-node frame, if any.
-  // Pick any frozen node as the anchor; the offset between its saved position
-  // and its dagre-computed position is the translation to apply to unfrozen
-  // nodes that dagre placed *relative to* the anchor (i.e. connected via edges).
-  let offsetX = 0
-  let offsetY = 0
-  const anchorId = nodes.find(n => frozenIds.has(n.id))?.id
-  if (anchorId) {
-    const dagrePos = g.node(anchorId)
-    const savedAnchor = view.elements.find(e => e.id === anchorId)
-    const anchorSize = sizeById.get(anchorId) ?? { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT }
-    if (dagrePos && savedAnchor && savedAnchor.x !== undefined && savedAnchor.y !== undefined) {
-      offsetX = savedAnchor.x - (dagrePos.x - anchorSize.width / 2)
-      offsetY = savedAnchor.y - (dagrePos.y - anchorSize.height / 2)
-    }
+  const dagreTopLeft = (id: string): { x: number; y: number } | null => {
+    const pos = g.node(id)
+    if (!pos) return null
+    const size = sizeById.get(id) ?? { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT }
+    return { x: pos.x - size.width / 2, y: pos.y - size.height / 2 }
   }
 
-  // Bbox of frozen nodes' saved positions. New disconnected nodes get parked
-  // just below this box rather than wherever dagre dumped them as a separate
-  // component (which is typically far off to the side, the symptom users see
-  // when adding a freshly-created person/system with no edges yet).
-  let bboxMinX = Infinity, bboxMaxX = -Infinity, bboxMaxY = -Infinity
-  if (anchorId) {
+  // Connected components over the element graph. Stitching decisions are made
+  // per component: dagre's relative placement is meaningful between any two
+  // nodes connected by *some* path, not only direct neighbors of a frozen
+  // node — judging each node by its direct edges would dump everything two or
+  // more hops from a locked node into the parking row below.
+  const adjacency = new Map<string, string[]>()
+  for (const edge of edges) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) continue
+    const forward = adjacency.get(edge.source) ?? []
+    forward.push(edge.target)
+    adjacency.set(edge.source, forward)
+    const backward = adjacency.get(edge.target) ?? []
+    backward.push(edge.source)
+    adjacency.set(edge.target, backward)
+  }
+  const componentOf = new Map<string, number>()
+  let componentCount = 0
+  for (const node of nodes) {
+    if (componentOf.has(node.id)) continue
+    const stack = [node.id]
+    componentOf.set(node.id, componentCount)
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      for (const neighbor of adjacency.get(id) ?? []) {
+        if (componentOf.has(neighbor)) continue
+        componentOf.set(neighbor, componentCount)
+        stack.push(neighbor)
+      }
+    }
+    componentCount++
+  }
+
+  // Per-component translation from dagre's frame onto the canvas frame.
+  // Components holding frozen nodes average the (saved - dagre) offset over
+  // them, splitting the error between multiple anchors instead of placing
+  // everything relative to whichever frozen node happens to come first.
+  const savedById = new Map<string, { x: number; y: number }>()
+  for (const e of view.elements) {
+    if (e.x !== undefined && e.y !== undefined) savedById.set(e.id, { x: e.x, y: e.y })
+  }
+  const offsetByComponent = new Map<number, { x: number; y: number }>()
+  const offsetSums = new Map<number, { x: number; y: number; count: number }>()
+  for (const node of nodes) {
+    if (!frozenIds.has(node.id)) continue
+    const saved = savedById.get(node.id)
+    const dagrePos = dagreTopLeft(node.id)
+    if (!saved || !dagrePos) continue
+    const component = componentOf.get(node.id)!
+    const sum = offsetSums.get(component) ?? { x: 0, y: 0, count: 0 }
+    sum.x += saved.x - dagrePos.x
+    sum.y += saved.y - dagrePos.y
+    sum.count++
+    offsetSums.set(component, sum)
+  }
+  for (const [component, sum] of offsetSums) {
+    offsetByComponent.set(component, { x: sum.x / sum.count, y: sum.y / sum.count })
+  }
+
+  // Bbox of frozen nodes' saved positions. Components with no frozen member
+  // get parked just below this box rather than wherever dagre dumped them as
+  // a separate component (which is typically far off to the side, the symptom
+  // users see when adding a freshly-created person/system with no edges yet).
+  let bboxMinX = Infinity, bboxMaxY = -Infinity
+  if (frozenIds.size > 0) {
     for (const e of view.elements) {
       if (e.x === undefined || e.y === undefined) continue
       const size = sizeById.get(e.id) ?? { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT }
       bboxMinX = Math.min(bboxMinX, e.x)
-      bboxMaxX = Math.max(bboxMaxX, e.x + size.width)
       bboxMaxY = Math.max(bboxMaxY, e.y + size.height)
     }
   }
-  const haveBbox = isFinite(bboxMinX)
-
-  // An unfrozen node is "anchored" to existing content when it shares an edge
-  // with any frozen node — in that case dagre's relative placement is
-  // meaningful and the anchor offset is the right translation. A node with no
-  // such edge is disconnected and would land in dagre's own component layout
-  // (far away), so we override its position to sit below the frozen bbox.
-  const isAnchoredToFrozen = (id: string): boolean => {
-    for (const e of edges) {
-      if (e.source === id && frozenIds.has(e.target)) return true
-      if (e.target === id && frozenIds.has(e.source)) return true
+  if (isFinite(bboxMinX)) {
+    // Park unanchored components in a row below the frozen bbox, keeping each
+    // component's internal dagre layout intact.
+    let parkCursorX = bboxMinX
+    for (let component = 0; component < componentCount; component++) {
+      if (offsetByComponent.has(component)) continue
+      let minX = Infinity, minY = Infinity, maxX = -Infinity
+      for (const node of nodes) {
+        if (componentOf.get(node.id) !== component) continue
+        const topLeft = dagreTopLeft(node.id)
+        if (!topLeft) continue
+        const size = sizeById.get(node.id) ?? { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT }
+        minX = Math.min(minX, topLeft.x)
+        minY = Math.min(minY, topLeft.y)
+        maxX = Math.max(maxX, topLeft.x + size.width)
+      }
+      if (!isFinite(minX)) continue
+      offsetByComponent.set(component, { x: parkCursorX - minX, y: bboxMaxY + 120 - minY })
+      parkCursorX += (maxX - minX) + 120
     }
-    return false
   }
 
-  let parkIndex = 0
   const laidOutNodes = nodes.map((node) => {
     if (frozenIds.has(node.id)) return node
-    if (haveBbox && !isAnchoredToFrozen(node.id)) {
-      // Park disconnected new nodes in a row below the frozen bbox.
-      const x = bboxMinX + parkIndex * 250
-      const y = bboxMaxY + 120
-      parkIndex++
-      return { ...node, position: { x, y } }
-    }
-    const pos = g.node(node.id)
-    const size = sizeById.get(node.id) ?? { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT }
-    return {
-      ...node,
-      position: { x: pos.x - size.width / 2 + offsetX, y: pos.y - size.height / 2 + offsetY },
-    }
+    const topLeft = dagreTopLeft(node.id)
+    if (!topLeft) return node
+    const offset = offsetByComponent.get(componentOf.get(node.id)!) ?? { x: 0, y: 0 }
+    return { ...node, position: { x: topLeft.x + offset.x, y: topLeft.y + offset.y } }
   })
 
   return separateOverlayClusters(laidOutNodes, sizeById, frozenIds, groups, activeBoundaryClusters)

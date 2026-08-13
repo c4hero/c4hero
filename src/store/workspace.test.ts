@@ -4658,6 +4658,25 @@ describe('locking elements against re-layout', () => {
     expect(el('alice').locked).toBe(true)
   })
 
+  it('unlocking preserves position persistence for never-dragged nodes', () => {
+    // A lock applied to an auto-laid-out node: x/y present (written by
+    // syncAutoLayoutPositions), pinned absent because it was never dragged.
+    const { ws, viewKey } = makeWsWithView()
+    for (const e of ws.views.systemLandscapeViews[0].elements) delete e.pinned
+    useWorkspaceStore.setState({ workspace: ws, activeViewKey: viewKey })
+
+    useWorkspaceStore.getState().setElementsLocked('v1', ['alice', 'api'], true)
+    useWorkspaceStore.getState().setElementsLocked('v1', ['alice'], false)
+    useWorkspaceStore.getState().unlockAllInView('v1')
+
+    // Both unlock paths adopt the held position as hand-authored, so the
+    // sidecar keeps persisting it and the next load doesn't re-layout it away.
+    expect(el('alice')).toMatchObject({ x: 10, y: 20, pinned: true })
+    expect(el('alice').locked).toBeUndefined()
+    expect(el('api')).toMatchObject({ x: 50, y: 80, pinned: true })
+    expect(el('api').locked).toBeUndefined()
+  })
+
   it('unlockAllInView does nothing when no element is locked', () => {
     const undoBefore = useWorkspaceStore.getState().undoStack.length
     useWorkspaceStore.getState().unlockAllInView('v1')

@@ -264,6 +264,11 @@ export const createViewSlice: StateCreator<
     pushUndoSnapshot(s)
     for (const el of changed) {
       el.locked = locked || undefined
+      // Adopt the current position as hand-authored. Without this, a
+      // locked-but-never-dragged node is persisted only via `locked`, and
+      // unlocking it later would silently drop the position it had been
+      // holding across re-layouts and reloads.
+      if (el.x !== undefined && el.y !== undefined) el.pinned = true
     }
   }),
 
@@ -274,6 +279,11 @@ export const createViewSlice: StateCreator<
     const locked = view.elements.filter((el) => el.locked)
     if (locked.length === 0) return
     pushUndoSnapshot(s)
-    for (const el of locked) el.locked = undefined
+    for (const el of locked) {
+      el.locked = undefined
+      // Same as setElementsLocked: unlocking releases the node, it doesn't
+      // forfeit the position the lock was holding.
+      if (el.x !== undefined && el.y !== undefined) el.pinned = true
+    }
   }),
 })

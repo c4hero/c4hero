@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/workspace'
+import { test, expect, type WorkspaceHelper } from '../fixtures/workspace'
 
 /** A view whose auto-arrange result visibly moves things around. */
 const DSL = `workspace "Locking" {
@@ -40,10 +40,14 @@ async function canvasPosition(workspace: { page: import('@playwright/test').Page
   }, id)
 }
 
-async function autoArrange(workspace: { page: import('@playwright/test').Page }, direction: string) {
+async function autoArrange(workspace: WorkspaceHelper, direction: string) {
   await workspace.page.getByRole('button', { name: 'Auto-arrange' }).click()
   await workspace.page.getByRole('button', { name: direction }).click()
-  await workspace.page.waitForTimeout(600)
+  // The re-layout bumps layoutVersion and refits the viewport; the store
+  // write-back lands before the fit, so a settled viewport means settled
+  // positions. Condition-based, unlike a fixed sleep, which can both waste
+  // wall time and (on a slow runner) elapse before the relayout finishes.
+  await workspace.waitForCanvasSettled()
 }
 
 /** A node's own flow-space position, read from the inline transform React
@@ -132,22 +136,14 @@ test.describe('Node locking', () => {
 
     expect(await canvasPosition(workspace, 'api')).toMatchObject({ x: before!.x, y: before!.y })
 
-    // The canvas says so, visibly — and without needing a hover. `toBeVisible`
-    // alone would pass on an opacity-0 element, which is how this first shipped.
+    // The canvas says so, visibly — and without needing a hover. The bug this
+    // guards is structural: the glyph once rendered inside .c4-node-actions,
+    // which fades to opacity 0 until the node is hovered — invisible lock
+    // state. Assert placement outside that container instead of sampling
+    // effective opacity on a timer.
     const glyph = workspace.page.locator('.react-flow__node[data-id="api"] .c4-node-lock')
     await expect(glyph).toBeVisible()
-    await workspace.page.mouse.move(5, 5)
-    await workspace.page.waitForTimeout(300)
-    const opacity = await glyph.evaluate((el) => {
-      let node: HTMLElement | null = el as HTMLElement
-      let effective = 1
-      while (node) {
-        effective *= Number(window.getComputedStyle(node).opacity)
-        node = node.parentElement
-      }
-      return effective
-    })
-    expect(opacity).toBeGreaterThan(0.5)
+    await expect(workspace.page.locator('.c4-node-actions .c4-node-lock')).toHaveCount(0)
 
     await workspace.clickNode('API')
     await workspace.page.getByRole('button', { name: 'Unlock position', exact: true }).click()

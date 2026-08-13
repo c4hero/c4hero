@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, isFocalScopeElement } from '@/store/workspace'
+import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location, Workspace } from '@/types/model'
@@ -170,7 +170,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   ) : []
   const isLocked = useWorkspaceStore((s) => {
     if (!s.workspace || !s.activeViewKey) return false
-    const view = getAllViews(s.workspace).find((v) => v.key === s.activeViewKey)
+    const view = getActiveView(s.workspace, s.activeViewKey)
     return view?.elements.find((el) => el.id === element.id)?.locked === true
   })
   const setElementsLocked = useWorkspaceStore((s) => s.setElementsLocked)
