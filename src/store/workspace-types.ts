@@ -189,6 +189,9 @@ export interface WorkspaceState extends UndoState {
    *  through Auto-arrange and can't be dragged. */
   setElementsLocked: (viewKey: string, ids: string[], locked: boolean) => void
   unlockAllInView: (viewKey: string) => void
+  /** Lock or unlock a whole view's layout: Auto-arrange and direction changes
+   *  become no-ops and nothing can be dragged. Element locks are unaffected. */
+  setViewLocked: (viewKey: string, locked: boolean) => void
 
   // Layout epoch — increments on explicit relayout/direction change so Canvas can refit
   layoutVersion: number

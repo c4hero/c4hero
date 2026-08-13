@@ -37,6 +37,8 @@ interface SidecarViewElement {
 }
 
 interface SidecarView {
+  /** View-level layout lock (freezes Auto-arrange + dragging for the view). */
+  locked?: boolean
   elements?: Record<string, SidecarViewElement>
 }
 
@@ -71,6 +73,7 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
 
 function isSidecarView(value: unknown): value is SidecarView {
   if (!isRecord(value)) return false
+  if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
   return true
 }
@@ -93,8 +96,9 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
   // migration of existing sidecar files written by older versions of c4hero.
 
-  // Views: hand-placed and locked elements. A lock is worth persisting on its
-  // own — it survives a re-layout, so it has to survive a reload.
+  // Views: hand-placed and locked elements, plus the view-level layout lock.
+  // A lock is worth persisting on its own — it survives a re-layout, so it
+  // has to survive a reload.
   const views: Record<string, SidecarView> = {}
   for (const view of allViewsOf(workspace)) {
     const viewElements: Record<string, SidecarViewElement> = {}
@@ -109,9 +113,13 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
         hasData = true
       }
     }
-    if (Object.keys(viewElements).length > 0) {
-      views[view.key] = { elements: viewElements }
+    const entry: SidecarView = {}
+    if (view.locked) {
+      entry.locked = true
+      hasData = true
     }
+    if (Object.keys(viewElements).length > 0) entry.elements = viewElements
+    if (entry.locked || entry.elements) views[view.key] = entry
   }
   if (Object.keys(views).length > 0) sidecar.views = views
 
@@ -164,11 +172,13 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     }
   }
 
-  // Views: hand-placed and locked elements
+  // Views: the view-level layout lock, plus hand-placed and locked elements
   if (sidecar.views) {
     for (const view of allViewsOf(workspace)) {
       const viewData = sidecar.views[view.key]
-      if (!viewData?.elements) continue
+      if (!viewData) continue
+      if (viewData.locked) view.locked = true
+      if (!viewData.elements) continue
       for (const el of view.elements) {
         const elData = viewData.elements[el.id]
         // An entry with explicit pinned:false / locked:false is well-formed

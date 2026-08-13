@@ -366,3 +366,48 @@ describe('locked view elements round-trip', () => {
     expect(ws.views.systemLandscapeViews[0].elements[0].locked).toBeUndefined()
   })
 })
+
+describe('view-level lock round-trip', () => {
+  it('persists view.locked through extract → serialize → parse → apply', () => {
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews[0].locked = true
+
+    const sidecar = extractSidecar(ws)
+    expect(sidecar).not.toBeNull()
+
+    const reloaded = makeWorkspace()
+    applySidecar(reloaded, parseSidecar(serializeSidecar(sidecar!))!)
+    expect(reloaded.views.systemLandscapeViews[0].locked).toBe(true)
+  })
+
+  it('persists a view lock even when no element is pinned or locked', () => {
+    // The lock must not depend on some element also having sidecar data —
+    // a fully auto-laid-out view can still be locked.
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews[0].locked = true
+    for (const el of ws.views.systemLandscapeViews[0].elements) {
+      el.pinned = undefined
+      el.locked = undefined
+    }
+
+    const sidecar = extractSidecar(ws)
+    expect(sidecar?.views?.sl1?.locked).toBe(true)
+  })
+
+  it('reads a sidecar without the view-level flag (written before it existed)', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: true, x: 5, y: 6 } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].locked).toBeUndefined()
+  })
+
+  it('rejects a malformed locked value', () => {
+    const parsed = parseSidecar(JSON.stringify({
+      version: 1,
+      views: { sl1: { locked: 'yes' } },
+    }))
+    expect(parsed).toBeNull()
+  })
+})

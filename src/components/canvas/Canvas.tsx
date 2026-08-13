@@ -135,7 +135,7 @@ function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, 
   const contentOnly = nodes.filter((n) => !isOverlayNode(n))
   const previousOverlays = new Map(nodes.filter(isOverlayNode).map((n) => [n.id, n]))
   const boundaryClusters = view ? buildBoundaryLayoutClusters(workspace, view) : []
-  const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters)
+  const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters, { draggable: view?.locked !== true })
   const updatedBoundaries = view ? buildBoundaryNodes(workspace, view, contentOnly, updatedGroups) : []
   const overlays = [...updatedBoundaries, ...updatedGroups].map((overlay) => {
     const previous = previousOverlays.get(overlay.id)
@@ -358,7 +358,7 @@ export default function Canvas() {
     const laidOut = applyAutoLayout(layoutNodes, tempEdges, view, workspace.model.groups, direction, boundaryInternalIds, boundaryClusters)
 
     // 4. Build group background nodes and scope boundary using post-layout positions
-    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut, boundaryClusters)
+    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut, boundaryClusters, { draggable: view.locked !== true })
     const boundaryNodes = buildBoundaryNodes(workspace, view, laidOut, groupNodes)
     const overlayNodes = [...boundaryNodes, ...groupNodes]
     const allNodes = [...overlayNodes, ...laidOut]
@@ -738,6 +738,13 @@ export default function Canvas() {
     const dragMemberIds = new Set(memberSet)
     for (const groupNodeId of getNestedGroupNodeIds(workspaceRef.current, memberSet, node.id)) {
       dragMemberIds.add(groupNodeId)
+    }
+
+    // A locked view freezes everything — the overlay itself is undraggable,
+    // but bail before capturing members in case a drag start races a lock.
+    if (viewRef.current?.locked) {
+      overlayDragRef.current = null
+      return
     }
 
     // Locked members hold their position through a group/boundary drag same
