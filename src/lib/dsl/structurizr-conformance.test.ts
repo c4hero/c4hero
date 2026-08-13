@@ -216,6 +216,144 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect(validate(source)).toContain('View keys can only contain')
     })
 
+    // Deployment + dynamic views: the grammar shapes that broke the first
+    // implementation attempt (PR #105), each validated against the real
+    // parser rather than against our own round-trip alone.
+    describe('deployment and dynamic views', () => {
+        const DEPLOYMENT_DSL = `
+workspace "Deploy" {
+  model {
+    sys = softwareSystem "Sys" {
+      web = container "Web"
+      db = container "DB"
+      web -> db "Reads" "JDBC"
+    }
+    ext = softwareSystem "Mainframe"
+    web -> ext "Uses"
+
+    deploymentEnvironment "Live" {
+      deploymentNode "AWS" "" "Amazon Web Services" {
+        deploymentNode "us-east-1" {
+          lb = infrastructureNode "Load Balancer" "Routes traffic" "ELB"
+          deploymentNode "Web Server" "" "Ubuntu" "" 4 {
+            liveWeb = containerInstance web
+          }
+          deploymentNode "DB Server" "" "Ubuntu" {
+            liveDb = containerInstance db
+          }
+        }
+      }
+      deploymentNode "DC" {
+        liveExt = softwareSystemInstance ext
+      }
+      lb -> liveWeb "Forwards to" "HTTPS"
+    }
+  }
+  views {
+    deployment sys "Live" "LiveScoped" {
+      include *
+      autoLayout lr
+    }
+    deployment * "Live" "LiveAll" {
+      include *
+    }
+  }
+}
+`
+        const DYNAMIC_DSL = `
+workspace "Dynamics" {
+  model {
+    user = person "User"
+    sys = softwareSystem "Sys" {
+      spa = container "SPA"
+      api = container "API"
+      db = container "DB"
+      spa -> api "Submits order"
+      api -> db "Persists order"
+    }
+    user -> spa "Uses"
+    user -> sys "Uses the system"
+  }
+  views {
+    dynamic sys "Checkout" {
+      user -> spa "Opens checkout"
+      spa -> api "Submits order"
+      api -> db "Persists order"
+      api -> spa "Returns confirmation"
+      spa -> api "Submits order"
+    }
+  }
+}
+`
+
+        it('the deployment fixture itself is valid upstream', () => {
+            expect(validate(DEPLOYMENT_DSL)).toBeNull()
+        })
+
+        it('the dynamic fixture itself is valid upstream', () => {
+            expect(validate(DYNAMIC_DSL)).toBeNull()
+        })
+
+        it('a parsed deployment workspace re-serializes to DSL Structurizr accepts', () => {
+            const { workspace, errors } = parseDSL(DEPLOYMENT_DSL)
+            expect(errors).toEqual([])
+            expect(validate(serializeDSL(workspace))).toBeNull()
+        })
+
+        it('a parsed dynamic workspace re-serializes to DSL Structurizr accepts', () => {
+            const { workspace, errors } = parseDSL(DYNAMIC_DSL)
+            expect(errors).toEqual([])
+            expect(validate(serializeDSL(workspace))).toBeNull()
+        })
+
+        it('the positional instances argument survives to the real parser', () => {
+            // PR #105 never consumed the 5th positional argument, silently
+            // re-parenting children. Compare what the real parser stores for
+            // our re-serialization against the original.
+            const { workspace, errors } = parseDSL(DEPLOYMENT_DSL)
+            expect(errors).toEqual([])
+            type ExportedNode = {
+                name: string
+                instances?: string | number
+                children?: ExportedNode[]
+                containerInstances?: unknown[]
+                infrastructureNodes?: unknown[]
+            }
+            const nodesOf = (model: Record<string, unknown>): ExportedNode[] => {
+                const m = model.model as { deploymentNodes?: ExportedNode[] } | undefined
+                return m?.deploymentNodes ?? []
+            }
+            const flatten = (nodes: ExportedNode[]): ExportedNode[] =>
+                nodes.flatMap(n => [n, ...flatten(n.children ?? [])])
+
+            const theirs = flatten(nodesOf(exportModel(DEPLOYMENT_DSL)))
+            const ours = flatten(nodesOf(exportModel(serializeDSL(workspace))))
+
+            const summarize = (nodes: ExportedNode[]) => nodes
+                .map(n => ({
+                    name: n.name,
+                    instances: String(n.instances ?? '1'),
+                    containerInstances: (n.containerInstances ?? []).length,
+                    infrastructureNodes: (n.infrastructureNodes ?? []).length,
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name))
+            expect(summarize(ours)).toEqual(summarize(theirs))
+            expect(summarize(theirs).find(n => n.name === 'Web Server')?.instances).toBe('4')
+        })
+
+        it('dynamic steps keep order, repeats, and the response step through re-serialization', () => {
+            const { workspace, errors } = parseDSL(DYNAMIC_DSL)
+            expect(errors).toEqual([])
+            const reparsed = parseDSL(serializeDSL(workspace))
+            expect(reparsed.errors).toEqual([])
+            const view = reparsed.workspace.views.dynamicViews[0]
+            expect(view.relationships.map(s => s.order)).toEqual(['1', '2', '3', '4', '5'])
+            // Step 4 is the response; step 5 repeats step 2's relationship.
+            expect(view.relationships[3].response).toBe(true)
+            expect(view.relationships[4].id).toBe(view.relationships[1].id)
+        })
+    })
+
     it('nested model, container and component groups serialize to DSL Structurizr accepts', () => {
         const { workspace, errors } = parseDSL(`
 workspace "Grouped" {

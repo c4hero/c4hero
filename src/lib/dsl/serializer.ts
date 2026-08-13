@@ -501,12 +501,10 @@ class SerializerContext {
             this.serializeDeploymentEnvironment(env)
         }
 
-        // Relationships. Implied instance relationships are parser-derived
-        // (replicated from container/system relationships) — never emitted.
-        const explicitRels = model.relationships.filter(r => !r.implied)
-        if (explicitRels.length > 0) {
+        // Relationships
+        if (model.relationships.length > 0) {
             this.emitBlank()
-            for (const rel of explicitRels) {
+            for (const rel of model.relationships) {
                 this.serializeRelationship(rel)
             }
         }
@@ -1010,8 +1008,17 @@ class SerializerContext {
         for (const step of view.relationships) {
             const rel = relById.get(step.id)
             if (!rel) continue
-            const sourceRef = this.idToVar.get(rel.sourceId) ?? rel.sourceId
-            const destRef = this.idToVar.get(rel.destinationId) ?? rel.destinationId
+            // Steps carry their own endpoints in travel order: a response
+            // step runs against the relationship's direction, and a
+            // hierarchy-implied step connects different granularity than the
+            // backing relationship. Older workspaces without step endpoints
+            // fall back to the relationship's, reversed for responses.
+            const fromId = step.sourceId
+                ?? (step.response ? rel.destinationId : rel.sourceId)
+            const toId = step.destinationId
+                ?? (step.response ? rel.sourceId : rel.destinationId)
+            const sourceRef = this.idToVar.get(fromId) ?? fromId
+            const destRef = this.idToVar.get(toId) ?? toId
             const description = step.description ?? rel.description
             const line = description
                 ? `${sourceRef} -> ${destRef} "${this.escapeString(description)}"`

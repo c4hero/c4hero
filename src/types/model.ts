@@ -130,10 +130,6 @@ export interface Relationship {
   url?: string
   tags: string[]
   properties: Record<string, string>
-  /** True for relationships the parser replicates between deployment
-   *  instances (mirroring Structurizr's implied instance relationships).
-   *  The serializer never emits implied relationships back to DSL. */
-  implied?: boolean
 }
 
 // ─── Views ───────────────────────────────────────────────────────────
@@ -150,6 +146,17 @@ export interface ElementInView {
 
 export interface RelationshipInView {
   id: string
+  /** Dynamic views: the step's own endpoints, in travel order. A step may
+   *  connect elements at a different granularity than the backing
+   *  relationship (hierarchy-implied match, e.g. step `app -> sys` backed by
+   *  `app -> sys.api`), so the arrow is drawn between these, not the
+   *  relationship's endpoints. */
+  sourceId?: string
+  destinationId?: string
+  /** Dynamic views: this step travels AGAINST the model relationship's
+   *  direction (a response/return message — `b -> a` where the model holds
+   *  `a -> b`). Structurizr renders these as reversed arrows. */
+  response?: boolean
   /** Dynamic views: sequence label for this interaction ("1", "2", …).
    *  Interaction order is the array order; this is the rendered label. */
   order?: string

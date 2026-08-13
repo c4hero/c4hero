@@ -5,7 +5,7 @@
 // access viewExcludedIds / the resolveRef map without inheriting the full
 // parser class.
 
-import type { Workspace, View, ViewType, AutoLayout, LayoutDirection, Model } from '@/types/model'
+import type { Workspace, View, ViewType, AutoLayout, LayoutDirection, Model, Relationship } from '@/types/model'
 import type { ContextAwareParser } from './parser'
 import { parseStylesBody } from './parser-styles'
 
@@ -252,18 +252,50 @@ function parseAutoLayoutInto(p: ContextAwareParser, view: View): void {
  *  (Structurizr semantics); the view stores the relationship id plus the
  *  step's order label and optional description override. View elements are
  *  derived from the step endpoints. */
+/** Structurizr restricts view keys to [a-zA-Z0-9_-]; foreign DSL can carry
+ *  keys the upstream parser would reject (e.g. quoted keys with spaces).
+ *  Normalize at parse so every downstream consumer — sidecar, serializer,
+ *  key dedup — works with a key that survives re-serialization. An all-
+ *  illegal key normalizes to '' and takes the auto-key path. */
+function sanitizeViewKey(raw: string): string {
+    return raw.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+/** The element plus every descendant in the C4 tree (system -> containers ->
+ *  components). People and components have no descendants. */
+function subtreeIds(model: Model, rootId: string): Set<string> {
+    const ids = new Set<string>([rootId])
+    for (const sys of model.softwareSystems) {
+        if (sys.id === rootId) {
+            for (const c of sys.containers) {
+                ids.add(c.id)
+                for (const comp of c.components) ids.add(comp.id)
+            }
+            return ids
+        }
+        for (const c of sys.containers) {
+            if (c.id === rootId) {
+                for (const comp of c.components) ids.add(comp.id)
+                return ids
+            }
+        }
+    }
+    return ids
+}
+
 function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
     p.advance() // consume 'dynamic'
 
-    // Scope: `*` (unscoped), or a software system / container reference.
+    // Scope: `*` (unscoped), or a software system / container reference —
+    // possibly hierarchical (`sys1.api`).
     let scopeRef: string | undefined
     if (p.check('STAR')) {
         p.advance()
     } else {
-        scopeRef = p.readOptionalStringOrIdentifier()
+        scopeRef = p.readQualifiedRef()?.ref
     }
 
-    const key = p.readOptionalStringOrIdentifier() ?? ''
+    const key = sanitizeViewKey(p.readOptionalStringOrIdentifier() ?? '')
     const positionalDescription = p.readOptionalString()
 
     const view: View = {
@@ -352,42 +384,66 @@ function parseDynamicViewBody(p: ContextAwareParser, view: View, model: Model, o
             }
         }
 
-        // Interaction step: `source -> destination ["description"]`
-        if ((token.type === 'IDENTIFIER' || token.type === 'KEYWORD') && p.tokens[p.pos + 1]?.type === 'ARROW') {
-            const sourceToken = p.advance()
+        // Interaction step: `source -> destination ["description"]`, where
+        // either side may be a hierarchical (dotted) reference.
+        if (p.looksLikeRelationship()) {
+            const source = p.readQualifiedRef()!
+            p.skipNewlines()
             p.advance() // consume ARROW
-            const destToken = p.peek()
-            if (destToken.type !== 'IDENTIFIER' && destToken.type !== 'KEYWORD') {
-                p.addError(`Expected interaction destination, got ${destToken.type}`, destToken)
+            p.skipNewlines()
+            const dest = p.readQualifiedRef()
+            if (!dest) {
+                p.addError(`Expected interaction destination, got ${p.peekType()}`, p.peek())
                 p.skipToNextLine()
                 continue
             }
-            p.advance()
             const stepDescription = p.readOptionalString() || undefined
 
-            const sourceId = p.resolveRef(sourceToken.value)
-            const destId = p.resolveRef(destToken.value)
+            const sourceId = p.resolveRef(source.ref)
+            const destId = p.resolveRef(dest.ref)
             if (!sourceId || !destId) {
-                p.addError(`Unresolved reference in dynamic view: '${!sourceId ? sourceToken.value : destToken.value}'`, sourceToken)
+                p.addError(`Unresolved reference in dynamic view: '${!sourceId ? source.ref : dest.ref}'`, source.token)
                 continue
             }
 
-            // The step must reference an existing model relationship. Prefer a
-            // description match when several connect the same pair.
-            const candidates = model.relationships.filter(
-                r => !r.implied && r.sourceId === sourceId && r.destinationId === destId
-            )
-            const rel = candidates.find(r => stepDescription && r.description === stepDescription) ?? candidates[0]
+            // The step must reference an existing model relationship. Match
+            // tiers mirror what the real Structurizr parser resolves:
+            //   1. exact forward (source -> dest)
+            //   2. hierarchy-implied forward — any relationship between a
+            //      descendant of source and a descendant of dest (Structurizr
+            //      materializes these as parent-level relationships when
+            //      `!impliedRelationships` is on; we match them lazily)
+            //   3/4. the same two reversed — a response message travelling
+            //      back over an existing relationship.
+            // Within a tier, prefer a description match when several qualify.
+            const pick = (rels: Relationship[]) =>
+                rels.find(r => stepDescription && r.description === stepDescription) ?? rels[0]
+            const sourceTree = subtreeIds(model, sourceId)
+            const destTree = subtreeIds(model, destId)
+            const forward = pick(model.relationships.filter(
+                r => r.sourceId === sourceId && r.destinationId === destId,
+            )) ?? pick(model.relationships.filter(
+                r => sourceTree.has(r.sourceId) && destTree.has(r.destinationId),
+            ))
+            const reverse = forward ? undefined : (pick(model.relationships.filter(
+                r => r.sourceId === destId && r.destinationId === sourceId,
+            )) ?? pick(model.relationships.filter(
+                r => destTree.has(r.sourceId) && sourceTree.has(r.destinationId),
+            )))
+            const rel = forward ?? reverse
             if (!rel) {
                 p.addError(
-                    `Dynamic view step references a relationship that does not exist in the model: '${sourceToken.value} -> ${destToken.value}'`,
-                    sourceToken
+                    `Dynamic view step references a relationship that does not exist in the model: '${source.ref} -> ${dest.ref}'`,
+                    source.token,
                 )
                 continue
             }
 
             view.relationships.push({
                 id: rel.id,
+                sourceId,
+                destinationId: destId,
+                response: reverse ? true : undefined,
                 order: String(order.next++),
                 description: stepDescription,
             })
@@ -415,7 +471,7 @@ function parseDeploymentView(p: ContextAwareParser, model: Model): View | null {
     if (p.check('STAR')) {
         p.advance()
     } else {
-        scopeRef = p.readOptionalStringOrIdentifier()
+        scopeRef = p.readQualifiedRef({ allowString: true })?.ref
     }
 
     // Environment: a string name, or an identifier assigned to a
@@ -428,7 +484,7 @@ function parseDeploymentView(p: ContextAwareParser, model: Model): View | null {
         }
     }
 
-    const key = p.readOptionalStringOrIdentifier() ?? ''
+    const key = sanitizeViewKey(p.readOptionalStringOrIdentifier() ?? '')
     const positionalDescription = p.readOptionalString()
 
     const view: View = {

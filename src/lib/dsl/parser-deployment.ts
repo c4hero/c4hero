@@ -129,6 +129,13 @@ function parseDeploymentNode(p: ContextAwareParser, model: Model, varName?: stri
     const description = p.readOptionalString() || undefined
     const technology = p.readOptionalString() || undefined
     const tagsStr = p.readOptionalString()
+    // Structurizr's positional 5th argument: `deploymentNode <name> [description]
+    // [technology] [tags] [instances]`. Left unconsumed it would sit in front of
+    // the `{`, silently re-parenting the node's children onto its parent.
+    let positionalInstances: string | undefined
+    if (p.check('NUMBER') || p.check('STRING')) {
+        positionalInstances = p.advance().value
+    }
 
     const id = varName ?? nextId()
     const node: DeploymentNode = {
@@ -137,6 +144,7 @@ function parseDeploymentNode(p: ContextAwareParser, model: Model, varName?: stri
         name,
         description,
         technology,
+        instances: positionalInstances,
         tags: p.buildTags('Element', 'Deployment Node', tagsStr),
         properties: {},
         children: [],

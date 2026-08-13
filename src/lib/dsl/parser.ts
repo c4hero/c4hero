@@ -6,9 +6,7 @@ import type {
     Model,
     View,
     ElementInView,
-    Relationship,
     DeploymentNode,
-    DeploymentEnvironment,
 } from '@/types/model'
 import { lex } from './lexer'
 import type { Token, TokenType } from './lexer'
@@ -116,16 +114,6 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
 
 // ─── Deployment helpers ──────────────────────────────────────────────
 
-/** Depth-first walk over an environment's deployment node tree. */
-function walkDeploymentNodes(env: DeploymentEnvironment, visit: (node: DeploymentNode) => void): void {
-    const stack = [...env.deploymentNodes]
-    while (stack.length > 0) {
-        const node = stack.pop()!
-        visit(node)
-        stack.push(...node.children)
-    }
-}
-
 /** Element IDs that belong to the scope system for deployment-view filtering:
  *  the system itself plus its containers. */
 function deploymentScopeIds(model: Model, softwareSystemId: string): Set<string> {
@@ -186,60 +174,6 @@ function expandDeploymentWildcard(model: Model, view: View): ElementInView[] {
     // but ElementInView order does not matter to the canvas).
     const seen = new Set<string>()
     return ids.filter(id => (seen.has(id) ? false : (seen.add(id), true))).map(id => ({ id }))
-}
-
-/** Replicate model relationships between deployment instances within each
- *  environment, mirroring Structurizr's implied instance relationships: if
- *  container A -> container B exists and both have instances in the same
- *  environment, each instance pair gets an implied relationship. */
-function addImpliedInstanceRelationships(model: Model): void {
-    for (const env of model.deploymentEnvironments) {
-        // Map: model element id -> instance ids within this environment
-        const instancesByElement = new Map<string, string[]>()
-        walkDeploymentNodes(env, node => {
-            for (const inst of node.containerInstances) {
-                const list = instancesByElement.get(inst.containerId) ?? []
-                list.push(inst.id)
-                instancesByElement.set(inst.containerId, list)
-            }
-            for (const inst of node.softwareSystemInstances) {
-                const list = instancesByElement.get(inst.softwareSystemId) ?? []
-                list.push(inst.id)
-                instancesByElement.set(inst.softwareSystemId, list)
-            }
-        })
-        if (instancesByElement.size === 0) continue
-
-        const explicitPairs = new Set(
-            model.relationships.filter(r => !r.implied).map(r => `${r.sourceId}→${r.destinationId}`)
-        )
-
-        const implied: Relationship[] = []
-        for (const rel of model.relationships) {
-            if (rel.implied) continue
-            const sourceInstances = instancesByElement.get(rel.sourceId)
-            const destInstances = instancesByElement.get(rel.destinationId)
-            if (!sourceInstances || !destInstances) continue
-            for (const src of sourceInstances) {
-                for (const dst of destInstances) {
-                    if (explicitPairs.has(`${src}→${dst}`)) continue
-                    implied.push({
-                        id: `rel-implied-${src}-${dst}`,
-                        sourceId: src,
-                        destinationId: dst,
-                        description: rel.description,
-                        technology: rel.technology,
-                        interactionStyle: rel.interactionStyle,
-                        lineStyle: rel.lineStyle,
-                        tags: [...rel.tags],
-                        properties: {},
-                        implied: true,
-                    })
-                }
-            }
-        }
-        model.relationships.push(...implied)
-    }
 }
 
 // ─── Public Types ────────────────────────────────────────────────────
@@ -734,11 +668,10 @@ export function parse(input: string): ParseResult {
     // Combine lexer and parser errors
     const errors = [...lexResult.errors, ...result.errors]
 
-    // Post-process: replicate model relationships between deployment instances
-    // (Structurizr's implied instance relationships) BEFORE populating view
-    // relationships, so deployment views pick them up like any other.
+    // Implied instance relationships are NOT materialized here — the canvas
+    // derives them per deployment view via deriveInstanceRelationships(), so
+    // the model only ever holds relationships the user authored.
     const ws = result.workspace
-    addImpliedInstanceRelationships(ws.model)
 
     // Post-process: populate view.relationships from model relationships.
     // The DSL doesn't store relationship refs in views — Structurizr infers them.

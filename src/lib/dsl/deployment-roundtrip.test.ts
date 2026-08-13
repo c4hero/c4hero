@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from './index'
+import { deriveInstanceRelationships } from '@/lib/deployment'
 import type { DeploymentNode, Workspace } from '@/types/model'
 
 // Structurizr-authored deployment DSL, adapted from the official Big Bank plc
@@ -86,34 +87,100 @@ describe('deployment model parsing (Structurizr-authored)', () => {
     expect(dataCenter.softwareSystemInstances[0].softwareSystemId).toBe(ws.model.softwareSystems[1].id)
   })
 
-  it('replicates model relationships between instances (implied) and keeps explicit ones', () => {
+  it('derives instance relationships on demand without materializing them in the model', () => {
     const { workspace: ws } = parseDSL(STRUCTURIZR_DSL)
     const env = ws.model.deploymentEnvironments[0]
     const webInstance = env.deploymentNodes[0].children[0].children[0].containerInstances[0]
     const dbInstance = env.deploymentNodes[0].children[0].children[1].containerInstances[0]
     const mainframeInstance = env.deploymentNodes[1].softwareSystemInstances[0]
 
-    // webApplication -> database replicated between their instances
-    const impliedWebDb = ws.model.relationships.find(
-      r => r.implied && r.sourceId === webInstance.id && r.destinationId === dbInstance.id
+    // The model holds only authored relationships — implied instance
+    // relationships are a derived projection, never stored (storing them
+    // would let edits/deletions of the copies silently revert on reload).
+    const instanceIds = new Set([webInstance.id, dbInstance.id, mainframeInstance.id])
+    const materialized = ws.model.relationships.filter(
+      r => instanceIds.has(r.sourceId) && instanceIds.has(r.destinationId),
     )
-    expect(impliedWebDb).toBeDefined()
-    expect(impliedWebDb!.description).toBe('Reads from and writes to')
-    expect(impliedWebDb!.technology).toBe('JDBC')
+    expect(materialized).toHaveLength(0)
+
+    const derived = deriveInstanceRelationships(ws.model, 'Live')
+
+    // webApplication -> database replicated between their instances
+    const webDb = derived.find(
+      r => r.sourceId === webInstance.id && r.destinationId === dbInstance.id,
+    )
+    expect(webDb).toBeDefined()
+    expect(webDb!.description).toBe('Reads from and writes to')
+    expect(webDb!.technology).toBe('JDBC')
 
     // webApplication -> mainframe replicated container-instance -> system-instance
-    const impliedWebMainframe = ws.model.relationships.find(
-      r => r.implied && r.sourceId === webInstance.id && r.destinationId === mainframeInstance.id
-    )
-    expect(impliedWebMainframe).toBeDefined()
+    expect(derived.some(
+      r => r.sourceId === webInstance.id && r.destinationId === mainframeInstance.id,
+    )).toBe(true)
 
-    // The explicit lb -> liveWebApp relationship is a normal (non-implied) relationship
+    // The explicit lb -> liveWebApp relationship stays a normal model relationship
     const lbId = env.deploymentNodes[0].children[0].infrastructureNodes[0].id
-    const explicit = ws.model.relationships.find(
-      r => r.sourceId === lbId && r.destinationId === webInstance.id
-    )
-    expect(explicit).toBeDefined()
-    expect(explicit!.implied).toBeUndefined()
+    expect(ws.model.relationships.some(
+      r => r.sourceId === lbId && r.destinationId === webInstance.id,
+    )).toBe(true)
+  })
+
+  it('consumes the positional instances argument without corrupting the tree', () => {
+    // `deploymentNode <name> [description] [technology] [tags] [instances]` —
+    // left unconsumed, the trailing number ended the node header early, its
+    // children re-parented onto the parent node, and the following sibling
+    // was swallowed by the stray closing brace. All with zero parse errors.
+    const dsl = `workspace {
+      model {
+        sys = softwareSystem "Sys" { web = container "Web" }
+        deploymentEnvironment "Live" {
+          deploymentNode "Region" {
+            deploymentNode "Web Server" "" "Ubuntu" "" 4 {
+              liveWeb = containerInstance web
+            }
+            fw = infrastructureNode "Firewall"
+          }
+        }
+      }
+    }`
+    const { workspace: ws, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const region = ws.model.deploymentEnvironments[0].deploymentNodes[0]
+    expect(region.name).toBe('Region')
+    expect(region.children).toHaveLength(1)
+    expect(region.infrastructureNodes).toHaveLength(1)
+    const webServer = region.children[0]
+    expect(webServer.instances).toBe('4')
+    expect(webServer.containerInstances).toHaveLength(1)
+  })
+
+  it('derives distinct ids when two model relationships connect the same element pair', () => {
+    // The old implementation keyed derived relationships by instance pair
+    // alone, so `web -> db "reads"` and `web -> db "writes"` collided on one
+    // id and React Flow dropped an edge.
+    const dsl = `workspace {
+      model {
+        sys = softwareSystem "Sys" {
+          web = container "Web"
+          db = container "DB"
+          web -> db "Reads"
+          web -> db "Writes"
+        }
+        deploymentEnvironment "Live" {
+          deploymentNode "Server" {
+            liveWeb = containerInstance web
+            liveDb = containerInstance db
+          }
+        }
+      }
+    }`
+    const { workspace: ws, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+
+    const derived = deriveInstanceRelationships(ws.model, 'Live')
+    expect(derived).toHaveLength(2)
+    expect(new Set(derived.map(r => r.id)).size).toBe(2)
+    expect(derived.map(r => r.description).sort()).toEqual(['Reads', 'Writes'])
   })
 
   it('expands include * for a scoped deployment view to the relevant subtree', () => {
@@ -136,8 +203,14 @@ describe('deployment model parsing (Structurizr-authored)', () => {
     expect(ids.has(env.deploymentNodes[0].children[0].children[0].containerInstances[0].id)).toBe(true)
     expect(ids.has(env.deploymentNodes[1].id)).toBe(false)
 
-    // View relationships include the implied instance relationship and the explicit lb edge
-    expect(scoped.relationships.length).toBeGreaterThanOrEqual(2)
+    // View relationships hold only authored relationships whose endpoints are
+    // both in the view — here the explicit lb -> liveWebApp edge. Implied
+    // instance edges are derived at render time, not stored on the view.
+    const lbId = env.deploymentNodes[0].children[0].infrastructureNodes[0].id
+    const webInstanceId = env.deploymentNodes[0].children[0].children[0].containerInstances[0].id
+    const relById = new Map(ws.model.relationships.map(r => [r.id, r]))
+    const viewRels = scoped.relationships.map(vr => relById.get(vr.id)!)
+    expect(viewRels.some(r => r.sourceId === lbId && r.destinationId === webInstanceId)).toBe(true)
   })
 
   it('expands include * for an unscoped deployment view to the whole environment', () => {

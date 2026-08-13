@@ -73,7 +73,9 @@ describe('dynamic view parsing', () => {
     expect(view.relationships[2].id).toBe(persistRel.id)
   })
 
-  it('records an error and skips steps whose relationship is not in the model', () => {
+  it('accepts a reverse-direction step as a response over the existing relationship', () => {
+    // Structurizr allows `b -> a` as a return message over a model
+    // relationship declared `a -> b`; rejecting it broke valid workspaces.
     const dsl = `workspace {
       model {
         a = softwareSystem "A"
@@ -83,7 +85,38 @@ describe('dynamic view parsing', () => {
       views {
         dynamic * "Flow" {
           a -> b
-          b -> a "no such relationship"
+          b -> a "returns result"
+        }
+      }
+    }`
+    const { workspace: ws, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = ws.views.dynamicViews[0]
+    expect(view.relationships).toHaveLength(2)
+
+    const rel = ws.model.relationships[0]
+    const response = view.relationships[1]
+    expect(response.id).toBe(rel.id)
+    expect(response.response).toBe(true)
+    expect(response.order).toBe('2')
+    expect(response.description).toBe('returns result')
+    // Travel order: the response runs destination -> source.
+    expect(response.sourceId).toBe(rel.destinationId)
+    expect(response.destinationId).toBe(rel.sourceId)
+  })
+
+  it('records an error and skips steps with no relationship in either direction', () => {
+    const dsl = `workspace {
+      model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        c = softwareSystem "C"
+        a -> b "calls"
+      }
+      views {
+        dynamic * "Flow" {
+          a -> b
+          a -> c "no such relationship"
         }
       }
     }`
