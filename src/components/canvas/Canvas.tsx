@@ -42,6 +42,7 @@ import {
   buildBoundaryLayoutClusters,
 } from './canvasBuilders'
 import { buildDeploymentNodes, deploymentBoundaryMemberIds } from './deploymentBuilders'
+import { deploymentViewRelationships } from '@/lib/deployment'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -341,19 +342,28 @@ export default function Canvas() {
     //    (deployment elements live outside the C4 element tree).
     const drillableIds = buildDrillableSet(workspace)
     const rawNodes = view.type === 'deployment'
-      ? buildDeploymentNodes(workspace, view)
+      ? buildDeploymentNodes(workspace, view, highlightFilters, themeStyles)
       : buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
     const layoutNodes = carryForwardMeasurements(rawNodes, reactFlowInstance.getNodes())
 
-    // 2. Build temporary edges (just source/target, no handles yet) for dagre
+    // 2. Build temporary edges (just source/target, no handles yet) for dagre.
+    //    Deployment views take theirs from the same explicit + derived set the
+    //    edge builder renders — derived instance relationships live in no
+    //    view.relationships list.
     const relationshipMap = buildRelationshipMap(workspace)
     const viewElementIds = new Set(view.elements.map(e => e.id))
     const tempEdges: Edge[] = []
-    for (const vr of view.relationships) {
-      const rel = relationshipMap.get(vr.id)
-      if (!rel) continue
-      if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
-      tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
+    if (view.type === 'deployment') {
+      for (const rel of deploymentViewRelationships(workspace.model, view)) {
+        tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
+      }
+    } else {
+      for (const vr of view.relationships) {
+        const rel = relationshipMap.get(vr.id)
+        if (!rel) continue
+        if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
+        tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
+      }
     }
 
     // 3. Auto-layout: position unpinned nodes, keep pinned ones.

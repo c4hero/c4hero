@@ -275,3 +275,22 @@ export function deriveInstanceRelationships(model: Model, environmentName?: stri
     }
     return derived
 }
+
+/** Every relationship a deployment view draws: explicit model relationships
+ *  whose endpoints are both visible in the view (instance-to-instance or
+ *  infrastructure edges the user authored), plus the derived instance
+ *  relationships for the view's environment. Single source for both the
+ *  layout (dagre) edges and the rendered edges. */
+export function deploymentViewRelationships(
+    model: Model,
+    view: { environment?: string; elements: { id: string }[] },
+): Relationship[] {
+    const viewIds = new Set(view.elements.map(e => e.id))
+    const explicit = model.relationships.filter(
+        r => viewIds.has(r.sourceId) && viewIds.has(r.destinationId),
+    )
+    const derived = deriveInstanceRelationships(model, view.environment).filter(
+        r => viewIds.has(r.sourceId) && viewIds.has(r.destinationId),
+    )
+    return [...explicit, ...derived]
+}

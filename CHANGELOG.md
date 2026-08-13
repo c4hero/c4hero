@@ -9,13 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Dynamic and deployment views now round-trip through the DSL.** Workspaces
-  using `dynamic` views (ordered interaction steps, including response
-  messages and repeated steps) and `deployment` views (`deploymentEnvironment`,
-  nested `deploymentNode`s, `containerInstance` / `softwareSystemInstance`,
-  `infrastructureNode`) parse and re-serialize losslessly, verified against the
-  real Structurizr parser in CI. Canvas rendering for both view types is in
-  progress; until it lands these views are preserved, not yet drawn.
+- **Dynamic and deployment views — c4hero now covers the complete C4 view
+  set.** Workspaces using `dynamic` views (ordered interaction steps,
+  including response messages and repeated steps) and `deployment` views
+  (`deploymentEnvironment`, nested `deploymentNode`s, `containerInstance` /
+  `softwareSystemInstance`, `infrastructureNode`) parse, render, and
+  re-serialize losslessly, verified against the real Structurizr parser in
+  CI. Dynamic views number every interaction step on its edge; deployment
+  views draw the environment as nested deployment-node boundaries around the
+  instances and infrastructure running inside them. Authoring deployment
+  topology stays DSL-side for now; rendering, layout, drag, and export are
+  fully wired.
 
 ### Fixed
 

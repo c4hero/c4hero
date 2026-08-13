@@ -43,7 +43,7 @@ workspace "Bank" {
  *  view, so a layout/overlay integration regression fails here headlessly. */
 function runPipeline(ws: Workspace, view: View) {
   // 1. content nodes, given measured sizes as React Flow would after measure
-  const rawNodes = buildDeploymentNodes(ws, view).map(n => ({
+  const rawNodes = buildDeploymentNodes(ws, view, NO_FILTERS, []).map(n => ({
     ...n,
     measured: { width: 200, height: 100 },
   }))

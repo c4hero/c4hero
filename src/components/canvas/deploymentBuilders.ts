@@ -1,10 +1,13 @@
 import type { Node } from '@xyflow/react'
-import type { View, Workspace } from '@/types/model'
+import type { ElementStyle, ModelElement, View, Workspace } from '@/types/model'
+import { isHighlighted, highlightActive, type HighlightFilters } from '@/lib/highlight'
+import { stripThemeManagedStyleFields } from '@/lib/themes'
 import {
   deploymentEnvironmentOf,
   buildDeploymentContentNodes,
   buildDeploymentBoundarySpecs,
 } from '@/lib/deployment'
+import { buildStyleIndex, getElementStyle } from './canvasBuilders'
 import type { LayoutBoundaryCluster } from '@/lib/canvasLayout'
 
 const BOUNDARY_Z = -100
@@ -28,11 +31,30 @@ function nodeRect(node: Node): OverlayRect {
 }
 
 /** Content nodes for a deployment view — container/system instances and
- *  infrastructure nodes. Deployment nodes themselves are drawn as boundaries. */
-export function buildDeploymentNodes(workspace: Workspace, view: View): Node[] {
+ *  infrastructure nodes. Deployment nodes themselves are drawn as boundaries.
+ *
+ *  Takes the same styling inputs as buildNodes: instances render through the
+ *  regular C4 node components, so they get the full tag-style cascade and
+ *  highlight-filter treatment — without this, an active filter fades every
+ *  deployment edge (buildEdges sees no highlighted node) while the nodes
+ *  ignore the filter entirely. */
+export function buildDeploymentNodes(
+  workspace: Workspace,
+  view: View,
+  filters: HighlightFilters,
+  themeStyles: ElementStyle[],
+): Node[] {
   const env = deploymentEnvironmentOf(workspace.model, view)
   if (!env) return []
   const content = buildDeploymentContentNodes(workspace.model, env)
+
+  const workspaceStyles = workspace.views.configuration.styles.elements
+    .map(stripThemeManagedStyleFields)
+    .filter((style): style is ElementStyle => style !== null)
+  const styleIndex = buildStyleIndex([...themeStyles, ...workspaceStyles])
+  const active = highlightActive(filters)
+  const highlightClass = (highlighted: boolean) =>
+    active ? (highlighted ? 'c4-node-highlighted' : 'c4-node-faded') : undefined
 
   const nodes: Node[] = []
   for (const viewEl of view.elements) {
@@ -40,13 +62,25 @@ export function buildDeploymentNodes(workspace: Workspace, view: View): Node[] {
     if (!spec) continue // deployment-node ids resolve to boundaries, not content
     const pos = { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }
     if (spec.nodeType === 'infrastructureNode' && spec.infra) {
-      nodes.push({ id: spec.id, type: 'infrastructureNode', position: pos, data: { infra: spec.infra } })
+      // Infrastructure nodes carry tags/technology, which is all the
+      // element-facing filter facets read; status/team simply won't match.
+      const highlighted = active && isHighlighted(spec.infra as unknown as ModelElement, filters)
+      nodes.push({
+        id: spec.id,
+        type: 'infrastructureNode',
+        position: pos,
+        data: { infra: spec.infra, highlighted },
+        className: highlightClass(highlighted),
+      })
     } else if (spec.element) {
+      const style = getElementStyle(spec.element, styleIndex)
+      const highlighted = active && isHighlighted(spec.element, filters)
       nodes.push({
         id: spec.id,
         type: spec.nodeType,
         position: pos,
-        data: { element: spec.element, canDrill: false, viewCount: 1 },
+        data: { element: spec.element, style, canDrill: false, viewCount: 1, highlighted },
+        className: highlightClass(highlighted),
       })
     }
   }
@@ -88,14 +122,18 @@ export function buildDeploymentBoundaryNodes(workspace: Workspace, view: View, l
 
   const presentLeafIds = new Set(nodeMap.keys())
   const specs = buildDeploymentBoundarySpecs(env, presentLeafIds)
+  const maxDepth = specs.reduce((d, s) => Math.max(d, s.depth), 0)
 
   const boundaries: Node[] = []
   for (const spec of specs) {
     const members = spec.memberIds.map(id => nodeMap.get(id)).filter((r): r is OverlayRect => r !== undefined)
     if (members.length === 0) continue
     const depth = spec.depth
-    const pad = BOUNDARY_PADDING + depth * NESTING_PADDING_STEP
-    const padTop = BOUNDARY_PADDING_TOP + depth * NESTING_PADDING_STEP
+    // Padding SHRINKS with depth: an ancestor's box must wrap its children's
+    // boxes, and in a single-child chain (AWS → us-east-1) both wrap the very
+    // same member rects — only a larger outer padding separates them.
+    const pad = BOUNDARY_PADDING + (maxDepth - depth) * NESTING_PADDING_STEP
+    const padTop = BOUNDARY_PADDING_TOP + (maxDepth - depth) * NESTING_PADDING_STEP
     const minX = Math.min(...members.map(m => m.x))
     const minY = Math.min(...members.map(m => m.y))
     const maxX = Math.max(...members.map(m => m.x + m.w))
