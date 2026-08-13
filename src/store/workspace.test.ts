@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useWorkspaceStore, getBreadcrumb, getCreatableTypes, buildElementMap, buildRelationshipMap, canDrillInto, getRelationshipById, getSelectedElement } from './workspace'
 import { MAX_UNDO } from './workspace-types'
 import type { Workspace } from '@/types/model'
+import { parseDSL, serializeDSL } from '@/lib/dsl'
 
 function makeWorkspace(): Workspace {
   return {
@@ -4550,5 +4551,102 @@ describe('removeElementsFromView', () => {
     expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
     // View must be unchanged
     expect(useWorkspaceStore.getState().workspace!.views.containerViews[0].elements).toEqual([{ id: 'c1' }])
+  })
+})
+
+describe('deployment + dynamic view store integrity', () => {
+  const DSL = `workspace {
+    model {
+      sys = softwareSystem "Sys" {
+        web = container "Web"
+        db = container "DB"
+        web -> db "Reads"
+      }
+      other = softwareSystem "Other"
+      web -> other "Uses"
+      deploymentEnvironment "Live" {
+        deploymentNode "Server" {
+          liveWeb = containerInstance web
+          liveDb = containerInstance db
+        }
+      }
+    }
+    views {
+      deployment sys "Live" "Dep" { include * }
+      dynamic sys "Flow" {
+        web -> db "Reads"
+        db -> web "Returns rows"
+      }
+    }
+  }`
+
+  function load() {
+    const { workspace: ws, errors } = parseDSL(DSL)
+    expect(errors).toHaveLength(0)
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    return useWorkspaceStore.getState().workspace!
+  }
+
+  it('deleting a container prunes its deployment instances so the DSL re-parses', () => {
+    let ws = load()
+    const webId = ws.model.softwareSystems[0].containers.find(c => c.name === 'Web')!.id
+    useWorkspaceStore.getState().deleteElement(webId)
+    ws = useWorkspaceStore.getState().workspace!
+
+    const server = ws.model.deploymentEnvironments[0].deploymentNodes[0]
+    expect(server.containerInstances).toHaveLength(1)
+    expect(server.containerInstances[0].containerId).toBe(
+      ws.model.softwareSystems[0].containers[0].id,
+    )
+
+    // The round trip that used to fail: a dangling instance serialized a
+    // reference to the deleted container.
+    const reparsed = parseDSL(serializeDSL(ws))
+    expect(reparsed.errors).toEqual([])
+  })
+
+  it('deleting the scope system drops its deployment and dynamic views', () => {
+    let ws = load()
+    const sysId = ws.model.softwareSystems[0].id
+    useWorkspaceStore.getState().deleteElement(sysId)
+    ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.deploymentViews).toHaveLength(0)
+    expect(ws.views.dynamicViews).toHaveLength(0)
+  })
+
+  it('drawing a new relationship elsewhere adds no phantom step to a dynamic view', () => {
+    let ws = load()
+    const webId = ws.model.softwareSystems[0].containers.find(c => c.name === 'Web')!.id
+    const dbId = ws.model.softwareSystems[0].containers.find(c => c.name === 'DB')!.id
+    const before = ws.views.dynamicViews[0].relationships.length
+
+    useWorkspaceStore.getState().addRelationship(webId, dbId, 'Writes')
+    ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.dynamicViews[0]
+    // Still exactly the authored steps, every one numbered.
+    expect(view.relationships).toHaveLength(before)
+    expect(view.relationships.every(r => r.order !== undefined)).toBe(true)
+  })
+
+  it('deleting a stepped relationship removes its steps and orphaned members', () => {
+    let ws = load()
+    const rel = ws.model.relationships.find(r => r.description === 'Reads')!
+    useWorkspaceStore.getState().deleteRelationship(rel.id)
+    ws = useWorkspaceStore.getState().workspace!
+    const view = ws.views.dynamicViews[0]
+    // Both steps rode on that relationship (forward + response).
+    expect(view.relationships).toHaveLength(0)
+    expect(view.elements).toHaveLength(0)
+  })
+
+  it('reconnecting a stepped relationship invalidates its steps instead of bending them', () => {
+    let ws = load()
+    const rel = ws.model.relationships.find(r => r.description === 'Reads')!
+    const otherId = ws.model.softwareSystems.find(s => s.name === 'Other')!.id
+    const webId = ws.model.softwareSystems[0].containers.find(c => c.name === 'Web')!.id
+    useWorkspaceStore.getState().reconnectRelationship(rel.id, webId, otherId)
+    ws = useWorkspaceStore.getState().workspace!
+    expect(ws.views.dynamicViews[0].relationships).toHaveLength(0)
+    expect(ws.views.dynamicViews[0].elements).toHaveLength(0)
   })
 })

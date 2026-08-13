@@ -4,7 +4,7 @@ import type {
   ViewType, ElementInView,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
-import { expandDeploymentElements } from '@/lib/deployment'
+import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
 export type { CascadeImpact } from './workspace-types'
 
 /** Deep-clone an object that may be an Immer draft. structuredClone'ing a
@@ -618,16 +618,50 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
     return true
   })
 
+  // Deployment instances of deleted containers/systems die with them, and
+  // the instances' own ids then cascade through relationships and view refs —
+  // a dangling containerInstance would serialize a reference to the deleted
+  // element and fail to re-parse.
+  const removedInstanceIds = new Set<string>()
+  for (const env of ws.model.deploymentEnvironments ?? []) {
+    walkDeploymentNodes(env, (node) => {
+      node.containerInstances = node.containerInstances.filter((inst) => {
+        if (!allDeletedIds.has(inst.containerId)) return true
+        removedInstanceIds.add(inst.id)
+        return false
+      })
+      node.softwareSystemInstances = node.softwareSystemInstances.filter((inst) => {
+        if (!allDeletedIds.has(inst.softwareSystemId)) return true
+        removedInstanceIds.add(inst.id)
+        return false
+      })
+    })
+  }
+  for (const id of removedInstanceIds) allDeletedIds.add(id)
+
   // Prune relationships referencing any deleted endpoint
   ws.model.relationships = ws.model.relationships.filter(
     (r) => !allDeletedIds.has(r.sourceId) && !allDeletedIds.has(r.destinationId),
   )
   const survivingRelIds = new Set(ws.model.relationships.map((r) => r.id))
+  const survivingRelById = new Map(ws.model.relationships.map((r) => [r.id, r]))
 
   // Prune view element refs + view relationship refs
   forEachView(ws, (v) => {
     v.elements = v.elements.filter((e) => !allDeletedIds.has(e.id))
     v.relationships = v.relationships.filter((r) => survivingRelIds.has(r.id))
+    if (v.type === 'dynamic') {
+      // Dynamic membership is derived from interaction steps; drop elements
+      // whose every step died so they don't linger as orphan nodes (the next
+      // parse would drop them anyway — steps are all that serializes).
+      const stepEndpoints = new Set<string>()
+      for (const step of v.relationships) {
+        const rel = survivingRelById.get(step.id)
+        stepEndpoints.add(step.sourceId ?? rel?.sourceId ?? '')
+        stepEndpoints.add(step.destinationId ?? rel?.destinationId ?? '')
+      }
+      v.elements = v.elements.filter((e) => stepEndpoints.has(e.id))
+    }
   })
 
   // Remove scoped views whose scope element was deleted
@@ -639,6 +673,13 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
   )
   ws.views.componentViews = ws.views.componentViews.filter(
     (v) => !v.containerId || (!idSet.has(v.containerId) && !deletedContainerIds.has(v.containerId)),
+  )
+  ws.views.deploymentViews = (ws.views.deploymentViews ?? []).filter(
+    (v) => !v.softwareSystemId || !idSet.has(v.softwareSystemId),
+  )
+  ws.views.dynamicViews = (ws.views.dynamicViews ?? []).filter(
+    (v) => (!v.softwareSystemId || !idSet.has(v.softwareSystemId))
+      && (!v.containerId || (!idSet.has(v.containerId) && !deletedContainerIds.has(v.containerId))),
   )
 
   // Drop deleted IDs from group memberships
