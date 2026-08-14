@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # No base-branch filter: stacked PRs target another PR's branch as their
+  # base, and a filter of [main] left their required checks "Expected -
+  # Waiting" forever (the workflow never triggered).
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
