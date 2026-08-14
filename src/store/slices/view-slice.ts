@@ -14,7 +14,7 @@ export type ViewSlice = Pick<WorkspaceState,
   | 'addView' | 'deleteView' | 'renameView' | 'duplicateView'
   | 'toggleElementInView' | 'removeElementsFromView' | 'setLayoutDirection' | 'resetAndRelayout'
   | 'updateNodePosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
-  | 'setElementsLocked' | 'unlockAllInView'
+  | 'setElementsLocked' | 'unlockAllInView' | 'setViewLocked'
   | 'layoutVersion'
 >
 
@@ -123,6 +123,8 @@ export const createViewSlice: StateCreator<
     for (const key of VIEW_ARRAY_KEYS) {
       const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
       if (!view) continue
+      // A locked view freezes every node, locked or not.
+      if (view.locked) return
       const el = view.elements.find(e => e.id === nodeId)
       if (!el) return
       // Locked nodes are marked undraggable in React Flow; this is the backstop
@@ -142,6 +144,7 @@ export const createViewSlice: StateCreator<
     for (const key of VIEW_ARRAY_KEYS) {
       const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
       if (!view) continue
+      if (view.locked) return
       for (const el of view.elements) {
         if (el.locked) continue
         const u = updateMap.get(el.id)
@@ -234,6 +237,9 @@ export const createViewSlice: StateCreator<
     if (!s.workspace) return
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
+    // A locked view's layout is frozen wholesale — the UI disables these
+    // controls, this is the backstop for the command palette / shortcuts.
+    if (view.locked) return
     pushUndoSnapshot(s)
     view.autoLayout = { ...view.autoLayout, direction }
     clearUnlockedPositions(view)
@@ -244,6 +250,7 @@ export const createViewSlice: StateCreator<
     if (!s.workspace) return
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
+    if (view.locked) return
     pushUndoSnapshot(s)
     clearUnlockedPositions(view)
     if (direction) {
@@ -270,6 +277,15 @@ export const createViewSlice: StateCreator<
       // holding across re-layouts and reloads.
       if (el.x !== undefined && el.y !== undefined) el.pinned = true
     }
+  }),
+
+  setViewLocked: (viewKey, locked) => set((s) => {
+    if (!s.workspace) return
+    const view = findViewHelper(s.workspace, viewKey)
+    if (!view) return
+    if ((view.locked ?? false) === locked) return
+    pushUndoSnapshot(s)
+    view.locked = locked || undefined
   }),
 
   unlockAllInView: (viewKey) => set((s) => {

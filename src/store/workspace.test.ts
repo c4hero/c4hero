@@ -4686,3 +4686,92 @@ describe('locking elements against re-layout', () => {
     expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
   })
 })
+
+describe('view-level layout lock', () => {
+  function makeWsWithView(): { ws: Workspace; viewKey: string } {
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews.push({
+      key: 'v1',
+      type: 'systemLandscape',
+      title: 'Landscape',
+      elements: [
+        { id: 'alice', x: 10, y: 20, pinned: true },
+        { id: 'api', x: 50, y: 80, pinned: true },
+      ],
+      relationships: [],
+      autoLayout: { direction: 'TB' },
+    })
+    return { ws, viewKey: 'v1' }
+  }
+
+  const view = () => useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+  const el = (id: string) => view().elements.find((e) => e.id === id)!
+
+  beforeEach(() => {
+    const { ws, viewKey } = makeWsWithView()
+    useWorkspaceStore.setState({
+      workspace: ws,
+      activeViewKey: viewKey,
+      layoutVersion: 0,
+      undoStack: [],
+      redoStack: [],
+      selectedElementIds: [],
+      selectedRelationshipId: null,
+      selectedGroupId: null,
+    })
+  })
+
+  it('setViewLocked toggles, is undoable, and no-ops when unchanged', () => {
+    useWorkspaceStore.getState().setViewLocked('v1', true)
+    expect(view().locked).toBe(true)
+
+    const undoBefore = useWorkspaceStore.getState().undoStack.length
+    useWorkspaceStore.getState().setViewLocked('v1', true)
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoBefore)
+
+    useWorkspaceStore.getState().undo()
+    expect(view().locked).toBeUndefined()
+  })
+
+  it('a locked view refuses Auto-arrange and direction changes wholesale', () => {
+    useWorkspaceStore.getState().setViewLocked('v1', true)
+    const layoutBefore = useWorkspaceStore.getState().layoutVersion
+
+    useWorkspaceStore.getState().resetAndRelayout('v1')
+    useWorkspaceStore.getState().setLayoutDirection('v1', 'LR')
+
+    // Nothing moved, nothing re-laid out, no undo entries for the no-ops.
+    expect(el('alice')).toMatchObject({ x: 10, y: 20, pinned: true })
+    expect(el('api')).toMatchObject({ x: 50, y: 80, pinned: true })
+    expect(view().autoLayout?.direction).toBe('TB')
+    expect(useWorkspaceStore.getState().layoutVersion).toBe(layoutBefore)
+  })
+
+  it('a locked view refuses drags for every node, locked or not', () => {
+    useWorkspaceStore.getState().setViewLocked('v1', true)
+    useWorkspaceStore.getState().updateNodePosition('alice', 999, 999)
+    useWorkspaceStore.getState().updateNodePositions([
+      { id: 'alice', x: 777, y: 777 },
+      { id: 'api', x: 888, y: 888 },
+    ])
+    expect(el('alice')).toMatchObject({ x: 10, y: 20 })
+    expect(el('api')).toMatchObject({ x: 50, y: 80 })
+  })
+
+  it('unlocking the view restores normal behaviour and element locks underneath', () => {
+    useWorkspaceStore.getState().setElementsLocked('v1', ['alice'], true)
+    useWorkspaceStore.getState().setViewLocked('v1', true)
+    useWorkspaceStore.getState().setViewLocked('v1', false)
+
+    // Element lock survived the view lock/unlock cycle.
+    expect(el('alice').locked).toBe(true)
+
+    // Unlocked view: api moves again, alice still element-locked.
+    useWorkspaceStore.getState().updateNodePositions([
+      { id: 'alice', x: 777, y: 777 },
+      { id: 'api', x: 300, y: 400 },
+    ])
+    expect(el('alice')).toMatchObject({ x: 10, y: 20 })
+    expect(el('api')).toMatchObject({ x: 300, y: 400 })
+  })
+})

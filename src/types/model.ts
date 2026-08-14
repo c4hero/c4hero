@@ -187,6 +187,11 @@ export interface View {
    *  defined no views at all. The serializer skips auto views so the source
    *  DSL roundtrips unchanged; users still see them on the canvas. */
   autoView?: boolean
+  /** View-level layout lock: the whole diagram is frozen — Auto-arrange and
+   *  layout-direction changes are no-ops, and no node can be dragged. Element
+   *  locks stay independent underneath, so unlocking the view restores them.
+   *  A c4hero concept persisted in the sidecar, not the DSL. */
+  locked?: boolean
   title?: string
   description?: string
   softwareSystemId?: string

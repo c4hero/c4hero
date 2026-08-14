@@ -72,6 +72,9 @@ export default function MultiSelectBar() {
     if (!workspace || !activeViewKey || selectedElementIds.length === 0) return new Set<string>()
     const view = getActiveView(workspace, activeViewKey)
     if (!view) return new Set<string>()
+    // A locked view freezes the whole selection: Align/Distribute/Straighten
+    // have nothing they may move.
+    if (view.locked) return new Set(selectedElementIds)
     const selected = new Set(selectedElementIds)
     return new Set(view.elements.filter((el) => selected.has(el.id) && el.locked).map((el) => el.id))
   }, [workspace, activeViewKey, selectedElementIds])

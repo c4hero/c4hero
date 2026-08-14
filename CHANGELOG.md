@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Lock a whole view's layout.** One switch in the Auto-arrange menu freezes
+  the active view: Auto-arrange and layout-direction changes become no-ops and
+  nothing can be dragged — not even by accident. Element locks keep working
+  independently underneath, so unlocking the view brings back exactly the
+  mixed state you had. The lock shows as a badge on the Auto-arrange button,
+  is undoable, and survives reload via the sidecar.
 - **Lock a node in place.** Auto-arrange used to be all or nothing: hand-place
   two elements and re-running it threw that work away. Locked nodes now hold
   their exact position through Auto-arrange and layout-direction changes while
