@@ -11,12 +11,15 @@ function makeWorkspace(): Workspace {
       softwareSystems: [{ id: 'api', type: 'softwareSystem', name: 'API', tags: ['Element', 'Software System'], properties: {}, containers: [] }],
       relationships: [],
       groups: [],
+      deploymentEnvironments: [],
     },
     views: {
       systemLandscapeViews: [],
       systemContextViews: [],
       containerViews: [],
       componentViews: [],
+      dynamicViews: [],
+      deploymentViews: [],
       configuration: { styles: { elements: [], relationships: [] } },
     },
   }
