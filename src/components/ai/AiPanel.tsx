@@ -350,6 +350,9 @@ function AppView({
     const base = baseline
     if (!base) return
     const store = useWorkspaceStore.getState()
+    // Pre-call ref, for TRANSACTIONAL rollback below — captured before
+    // setBatchApplying(true) so it matches the baseline that call snapshots.
+    const preWs = store.workspace
     store.setBatchApplying(true)
     try {
       store.resetWorkspaceTo(base)
@@ -357,6 +360,15 @@ function AppView({
       // Replay skips are real information: a kept change whose target came from
       // a now-reverted entry quietly stops applying — say so.
       setSkipNotice(ops.length ? summarizeSkips(applyEditPlan({ operations: ops }, storeEditActions(), base)) : null)
+    } catch (err) {
+      // TRANSACTIONAL APPLY: applyEditPlan is designed to never throw, but this
+      // guards a defective store action from leaving a half-replayed model with
+      // a dangling undo snapshot. Restore the exact pre-call ref — since it's
+      // also what setBatchApplying(true) captured as its baseline, the finally
+      // below's setBatchApplying(false) sees "unchanged" and rolls the
+      // undo/redo stacks back too.
+      store.resetWorkspaceTo(preWs ?? base)
+      throw err
     } finally {
       store.setBatchApplying(false)
     }
