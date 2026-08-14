@@ -85,7 +85,7 @@ jobs:
       # Cached by version so a GitHub-releases hiccup can't fail the build.
       - name: Cache Structurizr CLI
         id: structurizr-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .structurizr-cli
           key: structurizr-cli-${{ env.STRUCTURIZR_VERSION }}
