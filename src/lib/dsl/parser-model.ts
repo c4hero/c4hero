@@ -7,6 +7,7 @@ import { isElementStatus } from '@/types/model'
 import type { ContextAwareParser } from './parser'
 import { nextId, MAX_DEPTH, setUserProperty } from './parser'
 import { parseRelationship } from './parser-relationship'
+import { parseDeploymentEnvironment } from './parser-deployment'
 
 type Element = Person | SoftwareSystem | Container | Component
 
@@ -137,11 +138,8 @@ export function parseModelBody(
                 continue
             }
 
-            if (kw === 'deploymentenvironment' || kw === 'deploymentnode') {
-                p.advance()
-                while (p.check('STRING') || p.check('IDENTIFIER')) p.advance()
-                p.skipNewlines()
-                p.skipBraceBlock()
+            if (kw === 'deploymentenvironment') {
+                parseDeploymentEnvironment(p, model)
                 continue
             }
 
@@ -185,9 +183,11 @@ export function parseModelBody(
                     } else if (elementKw === 'softwaresystem') {
                         const sys = parseSoftwareSystem(p, varName, model)
                         if (sys) model.softwareSystems.push(sys)
+                    } else if (elementKw === 'deploymentenvironment') {
+                        parseDeploymentEnvironment(p, model, varName)
                     } else {
-                        // Unknown element type (e.g. deploymentEnvironment) — skip inline
-                        // args (stopping before any `{`) then skip any following brace block.
+                        // Unknown element type — skip inline args (stopping before
+                        // any `{`) then skip any following brace block.
                         p.skipUnknownDirective()
                     }
                 } else {

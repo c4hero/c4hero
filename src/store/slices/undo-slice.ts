@@ -3,7 +3,7 @@ import type { WorkspaceState } from '../workspace-types'
 import { announce } from '@/lib/announce'
 import { validateScope } from '@/lib/scopeValidation'
 import { undoSnapshot } from '../internals'
-import { findViewHelper, clearSelectionDraft } from '../workspace-helpers'
+import { findViewHelper, clearSelectionDraft, normalizeWorkspaceShape } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 
 /** Undo / redo history. Other slices append snapshots to undoStack via
@@ -75,6 +75,7 @@ export const createUndoSlice: StateCreator<
     // Wholesale workspace replacement with the same view/selection/scope fixups as
     // undo(), but WITHOUT touching the undo/redo stacks — the caller's batch owns
     // the single undo entry. Used by the AI sweep's replay-from-baseline revert.
+    normalizeWorkspaceShape(ws)
     s.workspace = ws
     const activeStillExists = s.activeViewKey ? !!findViewHelper(ws, s.activeViewKey) : false
     s.activeViewKey = activeStillExists ? s.activeViewKey : getFirstViewKey(ws)

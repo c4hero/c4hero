@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Dynamic and deployment views now round-trip through the DSL.** Workspaces
+  using `dynamic` views (ordered interaction steps, including response
+  messages and repeated steps) and `deployment` views (`deploymentEnvironment`,
+  nested `deploymentNode`s, `containerInstance` / `softwareSystemInstance`,
+  `infrastructureNode`) parse and re-serialize losslessly, verified against the
+  real Structurizr parser in CI. Canvas rendering for both view types is in
+  progress; until it lands these views are preserved, not yet drawn.
+
 ### Fixed
 
 - **Crowded nodes no longer stack their connections.** Each side of a node now
