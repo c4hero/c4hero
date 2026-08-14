@@ -15,6 +15,18 @@ function deepCloneMaybeDraft<T>(value: T): T {
   return structuredClone(isDraft(value) ? (current(value as object) as T) : value)
 }
 
+/** Fill view arrays and model collections that predate their introduction.
+ *  Workspaces persisted (or crash-recovery-snapshotted) before dynamic and
+ *  deployment views existed lack those arrays; every VIEW_ARRAY_KEYS loop and
+ *  allViewsOf spread would throw on them. Run once at every point a workspace
+ *  object from outside the store becomes THE workspace. */
+export function normalizeWorkspaceShape(ws: Workspace): Workspace {
+  ws.views.dynamicViews ??= []
+  ws.views.deploymentViews ??= []
+  ws.model.deploymentEnvironments ??= []
+  return ws
+}
+
 /** Get flat array of all views */
 export function allViewsOf(ws: Workspace): View[] {
   return [
@@ -124,8 +136,8 @@ export function elementExists(ws: Workspace, id: string): boolean {
   return getElementIndex(ws).has(id)
 }
 
-/** The four view-type array keys — used wherever we need to iterate or locate views by type. */
-export const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews'] as const
+/** The view-type array keys — used wherever we need to iterate or locate views by type. */
+export const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews'] as const
 
 /** Apply a callback to every view in the workspace (mutates views in place). */
 export function forEachView(ws: Workspace, fn: (v: View) => void): void {
@@ -154,6 +166,13 @@ const VIEW_ELEMENT_TYPES: Record<View['type'], ReadonlySet<ModelElement['type']>
   systemContext: new Set<ModelElement['type']>(['person', 'softwareSystem']),
   container: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container']),
   component: new Set<ModelElement['type']>(['person', 'softwareSystem', 'container', 'component']),
+  // Dynamic views derive their element membership from the interaction steps
+  // alone — Structurizr has no `include` for them, so a directly-added element
+  // would silently vanish on save/reload. Nothing may be dropped in directly.
+  dynamic: new Set<ModelElement['type']>(),
+  // Deployment views show deployment elements (nodes/instances), which are not
+  // ModelElements — plain model elements are never dropped into them directly.
+  deployment: new Set<ModelElement['type']>(),
 }
 
 /** True when a view of `viewType` is allowed to display an element of `elementType`. */

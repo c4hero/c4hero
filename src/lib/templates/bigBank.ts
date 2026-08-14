@@ -217,6 +217,7 @@ export function createBigBankSample(): Workspace {
         { id: 'r28', sourceId: 'mainframeFacade', destinationId: 'mainframe', description: 'Makes API calls', technology: 'XML/HTTPS', tags: ['Relationship'], properties: {} },
       ],
       groups: [],
+      deploymentEnvironments: [],
     },
     views: {
       systemLandscapeViews: [
@@ -311,6 +312,8 @@ export function createBigBankSample(): Workspace {
           autoLayout: { direction: 'TB' },
         },
       ],
+      dynamicViews: [],
+      deploymentViews: [],
       configuration: {
         styles: {
           elements: [

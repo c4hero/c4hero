@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { validateScope } from '@/lib/scopeValidation'
 import { pushUndoSnapshot } from '../internals'
+import { normalizeWorkspaceShape } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 
 /** Workspace lifecycle: load / close / metadata / scope validation, plus
@@ -31,6 +32,9 @@ export const createLifecycleSlice: StateCreator<
   }),
 
   loadWorkspace: (workspace) => {
+    // Files and snapshots written before dynamic/deployment views existed
+    // lack those arrays; fill them before anything iterates VIEW_ARRAY_KEYS.
+    normalizeWorkspaceShape(workspace)
     const firstView = getFirstViewKey(workspace)
     set({
       workspace,
