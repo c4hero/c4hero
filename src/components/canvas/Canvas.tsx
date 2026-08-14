@@ -523,7 +523,7 @@ export default function Canvas() {
     if (!pending) return
     const rf = rfInitInstance.current
     if (!rf) {
-      if (restoreAttempts.current++ < 30) requestAnimationFrame(tryRestoreViewport)
+      if (restoreAttempts.current++ < MAX_MEASURE_ATTEMPTS) requestAnimationFrame(tryRestoreViewport)
       else { restorePending.current = null; restoreAttempts.current = 0 }
       return
     }
