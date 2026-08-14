@@ -14,6 +14,7 @@ import {
   Settings,
   MousePointerClick,
   Sparkles,
+  LockOpen,
 } from 'lucide-react'
 import { useAiSettingsStore, isAiReady } from '@/store/ai-settings'
 import { missingInfoGaps } from '@/lib/ai'
@@ -43,6 +44,7 @@ export default function FloatingToolRail() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const resetAndRelayout = useWorkspaceStore((s) => s.resetAndRelayout)
+  const unlockAllInView = useWorkspaceStore((s) => s.unlockAllInView)
 
   const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
   const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
@@ -129,6 +131,7 @@ export default function FloatingToolRail() {
 
   const view = activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
   const currentDirection = view?.autoLayout?.direction ?? 'TB'
+  const lockedCount = view?.elements.filter((el) => el.locked).length ?? 0
 
   function handleAutoArrange(direction?: LayoutDirection) {
     if (!activeViewKey) return
@@ -293,6 +296,30 @@ export default function FloatingToolRail() {
                   )}
                 </button>
               ))}
+              {/* Escape hatch, right where the confusion lands: Auto-arrange
+                  skipping nodes is what sends someone looking here. */}
+              {lockedCount > 0 && (
+                <>
+                  <div style={{ height: 1, background: 'var(--color-border)', margin: '3px 6px' }} />
+                  <button
+                    className="flyout-item"
+                    aria-label={`Unlock all, ${lockedCount} locked`}
+                    onClick={() => {
+                      if (!activeViewKey) return
+                      unlockAllInView(activeViewKey)
+                      setArrangePanelOpen(false)
+                    }}
+                  >
+                    <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', display: 'flex' }}>
+                      <LockOpen size={14} />
+                    </span>
+                    <span aria-hidden="true">Unlock all</span>
+                    <span aria-hidden="true" style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                      {lockedCount}
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

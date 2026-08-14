@@ -228,6 +228,38 @@ test.describe('multi-select bar — align', () => {
     expect(Math.abs(centerX(customer) - centerX(atm))).toBeLessThan(1)
   })
 
+  test('Align top leaves a locked node in the selection untouched', async ({ workspace }) => {
+    await workspace.loadSample()
+    const landscape = (await workspace.getViews()).find((view) => view.type === 'systemLandscape')
+    expect(landscape).toBeTruthy()
+    await workspace.setView(landscape!.key)
+
+    await setActiveViewPositions(workspace.page, [
+      { id: 'customer', x: 100, y: 80 },
+      { id: 'atm', x: 460, y: 500 },
+      { id: 'mainframe', x: 820, y: 200 },
+    ])
+    await lockElements(workspace.page, ['atm'])
+
+    const atmBefore = await getNodeBox(workspace.page, 'atm')
+
+    await selectNodes(workspace, ['Personal Banking Customer', 'ATM', 'Mainframe Banking System'])
+    await clickAlignAction(workspace.page, 'Align top')
+
+    const customer = await getNodeBox(workspace.page, 'customer')
+    const mainframe = await getNodeBox(workspace.page, 'mainframe')
+    const atmAfter = await getNodeBox(workspace.page, 'atm')
+
+    // The two unlocked nodes aligned to each other...
+    expect(Math.abs(customer.y - mainframe.y)).toBeLessThan(0.5)
+    // ...but the locked node was excluded from the alignment entirely — it
+    // never moved, on screen or in the store — even though it was part of
+    // the selection Align top ran on.
+    expect(Math.abs(atmAfter.y - atmBefore.y)).toBeLessThan(0.5)
+    expect(Math.abs(atmAfter.x - atmBefore.x)).toBeLessThan(0.5)
+    expect(Math.abs(atmAfter.y - customer.y)).toBeGreaterThan(5)
+  })
+
   test('Distribute horizontally spaces rendered node gaps evenly', async ({ workspace }) => {
     await workspace.loadSample()
     const landscape = (await workspace.getViews()).find((view) => view.type === 'systemLandscape')
@@ -397,6 +429,15 @@ async function setActiveViewPositions(
     store?.updateNodePositions(updates)
   }, positions)
   await page.waitForTimeout(250)
+}
+
+async function lockElements(page: import('@playwright/test').Page, ids: string[]) {
+  await page.evaluate((elementIds) => {
+    type S = { activeViewKey: string | null; setElementsLocked: (viewKey: string, ids: string[], locked: boolean) => void }
+    const store = (window as unknown as { __testStore?: () => S }).__testStore?.()
+    if (store?.activeViewKey) store.setElementsLocked(store.activeViewKey, elementIds, true)
+  }, ids)
+  await page.waitForTimeout(150)
 }
 
 async function getNodeBox(page: import('@playwright/test').Page, id: string) {

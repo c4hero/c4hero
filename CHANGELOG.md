@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Lock a node in place.** Auto-arrange used to be all or nothing: hand-place
+  two elements and re-running it threw that work away. Locked nodes now hold
+  their exact position through Auto-arrange and layout-direction changes while
+  everything else reflows around them, and they can't be dragged by accident.
+  Lock from the element panel or the multi-select bar; locked nodes carry a
+  small lock marker, and **Unlock all** sits in the Auto-arrange menu. Lock
+  state is saved alongside positions and survives a reload. Requested in
+  [#108](https://github.com/c4hero/c4hero/issues/108).
 - **Dynamic and deployment views now round-trip through the DSL.** Workspaces
   using `dynamic` views (ordered interaction steps, including response
   messages and repeated steps) and `deployment` views (`deploymentEnvironment`,
