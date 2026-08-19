@@ -14,8 +14,21 @@ export type ViewSlice = Pick<WorkspaceState,
   | 'addView' | 'deleteView' | 'renameView' | 'duplicateView'
   | 'toggleElementInView' | 'removeElementsFromView' | 'setLayoutDirection' | 'resetAndRelayout'
   | 'updateNodePosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
+  | 'setElementsLocked' | 'unlockAllInView' | 'setViewLocked'
   | 'layoutVersion'
 >
+
+/** Drop the saved positions a full re-layout is meant to discard, leaving
+ *  locked elements exactly where the user put them. Exported so tests can
+ *  exercise the real implementation instead of a hand-copied stand-in. */
+export function clearUnlockedPositions(view: View): void {
+  for (const el of view.elements) {
+    if (el.locked) continue
+    el.x = undefined
+    el.y = undefined
+    el.pinned = undefined
+  }
+}
 
 export const createViewSlice: StateCreator<
   WorkspaceState,
@@ -110,8 +123,13 @@ export const createViewSlice: StateCreator<
     for (const key of VIEW_ARRAY_KEYS) {
       const view = (s.workspace.views[key] ?? []).find(v => v.key === s.activeViewKey)
       if (!view) continue
+      // A locked view freezes every node, locked or not.
+      if (view.locked) return
       const el = view.elements.find(e => e.id === nodeId)
       if (!el) return
+      // Locked nodes are marked undraggable in React Flow; this is the backstop
+      // for any path that moves nodes without going through a drag handle.
+      if (el.locked) return
       el.x = x
       el.y = y
       el.pinned = true
@@ -126,7 +144,9 @@ export const createViewSlice: StateCreator<
     for (const key of VIEW_ARRAY_KEYS) {
       const view = (s.workspace.views[key] ?? []).find(v => v.key === s.activeViewKey)
       if (!view) continue
+      if (view.locked) return
       for (const el of view.elements) {
+        if (el.locked) continue
         const u = updateMap.get(el.id)
         if (!u) continue
         el.x = u.x
@@ -217,14 +237,12 @@ export const createViewSlice: StateCreator<
     if (!s.workspace) return
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
+    // A locked view's layout is frozen wholesale — the UI disables these
+    // controls, this is the backstop for the command palette / shortcuts.
+    if (view.locked) return
     pushUndoSnapshot(s)
     view.autoLayout = { ...view.autoLayout, direction }
-    // Reset positions and pinned flags to trigger full re-layout
-    for (const el of view.elements) {
-      el.x = undefined
-      el.y = undefined
-      el.pinned = undefined
-    }
+    clearUnlockedPositions(view)
     s.layoutVersion += 1
   }),
 
@@ -232,15 +250,56 @@ export const createViewSlice: StateCreator<
     if (!s.workspace) return
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
+    if (view.locked) return
     pushUndoSnapshot(s)
-    for (const el of view.elements) {
-      el.x = undefined
-      el.y = undefined
-      el.pinned = undefined
-    }
+    clearUnlockedPositions(view)
     if (direction) {
       view.autoLayout = { ...view.autoLayout, direction }
     }
     s.layoutVersion += 1
+  }),
+
+  setElementsLocked: (viewKey, ids, locked) => set((s) => {
+    if (!s.workspace || ids.length === 0) return
+    const view = findViewHelper(s.workspace, viewKey)
+    if (!view) return
+    const targets = new Set(ids)
+    const changed = view.elements.filter(
+      (el) => targets.has(el.id) && (el.locked ?? false) !== locked,
+    )
+    if (changed.length === 0) return
+    pushUndoSnapshot(s)
+    for (const el of changed) {
+      el.locked = locked || undefined
+      // Adopt the current position as hand-authored. Without this, a
+      // locked-but-never-dragged node is persisted only via `locked`, and
+      // unlocking it later would silently drop the position it had been
+      // holding across re-layouts and reloads.
+      if (el.x !== undefined && el.y !== undefined) el.pinned = true
+    }
+  }),
+
+  setViewLocked: (viewKey, locked) => set((s) => {
+    if (!s.workspace) return
+    const view = findViewHelper(s.workspace, viewKey)
+    if (!view) return
+    if ((view.locked ?? false) === locked) return
+    pushUndoSnapshot(s)
+    view.locked = locked || undefined
+  }),
+
+  unlockAllInView: (viewKey) => set((s) => {
+    if (!s.workspace) return
+    const view = findViewHelper(s.workspace, viewKey)
+    if (!view) return
+    const locked = view.elements.filter((el) => el.locked)
+    if (locked.length === 0) return
+    pushUndoSnapshot(s)
+    for (const el of locked) {
+      el.locked = undefined
+      // Same as setElementsLocked: unlocking releases the node, it doesn't
+      // forfeit the position the lock was holding.
+      if (el.x !== undefined && el.y !== undefined) el.pinned = true
+    }
   }),
 })

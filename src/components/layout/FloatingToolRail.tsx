@@ -14,6 +14,8 @@ import {
   Settings,
   MousePointerClick,
   Sparkles,
+  Lock,
+  LockOpen,
 } from 'lucide-react'
 import { useAiSettingsStore, isAiReady } from '@/store/ai-settings'
 import { missingInfoGaps } from '@/lib/ai'
@@ -43,6 +45,8 @@ export default function FloatingToolRail() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const resetAndRelayout = useWorkspaceStore((s) => s.resetAndRelayout)
+  const unlockAllInView = useWorkspaceStore((s) => s.unlockAllInView)
+  const setViewLocked = useWorkspaceStore((s) => s.setViewLocked)
 
   const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
   const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
@@ -129,6 +133,8 @@ export default function FloatingToolRail() {
 
   const view = activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
   const currentDirection = view?.autoLayout?.direction ?? 'TB'
+  const lockedCount = view?.elements.filter((el) => el.locked).length ?? 0
+  const viewLocked = view?.locked === true
 
   function handleAutoArrange(direction?: LayoutDirection) {
     if (!activeViewKey) return
@@ -244,11 +250,18 @@ export default function FloatingToolRail() {
         <RailBtn
           ref={arrangeBtnRef}
           icon={<LayoutDashboard size={16} />}
-          label="Auto-arrange"
+          label={viewLocked ? 'Auto-arrange (view layout locked)' : 'Auto-arrange'}
           active={arrangePanelOpen}
           expanded={arrangePanelOpen}
           onClick={() => { setArrangePanelOpen((o) => !o); setAddPanelOpen(false) }}
         />
+        {/* Locked-view badge: the lock must be visible without opening the
+            menu — invisible lock state reads as "Auto-arrange is broken". */}
+        {viewLocked && (
+          <span aria-hidden="true" style={{ pointerEvents: 'none', position: 'absolute', top: 2, right: 2, display: 'flex', color: 'var(--color-accent)' }}>
+            <Lock size={10} />
+          </span>
+        )}
         {arrangePanelOpen && (
           <>
             <div
@@ -280,6 +293,8 @@ export default function FloatingToolRail() {
                   key={dir}
                   className="flyout-item"
                   data-active={currentDirection === dir}
+                  disabled={viewLocked}
+                  title={viewLocked ? 'View layout is locked' : undefined}
                   onClick={() => handleAutoArrange(dir)}
                 >
                   <span style={{ color: currentDirection === dir ? 'var(--color-accent)' : 'var(--color-text-muted)', display: 'flex' }}>
@@ -293,6 +308,46 @@ export default function FloatingToolRail() {
                   )}
                 </button>
               ))}
+              {/* Escape hatch, right where the confusion lands: Auto-arrange
+                  skipping nodes is what sends someone looking here. */}
+              <div style={{ height: 1, background: 'var(--color-border)', margin: '3px 6px' }} />
+              {/* View-level lock: freezes the whole diagram — Auto-arrange,
+                  direction changes, and every drag — in one switch. */}
+              <button
+                className="flyout-item"
+                aria-pressed={viewLocked}
+                aria-label={viewLocked ? 'Unlock view layout' : 'Lock view layout'}
+                onClick={() => {
+                  if (!activeViewKey) return
+                  setViewLocked(activeViewKey, !viewLocked)
+                }}
+              >
+                <span aria-hidden="true" style={{ color: viewLocked ? 'var(--color-accent)' : 'var(--color-text-muted)', display: 'flex' }}>
+                  {viewLocked ? <Lock size={14} /> : <LockOpen size={14} />}
+                </span>
+                <span aria-hidden="true">{viewLocked ? 'Unlock view layout' : 'Lock view layout'}</span>
+              </button>
+              {lockedCount > 0 && !viewLocked && (
+                <>
+                  <button
+                    className="flyout-item"
+                    aria-label={`Unlock all, ${lockedCount} locked`}
+                    onClick={() => {
+                      if (!activeViewKey) return
+                      unlockAllInView(activeViewKey)
+                      setArrangePanelOpen(false)
+                    }}
+                  >
+                    <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', display: 'flex' }}>
+                      <LockOpen size={14} />
+                    </span>
+                    <span aria-hidden="true">Unlock all</span>
+                    <span aria-hidden="true" style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                      {lockedCount}
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

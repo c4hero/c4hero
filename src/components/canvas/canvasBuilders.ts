@@ -186,7 +186,11 @@ export function buildNodes(
         onDrillIn,
         highlighted,
         viewCount: viewCountMap.get(element.id) ?? 1,
+        locked: viewEl.locked === true,
       },
+      // A locked node holds its place against Auto-arrange, so it should hold it
+      // against a stray drag too. A locked VIEW freezes every node the same way.
+      draggable: (view.locked === true || viewEl.locked === true) ? false : undefined,
       // Highlighter focus mode: matched nodes get the highlighted ring; the rest
       // fade to ghost context. When no facets are active, every node renders
       // normally (no class either way).
@@ -245,6 +249,7 @@ export function buildGroupNodes(
   groups: typeof workspace.model.groups,
   laidOutNodes: Node[],
   boundaryClusters: LayoutBoundaryCluster[] = [],
+  options: { draggable?: boolean } = {},
 ): Node[] {
   const PADDING = 24
   const PADDING_TOP = 52 // extra room for the group label
@@ -322,7 +327,8 @@ export function buildGroupNodes(
       // detect group drags (id starts with `group-`) and translate every
       // member by the same delta. The group's own position is then re-
       // derived from the updated members on the next overlay rebuild.
-      draggable: true,
+      // A locked view pins the overlays too (options.draggable === false).
+      draggable: options.draggable ?? true,
     })
   }
   return groupNodes

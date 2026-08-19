@@ -2150,6 +2150,16 @@ body {
   user-select: none;
 }
 
+/* Locked-node marker. Always visible — a lock nobody can see reads as
+   Auto-arrange being broken. */
+.c4-node-lock {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  opacity: 0.75;
+  user-select: none;
+}
+
 .c4-node-badge {
   position: absolute;
   top: -6px;

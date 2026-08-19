@@ -139,7 +139,7 @@ function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, 
   const contentOnly = nodes.filter((n) => !isOverlayNode(n))
   const previousOverlays = new Map(nodes.filter(isOverlayNode).map((n) => [n.id, n]))
   const boundaryClusters = view ? buildBoundaryLayoutClusters(workspace, view) : []
-  const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters)
+  const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters, { draggable: view?.locked !== true })
   const updatedBoundaries = view ? buildBoundaryNodes(workspace, view, contentOnly, updatedGroups) : []
   const overlays = [...updatedBoundaries, ...updatedGroups].map((overlay) => {
     const previous = previousOverlays.get(overlay.id)
@@ -375,7 +375,7 @@ export default function Canvas() {
     const laidOut = applyAutoLayout(layoutNodes, tempEdges, view, workspace.model.groups, direction, boundaryInternalIds, boundaryClusters)
 
     // 4. Build group background nodes and scope boundary using post-layout positions
-    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut, boundaryClusters)
+    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut, boundaryClusters, { draggable: view.locked !== true })
     const boundaryNodes = buildBoundaryNodes(workspace, view, laidOut, groupNodes)
     const overlayNodes = [...boundaryNodes, ...groupNodes]
     const allNodes = [...overlayNodes, ...laidOut]
@@ -540,7 +540,7 @@ export default function Canvas() {
     if (!pending) return
     const rf = rfInitInstance.current
     if (!rf) {
-      if (restoreAttempts.current++ < 30) requestAnimationFrame(tryRestoreViewport)
+      if (restoreAttempts.current++ < MAX_MEASURE_ATTEMPTS) requestAnimationFrame(tryRestoreViewport)
       else { restorePending.current = null; restoreAttempts.current = 0 }
       return
     }
@@ -600,14 +600,19 @@ export default function Canvas() {
         requestAnimationFrame(rebuildOverlays)
       }
     } else {
-      // Non-structural change (e.g. new relationship, style update, rename).
-      // Only update edges and refresh node data without replacing positions.
+      // Non-structural change (e.g. new relationship, style update, rename,
+      // lock toggle). Only update edges and refresh node data without
+      // replacing positions.
       setEdges(initialEdges)
       setNodes((prev) => {
         const byId = new Map(initialNodes.map(n => [n.id, n]))
         return prev.map(n => {
           const next = byId.get(n.id)
-          return next ? { ...n, data: next.data, className: next.className } : n
+          // draggable must be carried over here too: locking a node changes
+          // its computed draggable flag (canvasBuilders.ts) but not the
+          // structural signal above, so this is the only branch that ever
+          // applies it to an already-mounted node.
+          return next ? { ...n, data: next.data, className: next.className, draggable: next.draggable } : n
         })
       })
       requestAnimationFrame(rebuildOverlays)
@@ -752,9 +757,23 @@ export default function Canvas() {
       dragMemberIds.add(groupNodeId)
     }
 
+    // A locked view freezes everything — the overlay itself is undraggable,
+    // but bail before capturing members in case a drag start races a lock.
+    if (viewRef.current?.locked) {
+      overlayDragRef.current = null
+      return
+    }
+
+    // Locked members hold their position through a group/boundary drag same
+    // as they do through Auto-arrange: leave them out of memberStart so
+    // onNodeDrag's translation never touches them.
+    const lockedIds = new Set(
+      (viewRef.current?.elements ?? []).filter((el) => el.locked).map((el) => el.id),
+    )
+
     const memberStart = new Map<string, { x: number; y: number }>()
     for (const n of reactFlowInstance.getNodes()) {
-      if (dragMemberIds.has(n.id)) memberStart.set(n.id, { x: n.position.x, y: n.position.y })
+      if (dragMemberIds.has(n.id) && !lockedIds.has(n.id)) memberStart.set(n.id, { x: n.position.x, y: n.position.y })
     }
     overlayDragRef.current = {
       nodeId: node.id,

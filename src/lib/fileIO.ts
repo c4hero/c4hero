@@ -333,6 +333,7 @@ function isViewElementShape(value: unknown): boolean {
   if ('x' in value && value.x !== undefined && !isFiniteNumber(value.x)) return false
   if ('y' in value && value.y !== undefined && !isFiniteNumber(value.y)) return false
   if ('pinned' in value && value.pinned !== undefined && typeof value.pinned !== 'boolean') return false
+  if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   return true
 }
 

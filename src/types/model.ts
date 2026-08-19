@@ -140,8 +140,14 @@ export interface ElementInView {
   id: string
   x?: number
   y?: number
-  /** True when the user has manually dragged this node */
+  /** True when the user has manually dragged this node. Marks x/y as
+   *  hand-authored, which is what the sidecar persists. */
   pinned?: boolean
+  /** True when the user has locked this node in place. A locked node keeps its
+   *  x/y through a full re-layout (Auto-arrange, layout-direction change) and
+   *  can't be dragged until it's unlocked. Distinct from `pinned`: dragging
+   *  something records a position, it doesn't defend it. */
+  locked?: boolean
 }
 
 export interface RelationshipInView {
@@ -181,6 +187,11 @@ export interface View {
    *  defined no views at all. The serializer skips auto views so the source
    *  DSL roundtrips unchanged; users still see them on the canvas. */
   autoView?: boolean
+  /** View-level layout lock: the whole diagram is frozen — Auto-arrange and
+   *  layout-direction changes are no-ops, and no node can be dragged. Element
+   *  locks stay independent underneath, so unlocking the view restores them.
+   *  A c4hero concept persisted in the sidecar, not the DSL. */
+  locked?: boolean
   title?: string
   description?: string
   softwareSystemId?: string

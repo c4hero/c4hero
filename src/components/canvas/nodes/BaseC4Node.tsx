@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   ZoomIn,
   Database, Circle, Hexagon, Diamond, UserRound, Bot, Folder, Globe, Smartphone,
-  AlertTriangle,
+  AlertTriangle, Lock,
 } from 'lucide-react'
 import type { C4NodeData } from './types'
 import StatusDot from './StatusDot'
@@ -163,6 +163,19 @@ export default function BaseC4Node({
         <div style={{ flex: 1, minWidth: 0, ...(resolvedFontSize != null && { fontSize: `${resolvedFontSize}px` }) }}>
           <InlineName elementId={element.id} name={element.name} lineClamp={nameClamp} textColor={style?.color} />
         </div>
+        {/* Outside .c4-node-actions on purpose — that container fades out until
+            the node is hovered, and a lock nobody can see reads as Auto-arrange
+            being broken. */}
+        {data.locked && (
+          <span
+            className="c4-node-lock"
+            role="img"
+            aria-label={`${element.name} is locked in place`}
+            title="Locked — Auto-arrange and dragging leave this where it is"
+          >
+            <Lock size={11} />
+          </span>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }} className="c4-node-actions">
           {viewCount > 1 && (
             <span

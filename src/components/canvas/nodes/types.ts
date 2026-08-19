@@ -9,4 +9,6 @@ export interface C4NodeData {
   viewCount?: number
   /** True when this node matches the active highlighter filters — render highlight rail. */
   highlighted?: boolean
+  /** True when the user has locked this node in place. */
+  locked?: boolean
 }

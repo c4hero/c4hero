@@ -31,11 +31,14 @@ interface SidecarRelationship {
 
 interface SidecarViewElement {
   pinned?: boolean
+  locked?: boolean
   x?: number
   y?: number
 }
 
 interface SidecarView {
+  /** View-level layout lock (freezes Auto-arrange + dragging for the view). */
+  locked?: boolean
   elements?: Record<string, SidecarViewElement>
 }
 
@@ -62,6 +65,7 @@ function isSidecarRelationship(value: unknown): value is SidecarRelationship {
 function isSidecarViewElement(value: unknown): value is SidecarViewElement {
   if (!isRecord(value)) return false
   if ('pinned' in value && value.pinned !== undefined && typeof value.pinned !== 'boolean') return false
+  if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('x' in value && value.x !== undefined && !isFiniteNumber(value.x)) return false
   if ('y' in value && value.y !== undefined && !isFiniteNumber(value.y)) return false
   return true
@@ -69,6 +73,7 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
 
 function isSidecarView(value: unknown): value is SidecarView {
   if (!isRecord(value)) return false
+  if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
   return true
 }
@@ -91,22 +96,30 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
   // migration of existing sidecar files written by older versions of c4hero.
 
-  // Views: pinned elements
+  // Views: hand-placed and locked elements, plus the view-level layout lock.
+  // A lock is worth persisting on its own — it survives a re-layout, so it
+  // has to survive a reload.
   const views: Record<string, SidecarView> = {}
   for (const view of allViewsOf(workspace)) {
     const viewElements: Record<string, SidecarViewElement> = {}
     for (const el of view.elements) {
-      if (el.pinned) {
-        const entry: SidecarViewElement = { pinned: true }
+      if (el.pinned || el.locked) {
+        const entry: SidecarViewElement = {}
+        if (el.pinned) entry.pinned = true
+        if (el.locked) entry.locked = true
         if (el.x !== undefined) entry.x = el.x
         if (el.y !== undefined) entry.y = el.y
         viewElements[el.id] = entry
         hasData = true
       }
     }
-    if (Object.keys(viewElements).length > 0) {
-      views[view.key] = { elements: viewElements }
+    const entry: SidecarView = {}
+    if (view.locked) {
+      entry.locked = true
+      hasData = true
     }
+    if (Object.keys(viewElements).length > 0) entry.elements = viewElements
+    if (entry.locked || entry.elements) views[view.key] = entry
   }
   if (Object.keys(views).length > 0) sidecar.views = views
 
@@ -159,18 +172,24 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     }
   }
 
-  // Views: pinned
+  // Views: the view-level layout lock, plus hand-placed and locked elements
   if (sidecar.views) {
     for (const view of allViewsOf(workspace)) {
       const viewData = sidecar.views[view.key]
-      if (!viewData?.elements) continue
+      if (!viewData) continue
+      if (viewData.locked) view.locked = true
+      if (!viewData.elements) continue
       for (const el of view.elements) {
         const elData = viewData.elements[el.id]
-        if (elData?.pinned) {
-          el.pinned = true
-          if (isFiniteNumber(elData.x)) el.x = elData.x
-          if (isFiniteNumber(elData.y)) el.y = elData.y
-        }
+        // An entry with explicit pinned:false / locked:false is well-formed
+        // per isSidecarViewElement — checking the entry's presence rather
+        // than the truthiness of its fields is what makes that entry's x/y
+        // apply instead of being silently dropped alongside the false flags.
+        if (!elData) continue
+        if (elData.pinned !== undefined) el.pinned = elData.pinned || undefined
+        if (elData.locked !== undefined) el.locked = elData.locked || undefined
+        if (isFiniteNumber(elData.x)) el.x = elData.x
+        if (isFiniteNumber(elData.y)) el.y = elData.y
       }
     }
   }

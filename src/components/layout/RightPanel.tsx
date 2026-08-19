@@ -1,9 +1,9 @@
 import { useState, useCallback, useMemo } from 'react'
-import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, isFocalScopeElement } from '@/store/workspace'
+import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location, Workspace } from '@/types/model'
-import { X, Plus, ArrowRight, ArrowUpRight, ArrowDownLeft, ExternalLink, Eye, EyeOff, ChevronRight, Trash2, Sparkles, Loader2 } from 'lucide-react'
+import { X, Plus, ArrowRight, ArrowUpRight, ArrowDownLeft, ExternalLink, Eye, EyeOff, ChevronRight, Trash2, Sparkles, Loader2, Lock, LockOpen } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
@@ -168,6 +168,13 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const appearsInViews = workspace ? getAllViews(workspace).filter(v =>
     v.elements.some(e => e.id === element.id)
   ) : []
+  const isLocked = useWorkspaceStore((s) => {
+    if (!s.workspace || !s.activeViewKey) return false
+    const view = getActiveView(s.workspace, s.activeViewKey)
+    return view?.elements.find((el) => el.id === element.id)?.locked === true
+  })
+  const setElementsLocked = useWorkspaceStore((s) => s.setElementsLocked)
+
   const appearsInActiveView = activeViewKey
     ? appearsInViews.some(v => v.key === activeViewKey)
     : false
@@ -195,6 +202,20 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               style={{ color: 'var(--color-accent)', opacity: hasMissing ? 1 : 0.45 }}
             >
               {busyField === 'all' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            </button>
+          )}
+          {activeViewKey && appearsInActiveView && (
+            <button
+              onClick={() => setElementsLocked(activeViewKey, [element.id], !isLocked)}
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              aria-label={isLocked ? 'Unlock position' : 'Lock position'}
+              aria-pressed={isLocked}
+              title={isLocked
+                ? 'Unlock — let Auto-arrange and dragging move this again'
+                : 'Lock position — Auto-arrange and dragging leave this where it is'}
+              style={{ color: isLocked ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
+            >
+              {isLocked ? <Lock size={14} /> : <LockOpen size={14} />}
             </button>
           )}
           {!isFocal && activeViewKey && appearsInActiveView && (
