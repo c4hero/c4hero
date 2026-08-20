@@ -4,6 +4,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
 import DynamicStepsEditor from './DynamicStepsEditor'
+import DeploymentTopologyEditor from './DeploymentTopologyEditor'
 import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
 import {
   UserRound,
@@ -115,12 +116,9 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
         ref={panelRef}
         className="glass-flyout"
         data-flyout="add-element"
-        style={{ position: 'absolute', left: 56, top: 0, zIndex: 50, width: 280 }}
+        style={{ position: 'absolute', left: 56, top: 0, zIndex: 50, width: 300 }}
       >
-        <div style={{ padding: '12px 14px', color: 'var(--color-text-muted)', fontSize: 12, lineHeight: 1.5 }}>
-          Deployment topology (nodes, instances, infrastructure) is authored in
-          the DSL for now — edit the workspace file to change it.
-        </div>
+        <DeploymentTopologyEditor view={view} />
       </div>
     )
   }

@@ -73,9 +73,10 @@ export const createDynamicStepSlice: StateCreator<
       ws.model.relationships.push(created)
       rel = created
       // Non-dynamic views that show both endpoints pick up the new
-      // relationship, same as addRelationship. Dynamic views stay authored.
+      // relationship, same as addRelationship. Dynamic views stay authored;
+      // deployment views derive their edges from the topology.
       for (const v of allViewsOf(ws)) {
-        if (v.type === 'dynamic') continue
+        if (v.type === 'dynamic' || v.type === 'deployment') continue
         const ids = new Set(v.elements.map(e => e.id))
         if (ids.has(sourceId) && ids.has(destinationId) && !v.relationships.some(r => r.id === rel!.id)) {
           v.relationships.push({ id: rel.id })

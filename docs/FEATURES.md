@@ -4,7 +4,7 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 
 ## C4 modelling
 
-- Visual editing for **people, software systems, containers, and components** — the full C4 element vocabulary. **Deployment nodes, infrastructure nodes, and container / software-system instances** render on the canvas and round-trip through the DSL; authoring deployment topology is DSL-side for now.
+- Visual editing for **people, software systems, containers, and components** — the full C4 element vocabulary. **Deployment nodes, infrastructure nodes, and container / software-system instances** render on the canvas, round-trip through the DSL, and are authored visually from the add panel on a deployment view: nest nodes, place instances and infrastructure, rename inline, and delete with the subtree cascading.
 - All six view types: **system landscape, system context, container, component, dynamic, and deployment**.
 - **Dynamic views** render an ordered interaction sequence — each step carries its numbered badge and an optional per-step description on the edge. Steps are edited visually from the add panel: add (including response steps travelling back over an existing relationship), reorder, describe, and delete, with the sequence renumbering automatically.
 - **Deployment views** render the deployment environment as nested deployment-node boundaries wrapping the container / system instances and infrastructure nodes that run inside them.

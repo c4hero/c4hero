@@ -1,7 +1,7 @@
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
-  ViewType, ElementInView,
+  ViewType, ElementInView, DeploymentNode,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
@@ -136,9 +136,24 @@ export function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch
   return changed
 }
 
-/** True if an element with the given ID exists in the model tree. */
+/** True if an element with the given ID exists in the model tree. Deployment
+ *  elements count too — an explicit relationship may anchor on an
+ *  infrastructure node or instance (e.g. a load balancer routing to a
+ *  container instance), exactly as the DSL allows inside an environment. */
 export function elementExists(ws: Workspace, id: string): boolean {
-  return getElementIndex(ws).has(id)
+  if (getElementIndex(ws).has(id)) return true
+  for (const env of ws.model.deploymentEnvironments ?? []) {
+    let found = false
+    walkDeploymentNodes(env, (node) => {
+      if (found) return
+      if (node.id === id
+        || node.infrastructureNodes.some(i => i.id === id)
+        || node.containerInstances.some(i => i.id === id)
+        || node.softwareSystemInstances.some(i => i.id === id)) found = true
+    })
+    if (found) return true
+  }
+  return false
 }
 
 /** The view-type array keys — used wherever we need to iterate or locate views by type. */
@@ -617,6 +632,45 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
     })
     return true
   })
+
+  // Deployment elements deleted directly (an instance or infrastructure node
+  // by id, or a deployment node — which takes its whole subtree with it).
+  const collectSubtree = (node: DeploymentNode, into: Set<string>): void => {
+    into.add(node.id)
+    for (const inst of node.containerInstances) into.add(inst.id)
+    for (const inst of node.softwareSystemInstances) into.add(inst.id)
+    for (const infra of node.infrastructureNodes) into.add(infra.id)
+    for (const child of node.children) collectSubtree(child, into)
+  }
+  const removedDeploymentIds = new Set<string>()
+  const pruneNodes = (nodes: DeploymentNode[]): DeploymentNode[] =>
+    nodes.filter((node) => {
+      if (idSet.has(node.id)) {
+        collectSubtree(node, removedDeploymentIds)
+        return false
+      }
+      node.children = pruneNodes(node.children)
+      node.infrastructureNodes = node.infrastructureNodes.filter((infra) => {
+        if (!idSet.has(infra.id)) return true
+        removedDeploymentIds.add(infra.id)
+        return false
+      })
+      node.containerInstances = node.containerInstances.filter((inst) => {
+        if (!idSet.has(inst.id)) return true
+        removedDeploymentIds.add(inst.id)
+        return false
+      })
+      node.softwareSystemInstances = node.softwareSystemInstances.filter((inst) => {
+        if (!idSet.has(inst.id)) return true
+        removedDeploymentIds.add(inst.id)
+        return false
+      })
+      return true
+    })
+  for (const env of ws.model.deploymentEnvironments ?? []) {
+    env.deploymentNodes = pruneNodes(env.deploymentNodes)
+  }
+  for (const id of removedDeploymentIds) allDeletedIds.add(id)
 
   // Deployment instances of deleted containers/systems die with them, and
   // the instances' own ids then cascade through relationships and view refs —

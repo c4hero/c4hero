@@ -71,8 +71,10 @@ export const createRelationshipSlice: StateCreator<
       // Dynamic views are exempt: their relationship list is an ORDERED
       // interaction sequence — pushing an unnumbered entry would render a
       // phantom step and serialize it as one the user never authored.
+      // Deployment views are exempt too: their edge set is derived from the
+      // topology at render time, not stored per view.
       for (const view of allViewsOf(ws)) {
-        if (view.type === 'dynamic') continue
+        if (view.type === 'dynamic' || view.type === 'deployment') continue
         const viewElIds = new Set(view.elements.map(e => e.id))
         if (viewElIds.has(sourceId) && viewElIds.has(destinationId)) {
           if (!view.relationships.some(r => r.id === id)) {

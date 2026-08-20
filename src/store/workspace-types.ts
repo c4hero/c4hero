@@ -163,6 +163,15 @@ export interface WorkspaceState extends UndoState {
   moveDynamicStep: (viewKey: string, stepIndex: number, direction: 'up' | 'down') => void
   deleteDynamicStep: (viewKey: string, stepIndex: number) => void
 
+  // Deployment topology authoring. Views of the environment recompute their
+  // membership (same expansion `include *` parses to), keeping positions of
+  // surviving elements; all return the new element's id, or '' on no-op.
+  addDeploymentNode: (environment: string, parentNodeId: string | null) => string
+  addInfrastructureNode: (environment: string, hostNodeId: string) => string
+  addContainerInstance: (environment: string, hostNodeId: string, containerId: string) => string
+  addSoftwareSystemInstance: (environment: string, hostNodeId: string, softwareSystemId: string) => string
+  renameDeploymentElement: (environment: string, id: string, name: string) => void
+
   // View management
   addView: (type: ViewType, scopeId?: string, title?: string, options?: { environment?: string }) => string
   deleteView: (key: string) => void

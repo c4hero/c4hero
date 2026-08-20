@@ -353,6 +353,30 @@ workspace "Dynamics" {
             expect(view.relationships[4].id).toBe(view.relationships[1].id)
         })
 
+        it('store-authored deployment topology serializes to DSL Structurizr accepts', async () => {
+            const { useWorkspaceStore } = await import('@/store/workspace')
+            const { workspace, errors } = parseDSL(DEPLOYMENT_DSL)
+            expect(errors).toEqual([])
+            useWorkspaceStore.getState().loadWorkspace(workspace)
+            const store = useWorkspaceStore.getState()
+            const ws = () => useWorkspaceStore.getState().workspace!
+
+            const env = ws().model.deploymentEnvironments![0]
+            const host = env.deploymentNodes[0]
+            const podId = store.addDeploymentNode(env.name, host.id)
+            expect(podId).not.toBe('')
+            store.renameDeploymentElement(env.name, podId, 'Pod')
+            const infraId = store.addInfrastructureNode(env.name, podId)
+            const container = ws().model.softwareSystems.flatMap(s => s.containers)[0]
+            const instId = store.addContainerInstance(env.name, podId, container.id)
+            // Explicit relationship between deployment elements — the
+            // serializer must emit it AFTER the environment block so the
+            // identifiers exist when the single-pass parser reads it.
+            store.addRelationship(infraId, instId, 'routes to')
+
+            expect(validate(serializeDSL(ws()))).toBeNull()
+        })
+
         it('parallel-sequence numbering matches the real parser, before and after re-serialization', () => {
             const PARALLEL_DSL = `
 workspace "Parallel" {
