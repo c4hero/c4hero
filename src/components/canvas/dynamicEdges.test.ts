@@ -46,16 +46,16 @@ describe('dynamic view edges', () => {
 
     const edges = buildEdges(ws, view, nodes, NO_FILTERS)
     // One edge per interaction step, in sequence. Edge ids are step-scoped
-    // (`relId#order`) so a relationship repeated across steps still renders
-    // every step.
+    // by index (`relId#index`) — parallel branches can repeat both the
+    // relationship and the order number, so neither is unique alone.
     expect(edges).toHaveLength(view.relationships.length)
 
-    for (const step of view.relationships) {
-      const edge = edges.find(e => e.id === `${step.id}#${step.order}`)!
+    view.relationships.forEach((step, index) => {
+      const edge = edges.find(e => e.id === `${step.id}#${index}`)!
       expect(edge).toBeDefined()
       const data = edge.data as { order?: string; stepDescription?: string }
       expect(data.order).toBe(step.order)
-    }
+    })
 
     const orders = edges.map(e => (e.data as { order?: string }).order)
     expect(orders).toEqual(['1', '2', '3'])
@@ -102,13 +102,47 @@ workspace {
 
     const edges = buildEdges(ws, view, nodes, NO_FILTERS)
     const step1 = view.relationships[0]
-    const edge1 = edges.find(e => e.id === `${step1.id}#${step1.order}`)!
+    const edge1 = edges.find(e => e.id === `${step1.id}#0`)!
     expect((edge1.data as { stepDescription?: string }).stepDescription).toBe('Places an order')
 
     // Step 2 has no override — stepDescription is undefined so the edge falls
     // back to the model relationship's own description.
     const step2 = view.relationships[1]
-    const edge2 = edges.find(e => e.id === `${step2.id}#${step2.order}`)!
+    const edge2 = edges.find(e => e.id === `${step2.id}#1`)!
     expect((edge2.data as { stepDescription?: string }).stepDescription).toBeUndefined()
+  })
+
+  it('keeps edge ids distinct when parallel branches repeat a relationship at the same order', () => {
+    const dsl = `
+workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        a -> b "calls"
+    }
+    views {
+        dynamic * "Fanout" {
+            {
+                a -> b "branch one"
+            }
+            {
+                a -> b "branch two"
+            }
+        }
+    }
+}
+`
+    const { workspace: ws, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = ws.views.dynamicViews[0]
+    // Same relationship, same order in both branches — the collision the
+    // index-scoped edge id exists to prevent.
+    expect(view.relationships.map(r => r.order)).toEqual(['1', '1'])
+    expect(view.relationships[0].id).toBe(view.relationships[1].id)
+
+    const nodes = laidOut(view.elements.map(e => e.id))
+    const edges = buildEdges(ws, view, nodes, NO_FILTERS)
+    expect(edges).toHaveLength(2)
+    expect(new Set(edges.map(e => e.id)).size).toBe(2)
   })
 })

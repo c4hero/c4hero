@@ -345,13 +345,18 @@ function parseDynamicViewBody(p: ContextAwareParser, view: View, model: Model, o
 
         if (token.type === 'COMMENT') { p.advance(); continue }
 
-        // Parallel-sequence group: Structurizr numbers these 2a/2b/…; we
-        // flatten them into the running sequence so no step is lost.
+        // Parallel-sequence group. Structurizr clones the sequence counter at
+        // `{` and reverts it at `}`: every branch numbers from the same base,
+        // and the step after the groups reuses that base too (verified against
+        // the real CLI — `a->b  {b->c  c->d}  {b->d}  d->e` numbers
+        // 1, 2, 3, 2, 2). Duplicate orders across steps are therefore normal.
         if (token.type === 'LBRACE') {
             p.advance()
+            const base = order.next
             parseDynamicViewBody(p, view, model, order)
             p.skipNewlines()
             p.expect('RBRACE')
+            order.next = base
             continue
         }
 

@@ -352,6 +352,62 @@ workspace "Dynamics" {
             expect(view.relationships[3].response).toBe(true)
             expect(view.relationships[4].id).toBe(view.relationships[1].id)
         })
+
+        it('parallel-sequence numbering matches the real parser, before and after re-serialization', () => {
+            const PARALLEL_DSL = `
+workspace "Parallel" {
+  model {
+    a = softwareSystem "A"
+    b = softwareSystem "B"
+    c = softwareSystem "C"
+    d = softwareSystem "D"
+    e = softwareSystem "E"
+    a -> b "one"
+    b -> c "two"
+    c -> d "chain"
+    b -> d "alt"
+    d -> e "tail"
+    e -> a "home"
+  }
+  views {
+    dynamic * "Flow" {
+      a -> b
+      {
+        b -> c
+        c -> d
+      }
+      {
+        b -> d
+      }
+      d -> e
+      e -> a
+    }
+  }
+}
+`
+            const ordersOf = (exported: Record<string, unknown>): string[] => {
+                const views = exported.views as {
+                    dynamicViews?: { relationships?: { order?: string }[] }[]
+                } | undefined
+                return (views?.dynamicViews?.[0]?.relationships ?? [])
+                    .map(r => String(r.order))
+                    .sort()
+            }
+
+            const theirs = ordersOf(exportModel(PARALLEL_DSL))
+            // Branches clone the counter from the group's base and revert it;
+            // sequential steps after the groups renumber from that base too.
+            expect(theirs).toEqual(['1', '2', '2', '2', '3', '3'])
+
+            // Our parser assigns the same orders...
+            const { workspace, errors } = parseDSL(PARALLEL_DSL)
+            expect(errors).toEqual([])
+            expect(workspace.views.dynamicViews[0].relationships.map(s => s.order).sort()).toEqual(theirs)
+
+            // ...and our serialization reproduces them under the REAL parser
+            // (which requires the brace groups to survive re-emission).
+            expect(ordersOf(exportModel(serializeDSL(workspace)))).toEqual(theirs)
+        })
     })
 
     it('nested model, container and component groups serialize to DSL Structurizr accepts', () => {

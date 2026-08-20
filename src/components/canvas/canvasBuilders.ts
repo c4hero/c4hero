@@ -543,21 +543,23 @@ export function buildEdges(
       drawn.push({ rel, edgeId: rel.id, sourceId: rel.sourceId, targetId: rel.destinationId })
     }
   } else {
-    for (const viewRel of view.relationships) {
+    view.relationships.forEach((viewRel, stepIndex) => {
       const rel = relationshipMap.get(viewRel.id)
-      if (!rel) continue
+      if (!rel) return
       const sourceId = viewRel.sourceId ?? rel.sourceId
       const targetId = viewRel.destinationId ?? rel.destinationId
-      if (!viewElementIds.has(sourceId) || !viewElementIds.has(targetId)) continue
+      if (!viewElementIds.has(sourceId) || !viewElementIds.has(targetId)) return
       drawn.push({
         rel,
-        edgeId: viewRel.order !== undefined ? `${rel.id}#${viewRel.order}` : rel.id,
+        // Step-scoped by INDEX, not order: parallel-sequence branches can
+        // legally repeat both the relationship and the order number.
+        edgeId: viewRel.order !== undefined ? `${rel.id}#${stepIndex}` : rel.id,
         sourceId,
         targetId,
         order: viewRel.order,
         stepDescription: viewRel.description,
       })
-    }
+    })
   }
 
   const edgeInfos: EdgeInfo[] = []

@@ -644,7 +644,11 @@ export default function Canvas() {
     setEdges((prev) => {
       let changed = false
       const next = prev.map((e) => {
-        const shouldBeSelected = e.id === storeSelectedRelationshipId
+        // Match on the backing relationship, not the edge id: dynamic step
+        // edges carry step-scoped ids (`relId#index`), and every step of the
+        // selected relationship should show the emphasis.
+        const relId = (e.data as { relationship?: { id: string } } | undefined)?.relationship?.id ?? e.id
+        const shouldBeSelected = relId === storeSelectedRelationshipId
         if (!!e.selected === shouldBeSelected) return e
         changed = true
         return { ...e, selected: shouldBeSelected }

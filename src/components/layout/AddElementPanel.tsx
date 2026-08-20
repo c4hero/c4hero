@@ -94,6 +94,26 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const view = getActiveView(workspace, activeViewKey)
   const viewElementIds = new Set(view?.elements.map((e) => e.id) ?? [])
 
+  // Dynamic and deployment views have no creatable element types yet — say
+  // so instead of rendering a dead-end empty panel.
+  if (view?.type === 'dynamic' || view?.type === 'deployment') {
+    const hint = view.type === 'dynamic'
+      ? 'Dynamic view steps are authored in the DSL for now — edit the workspace file to add or reorder interaction steps.'
+      : 'Deployment topology (nodes, instances, infrastructure) is authored in the DSL for now — edit the workspace file to change it.'
+    return (
+      <div
+        ref={panelRef}
+        className="glass-flyout"
+        data-flyout="add-element"
+        style={{ position: 'absolute', left: 56, top: 0, zIndex: 50, width: 280 }}
+      >
+        <div style={{ padding: '12px 14px', color: 'var(--color-text-muted)', fontSize: 12, lineHeight: 1.5 }}>
+          {hint}
+        </div>
+      </div>
+    )
+  }
+
   // Determine which element types are allowed in this view
   const allowedTypes = new Set<string>()
   if (creatableTypes.canCreatePerson) allowedTypes.add('person')

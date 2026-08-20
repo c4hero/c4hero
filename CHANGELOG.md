@@ -37,6 +37,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Parallel interaction sequences now number exactly like Structurizr.**
+  Brace groups in a dynamic view used to be flattened into one running
+  sequence (1, 2, 3, 4); the real parser clones the counter at `{` and
+  reverts it at `}`, so branches share a base number and the step after the
+  groups reuses it too. c4hero now matches that numbering — verified against
+  the Structurizr CLI — and re-serializes the brace groups so the orders
+  survive a round-trip instead of silently renumbering.
+- **Clicking a numbered step in a dynamic view now highlights it.** Step
+  edges carry step-scoped ids, and selection synced by edge id, so the
+  emphasis never applied; it now matches on the backing relationship, which
+  also highlights every step of that relationship at once.
+- The Add Element panel on dynamic and deployment views now explains that
+  steps and topology are authored in the DSL, instead of opening as an empty
+  dead end.
 - **Crowded nodes no longer stack their connections.** Each side of a node now
   offers seven connection points instead of three, so a system with several
   integrations fans them out along its edge rather than routing the fourth
