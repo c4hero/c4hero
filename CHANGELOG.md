@@ -35,6 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   state is saved alongside positions and survives a reload. Requested in
   [#108](https://github.com/c4hero/c4hero/issues/108).
 
+- **Edit dynamic view steps visually.** The add panel on a dynamic view is now
+  a step editor: add interactions between in-scope elements (picking the
+  reverse of an existing relationship authors a response step; a brand-new
+  pair creates the model relationship too), reorder with the sequence
+  renumbering automatically, override per-step descriptions inline, and
+  delete steps — membership follows the steps, edits are undoable, and the
+  result serializes losslessly.
+
 ### Fixed
 
 - **Parallel interaction sequences now number exactly like Structurizr.**

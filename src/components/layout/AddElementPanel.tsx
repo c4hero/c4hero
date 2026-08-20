@@ -3,6 +3,7 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView, getFocalScopeId, b
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
+import DynamicStepsEditor from './DynamicStepsEditor'
 import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
 import {
   UserRound,
@@ -94,12 +95,21 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const view = getActiveView(workspace, activeViewKey)
   const viewElementIds = new Set(view?.elements.map((e) => e.id) ?? [])
 
-  // Dynamic and deployment views have no creatable element types yet — say
-  // so instead of rendering a dead-end empty panel.
-  if (view?.type === 'dynamic' || view?.type === 'deployment') {
-    const hint = view.type === 'dynamic'
-      ? 'Dynamic view steps are authored in the DSL for now — edit the workspace file to add or reorder interaction steps.'
-      : 'Deployment topology (nodes, instances, infrastructure) is authored in the DSL for now — edit the workspace file to change it.'
+  // Dynamic views get the interaction-step editor; deployment views have no
+  // creatable element types yet — say so instead of an empty dead end.
+  if (view?.type === 'dynamic') {
+    return (
+      <div
+        ref={panelRef}
+        className="glass-flyout"
+        data-flyout="add-element"
+        style={{ position: 'absolute', left: 56, top: 0, zIndex: 50, width: 300 }}
+      >
+        <DynamicStepsEditor view={view} />
+      </div>
+    )
+  }
+  if (view?.type === 'deployment') {
     return (
       <div
         ref={panelRef}
@@ -108,7 +118,8 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
         style={{ position: 'absolute', left: 56, top: 0, zIndex: 50, width: 280 }}
       >
         <div style={{ padding: '12px 14px', color: 'var(--color-text-muted)', fontSize: 12, lineHeight: 1.5 }}>
-          {hint}
+          Deployment topology (nodes, instances, infrastructure) is authored in
+          the DSL for now — edit the workspace file to change it.
         </div>
       </div>
     )

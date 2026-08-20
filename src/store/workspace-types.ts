@@ -155,6 +155,14 @@ export interface WorkspaceState extends UndoState {
   reconnectRelationship: (id: string, newSourceId: string, newTargetId: string) => void
   deleteRelationship: (id: string) => void
 
+  // Dynamic view steps. Edits renumber the sequence 1..n (an edit through
+  // the linear editor flattens any parallel-sequence numbering) and
+  // recompute the view's derived element membership.
+  addDynamicStep: (viewKey: string, sourceId: string, destinationId: string, description?: string) => void
+  updateDynamicStepDescription: (viewKey: string, stepIndex: number, description: string) => void
+  moveDynamicStep: (viewKey: string, stepIndex: number, direction: 'up' | 'down') => void
+  deleteDynamicStep: (viewKey: string, stepIndex: number) => void
+
   // View management
   addView: (type: ViewType, scopeId?: string, title?: string, options?: { environment?: string }) => string
   deleteView: (key: string) => void
