@@ -44,16 +44,16 @@
   "dependencies": {
     "@dagrejs/dagre": "3.1.1",
     "@sentry/react": "^10.70.0",
-    "@xyflow/react": "^12.11.2",
+    "@xyflow/react": "^12.11.3",
     "html-to-image": "^1.11.13",
-    "immer": "^11.1.16",
+    "immer": "^11.1.17",
     "lucide-react": "^1.31.0",
     "nanoid": "6.0.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
-    "web-vitals": "^6.1.0",
-    "zustand": "^5.0.14"
+    "web-vitals": "^6.1.1",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
