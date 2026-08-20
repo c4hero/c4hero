@@ -127,7 +127,7 @@ describe('dynamic view parsing', () => {
     expect(view.relationships[0].order).toBe('1')
   })
 
-  it('flattens parallel-sequence brace groups, numbering continuing through', () => {
+  it('numbers parallel-sequence brace groups like Structurizr: branches share a base, the counter reverts after', () => {
     const dsl = `workspace {
       model {
         a = softwareSystem "A"
@@ -150,8 +150,83 @@ describe('dynamic view parsing', () => {
     const { workspace: ws, errors } = parseDSL(dsl)
     expect(errors).toHaveLength(0)
     const view = ws.views.dynamicViews[0]
-    expect(view.relationships.map(r => r.order)).toEqual(['1', '2', '3'])
+    // The braced step clones the counter (2) and reverts it, so the step
+    // after the group renumbers from the same base — verified against the
+    // real Structurizr CLI.
+    expect(view.relationships.map(r => r.order)).toEqual(['1', '2', '2'])
     expect(view.elements).toHaveLength(3)
+  })
+
+  it('round-trips multi-branch parallel sequences: orders and brace groups survive serialize → parse', () => {
+    const dsl = `workspace {
+      model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        c = softwareSystem "C"
+        d = softwareSystem "D"
+        e = softwareSystem "E"
+        a -> b "one"
+        b -> c "two"
+        c -> d "chain"
+        b -> d "alt"
+        d -> e "tail"
+        e -> a "home"
+      }
+      views {
+        dynamic * "Flow" {
+          a -> b
+          {
+            b -> c
+            c -> d
+          }
+          {
+            b -> d
+          }
+          d -> e
+          e -> a
+        }
+      }
+    }`
+    const { workspace: ws, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const orders = ws.views.dynamicViews[0].relationships.map(r => r.order)
+    // Oracle-verified: both branches clone from 1, the post-group steps
+    // continue from the reverted counter.
+    expect(orders).toEqual(['1', '2', '3', '2', '2', '3'])
+
+    const reparsed = parseDSL(serializeDSL(ws))
+    expect(reparsed.errors).toHaveLength(0)
+    expect(reparsed.workspace.views.dynamicViews[0].relationships.map(r => r.order)).toEqual(orders)
+    // The serialized DSL must use braces to reproduce those orders — flat
+    // emission would renumber 1..6.
+    expect(serializeDSL(ws)).toContain('{')
+  })
+
+  it('serializes a lone mid-sequence branch back into braces (split-run reconstruction)', () => {
+    const dsl = `workspace {
+      model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        c = softwareSystem "C"
+        a -> b "one"
+        b -> c "two"
+        c -> a "three"
+      }
+      views {
+        dynamic * "Flow" {
+          a -> b
+          {
+            b -> c
+          }
+          c -> a
+        }
+      }
+    }`
+    const { workspace: ws } = parseDSL(dsl)
+    const reparsed = parseDSL(serializeDSL(ws))
+    expect(reparsed.errors).toHaveLength(0)
+    expect(reparsed.workspace.views.dynamicViews[0].relationships.map(r => r.order))
+      .toEqual(['1', '2', '2'])
   })
 
   it('supports container-scoped and unscoped dynamic views', () => {

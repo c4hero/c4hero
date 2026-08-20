@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Dynamic and deployment views — c4hero now covers the complete C4 view
+  set.** Workspaces using `dynamic` views (ordered interaction steps,
+  including response messages and repeated steps) and `deployment` views
+  (`deploymentEnvironment`, nested `deploymentNode`s, `containerInstance` /
+  `softwareSystemInstance`, `infrastructureNode`) parse, render, and
+  re-serialize losslessly, verified against the real Structurizr parser in
+  CI. Dynamic views number every interaction step on its edge; deployment
+  views draw the environment as nested deployment-node boundaries around the
+  instances and infrastructure running inside them. Authoring deployment
+  topology stays DSL-side for now; rendering, layout, drag, and export are
+  fully wired.
 - **Lock a whole view's layout.** One switch in the Auto-arrange menu freezes
   the active view: Auto-arrange and layout-direction changes become no-ops and
   nothing can be dragged — not even by accident. Element locks keep working
@@ -23,16 +34,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   small lock marker, and **Unlock all** sits in the Auto-arrange menu. Lock
   state is saved alongside positions and survives a reload. Requested in
   [#108](https://github.com/c4hero/c4hero/issues/108).
-- **Dynamic and deployment views now round-trip through the DSL.** Workspaces
-  using `dynamic` views (ordered interaction steps, including response
-  messages and repeated steps) and `deployment` views (`deploymentEnvironment`,
-  nested `deploymentNode`s, `containerInstance` / `softwareSystemInstance`,
-  `infrastructureNode`) parse and re-serialize losslessly, verified against the
-  real Structurizr parser in CI. Canvas rendering for both view types is in
-  progress; until it lands these views are preserved, not yet drawn.
+
+- **Author deployment topology visually.** The add panel on a deployment view
+  edits the environment's topology: add deployment nodes (top-level or
+  nested), infrastructure nodes, and container / software-system instances;
+  rename nodes inline; delete anything with its subtree cascading through
+  relationships and view membership. Scoped views pick up only instances of
+  their system, positions survive topology edits, everything is undoable, and
+  the result serializes to DSL the real Structurizr parser accepts.
+- **Edit dynamic view steps visually.** The add panel on a dynamic view is now
+  a step editor: add interactions between in-scope elements (picking the
+  reverse of an existing relationship authors a response step; a brand-new
+  pair creates the model relationship too), reorder with the sequence
+  renumbering automatically, override per-step descriptions inline, and
+  delete steps — membership follows the steps, edits are undoable, and the
+  result serializes losslessly.
 
 ### Fixed
 
+- **Parallel interaction sequences now number exactly like Structurizr.**
+  Brace groups in a dynamic view used to be flattened into one running
+  sequence (1, 2, 3, 4); the real parser clones the counter at `{` and
+  reverts it at `}`, so branches share a base number and the step after the
+  groups reuses it too. c4hero now matches that numbering — verified against
+  the Structurizr CLI — and re-serializes the brace groups so the orders
+  survive a round-trip instead of silently renumbering.
+- **Clicking a numbered step in a dynamic view now highlights it.** Step
+  edges carry step-scoped ids, and selection synced by edge id, so the
+  emphasis never applied; it now matches on the backing relationship, which
+  also highlights every step of that relationship at once.
+- The Add Element panel on dynamic and deployment views now explains that
+  steps and topology are authored in the DSL, instead of opening as an empty
+  dead end.
 - **Crowded nodes no longer stack their connections.** Each side of a node now
   offers seven connection points instead of three, so a system with several
   integrations fans them out along its edge rather than routing the fourth

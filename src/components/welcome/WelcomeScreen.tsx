@@ -150,6 +150,8 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
               + ws.views.systemContextViews.length
               + ws.views.containerViews.length
               + ws.views.componentViews.length
+              + (ws.views.dynamicViews?.length ?? 0)
+              + (ws.views.deploymentViews?.length ?? 0)
           }
         } catch (err) { log.warn('Failed to parse DSL metadata for file listing', err) }
         files.push({ name, modifiedAt, scope, elementCount, viewCount })
