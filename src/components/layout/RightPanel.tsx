@@ -1,9 +1,9 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location, Workspace } from '@/types/model'
-import { X, Plus, ArrowRight, ArrowUpRight, ArrowDownLeft, ExternalLink, Eye, EyeOff, ChevronRight, Trash2, Sparkles, Loader2, Lock, LockOpen } from 'lucide-react'
+import { X, Plus, ArrowRight, ArrowUpRight, ArrowDownLeft, ExternalLink, Eye, EyeOff, ChevronRight, Trash2, Sparkles, Loader2, Lock, LockOpen, RefreshCw } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
@@ -116,6 +116,12 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const updateElement = useWorkspaceStore((s) => s.updateElement)
   const updateElementLive = useWorkspaceStore((s) => s.updateElementLive)
   const updateTech = useWorkspaceStore((s) => s.updateElementTechnology)
+  const updateElementId = useWorkspaceStore((s) => s.updateElementId)
+  const resyncElementId = useWorkspaceStore((s) => s.resyncElementId)
+  const [idError, setIdError] = useState<string | null>(null)
+  // A successful ID commit (and any selection change) lands here with a new
+  // element.id — stale errors must not stick to the fresh value.
+  useEffect(() => setIdError(null), [element.id])
   const deleteElement = useWorkspaceStore((s) => s.deleteElement)
   const removeElementsFromView = useWorkspaceStore((s) => s.removeElementsFromView)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
@@ -302,6 +308,44 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             <div>
               <FieldLabel>Name</FieldLabel>
               <EditableField value={element.name} placeholder="Element name" aria-label="Element name" onLiveChange={(v) => updateElementLive(element.id, { name: v })} onCommit={(v) => updateElement(element.id, { name: v })} />
+            </div>
+            <div>
+              <FieldLabel>ID</FieldLabel>
+              <div className="flex items-center gap-1.5">
+                <div className="flex-1">
+                  <EditableField
+                    value={element.id}
+                    placeholder="Identifier"
+                    mono
+                    aria-label="Element ID"
+                    aria-invalid={!!idError}
+                    aria-describedby={idError ? `id-error-${element.id}` : undefined}
+                    onCommit={(v) => {
+                      const next = v.trim()
+                      if (next === element.id) { setIdError(null); return }
+                      setIdError(updateElementId(element.id, next))
+                    }}
+                  />
+                </div>
+                {!element.idIsAuto && (
+                  <button
+                    onClick={() => resyncElementId(element.id)}
+                    className="btn-icon !min-h-8 !min-w-8 !p-1.5 shrink-0"
+                    title="Sync ID from name — it will follow future renames again"
+                    aria-label="Sync ID from name"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                )}
+              </div>
+              {idError && (
+                <p id={`id-error-${element.id}`} role="alert" className="mt-1 text-[11px]" style={{ color: 'var(--color-status-removed, #eb5757)' }}>
+                  {idError}
+                </p>
+              )}
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                {element.idIsAuto ? 'Follows the name. Used as the identifier in exported DSL.' : 'Pinned. Used as the identifier in exported DSL.'}
+              </p>
             </div>
             {hasLocation && (
               <div>

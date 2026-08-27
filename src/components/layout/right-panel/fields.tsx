@@ -15,6 +15,7 @@ export function EditableField({
   onCommit,
   onLiveChange,
   multiline,
+  mono,
   'aria-label': ariaLabel,
   'aria-invalid': ariaInvalid,
   'aria-describedby': ariaDescribedBy,
@@ -24,6 +25,8 @@ export function EditableField({
   onCommit: (val: string) => void
   onLiveChange?: (val: string) => void
   multiline?: boolean
+  /** Monospace input — for identifier-like values. */
+  mono?: boolean
   'aria-label'?: string
   'aria-invalid'?: boolean
   'aria-describedby'?: string
@@ -96,7 +99,7 @@ export function EditableField({
       aria-label={ariaLabel}
       aria-invalid={ariaInvalid}
       aria-describedby={ariaDescribedBy}
-      className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors"
+      className={`w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors${mono ? ' font-mono' : ''}`}
       style={style}
     />
   )

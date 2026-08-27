@@ -17,6 +17,7 @@ vi.mock('lucide-react', () => ({
   Trash2: () => null,
   Lock: () => null,
   LockOpen: () => null,
+  RefreshCw: () => null,
   AlertTriangle: () => null,
   Settings: () => null,
   ChevronDown: () => null,

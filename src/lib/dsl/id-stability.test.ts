@@ -104,3 +104,27 @@ describe('element ID stability through serialize → parse roundtrip', () => {
     expect(parsed.model.softwareSystems[0].id).toBe('XyZwVuTs')
   })
 })
+
+describe('user-set (TEA-242) IDs through serialize → parse roundtrip', () => {
+  it('name-derived camelCase IDs survive and appear verbatim as DSL identifiers', () => {
+    const ws = makeWsWithId('paymentClerk', 'internetBankingSystem')
+    const dsl = serializeDSL(ws)
+    expect(dsl).toContain('paymentClerk = person')
+    expect(dsl).toContain('internetBankingSystem = softwareSystem')
+    const { workspace: parsed, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.people[0].id).toBe('paymentClerk')
+    expect(parsed.model.softwareSystems[0].id).toBe('internetBankingSystem')
+    const rel = parsed.model.relationships[0]
+    expect(rel.sourceId).toBe('paymentClerk')
+    expect(rel.destinationId).toBe('internetBankingSystem')
+  })
+
+  it('imported identifiers come back pinned (no idIsAuto flag)', () => {
+    const ws = makeWsWithId('paymentClerk', 'internetBankingSystem')
+    const { workspace: parsed, errors } = parseDSL(serializeDSL(ws))
+    expect(errors).toHaveLength(0)
+    expect(parsed.model.people[0].idIsAuto).toBeUndefined()
+    expect(parsed.model.softwareSystems[0].idIsAuto).toBeUndefined()
+  })
+})
