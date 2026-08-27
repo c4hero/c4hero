@@ -22,6 +22,7 @@ function allowedViewTypes(scope: string | undefined) {
 export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const addView = useWorkspaceStore((s) => s.addView)
+  const addDeploymentEnvironment = useWorkspaceStore((s) => s.addDeploymentEnvironment)
   // Optional pre-populated defaults (used by the zoom-in "Customize…" flow).
   const defaults = useWorkspaceStore((s) => s.createViewDefaults)
   const setCreateViewDefaults = useWorkspaceStore((s) => s.setCreateViewDefaults)
@@ -35,6 +36,7 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [scopeId, setScopeId] = useState<string>(() => defaults?.scopeId ?? '')
   const [environment, setEnvironment] = useState('')
+  const [newEnvName, setNewEnvName] = useState('')
 
   if (!workspace) return null
 
@@ -79,18 +81,23 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
   const scopeMissing = needsScope && !scopeId
   const noScopeChoicesAvailable = needsScope && scopeOptions.length === 0
   const missingScopeKind = type === 'component' ? 'container' : 'system'
-  // A deployment view without an environment has nothing to show; refuse to
-  // create one, mirroring the required-scope rule above.
-  const environmentMissing = needsEnvironment && !environment
-  const noEnvironmentsAvailable = needsEnvironment && environments.length === 0
+  // A deployment view needs an environment, but it doesn't have to exist yet:
+  // picking "New environment…" (the only mode when the workspace has none)
+  // creates an empty one alongside the view, and its topology is authored in
+  // the view's editor afterwards.
+  const NEW_ENVIRONMENT = '__new__'
+  const creatingEnvironment = needsEnvironment && (environments.length === 0 || environment === NEW_ENVIRONMENT)
+  const effectiveEnvironment = creatingEnvironment ? newEnvName.trim() : environment
+  const environmentMissing = needsEnvironment && !effectiveEnvironment
 
   const handleCreate = () => {
     if (scopeMissing || environmentMissing) return
+    if (creatingEnvironment && !addDeploymentEnvironment(effectiveEnvironment)) return
     addView(
       type,
       (needsScope || optionalSystemScope) && scopeId ? scopeId : undefined,
       title || undefined,
-      needsEnvironment ? { environment } : undefined,
+      needsEnvironment ? { environment: effectiveEnvironment } : undefined,
     )
     setCreateViewDefaults(null) // consume the zoom defaults so the next open starts fresh
     onClose()
@@ -152,23 +159,39 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
               >
                 <option value="">Select...</option>
                 {environments.map(env => <option key={env.id} value={env.name}>{env.name}</option>)}
+                <option value={NEW_ENVIRONMENT}>New environment…</option>
               </select>
             </div>
           )}
 
-          {noEnvironmentsAvailable && (
-            <div
-              role="alert"
-              className="rounded-lg px-3 py-2 text-[11px]"
-              style={{
-                background: 'var(--color-tint-error)',
-                color: 'var(--color-error-text)',
-                border: '1px solid var(--color-border-error)',
-              }}
-            >
-              Can't create a deployment view — this workspace has no deployment
-              environments yet. Define one in the DSL (deploymentEnvironment)
-              first, then come back.
+          {creatingEnvironment && (
+            <div>
+              <label htmlFor="cv-new-environment" className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+                {environments.length === 0 ? 'Environment' : 'New environment name'}
+                <span aria-hidden="true" style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>
+                <span className="sr-only">required</span>
+              </label>
+              <input
+                id="cv-new-environment"
+                type="text"
+                value={newEnvName}
+                onChange={(e) => setNewEnvName(e.target.value)}
+                placeholder="e.g. Production"
+                required
+                aria-required="true"
+                aria-invalid={!newEnvName.trim()}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{
+                  background: 'var(--color-surface-2)',
+                  borderColor: !newEnvName.trim() ? 'var(--color-border-error)' : 'var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
+              />
+              <div className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                Creates an empty environment — add nodes and instances in the
+                view's topology editor.
+              </div>
             </div>
           )}
 

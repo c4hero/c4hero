@@ -172,3 +172,34 @@ describe('deployment topology authoring', () => {
     expect(env().deploymentNodes).toHaveLength(1)
   })
 })
+
+describe('addDeploymentEnvironment', () => {
+  beforeEach(() => {
+    load()
+  })
+
+  it('creates an empty environment', () => {
+    expect(useWorkspaceStore.getState().addDeploymentEnvironment('Staging')).toBe(true)
+    const envs = ws().model.deploymentEnvironments!
+    expect(envs.map(e => e.name)).toEqual(['Live', 'Staging'])
+    expect(envs[1].deploymentNodes).toEqual([])
+    expect(envs[1].id).toBeTruthy()
+  })
+
+  it('is a no-op success for an existing name (environments are name-keyed)', () => {
+    expect(useWorkspaceStore.getState().addDeploymentEnvironment('Live')).toBe(true)
+    expect(ws().model.deploymentEnvironments).toHaveLength(1)
+  })
+
+  it('rejects a blank name', () => {
+    expect(useWorkspaceStore.getState().addDeploymentEnvironment('   ')).toBe(false)
+    expect(ws().model.deploymentEnvironments).toHaveLength(1)
+  })
+
+  it('supports authoring into the new environment immediately', () => {
+    useWorkspaceStore.getState().addDeploymentEnvironment('Staging')
+    const nodeId = useWorkspaceStore.getState().addDeploymentNode('Staging', null)
+    expect(nodeId).not.toBe('')
+    expect(ws().model.deploymentEnvironments![1].deploymentNodes).toHaveLength(1)
+  })
+})

@@ -29,6 +29,7 @@ function refreshDeploymentViews(ws: Workspace, environment: string): void {
 }
 
 export type DeploymentSlice = Pick<WorkspaceState,
+  | 'addDeploymentEnvironment'
   | 'addDeploymentNode' | 'addInfrastructureNode'
   | 'addContainerInstance' | 'addSoftwareSystemInstance'
   | 'renameDeploymentElement'
@@ -40,6 +41,24 @@ export const createDeploymentSlice: StateCreator<
   [],
   DeploymentSlice
 > = (set) => ({
+  addDeploymentEnvironment: (name) => {
+    const trimmed = name.trim()
+    if (!trimmed) return false
+    let ok = false
+    set((s) => {
+      if (!s.workspace) return
+      // Environments are identified by name (views reference them by name, and
+      // the DSL has no separate identifier) — an existing name is a no-op
+      // success so the caller can target it without special-casing.
+      if (envByName(s.workspace, trimmed)) { ok = true; return }
+      pushUndoSnapshot(s)
+      s.workspace.model.deploymentEnvironments ??= []
+      s.workspace.model.deploymentEnvironments.push({ id: nanoid(8), name: trimmed, deploymentNodes: [] })
+      ok = true
+    })
+    return ok
+  },
+
   addDeploymentNode: (environment, parentNodeId) => {
     const id = nanoid(8)
     let created = false
