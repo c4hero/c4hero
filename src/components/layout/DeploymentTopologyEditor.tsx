@@ -86,6 +86,15 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
   const needsHost = kind !== 'node' // deployment nodes may be top-level
   const needsElement = kind === 'containerInstance' || kind === 'systemInstance'
   const canAdd = (!needsHost || hostId !== '') && (!needsElement || elementId !== '')
+  // Why Add is disabled, most fundamental blocker first — a fresh environment
+  // has no nodes at all, so nothing but a deployment node can be added yet.
+  const kindLabel = kind === 'infra' ? 'An infrastructure node' : 'An instance'
+  const blockedHint = canAdd ? null
+    : needsHost && paths.length === 0
+      ? `${kindLabel} lives inside a deployment node — add a Deployment node first.`
+      : needsHost && hostId === ''
+        ? `Choose which node to put it inside.`
+        : `Choose which ${kind === 'containerInstance' ? 'container' : 'system'} to instantiate.`
 
   const add = () => {
     const store = useWorkspaceStore.getState()
@@ -229,6 +238,11 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
         >
           <Plus size={12} /> Add
         </button>
+        {blockedHint && (
+          <span role="status" style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
+            {blockedHint}
+          </span>
+        )}
         <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
           Click a node's name to rename it. Deleting a node removes everything
           inside it.
