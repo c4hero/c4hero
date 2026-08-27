@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useWorkspaceStore } from './workspace'
+import { useWorkspaceStore, getSelectedDeploymentElement } from './workspace'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 
 const DSL = `workspace {
@@ -201,5 +201,52 @@ describe('addDeploymentEnvironment', () => {
     const nodeId = useWorkspaceStore.getState().addDeploymentNode('Staging', null)
     expect(nodeId).not.toBe('')
     expect(ws().model.deploymentEnvironments![1].deploymentNodes).toHaveLength(1)
+  })
+})
+
+describe('updateDeploymentElement / getSelectedDeploymentElement', () => {
+  beforeEach(() => {
+    load()
+  })
+
+  it('patches name, technology and description on a deployment node', () => {
+    const nodeId = env().deploymentNodes[0].id
+    useWorkspaceStore.getState().updateDeploymentElement('Live', nodeId, { name: 'K8s Cluster', technology: 'Kubernetes', description: 'Prod cluster' })
+    const node = env().deploymentNodes[0]
+    expect(node.name).toBe('K8s Cluster')
+    expect(node.technology).toBe('Kubernetes')
+    expect(node.description).toBe('Prod cluster')
+  })
+
+  it('ignores a blank name but clears blank technology/description', () => {
+    const nodeId = env().deploymentNodes[0].id
+    useWorkspaceStore.getState().updateDeploymentElement('Live', nodeId, { technology: 'EC2' })
+    useWorkspaceStore.getState().updateDeploymentElement('Live', nodeId, { name: '   ', technology: '' })
+    const node = env().deploymentNodes[0]
+    expect(node.name).toBe('Server')
+    expect(node.technology).toBeUndefined()
+  })
+
+  it('patches infrastructure nodes too', () => {
+    const nodeId = env().deploymentNodes[0].id
+    const infraId = useWorkspaceStore.getState().addInfrastructureNode('Live', nodeId)
+    useWorkspaceStore.getState().updateDeploymentElement('Live', infraId, { name: 'Load Balancer', technology: 'ALB' })
+    const infra = env().deploymentNodes[0].infrastructureNodes[0]
+    expect(infra.name).toBe('Load Balancer')
+    expect(infra.technology).toBe('ALB')
+  })
+
+  it('resolves selected deployment elements of every kind', () => {
+    const nodeId = env().deploymentNodes[0].id
+    const infraId = useWorkspaceStore.getState().addInfrastructureNode('Live', nodeId)
+    const instId = env().deploymentNodes[0].containerInstances[0].id
+    const w = ws()
+    expect(getSelectedDeploymentElement(w, [nodeId])).toMatchObject({ kind: 'deploymentNode', environment: 'Live' })
+    expect(getSelectedDeploymentElement(w, [infraId])).toMatchObject({ kind: 'infrastructureNode', environment: 'Live' })
+    const inst = getSelectedDeploymentElement(w, [instId])
+    expect(inst).toMatchObject({ kind: 'containerInstance', environment: 'Live' })
+    expect(inst && 'referenced' in inst ? inst.referenced?.name : undefined).toBe('Web')
+    expect(getSelectedDeploymentElement(w, ['nope'])).toBeUndefined()
+    expect(getSelectedDeploymentElement(w, [])).toBeUndefined()
   })
 })

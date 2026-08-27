@@ -146,7 +146,7 @@ export function buildDeploymentBoundaryNodes(workspace: Workspace, view: View, l
       position: { x: minX - pad, y: minY - padTop },
       measured: { width, height },
       style: { width, height, pointerEvents: 'none' },
-      data: { name: spec.name, typeLabel: spec.typeLabel },
+      data: { name: spec.name, typeLabel: spec.typeLabel, deploymentNodeId: spec.id },
       // Deeper (more nested) boundaries sit above their ancestors so their
       // labels aren't covered.
       zIndex: BOUNDARY_Z + depth,
@@ -166,7 +166,7 @@ export function buildDeploymentBoundaryNodes(workspace: Workspace, view: View, l
       position: { x: 0, y: 0 },
       measured: { width: EMPTY_BOUNDARY_W, height: EMPTY_BOUNDARY_H },
       style: { width: EMPTY_BOUNDARY_W, height: EMPTY_BOUNDARY_H, pointerEvents: 'none' },
-      data: { name: first.name, typeLabel: first.technology ?? 'Deployment Node', empty: true },
+      data: { name: first.name, typeLabel: first.technology ?? 'Deployment Node', empty: true, deploymentNodeId: first.id },
       zIndex: BOUNDARY_Z,
       selectable: false,
       draggable: false,

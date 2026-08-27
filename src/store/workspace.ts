@@ -24,6 +24,7 @@ export {
   buildElementMap,
   buildRelationshipMap,
   getSelectedElement,
+  getSelectedDeploymentElement,
   getRelationshipById,
   canDrillInto,
   getZoomTarget,

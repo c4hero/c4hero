@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
-import type { DeploymentEnvironment, DeploymentNode, Workspace } from '@/types/model'
+import type { DeploymentEnvironment, DeploymentNode, InfrastructureNode, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
 
@@ -32,7 +32,7 @@ export type DeploymentSlice = Pick<WorkspaceState,
   | 'addDeploymentEnvironment'
   | 'addDeploymentNode' | 'addInfrastructureNode'
   | 'addContainerInstance' | 'addSoftwareSystemInstance'
-  | 'renameDeploymentElement'
+  | 'renameDeploymentElement' | 'updateDeploymentElement'
 >
 
 export const createDeploymentSlice: StateCreator<
@@ -160,6 +160,30 @@ export const createDeploymentSlice: StateCreator<
     })
     return created ? id : ''
   },
+
+  updateDeploymentElement: (environment, id, patch) => set((s) => {
+    if (!s.workspace) return
+    const env = envByName(s.workspace, environment)
+    if (!env) return
+    let target: DeploymentNode | InfrastructureNode | undefined
+    walkDeploymentNodes(env, (node) => {
+      if (node.id === id) target = node
+      for (const infra of node.infrastructureNodes) {
+        if (infra.id === id) target = infra
+      }
+    })
+    if (!target) return
+    let changed = false
+    const name = patch.name?.trim()
+    if (name && name !== target.name) { changed = true }
+    if ('technology' in patch && patch.technology !== target.technology) { changed = true }
+    if ('description' in patch && patch.description !== target.description) { changed = true }
+    if (!changed) return
+    pushUndoSnapshot(s)
+    if (name) target.name = name
+    if ('technology' in patch) target.technology = patch.technology || undefined
+    if ('description' in patch) target.description = patch.description || undefined
+  }),
 
   renameDeploymentElement: (environment, id, name) => set((s) => {
     if (!s.workspace) return
