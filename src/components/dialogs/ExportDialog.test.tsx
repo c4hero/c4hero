@@ -44,6 +44,18 @@ describe('ExportDialog', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Copy' }).hasAttribute('disabled')).toBe(false))
   })
 
+  it('offers the standalone HTML export', async () => {
+    const props = renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: 'Download interactive HTML' }))
+    await waitFor(() => expect(props.onExport).toHaveBeenCalledWith('html'))
+  })
+
+  it('gives the two Download buttons distinct accessible names', () => {
+    renderDialog()
+    expect(screen.getByRole('button', { name: 'Download interactive HTML' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Download Structurizr DSL' })).toBeTruthy()
+  })
+
   it('clears the busy state when an action rejects', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const onCopy = vi.fn().mockRejectedValue(new Error('clipboard blocked'))

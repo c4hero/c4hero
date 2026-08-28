@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Export the whole workspace as one interactive HTML file.** Every view, laid
+  out and rendered as inline SVG, wrapped in a small read-only viewer: view
+  tabs, pan and zoom, drill-through, search and an element details panel. The
+  file has no dependencies and makes no network requests — its own
+  `Content-Security-Policy` forbids them — so it works from disk, in a wiki, as
+  a chat attachment or from a years-old build artifact, with or without c4hero.
+  Exports are deterministic, so they diff cleanly in review. Find it in the
+  Export dialog or the command palette ("Export as interactive HTML"). (TEA-88)
 - **Lock a whole view's layout.** One switch in the Auto-arrange menu freezes
   the active view: Auto-arrange and layout-direction changes become no-ops and
   nothing can be dragged — not even by accident. Element locks keep working
