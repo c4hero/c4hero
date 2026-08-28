@@ -125,6 +125,17 @@ export default function BaseC4Node({
       aria-selected={selected}
     >
       <StatusDot status={element.status} />
+      {data.diffStatus && (
+        <span
+          className={`c4-node-diff-badge c4-node-diff-badge-${data.diffStatus}`}
+          role="img"
+          aria-label={data.diffStatus === 'added'
+            ? `${element.name} is new in this revision`
+            : `${element.name} changed in this revision`}
+        >
+          {data.diffStatus === 'added' ? 'New' : 'Changed'}
+        </span>
+      )}
       {elementViolations.length > 0 && (
         <span
           className="c4-node-violation"

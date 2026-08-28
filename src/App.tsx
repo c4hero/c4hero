@@ -18,6 +18,7 @@ import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
 import ZoomConfirmDialog from '@/components/shared/ZoomConfirmDialog'
 import Canvas from '@/components/canvas/Canvas'
 import CanvasHints from '@/components/canvas/CanvasHints'
+import CompareBar from '@/components/compare/CompareBar'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import NotFound from '@/components/shared/NotFound'
 import { loadFromLocalStorage } from '@/lib/fileIO'
@@ -27,6 +28,7 @@ import { isCanvasRoute } from '@/lib/routes'
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
 const AiPanel = lazy(() => import('@/components/ai/AiPanel'))
+const CompareDialog = lazy(() => import('@/components/compare/CompareDialog'))
 
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -37,6 +39,7 @@ export default function App() {
   const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
   const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
   const aiSettingsOpen = useWorkspaceStore((s) => s.aiSettingsOpen)
+  const comparisonPanelOpen = useWorkspaceStore((s) => s.comparisonPanelOpen)
   const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const navigate = useNavigate()
@@ -90,6 +93,7 @@ export default function App() {
         <FloatingBottomStrip />
         <FloatingZoomHud />
         <CanvasHints />
+        <CompareBar />
         <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
         <div className="commit-hash">v{__APP_VERSION__} · {__COMMIT_HASH__}</div>
       </div>
@@ -165,6 +169,14 @@ export default function App() {
       {/* Zoom-in confirm — shown when a user clicks zoom on an element with
           no existing child view. Offers fast create or "Customize…" for full control. */}
       <ZoomConfirmDialog />
+
+      {/* Revision comparison — the picker and the change list. Rendered outside
+          the canvas element so it survives a view switch mid-review. */}
+      {onCanvas && comparisonPanelOpen && (
+        <Suspense fallback={<LoadingDot />}>
+          <CompareDialog />
+        </Suspense>
+      )}
 
       {/* BYOK AI assistant — only on the canvas (a workspace open on a canvas
           route), never on the welcome/collection screens. */}

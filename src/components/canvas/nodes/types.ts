@@ -11,4 +11,8 @@ export interface C4NodeData {
   highlighted?: boolean
   /** True when the user has locked this node in place. */
   locked?: boolean
+  /** Set while a revision comparison is active: how this element differs from
+   *  the compared-against revision. Absent when it is unchanged, or when no
+   *  comparison is running. */
+  diffStatus?: 'added' | 'changed'
 }

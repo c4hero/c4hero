@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Compare against another revision.** Pick any other `.dsl` file — an older
+  copy, a branch checkout, a teammate's export — and c4hero shows exactly what
+  the architecture gained, lost and changed: elements, relationships, view
+  membership and workspace metadata, each with its before/after value. Added
+  nodes ring green on the canvas and changed nodes ring amber while untouched
+  ones recede, so the change set reads at a glance; click any entry to jump
+  straight to it. The comparison stays live while you edit, and the compared
+  file is strictly read-only — it never becomes the save target. Open it from
+  the menu or the command palette ("Compare with another revision"). (TEA-82)
 - **Lock a whole view's layout.** One switch in the Auto-arrange menu freezes
   the active view: Auto-arrange and layout-direction changes become no-ops and
   nothing can be dragged — not even by accident. Element locks keep working

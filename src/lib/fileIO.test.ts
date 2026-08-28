@@ -524,3 +524,71 @@ describe('isWorkspaceShape edge cases', () => {
     expect(isWorkspaceShape(bad)).toBe(false)
   })
 })
+
+// ─── Comparison file picker ──────────────────────────────────────────
+
+describe('openComparisonFile', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.resetModules()
+  })
+
+  function stubPicker(content: string, name: string) {
+    const file = new File([content], name, { type: 'text/plain' })
+    const handle = { getFile: vi.fn().mockResolvedValue(file) }
+    const showOpenFilePicker = vi.fn().mockResolvedValue([handle])
+    vi.stubGlobal('showOpenFilePicker', showOpenFilePicker)
+    return showOpenFilePicker
+  }
+
+  it('reads the picked revision', async () => {
+    const { mock } = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', mock)
+    stubPicker('workspace "v1" {}', 'v1.dsl')
+
+    const { openComparisonFile } = await import('./fileIO')
+    expect(await openComparisonFile()).toEqual({ content: 'workspace "v1" {}', name: 'v1.dsl' })
+  })
+
+  it('never repoints where Save writes', async () => {
+    const { mock } = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', mock)
+    stubPicker('workspace "v1" {}', 'v1.dsl')
+
+    const { openComparisonFile, getCurrentFileHandle } = await import('./fileIO')
+    await openComparisonFile()
+    // openDSLFile would have adopted the handle here; comparing must not.
+    expect(getCurrentFileHandle()).toBeNull()
+  })
+
+  it('does not pollute the recent-files list with a compared revision', async () => {
+    const { mock } = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', mock)
+    stubPicker('workspace "v1" {}', 'v1.dsl')
+
+    const { openComparisonFile, getRecentFiles } = await import('./fileIO')
+    await openComparisonFile()
+    expect(getRecentFiles()).toEqual([])
+  })
+
+  it('returns null when the picker is dismissed', async () => {
+    const { mock } = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', mock)
+    vi.stubGlobal('showOpenFilePicker', vi.fn().mockRejectedValue(new DOMException('aborted')))
+
+    const { openComparisonFile } = await import('./fileIO')
+    expect(await openComparisonFile()).toBeNull()
+  })
+
+  it('limits the picker to DSL and text files', async () => {
+    const { mock } = makeMockLocalStorage()
+    vi.stubGlobal('localStorage', mock)
+    const picker = stubPicker('workspace "v1" {}', 'v1.dsl')
+
+    const { openComparisonFile } = await import('./fileIO')
+    await openComparisonFile()
+    expect(picker).toHaveBeenCalledWith(expect.objectContaining({
+      types: [expect.objectContaining({ accept: { 'text/plain': ['.dsl', '.txt'] } })],
+    }))
+  })
+})

@@ -15,6 +15,7 @@ import {
   reconnectEdge,
 } from '@xyflow/react'
 import { applyAutoLayout } from '@/lib/canvasLayout'
+import { diffWorkspacesCached } from '@/lib/workspaceDiff'
 import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import type { HighlightFilters } from '@/lib/highlight'
@@ -36,6 +37,7 @@ import RelationshipEdge from './edges/RelationshipEdge'
 import {
   buildNodes,
   buildEdges,
+  type DiffOverlay,
   buildGroupNodes,
   buildBoundaryNodes,
   buildDrillableSet,
@@ -186,6 +188,8 @@ export default function Canvas() {
   const techFilterMode = useWorkspaceStore((s) => s.techFilterMode)
   const teamFilterMode = useWorkspaceStore((s) => s.teamFilterMode)
   const layoutVersion = useWorkspaceStore((s) => s.layoutVersion)
+  const comparisonBase = useWorkspaceStore((s) => s.comparisonBase)
+  const comparisonOverlay = useWorkspaceStore((s) => s.comparisonOverlay)
   const canvasGuideOpen = useWorkspaceStore((s) => s.canvasGuideOpen)
   const setCanvasGuideOpen = useWorkspaceStore((s) => s.setCanvasGuideOpen)
 
@@ -199,6 +203,16 @@ export default function Canvas() {
     techsMode: techFilterMode,
     teamsMode: teamFilterMode,
   }), [activeTagFilter, activeStatusFilter, activeTechFilter, activeTeamFilter, tagFilterMode, statusFilterMode, techFilterMode, teamFilterMode])
+
+  // Comparison overlay: derived from the base revision and the live workspace,
+  // so every edit re-tints the canvas without any stale-diff bookkeeping. The
+  // diff itself is memoized on the two workspace identities, so the compare
+  // panel showing the same comparison costs nothing extra.
+  const diffOverlay = useMemo<DiffOverlay | null>(() => {
+    if (!comparisonBase || !comparisonOverlay || !workspace) return null
+    const diff = diffWorkspacesCached(comparisonBase, workspace)
+    return { elements: diff.elementStatus, relationships: diff.relationshipStatus }
+  }, [comparisonBase, comparisonOverlay, workspace])
 
   const minimapMode = useSettingsStore((s) => s.minimapMode)
   const snapToGrid = useSettingsStore((s) => s.snapToGrid)
@@ -335,7 +349,7 @@ export default function Canvas() {
 
     // 1. Build nodes with raw positions from view
     const drillableIds = buildDrillableSet(workspace)
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
+    const rawNodes = buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles, diffOverlay)
     const layoutNodes = carryForwardMeasurements(rawNodes, reactFlowInstance.getNodes())
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
@@ -364,10 +378,10 @@ export default function Canvas() {
     const allNodes = [...overlayNodes, ...laidOut]
 
     // 5. Build final edges using post-layout positions for handle routing
-    const edges = buildEdges(workspace, view, allNodes, highlightFilters)
+    const edges = buildEdges(workspace, view, allNodes, highlightFilters, diffOverlay)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, diffOverlay])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.

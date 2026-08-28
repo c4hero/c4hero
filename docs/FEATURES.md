@@ -24,6 +24,23 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 - **Recent collections / files** are remembered in `localStorage` and re-openable from the welcome screen.
 - **Crash recovery**: the active workspace is mirrored to `localStorage`. If the tab crashes or you close it mid-edit, the next launch offers to restore.
 
+## Revision comparison
+
+- **Compare against another revision.** Point c4hero at any other `.dsl` file —
+  an older copy, a branch checkout, a teammate's export — and see exactly what
+  the architecture gained, lost and changed: elements, relationships, view
+  membership and workspace metadata, each with the before/after value.
+- **On the canvas, not just in a list.** Added nodes ring green, changed nodes
+  ring amber, untouched ones recede, and edges follow the same code. Click any
+  entry in the list to jump to it on the diagram.
+- **Live.** The comparison stays running while you edit, so the change set and
+  the canvas tint update as you work. A marker in the top-left names the
+  revision you're comparing against and clears it in one click.
+- **Read-only and safe.** The compared file is never written to, never becomes
+  the save target, and never lands in your recent files.
+- Matching is structural, not textual: renaming a DSL identifier or an element
+  reads as a change, not as a delete plus an add.
+
 ## Editing UX
 
 - **Inspector** (right panel) for element and relationship properties: name, description, technology, owner (with autocomplete from existing teams), URL, status, tags.

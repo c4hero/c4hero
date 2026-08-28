@@ -2010,6 +2010,63 @@ body {
   opacity: 0.35;
 }
 
+/* ─── Revision comparison overlay ────────────────────────────────────
+   Active only while the user is comparing the open workspace against another
+   revision. Added and changed nodes get a colored ring plus a corner badge;
+   untouched nodes recede so the change set reads at a glance. Composes with
+   the highlighter classes above — a node can be both faded and "added". */
+.c4-node-diff-added > .c4-node {
+  box-shadow:
+    0 0 0 2px var(--color-success),
+    0 0 18px color-mix(in srgb, var(--color-success) 45%, transparent);
+}
+.c4-node-diff-changed > .c4-node {
+  box-shadow:
+    0 0 0 2px var(--color-warning),
+    0 0 18px color-mix(in srgb, var(--color-warning) 45%, transparent);
+}
+.react-flow__node.c4-node-diff-same {
+  opacity: 0.45;
+  filter: saturate(0.75);
+}
+.c4-edge-diff-added path.react-flow__edge-path {
+  stroke: var(--color-success) !important;
+  stroke-width: 2.4 !important;
+}
+.c4-edge-diff-changed path.react-flow__edge-path {
+  stroke: var(--color-warning) !important;
+  stroke-width: 2.4 !important;
+}
+.c4-edge-diff-same path.react-flow__edge-path {
+  opacity: 0.3 !important;
+}
+.c4-edge-diff-same text {
+  opacity: 0.45;
+}
+
+.c4-node-diff-badge {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 4;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #0b1207;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 2px var(--canvas-bg, var(--color-bg-primary));
+}
+.c4-node-diff-badge-added { background: var(--color-success); }
+.c4-node-diff-badge-changed { background: var(--color-warning); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .react-flow__node.c4-node-diff-same {
+    transition: opacity 0.18s ease, filter 0.18s ease;
+  }
+}
+
 .c4-node-violation {
   position: absolute;
   top: -8px;

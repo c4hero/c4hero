@@ -61,6 +61,11 @@ export const createLifecycleSlice: StateCreator<
       activeTechFilter: [],
       activeTeamFilter: [],
       lastClearedHighlightFilters: null,
+      // A comparison is scoped to one workspace — carrying it across a load
+      // would diff the new model against an unrelated revision.
+      comparisonBase: null,
+      comparisonLabel: null,
+      comparisonPanelOpen: false,
       scopeViolations: validateScope(workspace),
     })
   },
@@ -84,6 +89,9 @@ export const createLifecycleSlice: StateCreator<
       undoStack: [],
       redoStack: [],
       lastClearedHighlightFilters: null,
+      comparisonBase: null,
+      comparisonLabel: null,
+      comparisonPanelOpen: false,
       scopeViolations: [],
     }),
 

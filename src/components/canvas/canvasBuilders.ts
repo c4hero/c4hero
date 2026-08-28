@@ -10,6 +10,21 @@ import {
 import { CENTER_SLOT, handleId, pickSlots, type Side } from './handleSlots'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
 
+/** Per-id diff status handed to the canvas while a revision comparison is
+ *  active. Only ids present in the *current* workspace can appear — elements
+ *  that a later revision removed have no node to tint, so the compare panel
+ *  lists them instead. */
+export interface DiffOverlay {
+  elements: Map<string, 'added' | 'changed'>
+  relationships: Map<string, 'added' | 'changed'>
+}
+
+/** Class marking a node/edge that the comparison left untouched, so changes
+ *  read against a quieter background. */
+function diffClass(prefix: 'c4-node' | 'c4-edge', status: 'added' | 'changed' | undefined): string {
+  return status ? `${prefix}-diff-${status}` : `${prefix}-diff-same`
+}
+
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
 function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
   const map = new Map<string, ElementStyle>()
@@ -149,6 +164,7 @@ export function buildNodes(
   viewCountMap: Map<string, number>,
   drillableIds: Set<string>,
   themeStyles: ElementStyle[],
+  diff?: DiffOverlay | null,
 ): Node[] {
   const elementMap = buildElementMap(workspace)
   // Theme styles form the base layer. Truly custom workspace styles still
@@ -169,6 +185,13 @@ export function buildNodes(
     const style = getElementStyle(element, styleIndex)
     const highlighted = active && isHighlighted(element, filters)
     const pos = { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }
+    const diffStatus = diff?.elements.get(element.id)
+
+    // Highlighter focus mode and the comparison overlay are independent
+    // treatments and can be on at the same time, so classes compose.
+    const classNames: string[] = []
+    if (active) classNames.push(highlighted ? 'c4-node-highlighted' : 'c4-node-faded')
+    if (diff) classNames.push(diffClass('c4-node', diffStatus))
 
     nodes.push({
       id: element.id,
@@ -183,6 +206,7 @@ export function buildNodes(
         highlighted,
         viewCount: viewCountMap.get(element.id) ?? 1,
         locked: viewEl.locked === true,
+        diffStatus,
       },
       // A locked node holds its place against Auto-arrange, so it should hold it
       // against a stray drag too. A locked VIEW freezes every node the same way.
@@ -190,7 +214,7 @@ export function buildNodes(
       // Highlighter focus mode: matched nodes get the highlighted ring; the rest
       // fade to ghost context. When no facets are active, every node renders
       // normally (no class either way).
-      className: active ? (highlighted ? 'c4-node-highlighted' : 'c4-node-faded') : undefined,
+      className: classNames.length > 0 ? classNames.join(' ') : undefined,
     })
   }
 
@@ -492,6 +516,7 @@ export function buildEdges(
   view: View,
   nodes: Node[],
   filters: HighlightFilters,
+  diff?: DiffOverlay | null,
 ): Edge[] {
   const relationshipMap = buildRelationshipMap(workspace)
   const relationshipStyles = workspace.views.configuration.styles.relationships
@@ -589,9 +614,11 @@ export function buildEdges(
     const highlighted = techHighlighted || (active && endpointsHighlighted)
     const faded = active && !highlighted
 
-    let className: string | undefined
-    if (highlighted) className = 'c4-edge-highlighted'
-    else if (faded) className = 'c4-edge-faded'
+    const classNames: string[] = []
+    if (highlighted) classNames.push('c4-edge-highlighted')
+    else if (faded) classNames.push('c4-edge-faded')
+    const diffStatus = diff?.relationships.get(e.rel.id)
+    if (diff) classNames.push(diffClass('c4-edge', diffStatus))
 
     edges.push({
       id: e.rel.id,
@@ -600,8 +627,8 @@ export function buildEdges(
       sourceHandle: handleId(e.sourceSide, srcSlot, 'source'),
       targetHandle: handleId(e.targetSide, tgtSlot, 'target'),
       type: 'relationship',
-      data: { relationship: e.rel, relationshipStyle: e.relStyle, highlighted },
-      className,
+      data: { relationship: e.rel, relationshipStyle: e.relStyle, highlighted, diffStatus },
+      className: classNames.length > 0 ? classNames.join(' ') : undefined,
     })
   }
 

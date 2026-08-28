@@ -261,4 +261,19 @@ export interface WorkspaceState extends UndoState {
   createViewDialogOpen: boolean
   setCreateViewDialogOpen: (open: boolean) => void
   setPresentationMode: (on: boolean) => void
+
+  // Revision comparison
+  /** The revision being compared against, parsed read-only. Null when no
+   *  comparison is active. The diff is derived from this plus the live
+   *  workspace, so it tracks edits without extra state. */
+  comparisonBase: Workspace | null
+  /** Where the base revision came from, e.g. `bigbank.dsl`. */
+  comparisonLabel: string | null
+  comparisonPanelOpen: boolean
+  /** Whether the canvas tints added/changed nodes while a comparison is active. */
+  comparisonOverlay: boolean
+  startComparison: (base: Workspace, label: string) => void
+  clearComparison: () => void
+  setComparisonPanelOpen: (open: boolean) => void
+  setComparisonOverlay: (on: boolean) => void
 }

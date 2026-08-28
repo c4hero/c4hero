@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles,
+  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, GitCompare,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -362,6 +362,25 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       icon: FolderOpen,
       keywords: ['close', 'home', 'welcome'],
       execute: () => store().closeWorkspace(),
+    },
+
+    {
+      id: 'compare-revisions',
+      label: 'Compare with another revision...',
+      category: 'view',
+      icon: GitCompare,
+      keywords: ['compare', 'diff', 'revision', 'changes', 'git', 'review'],
+      when: () => !!store().workspace,
+      execute: () => { store().setComparisonPanelOpen(true) },
+    },
+    {
+      id: 'stop-comparing',
+      label: 'Stop comparing revisions',
+      category: 'view',
+      icon: GitCompare,
+      keywords: ['compare', 'diff', 'clear', 'stop'],
+      when: () => store().comparisonBase !== null,
+      execute: () => { store().clearComparison(); announce('Comparison cleared') },
     },
 
     // ─── Export ──────────────────────────────────────────

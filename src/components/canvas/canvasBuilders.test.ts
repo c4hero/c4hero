@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Node } from '@xyflow/react'
-import { buildEdges, buildNodes } from './canvasBuilders'
+import { buildEdges, buildNodes, type DiffOverlay } from './canvasBuilders'
 import { handleSide, handleSlot } from './handleSlots'
 import type { HighlightFilters } from '@/lib/highlight'
 import { THEMES } from '@/lib/themes'
@@ -182,5 +182,91 @@ describe('buildEdges handle routing', () => {
         expect(handleSlot(handle!)).not.toBeNull()
       }
     }
+  })
+})
+
+/** Two systems plus the relationship between them, so the overlay has one of
+ *  each thing it can tint. */
+function diffWorkspace(): Workspace {
+  return {
+    name: 'Diff test',
+    model: {
+      people: [],
+      softwareSystems: [
+        { id: 'a', type: 'softwareSystem', name: 'A', tags: ['Element', 'Software System'], properties: {}, containers: [] },
+        { id: 'b', type: 'softwareSystem', name: 'B', tags: ['Element', 'Software System'], properties: {}, containers: [] },
+      ],
+      relationships: [
+        { id: 'rel', sourceId: 'a', destinationId: 'b', tags: ['Relationship'], properties: {} },
+      ],
+      groups: [],
+    },
+    views: {
+      systemLandscapeViews: [
+        {
+          type: 'systemLandscape',
+          key: 'landscape',
+          elements: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 400, y: 0 }],
+          relationships: [{ id: 'rel' }],
+        },
+      ],
+      systemContextViews: [],
+      containerViews: [],
+      componentViews: [],
+      configuration: { styles: { elements: [], relationships: [] } },
+    },
+  }
+}
+
+function diffNodes(overlay: DiffOverlay | null) {
+  const ws = diffWorkspace()
+  return buildNodes(
+    ws, ws.views.systemLandscapeViews[0], () => {}, NO_FILTERS, new Map(), new Set(), THEMES.structurizr, overlay,
+  )
+}
+
+function diffEdges(overlay: DiffOverlay | null) {
+  const ws = diffWorkspace()
+  const nodes = diffNodes(overlay)
+  return buildEdges(ws, ws.views.systemLandscapeViews[0], nodes, NO_FILTERS, overlay)
+}
+
+describe('comparison overlay', () => {
+  const overlay: DiffOverlay = {
+    elements: new Map([['a', 'added' as const]]),
+    relationships: new Map([['rel', 'changed' as const]]),
+  }
+
+  it('leaves nodes and edges untouched when no comparison is running', () => {
+    expect(diffNodes(null).map((n) => n.className)).toEqual([undefined, undefined])
+    expect(diffEdges(null)[0].className).toBeUndefined()
+    expect(diffNodes(null)[0].data.diffStatus).toBeUndefined()
+  })
+
+  it('marks changed nodes and quiets the rest', () => {
+    const nodes = diffNodes(overlay)
+    expect(nodes[0].className).toBe('c4-node-diff-added')
+    expect(nodes[0].data.diffStatus).toBe('added')
+    expect(nodes[1].className).toBe('c4-node-diff-same')
+    expect(nodes[1].data.diffStatus).toBeUndefined()
+  })
+
+  it('marks changed edges and quiets the rest', () => {
+    expect(diffEdges(overlay)[0].className).toBe('c4-edge-diff-changed')
+    expect(diffEdges(overlay)[0].data!.diffStatus).toBe('changed')
+    const untouched = diffEdges({ elements: new Map(), relationships: new Map() })
+    expect(untouched[0].className).toBe('c4-edge-diff-same')
+  })
+
+  it('composes with the highlighter instead of replacing it', () => {
+    const ws = diffWorkspace()
+    ws.model.softwareSystems[0].tags.push('Critical')
+    const nodes = buildNodes(
+      ws, ws.views.systemLandscapeViews[0], () => {},
+      { tags: ['Critical'], statuses: [], techs: [], teams: [] },
+      new Map(), new Set(), THEMES.structurizr, overlay,
+    )
+    expect(nodes[0].className).toBe('c4-node-highlighted c4-node-diff-added')
+    expect(nodes[1].className).toBe('c4-node-faded c4-node-diff-same')
   })
 })

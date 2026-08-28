@@ -225,6 +225,50 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
   })
 }
 
+/** Read a `.dsl` file for read-only comparison.
+ *
+ *  Deliberately does NOT touch `currentFileHandle`, the sidecar handle, or the
+ *  recent-files list: picking a revision to compare against must never repoint
+ *  where Save writes, and an old revision is not a file the user "opened". */
+export async function openComparisonFile(): Promise<{ content: string; name: string } | null> {
+  if (hasFileSystemAccess()) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [
+          {
+            description: 'Structurizr DSL or text',
+            accept: { 'text/plain': ['.dsl', '.txt'] },
+          },
+        ],
+        excludeAcceptAllOption: false,
+      })
+      const file = await handle.getFile()
+      const content = await readTextFileWithLimit(file, 'DSL file')
+      return { content, name: file.name }
+    } catch {
+      // User cancelled the file picker — not an error
+      return null
+    }
+  }
+
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.dsl,.txt'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) { resolve(null); return }
+      try {
+        resolve({ content: await readTextFileWithLimit(file, 'DSL file'), name: file.name })
+      } catch (err) {
+        log.warn('Failed to open comparison file', err)
+        resolve(null)
+      }
+    }
+    input.click()
+  })
+}
+
 /** Save content to the current file handle or prompt for new file */
 export async function saveDSLFile(content: string, suggestedName?: string): Promise<boolean> {
   const safeSuggestedName = safeSuggestedDslName(suggestedName)

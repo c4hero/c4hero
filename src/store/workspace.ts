@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { WorkspaceState } from './workspace-types'
+import { createCompareSlice } from './slices/compare-slice'
 import { createFilterSlice } from './slices/filter-slice'
 import { createUiSlice } from './slices/ui-slice'
 import { createSelectionSlice } from './slices/selection-slice'
@@ -41,6 +42,7 @@ export {
  */
 export const useWorkspaceStore = create<WorkspaceState>()(
   immer((...a) => ({
+    ...createCompareSlice(...a),
     ...createFilterSlice(...a),
     ...createUiSlice(...a),
     ...createSelectionSlice(...a),
