@@ -15,6 +15,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'searchOpen' | 'commandPaletteOpen'
   | 'canvasSettingsOpen' | 'canvasGuideOpen' | 'addElementPanelOpen' | 'highlighterOpenFacet'
   | 'viewsPanelOpen' | 'createViewDialogOpen'
+  | 'impactTargetIds' | 'openImpactPanel' | 'closeImpactPanel'
   | 'pendingDelete' | 'confirmDelete' | 'cancelDelete'
   | 'presentationMode' | 'setPresentationMode'
   | 'minimapEnabled' | 'snapToGrid' | 'toggleMinimap' | 'toggleSnapToGrid'
@@ -54,6 +55,7 @@ export const createUiSlice: StateCreator<
   highlighterOpenFacet: null,
   viewsPanelOpen: false,
   createViewDialogOpen: false,
+  impactTargetIds: null,
   pendingDelete: null,
   presentationMode: false,
   minimapEnabled: true,
@@ -121,6 +123,12 @@ export const createUiSlice: StateCreator<
   setViewsPanelOpen: (open) => set({ viewsPanelOpen: open }),
   toggleViewsPanel: () => set((s) => { s.viewsPanelOpen = !s.viewsPanelOpen }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
+
+  // The targets are snapshotted when the panel opens: the analysis answers a
+  // question about a specific set of elements, and changing the canvas
+  // selection underneath it would silently rewrite the question.
+  openImpactPanel: (ids) => set({ impactTargetIds: [...ids], commandPaletteOpen: false }),
+  closeImpactPanel: () => set({ impactTargetIds: null }),
 
   toggleMinimap: () => set((s) => { s.minimapEnabled = !s.minimapEnabled }),
   toggleSnapToGrid: () => set((s) => { s.snapToGrid = !s.snapToGrid }),

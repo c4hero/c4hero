@@ -260,5 +260,10 @@ export interface WorkspaceState extends UndoState {
   setTeamFilterMode: (mode: 'any' | 'all') => void
   createViewDialogOpen: boolean
   setCreateViewDialogOpen: (open: boolean) => void
+  /** Elements the impact panel is analysing, snapshotted when it opened.
+   *  Null when the panel is closed. */
+  impactTargetIds: string[] | null
+  openImpactPanel: (ids: string[]) => void
+  closeImpactPanel: () => void
   setPresentationMode: (on: boolean) => void
 }

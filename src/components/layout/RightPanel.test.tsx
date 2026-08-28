@@ -17,6 +17,7 @@ vi.mock('lucide-react', () => ({
   Trash2: () => null,
   Lock: () => null,
   LockOpen: () => null,
+  Radar: () => null,
   AlertTriangle: () => null,
   Settings: () => null,
   ChevronDown: () => null,
@@ -80,6 +81,15 @@ describe('RightPanel', () => {
     useWorkspaceStore.getState().selectElements(['alice'])
     render(<RightPanel />)
     expect(screen.getByText('Person')).toBeTruthy()
+  })
+
+  it('opens the removal-impact panel from the inspector', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectElements(['alice'])
+    render(<RightPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'What breaks if this is removed' }))
+    expect(useWorkspaceStore.getState().impactTargetIds).toEqual(['alice'])
   })
 
   it('shows relationship description when relationship selected', () => {
