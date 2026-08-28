@@ -528,7 +528,11 @@ function layoutView(
       background: style.background ?? '#1f2937',
       color: style.color ?? '#e5e7eb',
       stroke: style.stroke ?? style.color ?? '#64748b',
-      strokeWidth: style.strokeWidth ?? 1.5,
+      // Coerced rather than trusted: unlike the colors, this lands in an SVG
+      // attribute as a bare number, and a workspace can reach us from
+      // localStorage or an imported JSON that never went through the DSL
+      // parser's numeric guard.
+      strokeWidth: finiteOr(style.strokeWidth, 1.5),
       drillTo: drillTargets.get(element.id) === view.key ? undefined : drillTargets.get(element.id),
     }
   })
@@ -555,6 +559,11 @@ function layoutView(
 
 function round(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+function finiteOr(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
 }
 
 // ─── Serialization ───────────────────────────────────────────────────

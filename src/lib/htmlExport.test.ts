@@ -163,6 +163,18 @@ describe('exportWorkspaceAsHtml — untrusted content', () => {
     expect(html).not.toContain('onload="x')
   })
 
+  it('does not let a non-numeric stroke width reach the SVG', () => {
+    const ws = shop()
+    // Only reachable from hand-edited localStorage or an imported JSON — the
+    // DSL parser rejects non-numbers — but the exporter should still be total.
+    ws.views.configuration.styles.elements.push(
+      { tag: 'Person', strokeWidth: '2" onload="x' as unknown as number },
+    )
+    const html = exportWorkspaceAsHtml(ws)
+    expect(html).not.toContain('onload="x')
+    expect(html).toContain('stroke-width="1.5"')
+  })
+
   it('drops element URLs that are not http(s)', () => {
     const ws = shop()
     ws.model.people[0].url = 'javascript:alert(1)'
