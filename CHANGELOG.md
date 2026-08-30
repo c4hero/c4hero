@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-30
+
 ### Added
 
 - **Dynamic and deployment views — c4hero now covers the complete C4 view
@@ -186,6 +188,7 @@ Initial public release. c4hero is a local-first browser-based visual editor for 
 - Canvas interactions no longer trigger browser-back navigation on Backspace in non-text contexts.
 - Boundary-node E2E selectors now match the per-scope ID format.
 
+[0.4.0]: https://github.com/c4hero/c4hero/releases/tag/v0.4.0
 [0.3.0]: https://github.com/c4hero/c4hero/releases/tag/v0.3.0
 [0.2.2]: https://github.com/c4hero/c4hero/releases/tag/v0.2.2
 [0.2.1]: https://github.com/c4hero/c4hero/releases/tag/v0.2.1
