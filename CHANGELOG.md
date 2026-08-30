@@ -17,9 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-serialize losslessly, verified against the real Structurizr parser in
   CI. Dynamic views number every interaction step on its edge; deployment
   views draw the environment as nested deployment-node boundaries around the
-  instances and infrastructure running inside them. Authoring deployment
-  topology stays DSL-side for now; rendering, layout, drag, and export are
-  fully wired.
+  instances and infrastructure running inside them. Rendering, layout, drag,
+  and export are fully wired, and topology can be authored visually (see
+  below).
 - **Lock a whole view's layout.** One switch in the Auto-arrange menu freezes
   the active view: Auto-arrange and layout-direction changes become no-ops and
   nothing can be dragged — not even by accident. Element locks keep working
@@ -42,6 +42,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   relationships and view membership. Scoped views pick up only instances of
   their system, positions survive topology edits, everything is undoable, and
   the result serializes to DSL the real Structurizr parser accepts.
+- **Scoped deployment views say what they hide.** A deployment view scoped to
+  a software system only draws subtrees deploying that system — which used to
+  make topology edits look like silent no-ops. The topology editor now shows a
+  "scoped to …" chip, badges elements the scope filters out, annotates
+  out-of-scope options in the instance picker, warns before an add that won't
+  appear, and offers a one-click jump to (or creation of) the unscoped view of
+  the same environment.
+- **What's new in c4hero, in c4hero.** A subtle release-notes pill appears for
+  returning users when a build ships announced features; clicking it opens the
+  highlights with a link to the full changelog, and dismissing it keeps it
+  gone until the next announcement. Off by default for self-hosted and fork
+  builds — enable with `VITE_WHATS_NEW=1`.
 - **Edit dynamic view steps visually.** The add panel on a dynamic view is now
   a step editor: add interactions between in-scope elements (picking the
   reverse of an existing relationship authors a response step; a brand-new
