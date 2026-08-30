@@ -3,7 +3,7 @@ import WhatsNewPill from './WhatsNewPill'
 import type { WhatsNewRelease } from '@/lib/whatsNew'
 
 vi.mock('lucide-react', () => ({
-  Sparkles: () => null,
+  Megaphone: () => null,
   X: () => null,
 }))
 

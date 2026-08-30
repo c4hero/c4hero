@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Sparkles, X } from 'lucide-react'
+import { Megaphone, X } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { WHATS_NEW, unseenRelease, dismissRelease, type WhatsNewRelease } from '@/lib/whatsNew'
 
@@ -51,7 +51,7 @@ export default function WhatsNewPill({ release = WHATS_NEW }: { release?: WhatsN
             cursor: 'pointer',
           }}
         >
-          <Sparkles size={13} style={{ color: 'var(--color-accent)' }} />
+          <Megaphone size={13} style={{ color: 'var(--color-accent)' }} />
           What's new
         </button>
         <button
@@ -72,7 +72,7 @@ export default function WhatsNewPill({ release = WHATS_NEW }: { release?: WhatsN
         >
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-sm font-semibold" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Sparkles size={14} style={{ color: 'var(--color-accent)' }} /> What's new
+              <Megaphone size={14} style={{ color: 'var(--color-accent)' }} /> What's new
             </h2>
             <button onClick={() => setOpen(false)} className="btn-icon !min-h-7 !min-w-7 !p-1" aria-label="Close dialog">
               <X size={14} />
@@ -90,11 +90,7 @@ export default function WhatsNewPill({ release = WHATS_NEW }: { release?: WhatsN
           </ul>
 
           <div className="mt-4 flex justify-end">
-            <button
-              onClick={dismiss}
-              className="rounded-lg border px-3 py-1.5 text-sm"
-              style={{ background: 'var(--color-surface-2)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
-            >
+            <button onClick={dismiss} className="btn-surface">
               Got it
             </button>
           </div>
