@@ -52,7 +52,27 @@ describe('unseenRelease', () => {
     expect(unseenRelease({ ...release, items: [] })).toBeNull()
   })
 
-  it('seeds first-ever launch silently: nothing shown, id stored', () => {
+  it('seeds a truly new user silently: nothing shown, id stored', () => {
+    expect(unseenRelease(release)).toBeNull()
+    expect(localStorage.getItem(KEY)).toBe(release.id)
+  })
+
+  it('shows the release to a returning user (app state exists, no dismissed id)', () => {
+    // Any c4hero* key proves the browser used the app before the feature
+    // shipped — the FIRST announcement must reach these users.
+    localStorage.setItem('c4hero_recent_files', '[]')
+    expect(unseenRelease(release)).toBe(release)
+    // Not seeded either — only an actual dismissal stores the id.
+    expect(localStorage.getItem(KEY)).toBeNull()
+  })
+
+  it('viewport keys also count as prior app state', () => {
+    localStorage.setItem('c4hero.viewport.Workspace.context', '{}')
+    expect(unseenRelease(release)).toBe(release)
+  })
+
+  it('non-app storage keys do NOT count as prior app state', () => {
+    localStorage.setItem('some-other-site-key', 'x')
     expect(unseenRelease(release)).toBeNull()
     expect(localStorage.getItem(KEY)).toBe(release.id)
   })

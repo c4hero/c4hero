@@ -26,7 +26,9 @@ export interface WhatsNewRelease {
 }
 
 export const WHATS_NEW: WhatsNewRelease | null = {
-  id: '2026-08-deployment-dynamic-views',
+  // The "-r2" re-arms this announcement for users who visited during the
+  // window where the first-launch rule silently seeded them (see below).
+  id: '2026-08-deployment-dynamic-views-r2',
   date: 'August 2026',
   items: [
     {
@@ -56,12 +58,27 @@ export function whatsNewEnabled(): boolean {
 
 const STORAGE_KEY = 'c4hero.whatsNewDismissed'
 
+/** Every app storage key starts with "c4hero" (c4hero_crash_recovery,
+ *  c4hero_recent_files, c4hero.viewport.*, …), so any such key that isn't ours
+ *  proves the browser used the app before this feature existed. Without this
+ *  check, existing users are indistinguishable from brand-new ones and the
+ *  FIRST announcement after the feature ships would reach nobody. */
+function hasPriorAppState(): boolean {
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key !== STORAGE_KEY && key.startsWith('c4hero')) return true
+  }
+  return false
+}
+
 /** The release the user hasn't seen yet, or null when there's nothing to show.
  *
- *  First-ever launch (no stored value) seeds the current id WITHOUT showing:
- *  to a brand-new user everything is new, so an announcement is noise. When
- *  localStorage is unavailable (private mode, embeds) this fails closed —
- *  better to never show than to nag on every launch. */
+ *  No stored value + no other app state = a brand-new user: seed the current
+ *  id WITHOUT showing (everything is new to them, an announcement is noise).
+ *  No stored value + existing app state = a returning user from before the
+ *  feature shipped: show the release. When localStorage is unavailable
+ *  (private mode, embeds) this fails closed — better to never show than to
+ *  nag on every launch. */
 export function unseenRelease(release: WhatsNewRelease | null = WHATS_NEW): WhatsNewRelease | null {
   // Disabled builds bail before touching storage — no seeding, no reads, so
   // enabling the flag later still gets the clean first-launch behavior.
@@ -70,6 +87,7 @@ export function unseenRelease(release: WhatsNewRelease | null = WHATS_NEW): What
   try {
     const dismissed = localStorage.getItem(STORAGE_KEY)
     if (dismissed === null) {
+      if (hasPriorAppState()) return release
       localStorage.setItem(STORAGE_KEY, release.id)
       return null
     }
