@@ -9,8 +9,39 @@ const release: WhatsNewRelease = {
   items: [{ title: 'Thing', body: 'Does stuff.' }],
 }
 
-beforeEach(() => localStorage.clear())
-afterEach(() => vi.restoreAllMocks())
+beforeEach(() => {
+  localStorage.clear()
+  // Most cases test the enabled behavior; the opt-in default gets its own suite.
+  vi.stubEnv('VITE_WHATS_NEW', '1')
+})
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.restoreAllMocks()
+})
+
+describe('build-time opt-in (VITE_WHATS_NEW)', () => {
+  it('is disabled by default: no pill, and storage is never touched', () => {
+    vi.unstubAllEnvs()
+    localStorage.setItem(KEY, 'some-older-release')
+    expect(unseenRelease(release)).toBeNull()
+    // No first-launch seeding either — flipping the flag on later starts clean.
+    localStorage.clear()
+    expect(unseenRelease(release)).toBeNull()
+    expect(localStorage.getItem(KEY)).toBeNull()
+  })
+
+  it('accepts "true" as well as "1"', () => {
+    vi.stubEnv('VITE_WHATS_NEW', 'true')
+    localStorage.setItem(KEY, 'some-older-release')
+    expect(unseenRelease(release)).toBe(release)
+  })
+
+  it('any other value stays disabled', () => {
+    vi.stubEnv('VITE_WHATS_NEW', 'on')
+    localStorage.setItem(KEY, 'some-older-release')
+    expect(unseenRelease(release)).toBeNull()
+  })
+})
 
 describe('unseenRelease', () => {
   it('returns null when there is no release (feature dormant)', () => {

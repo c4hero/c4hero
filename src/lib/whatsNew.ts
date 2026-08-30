@@ -27,6 +27,15 @@ export interface WhatsNewRelease {
 
 export const WHATS_NEW: WhatsNewRelease | null = null
 
+/** Build-time opt-in: the what's-new pill only ever shows on builds with
+ *  VITE_WHATS_NEW=1 (or true). Default is OFF — self-hosted and fork builds
+ *  show nothing even when release entries exist in the source; the hosted app
+ *  turns it on via its deploy environment. */
+export function whatsNewEnabled(): boolean {
+  const v = import.meta.env.VITE_WHATS_NEW
+  return v === '1' || v === 'true'
+}
+
 const STORAGE_KEY = 'c4hero.whatsNewDismissed'
 
 /** The release the user hasn't seen yet, or null when there's nothing to show.
@@ -36,6 +45,9 @@ const STORAGE_KEY = 'c4hero.whatsNewDismissed'
  *  localStorage is unavailable (private mode, embeds) this fails closed —
  *  better to never show than to nag on every launch. */
 export function unseenRelease(release: WhatsNewRelease | null = WHATS_NEW): WhatsNewRelease | null {
+  // Disabled builds bail before touching storage — no seeding, no reads, so
+  // enabling the flag later still gets the clean first-launch behavior.
+  if (!whatsNewEnabled()) return null
   if (!release || release.items.length === 0) return null
   try {
     const dismissed = localStorage.getItem(STORAGE_KEY)

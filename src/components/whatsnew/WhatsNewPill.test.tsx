@@ -19,9 +19,20 @@ const release: WhatsNewRelease = {
   ],
 }
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  vi.stubEnv('VITE_WHATS_NEW', '1')
+})
+afterEach(() => vi.unstubAllEnvs())
 
 describe('WhatsNewPill', () => {
+  it('renders nothing when the build-time flag is off, even with an undismissed release', () => {
+    vi.unstubAllEnvs()
+    localStorage.setItem(KEY, 'older-release')
+    render(<WhatsNewPill release={release} />)
+    expect(screen.queryByRole('button', { name: /what's new/i })).toBeNull()
+  })
+
   it('renders nothing when there is no release', () => {
     render(<WhatsNewPill release={null} />)
     expect(screen.queryByRole('button', { name: /what's new/i })).toBeNull()
