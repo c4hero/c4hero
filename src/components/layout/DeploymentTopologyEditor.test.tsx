@@ -85,3 +85,111 @@ describe('DeploymentTopologyEditor — disabled-Add feedback', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 })
+
+/** Workspace with two systems where the deployment view is scoped to Sys:
+ *  server hosts an instance of Sys's container (in scope) and the topology
+ *  also carries an empty node "spare" (out of scope — hosts nothing of Sys). */
+function makeScopedWs(scopeId: string | undefined): Workspace {
+  return {
+    name: 'T',
+    model: {
+      people: [],
+      softwareSystems: [
+        { id: 'sys', type: 'softwareSystem', name: 'Sys', tags: [], properties: {},
+          containers: [{ id: 'mob', type: 'container', name: 'Mobile App', tags: [], properties: {}, components: [] }] },
+        { id: 'other', type: 'softwareSystem', name: 'Other', tags: [], properties: {}, containers: [] },
+      ],
+      relationships: [],
+      groups: [],
+      deploymentEnvironments: [{
+        id: 'prod', name: 'Production',
+        deploymentNodes: [
+          { id: 'server', type: 'deploymentNode', name: 'Server', tags: [], properties: {}, children: [], infrastructureNodes: [],
+            containerInstances: [{ id: 'inst', type: 'containerInstance', containerId: 'mob', tags: [], properties: {} }],
+            softwareSystemInstances: [] },
+          { id: 'spare', type: 'deploymentNode', name: 'Spare', tags: [], properties: {}, children: [], infrastructureNodes: [], containerInstances: [], softwareSystemInstances: [] },
+        ],
+      }],
+    },
+    views: {
+      systemLandscapeViews: [],
+      systemContextViews: [],
+      containerViews: [],
+      componentViews: [],
+      dynamicViews: [],
+      deploymentViews: [{
+        type: 'deployment', key: 'dep', environment: 'Production',
+        softwareSystemId: scopeId,
+        // What expandDeploymentElements keeps for a Sys-scoped view: the
+        // hosting node and the instance; 'spare' is filtered out.
+        elements: scopeId ? [{ id: 'server' }, { id: 'inst' }] : [{ id: 'server' }, { id: 'inst' }, { id: 'spare' }],
+        relationships: [],
+      }],
+      configuration: { styles: { elements: [], relationships: [] } },
+    },
+  }
+}
+
+function renderScopedEditor(scopeId: string | undefined) {
+  useWorkspaceStore.getState().loadWorkspace(makeScopedWs(scopeId))
+  const view = useWorkspaceStore.getState().workspace!.views.deploymentViews[0] as View
+  render(<DeploymentTopologyEditor view={view} />)
+}
+
+describe('DeploymentTopologyEditor — scoped-view visibility', () => {
+  it('badges topology rows the scoped view filters out, and only those', () => {
+    renderScopedEditor('sys')
+    const badges = document.querySelectorAll('[data-out-of-scope]')
+    expect(badges).toHaveLength(1)
+    const rows = Array.from(document.querySelectorAll('[data-topology-row]'))
+    const spareRow = rows.find(r => r.textContent!.includes('Spare'))!
+    expect(spareRow.querySelector('[data-out-of-scope]')).not.toBeNull()
+    const serverRow = rows.find(r => r.textContent!.includes('Server'))!
+    expect(serverRow.querySelector('[data-out-of-scope]')).toBeNull()
+  })
+
+  it('shows no badges on an unscoped view', () => {
+    renderScopedEditor(undefined)
+    expect(document.querySelectorAll('[data-out-of-scope]')).toHaveLength(0)
+  })
+
+  it('annotates out-of-scope systems in the Instance of dropdown', () => {
+    renderScopedEditor('sys')
+    pickKind('systemInstance')
+    const select = screen.getByLabelText(/instance of/i) as HTMLSelectElement
+    const texts = Array.from(select.options).map(o => o.text)
+    expect(texts).toContain('Sys')
+    expect(texts).toContain('Other — outside view scope')
+  })
+
+  it('warns before adding an instance the scoped view will hide', () => {
+    renderScopedEditor('sys')
+    pickKind('systemInstance')
+    fireEvent.change(screen.getByLabelText(/host deployment node/i), { target: { value: 'server' } })
+    fireEvent.change(screen.getByLabelText(/instance of/i), { target: { value: 'other' } })
+    expect(addButton().disabled).toBe(false)
+    expect(screen.getByRole('status').textContent).toMatch(/outside the view's scope \(Sys\).*hidden in this view/i)
+  })
+
+  it('does not warn for an in-scope instance', () => {
+    renderScopedEditor('sys')
+    pickKind('containerInstance')
+    fireEvent.change(screen.getByLabelText(/host deployment node/i), { target: { value: 'server' } })
+    fireEvent.change(screen.getByLabelText(/instance of/i), { target: { value: 'mob' } })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('warns that a new deployment node stays hidden until it hosts an in-scope instance', () => {
+    renderScopedEditor('sys')
+    expect(screen.getByRole('status').textContent).toMatch(/hidden until it hosts an instance of Sys/i)
+  })
+
+  it('warns for infra added to a hidden host but not to a visible one', () => {
+    renderScopedEditor('sys')
+    pickKind('infra')
+    fireEvent.change(screen.getByLabelText(/host deployment node/i), { target: { value: 'spare' } })
+    expect(screen.getByRole('status').textContent).toMatch(/infrastructure node will be hidden/i)
+    fireEvent.change(screen.getByLabelText(/host deployment node/i), { target: { value: 'server' } })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+})

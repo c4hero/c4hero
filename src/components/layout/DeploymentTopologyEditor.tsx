@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { DeploymentNode, View, Workspace } from '@/types/model'
+import { deploymentScopeIds } from '@/lib/deployment'
 import { Boxes, HardDrive, Plus, Trash2 } from 'lucide-react'
 
 type Row = {
@@ -83,6 +84,16 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
   if (!workspace || !view.environment) return null
   const environment = view.environment
 
+  // A view scoped to a software system only draws deployment nodes whose
+  // subtree hosts an instance of that system (or its containers). The tree
+  // above shows the WHOLE environment, so scoped views need the mismatch
+  // called out — otherwise adds look like silent no-ops on the canvas.
+  const scopeSystem = view.softwareSystemId
+    ? workspace.model.softwareSystems.find(s => s.id === view.softwareSystemId)
+    : undefined
+  const scopeIds = scopeSystem ? deploymentScopeIds(workspace.model, scopeSystem.id) : undefined
+  const viewIds = new Set(view.elements.map(e => e.id))
+
   const needsHost = kind !== 'node' // deployment nodes may be top-level
   const needsElement = kind === 'containerInstance' || kind === 'systemInstance'
   const canAdd = (!needsHost || hostId !== '') && (!needsElement || elementId !== '')
@@ -95,6 +106,17 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
       : needsHost && hostId === ''
         ? `Choose which node to put it inside.`
         : `Choose which ${kind === 'containerInstance' ? 'container' : 'system'} to instantiate.`
+  // Warn BEFORE the add when the result won't appear on this scoped view:
+  // instances of out-of-scope elements never show; nodes/infra only show once
+  // their subtree hosts an in-scope instance.
+  const scopeHint = !scopeSystem || !canAdd ? null
+    : needsElement && scopeIds && !scopeIds.has(elementId)
+      ? `This ${kind === 'containerInstance' ? 'container' : 'system'} is outside the view's scope (${scopeSystem.name}) — it will be added to ${environment} but stay hidden in this view.`
+      : kind === 'node'
+        ? `Scoped view: the node will stay hidden until it hosts an instance of ${scopeSystem.name}.`
+        : kind === 'infra' && !viewIds.has(hostId)
+          ? `Scoped view: this host is hidden until it hosts an instance of ${scopeSystem.name}, so the infrastructure node will be hidden too.`
+          : null
 
   const add = () => {
     const store = useWorkspaceStore.getState()
@@ -171,6 +193,23 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
                 )}
               </span>
             )}
+            {scopeSystem && !viewIds.has(row.id) && (
+              <span
+                data-out-of-scope
+                title={`Hidden in this view — it only shows deployments of ${scopeSystem.name}`}
+                style={{
+                  fontSize: 9,
+                  padding: '1px 4px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-muted)',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                out of scope
+              </span>
+            )}
             <button
               aria-label={`Delete ${row.label}`}
               onClick={() => useWorkspaceStore.getState().deleteElements([row.id])}
@@ -212,8 +251,16 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
               {kind === 'containerInstance' ? 'Container…' : 'System…'}
             </option>
             {kind === 'containerInstance'
-              ? containers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
-              : systems.map(sys => <option key={sys.id} value={sys.id}>{sys.name}</option>)}
+              ? containers.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {scopeIds && !scopeIds.has(c.id) ? `${c.name} — outside view scope` : c.name}
+                  </option>
+                ))
+              : systems.map(sys => (
+                  <option key={sys.id} value={sys.id}>
+                    {scopeIds && !scopeIds.has(sys.id) ? `${sys.name} — outside view scope` : sys.name}
+                  </option>
+                ))}
           </select>
         )}
         <button
@@ -238,9 +285,9 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
         >
           <Plus size={12} /> Add
         </button>
-        {blockedHint && (
+        {(blockedHint ?? scopeHint) && (
           <span role="status" style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
-            {blockedHint}
+            {blockedHint ?? scopeHint}
           </span>
         )}
         <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>

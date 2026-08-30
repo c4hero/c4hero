@@ -235,6 +235,36 @@ describe('CreateViewDialog — deployment environment creation (inline)', () => 
     expect(after.views.deploymentViews[0].environment).toBe('Staging')
   })
 
+  it('does not carry a preseeded zoom scope into a deployment view (TEA-81 scope trap)', () => {
+    // The zoom "Customize…" flow preseeds type + scopeId. Switching the type
+    // to Deployment must drop that scope — a silently scoped deployment view
+    // filters out everything that doesn't deploy the scope system, which looks
+    // like adds doing nothing.
+    const ws = makeWs({
+      model: {
+        people: [],
+        softwareSystems: [
+          { id: 'a', type: 'softwareSystem', name: 'A', tags: [], properties: {},
+            containers: [{ id: 'c1', type: 'container', name: 'C1', tags: [], properties: {}, components: [] }] },
+        ],
+        relationships: [], groups: [],
+      },
+    })
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setCreateViewDefaults({ type: 'container', scopeId: 'a' })
+    render(<CreateViewDialog onClose={() => {}} />)
+    setType('deployment')
+
+    // The optional scope picker must be back at "All systems".
+    const scopeSelect = screen.getByLabelText(/scope \(optional\)/i) as HTMLSelectElement
+    expect(scopeSelect.value).toBe('')
+
+    fireEvent.change(screen.getByLabelText(/environment/i), { target: { value: 'Production' } })
+    fireEvent.click(screen.getByRole('button', { name: /^create view$/i }))
+    const after = useWorkspaceStore.getState().workspace!
+    expect(after.views.deploymentViews[0].softwareSystemId).toBeUndefined()
+  })
+
   it('targets the existing environment when the typed name matches one', () => {
     const ws = makeWs()
     ws.model.deploymentEnvironments = [{ id: 'live', name: 'Live', deploymentNodes: [] }]
