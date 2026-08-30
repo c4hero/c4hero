@@ -15,6 +15,7 @@ import type {
     ViewConfiguration,
     Group,
     ModelElement,
+    RelationshipInView,
     DeploymentEnvironment,
     DeploymentNode,
     InfrastructureNode,
@@ -1005,9 +1006,10 @@ class SerializerContext {
         if (view.description) this.emit(`description "${this.escapeString(view.description)}"`)
 
         const relById = new Map(this.workspace.model.relationships.map(r => [r.id, r]))
-        for (const step of view.relationships) {
-            const rel = relById.get(step.id)
-            if (!rel) continue
+        const steps = view.relationships.filter(step => relById.has(step.id))
+
+        const emitStep = (step: typeof steps[number]) => {
+            const rel = relById.get(step.id)!
             // Steps carry their own endpoints in travel order: a response
             // step runs against the relationship's direction, and a
             // hierarchy-implied step connects different granularity than the
@@ -1026,12 +1028,90 @@ class SerializerContext {
             this.emit(line)
         }
 
+        // Re-emit parallel-sequence brace groups. Structurizr's counter
+        // clones at `{` and reverts at `}` (branches renumber from the same
+        // base, as does the step after the groups), so a stored order
+        // sequence like 1,2,3,2,2 is only reproducible with braces. Runs of
+        // consecutive steps whose orders increment by one either stand alone
+        // (advancing the counter) or form a braced branch (reverting it);
+        // the next run's start order decides which. One level of nesting is
+        // reconstructed — sequences only a nested group could produce fall
+        // back to flat emission, whose orders regenerate sequentially.
+        const groups = this.parallelGroupsFor(steps)
+        if (groups) {
+            for (const group of groups) {
+                if (group.parallel) {
+                    this.emit('{')
+                    this.depth++
+                    group.steps.forEach(emitStep)
+                    this.depth--
+                    this.emit('}')
+                } else {
+                    group.steps.forEach(emitStep)
+                }
+            }
+        } else {
+            steps.forEach(emitStep)
+        }
+
         if (view.autoLayout) {
             this.serializeAutoLayout(view.autoLayout)
         }
 
         this.depth--
         this.emit('}')
+    }
+
+    /** Partition dynamic-view steps into plain sequences and parallel brace
+     *  groups whose reparse reproduces the stored orders exactly.
+     *
+     *  Orders are grouped into maximal runs that increment by one. A run is
+     *  plain when the next run continues where it ended; when the next run
+     *  restarts INSIDE it, the run splits — the prefix before the restart
+     *  point stays plain and the rest becomes a braced branch (whose close
+     *  reverts the counter, which is what lets the next run restart there).
+     *  Returns null when no split assignment reproduces the sequence (only
+     *  deeply nested parallel groups produce such orders) — the caller then
+     *  emits flat lines, whose orders regenerate sequentially on reparse. */
+    private parallelGroupsFor(
+        steps: RelationshipInView[],
+    ): Array<{ parallel: boolean; steps: RelationshipInView[] }> | null {
+        const orders = steps.map(step => {
+            const n = Number(step.order)
+            return Number.isInteger(n) && n > 0 ? n : null
+        })
+        if (orders.some(o => o === null)) return steps.length === 0 ? [] : null
+        const ints = orders as number[]
+
+        const runs: Array<{ from: number; to: number; start: number; end: number }> = []
+        for (let i = 0; i < ints.length;) {
+            let j = i
+            while (j + 1 < ints.length && ints[j + 1] === ints[j] + 1) j++
+            runs.push({ from: i, to: j, start: ints[i], end: ints[j] })
+            i = j + 1
+        }
+
+        const groups: Array<{ parallel: boolean; steps: RelationshipInView[] }> = []
+        let counter = 0
+        for (let r = 0; r < runs.length; r++) {
+            const run = runs[r]
+            if (run.start !== counter + 1) return null
+            const next = runs[r + 1]
+            if (next === undefined || next.start === run.end + 1) {
+                groups.push({ parallel: false, steps: steps.slice(run.from, run.to + 1) })
+                counter = run.end
+            } else if (next.start >= run.start && next.start <= run.end) {
+                const splitAt = run.from + (next.start - run.start)
+                if (splitAt > run.from) {
+                    groups.push({ parallel: false, steps: steps.slice(run.from, splitAt) })
+                }
+                groups.push({ parallel: true, steps: steps.slice(splitAt, run.to + 1) })
+                counter = next.start - 1
+            } else {
+                return null
+            }
+        }
+        return groups
     }
 
     private serializeAutoLayout(layout: AutoLayout): void {

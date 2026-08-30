@@ -7,6 +7,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useAutoSave } from '@/hooks/useAutoSave'
 import { useRouteSync, useRefreshRedirect } from '@/hooks/useRouteSync'
 import FloatingTopPill from '@/components/layout/FloatingTopPill'
+import WhatsNewPill from '@/components/whatsnew/WhatsNewPill'
 import FloatingToolRail from '@/components/layout/FloatingToolRail'
 import FloatingViewsPanel from '@/components/layout/FloatingViewsPanel'
 import FloatingInspector from '@/components/layout/FloatingInspector'
@@ -175,6 +176,11 @@ export default function App() {
           <ImpactDialog />
         </Suspense>
       )}
+
+      {/* What's-new pill — outside routes so it greets the user wherever they
+          land (welcome or canvas); presentation mode returns earlier and never
+          shows it. Renders nothing unless an unseen release exists. */}
+      <WhatsNewPill />
 
       {/* BYOK AI assistant — only on the canvas (a workspace open on a canvas
           route), never on the welcome/collection screens. */}

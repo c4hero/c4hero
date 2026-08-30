@@ -31,6 +31,11 @@
   --color-tint-external: #1f232a;
   --color-border-external: rgba(107, 114, 128, 0.5);
 
+  /* Deployment infrastructure node colors */
+  --color-type-infra: #a5b4fc;
+  --color-tint-infra: #1b1f33;
+  --color-border-infra: rgba(129, 140, 248, 0.5);
+
   /* C4 type background tints */
   --color-tint-person: #3a2a0a;
   --color-tint-system: #1a2f4a;
