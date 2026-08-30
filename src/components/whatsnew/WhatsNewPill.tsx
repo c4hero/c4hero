@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Megaphone, X } from 'lucide-react'
+import { ExternalLink, Megaphone, X } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { WHATS_NEW, unseenRelease, dismissRelease, type WhatsNewRelease } from '@/lib/whatsNew'
 
@@ -89,7 +89,18 @@ export default function WhatsNewPill({ release = WHATS_NEW }: { release?: WhatsN
             ))}
           </ul>
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex items-center justify-between">
+            {unseen.link ? (
+              <a
+                href={unseen.link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[12px]"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--color-accent)' }}
+              >
+                {unseen.link.label} <ExternalLink size={11} />
+              </a>
+            ) : <span />}
             <button onClick={dismiss} className="btn-surface">
               Got it
             </button>

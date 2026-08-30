@@ -20,6 +20,9 @@ export interface WhatsNewRelease {
   /** Human-readable release date, shown in the dialog. */
   date: string
   items: WhatsNewItem[]
+  /** Optional "full release notes" link shown in the dialog footer — point it
+   *  at the changelog section or announcement post for this release. */
+  link?: { label: string; url: string }
 }
 
 export const WHATS_NEW: WhatsNewRelease | null = null

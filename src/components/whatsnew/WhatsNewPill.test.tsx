@@ -3,6 +3,7 @@ import WhatsNewPill from './WhatsNewPill'
 import type { WhatsNewRelease } from '@/lib/whatsNew'
 
 vi.mock('lucide-react', () => ({
+  ExternalLink: () => null,
   Megaphone: () => null,
   X: () => null,
 }))
@@ -62,6 +63,25 @@ describe('WhatsNewPill', () => {
     fireEvent.click(screen.getByRole('button', { name: /dismiss what's new/i }))
     expect(screen.queryByRole('button', { name: /what's new in c4hero/i })).toBeNull()
     expect(localStorage.getItem(KEY)).toBe(release.id)
+  })
+
+  it('shows a release-notes link when the entry provides one, external-safe', () => {
+    localStorage.setItem(KEY, 'older-release')
+    const linked = { ...release, link: { label: 'Full release notes', url: 'https://example.com/notes' } }
+    render(<WhatsNewPill release={linked} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /what's new in c4hero/i }))
+    const link = screen.getByRole('link', { name: /full release notes/i }) as HTMLAnchorElement
+    expect(link.href).toBe('https://example.com/notes')
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toBe('noopener noreferrer')
+  })
+
+  it('shows no link when the entry has none', () => {
+    localStorage.setItem(KEY, 'older-release')
+    render(<WhatsNewPill release={release} />)
+    fireEvent.click(screen.getByRole('button', { name: /what's new in c4hero/i }))
+    expect(screen.queryByRole('link')).toBeNull()
   })
 
   it('closing the dialog without dismissing keeps the pill armed', () => {
