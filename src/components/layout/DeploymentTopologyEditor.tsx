@@ -131,10 +131,41 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
     setRenamingId(null)
   }
 
+  // Rows the scoped view hides — drives the "open the unscoped view" escape
+  // hatch so hidden elements are always one click from being seen.
+  const hiddenCount = scopeSystem ? rows.filter(r => !viewIds.has(r.id)).length : 0
+  const openUnscopedView = () => {
+    const store = useWorkspaceStore.getState()
+    const full = store.workspace?.views.deploymentViews.find(
+      v => v.environment === environment && !v.softwareSystemId,
+    )
+    if (full) store.setActiveView(full.key)
+    else store.addView('deployment', undefined, `${environment} — all systems`, { environment })
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ padding: '10px 12px 4px' }}>
         <span className="flyout-label">Deployment topology — {environment}</span>
+        {scopeSystem && (
+          <div style={{ marginTop: 4 }}>
+            <span
+              data-scope-chip
+              title={`This view only shows the parts of ${environment} that deploy ${scopeSystem.name}. The tree below edits the whole environment.`}
+              style={{
+                display: 'inline-block',
+                fontSize: 10,
+                padding: '1px 6px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface-2)',
+                color: 'var(--color-text-muted)',
+              }}
+            >
+              scoped to {scopeSystem.name}
+            </span>
+          </div>
+        )}
       </div>
 
       <div style={{ overflowY: 'auto', maxHeight: 240, padding: '2px 6px' }}>
@@ -289,6 +320,24 @@ export default function DeploymentTopologyEditor({ view }: { view: View }) {
           <span role="status" style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
             {blockedHint ?? scopeHint}
           </span>
+        )}
+        {hiddenCount > 0 && (
+          <button
+            onClick={openUnscopedView}
+            aria-label={`Open the unscoped ${environment} view`}
+            style={{
+              alignSelf: 'flex-start',
+              padding: 0,
+              background: 'none',
+              border: 'none',
+              fontSize: 10,
+              color: 'var(--color-accent)',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+            }}
+          >
+            {hiddenCount} hidden here — open the unscoped {environment} view
+          </button>
         )}
         <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
           Click a node's name to rename it. Deleting a node removes everything

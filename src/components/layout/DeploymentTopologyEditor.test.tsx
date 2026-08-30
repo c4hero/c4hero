@@ -192,4 +192,50 @@ describe('DeploymentTopologyEditor — scoped-view visibility', () => {
     fireEvent.change(screen.getByLabelText(/host deployment node/i), { target: { value: 'server' } })
     expect(screen.queryByRole('status')).toBeNull()
   })
+
+  it('shows a scope chip in the header for scoped views only', () => {
+    renderScopedEditor('sys')
+    const chip = document.querySelector('[data-scope-chip]')
+    expect(chip).not.toBeNull()
+    expect(chip!.textContent).toBe('scoped to Sys')
+  })
+
+  it('shows no scope chip on an unscoped view', () => {
+    renderScopedEditor(undefined)
+    expect(document.querySelector('[data-scope-chip]')).toBeNull()
+  })
+
+  it('offers a link to an existing unscoped view of the environment and switches to it', () => {
+    const ws = makeScopedWs('sys')
+    ws.views.deploymentViews.push({
+      type: 'deployment', key: 'dep-full', environment: 'Production',
+      elements: [{ id: 'server' }, { id: 'inst' }, { id: 'spare' }], relationships: [],
+    })
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    const view = useWorkspaceStore.getState().workspace!.views.deploymentViews[0] as View
+    render(<DeploymentTopologyEditor view={view} />)
+
+    const link = screen.getByRole('button', { name: /open the unscoped Production view/i })
+    expect(link.textContent).toMatch(/1 hidden here/)
+    fireEvent.click(link)
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('dep-full')
+  })
+
+  it('creates an unscoped view of the environment when none exists', () => {
+    renderScopedEditor('sys')
+    fireEvent.click(screen.getByRole('button', { name: /open the unscoped Production view/i }))
+    const s = useWorkspaceStore.getState()
+    const views = s.workspace!.views.deploymentViews
+    expect(views).toHaveLength(2)
+    const full = views.find(v => !v.softwareSystemId)!
+    expect(full.environment).toBe('Production')
+    expect(s.activeViewKey).toBe(full.key)
+    // The new view projects the whole environment, hidden 'spare' included.
+    expect(full.elements.map(e => e.id)).toEqual(expect.arrayContaining(['server', 'inst', 'spare']))
+  })
+
+  it('shows no unscoped-view link when nothing is hidden', () => {
+    renderScopedEditor(undefined)
+    expect(screen.queryByRole('button', { name: /open the unscoped/i })).toBeNull()
+  })
 })
