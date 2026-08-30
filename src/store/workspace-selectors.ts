@@ -1,5 +1,9 @@
-import type { Workspace, View, ModelElement, Relationship } from '@/types/model'
+import type {
+  Workspace, View, ModelElement, Relationship,
+  DeploymentNode, InfrastructureNode, ContainerInstance, SoftwareSystemInstance,
+} from '@/types/model'
 import { allViewsOf, findViewHelper, findElementHelper, getElementIndex } from './workspace-helpers'
+import { walkDeploymentNodes } from '@/lib/deployment'
 const relationshipMapCache = new WeakMap<Workspace, Map<string, Relationship>>()
 
 function getFirstViewKey(workspace: Workspace): string | null {
@@ -37,6 +41,50 @@ export function getSelectedElement(
 ): ModelElement | undefined {
   if (selectedIds.length === 0) return undefined
   return findElementHelper(workspace, selectedIds[0])
+}
+
+/** A deployment element resolved for the inspector: what it is, the object
+ *  itself, its environment, and (for instances) the model element it deploys. */
+export type SelectedDeploymentElement =
+  | { kind: 'deploymentNode'; environment: string; element: DeploymentNode }
+  | { kind: 'infrastructureNode'; environment: string; element: InfrastructureNode }
+  | { kind: 'containerInstance'; environment: string; instance: ContainerInstance; referenced?: ModelElement }
+  | { kind: 'softwareSystemInstance'; environment: string; instance: SoftwareSystemInstance; referenced?: ModelElement }
+
+/** Resolve a selected ID to a deployment element (node / infra / instance).
+ *  Deployment elements live outside the C4 model tree, so getSelectedElement
+ *  can't find them — the inspector falls back to this. IDs are unique across
+ *  the workspace, so all environments are searched. */
+export function getSelectedDeploymentElement(
+  workspace: Workspace,
+  selectedIds: string[],
+): SelectedDeploymentElement | undefined {
+  if (selectedIds.length === 0) return undefined
+  const id = selectedIds[0]
+  for (const env of workspace.model.deploymentEnvironments ?? []) {
+    let found: SelectedDeploymentElement | undefined
+    walkDeploymentNodes(env, (node) => {
+      if (found) return
+      if (node.id === id) { found = { kind: 'deploymentNode', environment: env.name, element: node }; return }
+      for (const infra of node.infrastructureNodes) {
+        if (infra.id === id) { found = { kind: 'infrastructureNode', environment: env.name, element: infra }; return }
+      }
+      for (const inst of node.containerInstances) {
+        if (inst.id === id) {
+          found = { kind: 'containerInstance', environment: env.name, instance: inst, referenced: findElementHelper(workspace, inst.containerId) }
+          return
+        }
+      }
+      for (const inst of node.softwareSystemInstances) {
+        if (inst.id === id) {
+          found = { kind: 'softwareSystemInstance', environment: env.name, instance: inst, referenced: findElementHelper(workspace, inst.softwareSystemId) }
+          return
+        }
+      }
+    })
+    if (found) return found
+  }
+  return undefined
 }
 
 export function getRelationshipById(

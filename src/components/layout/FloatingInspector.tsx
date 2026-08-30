@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useWorkspaceStore, getSelectedElement, getRelationshipById } from '@/store/workspace'
+import { useWorkspaceStore, getSelectedElement, getSelectedDeploymentElement, getRelationshipById } from '@/store/workspace'
 import RightPanel from '@/components/layout/RightPanel'
 
 export default function FloatingInspector() {
@@ -11,7 +11,9 @@ export default function FloatingInspector() {
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const hasElement = !!workspace && selectedIds.length > 0 && getSelectedElement(workspace, selectedIds) !== undefined
+  const hasElement = !!workspace && selectedIds.length > 0
+    && (getSelectedElement(workspace, selectedIds) !== undefined
+      || getSelectedDeploymentElement(workspace, selectedIds) !== undefined)
   const hasRelationship = !!workspace && selectedRelId !== null && getRelationshipById(workspace, selectedRelId) !== undefined
   const hasGroup = !!workspace && selectedGroupId !== null && workspace.model.groups.some(g => g.id === selectedGroupId)
 
