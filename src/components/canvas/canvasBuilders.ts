@@ -8,10 +8,12 @@ import {
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
 import { CENTER_SLOT, handleId, pickSlots, type Side } from './handleSlots'
+import { buildDeploymentLayoutClusters, buildDeploymentBoundaryNodes } from './deploymentBuilders'
+import { deploymentViewRelationships } from '@/lib/deployment'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
-function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
+export function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
   const map = new Map<string, ElementStyle>()
   for (const style of styles) {
     map.set(style.tag, { ...map.get(style.tag), ...style })
@@ -21,7 +23,7 @@ function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
 
 /** Get the best matching style for an element based on its tags.
  *  Cascade order follows Structurizr: Element → type tag → custom tags (in order). */
-function getElementStyle(
+export function getElementStyle(
   element: ModelElement,
   styleIndex: Map<string, ElementStyle>,
 ): ElementStyle | undefined {
@@ -116,6 +118,8 @@ export function buildDrillableSet(workspace: Workspace): Set<string> {
 
 /** Return the same boundary memberships buildBoundaryNodes will draw. */
 export function buildBoundaryLayoutClusters(workspace: Workspace, view: View): LayoutBoundaryCluster[] {
+  if (view.type === 'deployment') return buildDeploymentLayoutClusters(workspace, view)
+
   const viewElementIds = new Set(view.elements.map((element) => element.id))
   const clusters: LayoutBoundaryCluster[] = []
 
@@ -352,6 +356,8 @@ export function buildBoundaryNodes(
   laidOutNodes: Node[],
   groupNodes: Node[] = [],
 ): Node[] {
+  if (view.type === 'deployment') return buildDeploymentBoundaryNodes(workspace, view, laidOutNodes)
+
   const BOUNDARY_PADDING = 32
   // Header has 2 lines (name + type label) + internal padding; needs more
   // headroom than the side/bottom padding so the subtitle isn't covered by the
@@ -504,24 +510,63 @@ export function buildEdges(
 
   // First pass: compute base side pairs for all edges
   interface EdgeInfo {
-    relId: string
+    /** React Flow edge id. Dynamic steps suffix the step order — the same
+     *  relationship may legally appear as several steps, and RF keys by id,
+     *  so a bare relationship id would silently drop all but one step. */
+    edgeId: string
     sourceId: string
     targetId: string
     sourceSide: string
     targetSide: string
     relStyle: ReturnType<typeof getRelationshipStyle>
     rel: NonNullable<ReturnType<typeof relationshipMap.get>>
+    order?: string
+    stepDescription?: string
+  }
+
+  // The relationships this view draws, each with the endpoints the arrow
+  // travels between. Dynamic steps carry their own endpoints (response steps
+  // run against the relationship's direction; hierarchy-implied steps connect
+  // coarser elements). Deployment views add derived instance relationships,
+  // which exist in no view.relationships list.
+  type DrawnRel = {
+    rel: NonNullable<ReturnType<typeof relationshipMap.get>>
+    edgeId: string
+    sourceId: string
+    targetId: string
+    order?: string
+    stepDescription?: string
+  }
+  const drawn: DrawnRel[] = []
+  if (view.type === 'deployment') {
+    for (const rel of deploymentViewRelationships(workspace.model, view)) {
+      drawn.push({ rel, edgeId: rel.id, sourceId: rel.sourceId, targetId: rel.destinationId })
+    }
+  } else {
+    view.relationships.forEach((viewRel, stepIndex) => {
+      const rel = relationshipMap.get(viewRel.id)
+      if (!rel) return
+      const sourceId = viewRel.sourceId ?? rel.sourceId
+      const targetId = viewRel.destinationId ?? rel.destinationId
+      if (!viewElementIds.has(sourceId) || !viewElementIds.has(targetId)) return
+      drawn.push({
+        rel,
+        // Step-scoped by INDEX, not order: parallel-sequence branches can
+        // legally repeat both the relationship and the order number.
+        edgeId: viewRel.order !== undefined ? `${rel.id}#${stepIndex}` : rel.id,
+        sourceId,
+        targetId,
+        order: viewRel.order,
+        stepDescription: viewRel.description,
+      })
+    })
   }
 
   const edgeInfos: EdgeInfo[] = []
-  for (const viewRel of view.relationships) {
-    const rel = relationshipMap.get(viewRel.id)
-    if (!rel) continue
-    if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
-
-    const relStyle = getRelationshipStyle(rel.tags, relationshipStyles)
-    const srcPos = posMap.get(rel.sourceId)
-    const dstPos = posMap.get(rel.destinationId)
+  for (const d of drawn) {
+    const relStyle = getRelationshipStyle(d.rel.tags, relationshipStyles)
+    const srcPos = posMap.get(d.sourceId)
+    const dstPos = posMap.get(d.targetId)
     const handles = srcPos && dstPos
       ? computeHandlePair(srcPos, dstPos)
       : centerPair('bottom', 'top')
@@ -530,7 +575,18 @@ export function buildEdges(
     const sourceSide = handles.sourceHandle.split('-')[0]
     const targetSide = handles.targetHandle.split('-')[0]
 
-    edgeInfos.push({ relId: rel.id, sourceId: rel.sourceId, targetId: rel.destinationId, sourceSide, targetSide, relStyle, rel })
+    edgeInfos.push({
+      edgeId: d.edgeId,
+      sourceId: d.sourceId,
+      targetId: d.targetId,
+      sourceSide,
+      targetSide,
+      relStyle,
+      rel: d.rel,
+      // Dynamic views: the ordered interaction label and per-step description.
+      order: d.order,
+      stepDescription: d.stepDescription,
+    })
   }
 
   // Second pass: count ALL edges per node+side (regardless of source/target direction),
@@ -594,13 +650,19 @@ export function buildEdges(
     else if (faded) className = 'c4-edge-faded'
 
     edges.push({
-      id: e.rel.id,
+      id: e.edgeId,
       source: e.sourceId,
       target: e.targetId,
       sourceHandle: handleId(e.sourceSide, srcSlot, 'source'),
       targetHandle: handleId(e.targetSide, tgtSlot, 'target'),
       type: 'relationship',
-      data: { relationship: e.rel, relationshipStyle: e.relStyle, highlighted },
+      data: {
+        relationship: e.rel,
+        relationshipStyle: e.relStyle,
+        highlighted,
+        order: e.order,
+        stepDescription: e.stepDescription,
+      },
       className,
     })
   }
