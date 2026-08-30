@@ -162,8 +162,34 @@ export interface WorkspaceState extends UndoState {
   reconnectRelationship: (id: string, newSourceId: string, newTargetId: string) => void
   deleteRelationship: (id: string) => void
 
+  // Dynamic view steps. Edits renumber the sequence 1..n (an edit through
+  // the linear editor flattens any parallel-sequence numbering) and
+  // recompute the view's derived element membership.
+  addDynamicStep: (viewKey: string, sourceId: string, destinationId: string, description?: string) => void
+  updateDynamicStepDescription: (viewKey: string, stepIndex: number, description: string) => void
+  moveDynamicStep: (viewKey: string, stepIndex: number, direction: 'up' | 'down') => void
+  deleteDynamicStep: (viewKey: string, stepIndex: number) => void
+
+  // Deployment topology authoring. Views of the environment recompute their
+  // membership (same expansion `include *` parses to), keeping positions of
+  // surviving elements; all return the new element's id, or '' on no-op.
+  /** Create an empty deployment environment (topology is authored afterwards
+   *  in the deployment view's editor). An existing name is a no-op success —
+   *  environments are identified by name. Returns false only for a blank name
+   *  or no workspace. */
+  addDeploymentEnvironment: (name: string) => boolean
+  addDeploymentNode: (environment: string, parentNodeId: string | null) => string
+  addInfrastructureNode: (environment: string, hostNodeId: string) => string
+  addContainerInstance: (environment: string, hostNodeId: string, containerId: string) => string
+  addSoftwareSystemInstance: (environment: string, hostNodeId: string, softwareSystemId: string) => string
+  renameDeploymentElement: (environment: string, id: string, name: string) => void
+  /** Patch a deployment node's / infrastructure node's editable fields from the
+   *  inspector. A blank name is ignored (deployment elements must stay named);
+   *  blank technology/description clear the field. */
+  updateDeploymentElement: (environment: string, id: string, patch: { name?: string; technology?: string; description?: string }) => void
+
   // View management
-  addView: (type: ViewType, scopeId?: string, title?: string) => string
+  addView: (type: ViewType, scopeId?: string, title?: string, options?: { environment?: string }) => string
   deleteView: (key: string) => void
   renameView: (key: string, title: string) => void
   duplicateView: (key: string) => string

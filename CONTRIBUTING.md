@@ -36,6 +36,8 @@ Optional variables are documented in `.env.example`:
   proxy that terminates TLS
 - `VITE_LOG_ENDPOINT`, to send warn/error logs to an HTTPS endpoint; remember to
   add that origin to the deployment CSP `connect-src`
+- `VITE_WHATS_NEW`, to enable the in-app "What's new" release-notes pill
+  (disabled by default; self-hosted builds show nothing without it)
 
 Keep local overrides out of git.
 
@@ -128,6 +130,12 @@ browser check.
 3. Run the relevant checks locally.
 4. Write a clear commit message.
 5. Open a pull request with context, screenshots, or repro steps when helpful.
+6. If the change is a user-visible feature worth announcing in-app, update the
+   what's-new entry in `src/lib/whatsNew.ts` in the same pull request: set a new
+   `id` (date-slug), the release date, and short user-facing `items`. Skip this
+   for fixes and chores — an unchanged entry shows nobody anything. The pill
+   only appears on builds that opt in with `VITE_WHATS_NEW=1` (the hosted app
+   does; local and self-hosted builds are off by default).
 
 Good commit examples:
 

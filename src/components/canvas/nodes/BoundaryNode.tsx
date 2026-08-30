@@ -1,21 +1,31 @@
 import { memo } from 'react'
 import type { NodeProps } from '@xyflow/react'
+import { useWorkspaceStore } from '@/store/workspace'
 
 interface BoundaryNodeData {
   name: string
   typeLabel: string
   empty?: boolean
+  /** Set on deployment-node boundaries: clicking the label selects the node
+   *  so the inspector can edit its name / technology / description. */
+  deploymentNodeId?: string
 }
 
 function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }) {
-  const emptyTitle = data.typeLabel === 'Software System'
-    ? 'Add containers to this system'
-    : 'Add components to this container'
+  const emptyTitle = data.deploymentNodeId
+    ? 'Add instances to this node'
+    : data.typeLabel === 'Software System'
+      ? 'Add containers to this system'
+      : 'Add components to this container'
 
   return (
     <>
       <div
         className="c4-overlay-drag-handle"
+        onClick={() => {
+          // A drag suppresses click, so this only fires on a plain click.
+          if (data.deploymentNodeId) useWorkspaceStore.getState().selectElements([data.deploymentNodeId])
+        }}
         style={{
           position: 'absolute',
           top: 0,

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { useWorkspaceStore, getSelectedElement, getRelationshipById, buildElementMap, getAllViews, getActiveView, isFocalScopeElement } from '@/store/workspace'
+import { useWorkspaceStore, getSelectedElement, getSelectedDeploymentElement, getRelationshipById, buildElementMap, getAllViews, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location, Workspace } from '@/types/model'
@@ -8,6 +8,7 @@ import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
+import DeploymentElementProperties from './right-panel/DeploymentElementProperties'
 import { useAiProvider } from '@/store/ai-settings'
 import { suggestFieldValue, suggestTags } from '@/lib/ai'
 
@@ -50,6 +51,9 @@ export default function RightPanel() {
   if (!workspace) return null
 
   const element = getSelectedElement(workspace, selectedIds)
+  // Deployment elements (nodes / infra / instances) live outside the C4 model
+  // tree — resolve them separately so deployment views get an inspector too.
+  const deploymentElement = element ? undefined : getSelectedDeploymentElement(workspace, selectedIds)
   const relationship = selectedRelId ? getRelationshipById(workspace, selectedRelId) : undefined
   const group = selectedGroupId ? workspace.model.groups.find(g => g.id === selectedGroupId) : undefined
 
@@ -57,6 +61,8 @@ export default function RightPanel() {
     <div className="flex h-full w-full flex-col overflow-hidden">
       {element ? (
         <ElementProperties element={element} onClose={clearSelection} />
+      ) : deploymentElement ? (
+        <DeploymentElementProperties sel={deploymentElement} onClose={clearSelection} />
       ) : relationship ? (
         <RelationshipProperties relationship={relationship} onClose={clearSelection} />
       ) : group ? (

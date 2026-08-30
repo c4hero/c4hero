@@ -9,10 +9,12 @@ const ALL_VIEW_TYPES: { value: ViewType; label: string }[] = [
   { value: 'systemContext', label: 'System Context' },
   { value: 'container', label: 'Container' },
   { value: 'component', label: 'Component' },
+  { value: 'dynamic', label: 'Dynamic' },
+  { value: 'deployment', label: 'Deployment' },
 ]
 
 function allowedViewTypes(scope: string | undefined) {
-  if (scope === 'landscape') return ALL_VIEW_TYPES.filter(vt => vt.value === 'systemLandscape' || vt.value === 'systemContext')
+  if (scope === 'landscape') return ALL_VIEW_TYPES.filter(vt => vt.value === 'systemLandscape' || vt.value === 'systemContext' || vt.value === 'dynamic')
   if (scope === 'softwaresystem') return ALL_VIEW_TYPES.filter(vt => vt.value !== 'systemLandscape')
   return ALL_VIEW_TYPES
 }
@@ -20,6 +22,7 @@ function allowedViewTypes(scope: string | undefined) {
 export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const addView = useWorkspaceStore((s) => s.addView)
+  const addDeploymentEnvironment = useWorkspaceStore((s) => s.addDeploymentEnvironment)
   // Optional pre-populated defaults (used by the zoom-in "Customize…" flow).
   const defaults = useWorkspaceStore((s) => s.createViewDefaults)
   const setCreateViewDefaults = useWorkspaceStore((s) => s.setCreateViewDefaults)
@@ -32,10 +35,16 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
   const [type, setType] = useState<ViewType>(() => defaults?.type ?? viewTypes[0].value)
   const [title, setTitle] = useState('')
   const [scopeId, setScopeId] = useState<string>(() => defaults?.scopeId ?? '')
+  const [environment, setEnvironment] = useState('')
+  const [newEnvName, setNewEnvName] = useState('')
 
   if (!workspace) return null
 
   const needsScope = type === 'systemContext' || type === 'container' || type === 'component'
+  // Dynamic/deployment views may optionally scope to a software system.
+  const optionalSystemScope = type === 'dynamic' || type === 'deployment'
+  const environments = workspace.model.deploymentEnvironments ?? []
+  const needsEnvironment = type === 'deployment'
 
   // In a softwareSystem-scoped workspace, only one system is allowed to have
   // containers/components (see scopeValidation.ts) — that system IS the
@@ -52,7 +61,7 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
 
   // Build scope options based on type
   const scopeOptions: { id: string; name: string }[] = []
-  if (type === 'systemContext' || type === 'container') {
+  if (type === 'systemContext' || type === 'container' || optionalSystemScope) {
     for (const sys of workspace.model.softwareSystems) {
       if (focalSystemId && sys.id !== focalSystemId) continue
       scopeOptions.push({ id: sys.id, name: sys.name })
@@ -72,10 +81,24 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
   const scopeMissing = needsScope && !scopeId
   const noScopeChoicesAvailable = needsScope && scopeOptions.length === 0
   const missingScopeKind = type === 'component' ? 'container' : 'system'
+  // A deployment view needs an environment, but it doesn't have to exist yet:
+  // picking "New environment…" (the only mode when the workspace has none)
+  // creates an empty one alongside the view, and its topology is authored in
+  // the view's editor afterwards.
+  const NEW_ENVIRONMENT = '__new__'
+  const creatingEnvironment = needsEnvironment && (environments.length === 0 || environment === NEW_ENVIRONMENT)
+  const effectiveEnvironment = creatingEnvironment ? newEnvName.trim() : environment
+  const environmentMissing = needsEnvironment && !effectiveEnvironment
 
   const handleCreate = () => {
-    if (scopeMissing) return
-    addView(type, needsScope ? scopeId : undefined, title || undefined)
+    if (scopeMissing || environmentMissing) return
+    if (creatingEnvironment && !addDeploymentEnvironment(effectiveEnvironment)) return
+    addView(
+      type,
+      (needsScope || optionalSystemScope) && scopeId ? scopeId : undefined,
+      title || undefined,
+      needsEnvironment ? { environment: effectiveEnvironment } : undefined,
+    )
     setCreateViewDefaults(null) // consume the zoom defaults so the next open starts fresh
     onClose()
   }
@@ -112,6 +135,83 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
               {viewTypes.map(vt => <option key={vt.value} value={vt.value}>{vt.label}</option>)}
             </select>
           </div>
+
+          {needsEnvironment && environments.length > 0 && (
+            <div>
+              <label htmlFor="cv-environment" className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+                Environment
+                <span aria-hidden="true" style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>
+                <span className="sr-only">required</span>
+              </label>
+              <select
+                id="cv-environment"
+                value={environment}
+                onChange={(e) => setEnvironment(e.target.value)}
+                required
+                aria-required="true"
+                aria-invalid={!environment}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{
+                  background: 'var(--color-surface-2)',
+                  borderColor: !environment ? 'var(--color-border-error)' : 'var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                }}
+              >
+                <option value="">Select...</option>
+                {environments.map(env => <option key={env.id} value={env.name}>{env.name}</option>)}
+                <option value={NEW_ENVIRONMENT}>New environment…</option>
+              </select>
+            </div>
+          )}
+
+          {creatingEnvironment && (
+            <div>
+              <label htmlFor="cv-new-environment" className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+                {environments.length === 0 ? 'Environment' : 'New environment name'}
+                <span aria-hidden="true" style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>
+                <span className="sr-only">required</span>
+              </label>
+              <input
+                id="cv-new-environment"
+                type="text"
+                value={newEnvName}
+                onChange={(e) => setNewEnvName(e.target.value)}
+                placeholder="e.g. Production"
+                required
+                aria-required="true"
+                aria-invalid={!newEnvName.trim()}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{
+                  background: 'var(--color-surface-2)',
+                  borderColor: !newEnvName.trim() ? 'var(--color-border-error)' : 'var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
+              />
+              <div className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                Creates an empty environment — add nodes and instances in the
+                view's topology editor.
+              </div>
+            </div>
+          )}
+
+          {optionalSystemScope && scopeOptions.length > 0 && (
+            <div>
+              <label htmlFor="cv-scope-optional" className="mb-1 block text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+                Scope (optional)
+              </label>
+              <select
+                id="cv-scope-optional"
+                value={scopeId}
+                onChange={(e) => setScopeId(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{ background: 'var(--color-surface-2)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+              >
+                <option value="">All systems</option>
+                {scopeOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </div>
+          )}
 
           {needsScope && scopeOptions.length > 0 && (
             <div>
@@ -183,7 +283,7 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
 
           <button
             onClick={handleCreate}
-            disabled={scopeMissing}
+            disabled={scopeMissing || environmentMissing}
             className="w-full rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: 'var(--color-accent)', color: 'var(--color-bg-primary)' }}
           >
