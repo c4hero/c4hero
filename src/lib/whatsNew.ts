@@ -25,7 +25,25 @@ export interface WhatsNewRelease {
   link?: { label: string; url: string }
 }
 
-export const WHATS_NEW: WhatsNewRelease | null = null
+export const WHATS_NEW: WhatsNewRelease | null = {
+  id: '2026-08-deployment-dynamic-views',
+  date: 'August 2026',
+  items: [
+    {
+      title: 'Deployment views',
+      body: 'Model deployment environments — nodes, infrastructure, and container/system instances — and see them rendered as nested boundaries on the canvas, with relationships drawn automatically between instances.',
+    },
+    {
+      title: 'Dynamic views',
+      body: 'Author ordered interaction steps over your model and see them numbered on the diagram, including repeated steps and responses.',
+    },
+    {
+      title: 'Clearer scoped views',
+      body: 'The deployment topology editor now shows the view’s scope, flags elements the scope hides, and links straight to the unscoped view.',
+    },
+  ],
+  link: { label: 'Full release notes', url: 'https://github.com/c4hero/c4hero/blob/main/CHANGELOG.md' },
+}
 
 /** Build-time opt-in: the what's-new pill only ever shows on builds with
  *  VITE_WHATS_NEW=1 (or true). Default is OFF — self-hosted and fork builds

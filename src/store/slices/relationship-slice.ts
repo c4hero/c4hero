@@ -1,8 +1,25 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
-import type { Relationship } from '@/types/model'
+import type { Relationship, View, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
 import { allViewsOf, elementExists, forEachView, closeAiSurfaces } from '../workspace-helpers'
+
+/** Drop every step of `relId` from a dynamic view and recompute the view's
+ *  derived element membership from the surviving steps. Dynamic membership
+ *  exists only as a projection of the steps — leaving an element behind after
+ *  its last step dies renders an orphan node until the next reload. */
+function dropDynamicSteps(ws: Workspace, v: View, relId: string): void {
+  const before = v.relationships.length
+  v.relationships = v.relationships.filter(r => r.id !== relId)
+  if (v.relationships.length === before) return
+  const endpoints = new Set<string>()
+  for (const step of v.relationships) {
+    const stepRel = ws.model.relationships.find(r => r.id === step.id)
+    endpoints.add(step.sourceId ?? stepRel?.sourceId ?? '')
+    endpoints.add(step.destinationId ?? stepRel?.destinationId ?? '')
+  }
+  v.elements = v.elements.filter(e => endpoints.has(e.id))
+}
 
 export type RelationshipSlice = Pick<WorkspaceState,
   | 'addRelationship' | 'updateRelationship'
@@ -50,8 +67,14 @@ export const createRelationshipSlice: StateCreator<
           }
         }
       }
-      // Add relationship ref to every view that now has both endpoints
+      // Add relationship ref to every view that now has both endpoints.
+      // Dynamic views are exempt: their relationship list is an ORDERED
+      // interaction sequence — pushing an unnumbered entry would render a
+      // phantom step and serialize it as one the user never authored.
+      // Deployment views are exempt too: their edge set is derived from the
+      // topology at render time, not stored per view.
       for (const view of allViewsOf(ws)) {
+        if (view.type === 'dynamic' || view.type === 'deployment') continue
         const viewElIds = new Set(view.elements.map(e => e.id))
         if (viewElIds.has(sourceId) && viewElIds.has(destinationId)) {
           if (!view.relationships.some(r => r.id === id)) {
@@ -121,6 +144,13 @@ export const createRelationshipSlice: StateCreator<
 
     // Sync view.relationships: keep only in views where both new endpoints exist
     forEachView(ws, (v) => {
+      if (v.type === 'dynamic') {
+        // A dynamic step is authored against specific endpoints; reconnecting
+        // the backing relationship invalidates the step rather than silently
+        // bending the numbered arrow somewhere else.
+        dropDynamicSteps(ws, v, id)
+        return
+      }
       const elIds = new Set(v.elements.map(e => e.id))
       const hasRel = v.relationships.some(r => r.id === id)
       const bothPresent = elIds.has(newSourceId) && elIds.has(newTargetId)
@@ -139,6 +169,10 @@ export const createRelationshipSlice: StateCreator<
     pushUndoSnapshot(s)
     ws.model.relationships = ws.model.relationships.filter(r => r.id !== id)
     forEachView(ws, (v) => {
+      if (v.type === 'dynamic') {
+        dropDynamicSteps(ws, v, id)
+        return
+      }
       v.relationships = v.relationships.filter(r => r.id !== id)
     })
     if (s.selectedRelationshipId === id) s.selectedRelationshipId = null

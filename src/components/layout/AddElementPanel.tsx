@@ -3,6 +3,8 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView, getFocalScopeId, b
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
+import DynamicStepsEditor from './DynamicStepsEditor'
+import DeploymentTopologyEditor from './DeploymentTopologyEditor'
 import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
 import {
   UserRound,
@@ -93,6 +95,33 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const containersAllowed = scopeAllowsContainers(workspace.scope)
   const view = getActiveView(workspace, activeViewKey)
   const viewElementIds = new Set(view?.elements.map((e) => e.id) ?? [])
+
+  // Dynamic views get the interaction-step editor; deployment views have no
+  // creatable element types yet — say so instead of an empty dead end.
+  if (view?.type === 'dynamic') {
+    return (
+      <div
+        ref={panelRef}
+        className="glass-flyout"
+        data-flyout="add-element"
+        style={{ position: 'absolute', left: 56, top: 0, zIndex: 50, width: 300 }}
+      >
+        <DynamicStepsEditor view={view} />
+      </div>
+    )
+  }
+  if (view?.type === 'deployment') {
+    return (
+      <div
+        ref={panelRef}
+        className="glass-flyout"
+        data-flyout="add-element"
+        style={{ position: 'absolute', left: 56, top: 0, zIndex: 50, width: 300 }}
+      >
+        <DeploymentTopologyEditor view={view} />
+      </div>
+    )
+  }
 
   // Determine which element types are allowed in this view
   const allowedTypes = new Set<string>()

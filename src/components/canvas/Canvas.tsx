@@ -41,6 +41,8 @@ import {
   buildDrillableSet,
   buildBoundaryLayoutClusters,
 } from './canvasBuilders'
+import { buildDeploymentNodes, deploymentBoundaryMemberIds } from './deploymentBuilders'
+import { deploymentViewRelationships } from '@/lib/deployment'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -86,6 +88,8 @@ function getBoundaryMemberIds(workspace: Workspace | null | undefined, view: Vie
       .flatMap((system) => system.containers)
       .find((item) => item.id === parentId)
     for (const component of container?.components ?? []) memberIds.add(component.id)
+  } else if (view.type === 'deployment') {
+    return deploymentBoundaryMemberIds(workspace, view, parentId)
   }
 
   return memberIds
@@ -333,20 +337,33 @@ export default function Canvas() {
     if (!workspace || !view) return { initialNodes: [], initialEdges: [] }
     const direction = view.autoLayout?.direction ?? 'TB'
 
-    // 1. Build nodes with raw positions from view
+    // 1. Build nodes with raw positions from view. Deployment views resolve
+    //    their instance / infrastructure nodes through a dedicated builder
+    //    (deployment elements live outside the C4 element tree).
     const drillableIds = buildDrillableSet(workspace)
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
+    const rawNodes = view.type === 'deployment'
+      ? buildDeploymentNodes(workspace, view, highlightFilters, themeStyles)
+      : buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
     const layoutNodes = carryForwardMeasurements(rawNodes, reactFlowInstance.getNodes())
 
-    // 2. Build temporary edges (just source/target, no handles yet) for dagre
+    // 2. Build temporary edges (just source/target, no handles yet) for dagre.
+    //    Deployment views take theirs from the same explicit + derived set the
+    //    edge builder renders — derived instance relationships live in no
+    //    view.relationships list.
     const relationshipMap = buildRelationshipMap(workspace)
     const viewElementIds = new Set(view.elements.map(e => e.id))
     const tempEdges: Edge[] = []
-    for (const vr of view.relationships) {
-      const rel = relationshipMap.get(vr.id)
-      if (!rel) continue
-      if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
-      tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
+    if (view.type === 'deployment') {
+      for (const rel of deploymentViewRelationships(workspace.model, view)) {
+        tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
+      }
+    } else {
+      for (const vr of view.relationships) {
+        const rel = relationshipMap.get(vr.id)
+        if (!rel) continue
+        if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
+        tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
+      }
     }
 
     // 3. Auto-layout: position unpinned nodes, keep pinned ones.
@@ -627,7 +644,11 @@ export default function Canvas() {
     setEdges((prev) => {
       let changed = false
       const next = prev.map((e) => {
-        const shouldBeSelected = e.id === storeSelectedRelationshipId
+        // Match on the backing relationship, not the edge id: dynamic step
+        // edges carry step-scoped ids (`relId#index`), and every step of the
+        // selected relationship should show the emphasis.
+        const relId = (e.data as { relationship?: { id: string } } | undefined)?.relationship?.id ?? e.id
+        const shouldBeSelected = relId === storeSelectedRelationshipId
         if (!!e.selected === shouldBeSelected) return e
         changed = true
         return { ...e, selected: shouldBeSelected }

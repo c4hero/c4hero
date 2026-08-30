@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { Workspace } from '@/types/model'
 import CreateViewDialog from './CreateViewDialog'
@@ -184,5 +184,101 @@ describe('CreateViewDialog — zero-systems guard', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     const createBtn = screen.getByRole('button', { name: /^create view$/i }) as HTMLButtonElement
     expect(createBtn.disabled).toBe(false)
+  })
+})
+
+describe('CreateViewDialog — deployment environment creation (inline)', () => {
+  const setType = (value: string) => {
+    const typeSelect = screen.getByLabelText(/type/i) as HTMLSelectElement
+    fireEvent.change(typeSelect, { target: { value } })
+  }
+
+  it('offers an environment name input instead of a dead-end when none exist', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    render(<CreateViewDialog onClose={() => {}} />)
+    setType('deployment')
+
+    // No "define one in the DSL" alert anymore.
+    expect(screen.queryByRole('alert')).toBeNull()
+    const nameInput = screen.getByLabelText(/environment/i) as HTMLInputElement
+    const createBtn = screen.getByRole('button', { name: /^create view$/i }) as HTMLButtonElement
+    expect(createBtn.disabled).toBe(true)
+
+    fireEvent.change(nameInput, { target: { value: 'Production' } })
+    expect(createBtn.disabled).toBe(false)
+    fireEvent.click(createBtn)
+
+    const ws = useWorkspaceStore.getState().workspace!
+    expect(ws.model.deploymentEnvironments).toHaveLength(1)
+    expect(ws.model.deploymentEnvironments![0]).toMatchObject({ name: 'Production', deploymentNodes: [] })
+    expect(ws.views.deploymentViews).toHaveLength(1)
+    expect(ws.views.deploymentViews[0].environment).toBe('Production')
+  })
+
+  it('lets "New environment…" create a second environment alongside existing ones', () => {
+    const ws = makeWs()
+    ws.model.deploymentEnvironments = [{ id: 'live', name: 'Live', deploymentNodes: [] }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    render(<CreateViewDialog onClose={() => {}} />)
+    setType('deployment')
+
+    const envSelect = screen.getByLabelText(/^environment/i) as HTMLSelectElement
+    expect(Array.from(envSelect.options).map(o => o.text)).toContain('New environment…')
+    fireEvent.change(envSelect, { target: { value: '__new__' } })
+
+    const nameInput = screen.getByLabelText(/new environment name/i) as HTMLInputElement
+    fireEvent.change(nameInput, { target: { value: 'Staging' } })
+    fireEvent.click(screen.getByRole('button', { name: /^create view$/i }))
+
+    const after = useWorkspaceStore.getState().workspace!
+    expect(after.model.deploymentEnvironments!.map(e => e.name)).toEqual(['Live', 'Staging'])
+    expect(after.views.deploymentViews[0].environment).toBe('Staging')
+  })
+
+  it('does not carry a preseeded zoom scope into a deployment view (TEA-81 scope trap)', () => {
+    // The zoom "Customize…" flow preseeds type + scopeId. Switching the type
+    // to Deployment must drop that scope — a silently scoped deployment view
+    // filters out everything that doesn't deploy the scope system, which looks
+    // like adds doing nothing.
+    const ws = makeWs({
+      model: {
+        people: [],
+        softwareSystems: [
+          { id: 'a', type: 'softwareSystem', name: 'A', tags: [], properties: {},
+            containers: [{ id: 'c1', type: 'container', name: 'C1', tags: [], properties: {}, components: [] }] },
+        ],
+        relationships: [], groups: [],
+      },
+    })
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().setCreateViewDefaults({ type: 'container', scopeId: 'a' })
+    render(<CreateViewDialog onClose={() => {}} />)
+    setType('deployment')
+
+    // The optional scope picker must be back at "All systems".
+    const scopeSelect = screen.getByLabelText(/scope \(optional\)/i) as HTMLSelectElement
+    expect(scopeSelect.value).toBe('')
+
+    fireEvent.change(screen.getByLabelText(/environment/i), { target: { value: 'Production' } })
+    fireEvent.click(screen.getByRole('button', { name: /^create view$/i }))
+    const after = useWorkspaceStore.getState().workspace!
+    expect(after.views.deploymentViews[0].softwareSystemId).toBeUndefined()
+  })
+
+  it('targets the existing environment when the typed name matches one', () => {
+    const ws = makeWs()
+    ws.model.deploymentEnvironments = [{ id: 'live', name: 'Live', deploymentNodes: [] }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    render(<CreateViewDialog onClose={() => {}} />)
+    setType('deployment')
+
+    const envSelect = screen.getByLabelText(/^environment/i) as HTMLSelectElement
+    fireEvent.change(envSelect, { target: { value: '__new__' } })
+    fireEvent.change(screen.getByLabelText(/new environment name/i), { target: { value: '  Live  ' } })
+    fireEvent.click(screen.getByRole('button', { name: /^create view$/i }))
+
+    const after = useWorkspaceStore.getState().workspace!
+    expect(after.model.deploymentEnvironments).toHaveLength(1)
+    expect(after.views.deploymentViews[0].environment).toBe('Live')
   })
 })
