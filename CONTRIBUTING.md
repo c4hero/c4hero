@@ -128,6 +128,11 @@ browser check.
 3. Run the relevant checks locally.
 4. Write a clear commit message.
 5. Open a pull request with context, screenshots, or repro steps when helpful.
+6. If the change is a user-visible feature worth announcing in-app, update the
+   what's-new entry in `src/lib/whatsNew.ts` in the same pull request: set a new
+   `id` (date-slug), the release date, and short user-facing `items`. Skip this
+   for fixes and chores — an unchanged entry shows nobody anything, and forks
+   that never author entries never show the what's-new pill at all.
 
 Good commit examples:
 
