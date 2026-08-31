@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Copy, Check, TriangleAlert } from 'lucide-react'
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view'
-import { EditorState, Annotation } from '@codemirror/state'
+import { EditorState, Annotation, Transaction } from '@codemirror/state'
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, HighlightStyle, bracketMatching } from '@codemirror/language'
 import { lintGutter, setDiagnostics, type Diagnostic } from '@codemirror/lint'
@@ -77,7 +77,10 @@ export default function CodePane() {
         if (!view) return
         view.dispatch({
           changes: { from: 0, to: view.state.doc.length, insert: text },
-          annotations: fromStoreSync.of(true),
+          // Store syncs are excluded from the editor's undo history: undoing
+          // one would resurrect stale text, and the resulting keystroke event
+          // would auto-apply it — silently reverting canvas-side work.
+          annotations: [fromStoreSync.of(true), Transaction.addToHistory.of(false)],
         })
       },
       serialize: () => {

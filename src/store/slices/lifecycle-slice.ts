@@ -1,26 +1,52 @@
 import type { StateCreator } from 'zustand'
-import type { Workspace } from '@/types/model'
+import type { Workspace, ElementInView } from '@/types/model'
 import type { WorkspaceState } from '../workspace-types'
 import { validateScope } from '@/lib/scopeValidation'
 import { parseDSL } from '@/lib/dsl'
 import { checkModelIntegrity } from '@/lib/modelIntegrity'
 import { pushUndoSnapshot } from '../internals'
-import { normalizeWorkspaceShape, allViewsOf, findViewHelper, clearSelectionDraft } from '../workspace-helpers'
+import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
+
+/** Map element id -> element name for every element in the model tree. */
+function elementNamesById(ws: Workspace): Map<string, string> {
+  const names = new Map<string, string>()
+  forEachElementHelper(ws, (el) => { names.set(el.id, el.name) })
+  return names
+}
 
 /** Carry per-view element layout (x/y/pinned/locked) and view-level locks over
  *  from the previous workspace onto a freshly parsed one, matched by view key +
  *  element id. Positions never round-trip through DSL text — without this every
- *  code-pane apply would scramble the canvas. */
+ *  code-pane apply would scramble the canvas.
+ *
+ *  Elements written WITHOUT an explicit DSL identifier get a fresh
+ *  parser-generated id on every re-parse, so an unmatched id falls back to
+ *  matching by element name (skipped when the name is ambiguous in that view). */
 function carryOverViewLayout(prev: Workspace, next: Workspace): void {
   const prevViews = new Map(allViewsOf(prev).map((v) => [v.key, v]))
+  const prevNames = elementNamesById(prev)
+  const nextNames = elementNamesById(next)
   for (const view of allViewsOf(next)) {
     const old = prevViews.get(view.key)
     if (!old) continue
     if (old.locked) view.locked = true
-    const oldElements = new Map(old.elements.map((el) => [el.id, el]))
+    const oldById = new Map(old.elements.map((el) => [el.id, el]))
+    const oldByName = new Map<string, ElementInView | null>()
+    for (const el of old.elements) {
+      const name = prevNames.get(el.id)
+      if (name === undefined) continue
+      oldByName.set(name, oldByName.has(name) ? null : el) // null = ambiguous
+    }
     for (const el of view.elements) {
-      const oldEl = oldElements.get(el.id)
+      let oldEl = oldById.get(el.id)
+      if (!oldEl) {
+        const name = nextNames.get(el.id)
+        const byName = name !== undefined ? oldByName.get(name) : undefined
+        // Only fall back when the old element's id no longer exists in the new
+        // view — otherwise a rename would steal another element's position.
+        if (byName && !view.elements.some((e) => e.id === byName.id)) oldEl = byName
+      }
       if (!oldEl) continue
       if (oldEl.x !== undefined) el.x = oldEl.x
       if (oldEl.y !== undefined) el.y = oldEl.y
@@ -117,8 +143,20 @@ export const createLifecycleSlice: StateCreator<
     if (!get().workspace) return { ok: false, errors: [{ message: 'No workspace open', line: 1, column: 1 }] }
 
     // Strict gate: parsing is lenient (returns a partial model alongside
-    // errors), but a half-parsed model must never replace real work.
-    const { workspace: parsed, errors } = parseDSL(text)
+    // errors), but a half-parsed model must never replace real work. The
+    // try/catch is the backstop for anything the parser throws outright
+    // (e.g. pathological nesting) — a throw must degrade to a reported
+    // error, never escape into the caller's timer callback.
+    let parsed: Workspace
+    let errors: ReturnType<WorkspaceState['replaceWorkspaceFromDSL']>['errors']
+    try {
+      ;({ workspace: parsed, errors } = parseDSL(text))
+    } catch (err) {
+      return {
+        ok: false,
+        errors: [{ message: err instanceof Error ? err.message : 'Parse failed', line: 1, column: 1 }],
+      }
+    }
     if (errors.length > 0) return { ok: false, errors }
 
     normalizeWorkspaceShape(parsed)

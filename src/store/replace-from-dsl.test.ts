@@ -105,6 +105,28 @@ describe('replaceWorkspaceFromDSL', () => {
     expect(store().selectedRelationshipId).toBeNull()
   })
 
+  it('carries positions by name when an element has no stable id (id churn)', () => {
+    // The landscape view includes elements regardless of relationships, so the
+    // person stays in view even after its (anonymous) relationship is dropped.
+    store().setActiveView('Land')
+    store().updateNodePosition('u', 77, 88)
+
+    // Drop the `u =` identifier: the parser now generates a fresh id for the
+    // person on every parse, so the id-based match misses and the name-based
+    // fallback must kick in.
+    const anonymous = BASE_DSL.replace('u = person "User"', 'person "User"').replace('u -> sys "Uses"', '')
+    const result = store().replaceWorkspaceFromDSL(anonymous)
+    expect(result.ok).toBe(true)
+
+    const ws = store().workspace!
+    const person = ws.model.people.find((p) => p.name === 'User')!
+    expect(person.id).not.toBe('u')
+    const land = ws.views.systemLandscapeViews.find((v) => v.key === 'Land')!
+    const el = land.elements.find((e) => e.id === person.id)!
+    expect(el.x).toBe(77)
+    expect(el.y).toBe(88)
+  })
+
   it('refuses to empty a non-empty model (lenient-parser guard)', () => {
     const before = store().workspace!
     // All of these parse with ZERO errors but yield an empty model — the exact

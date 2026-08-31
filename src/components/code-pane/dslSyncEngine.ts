@@ -75,12 +75,22 @@ export function createDslSyncEngine(opts: DslSyncEngineOpts) {
     let result: { ok: boolean; errors: ParseError[] }
     try {
       result = opts.apply(text)
+    } catch (err) {
+      // A throw out of the apply path (this runs in a setTimeout — anything
+      // uncaught here would be a silent crash) is reported like a parse error.
+      result = {
+        ok: false,
+        errors: [{ message: err instanceof Error ? err.message : 'Apply failed', line: 1, column: 1 }],
+      }
     } finally {
       applying = false
     }
     if (result.ok) {
       status.errors = []
       status.pendingApply = false
+      // The workspace was just rebuilt from this text, so any earlier
+      // serialization failure is moot — don't leave a stale banner up.
+      status.serializeError = null
       owner = 'store'
     } else {
       status.errors = result.errors

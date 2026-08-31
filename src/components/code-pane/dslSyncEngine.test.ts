@@ -158,6 +158,30 @@ describe('dslSyncEngine', () => {
     expect(h.writeText).not.toHaveBeenCalled()
   })
 
+  it('a throwing apply is reported as an error, not an uncaught crash', () => {
+    const h = makeHarness({ apply: () => { throw new Error('parser exploded') } })
+    h.engine.init()
+    h.editorText.value = 'boom'
+    h.engine.handleEditorChange()
+    expect(() => vi.advanceTimersByTime(500)).not.toThrow()
+    expect(h.lastStatus().errors[0].message).toBe('parser exploded')
+    expect(h.lastStatus().pendingApply).toBe(true)
+  })
+
+  it('a successful apply clears a stale serialization error', () => {
+    const h = makeHarness()
+    h.engine.init()
+    h.serialize.mockReturnValue({ error: 'Group overlaps boundary' })
+    h.engine.handleStoreChange()
+    vi.advanceTimersByTime(200)
+    expect(h.lastStatus().serializeError).toBe('Group overlaps boundary')
+
+    h.editorText.value = 'fixed by hand'
+    h.engine.handleEditorChange()
+    vi.advanceTimersByTime(500)
+    expect(h.lastStatus().serializeError).toBeNull()
+  })
+
   it('flush applies pending text immediately', () => {
     const h = makeHarness()
     h.engine.init()
