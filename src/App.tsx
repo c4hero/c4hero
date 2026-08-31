@@ -28,6 +28,7 @@ import { isCanvasRoute } from '@/lib/routes'
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
 const AiPanel = lazy(() => import('@/components/ai/AiPanel'))
+const CodePane = lazy(() => import('@/components/code-pane/CodePane'))
 
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -35,6 +36,7 @@ export default function App() {
   const pendingDelete = useWorkspaceStore((s) => s.pendingDelete)
   const cancelDelete = useWorkspaceStore((s) => s.cancelDelete)
   const presentationMode = useWorkspaceStore((s) => s.presentationMode)
+  const codePanelOpen = useWorkspaceStore((s) => s.codePanelOpen)
   const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
   const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
   const aiSettingsOpen = useWorkspaceStore((s) => s.aiSettingsOpen)
@@ -89,6 +91,11 @@ export default function App() {
         <aside aria-label="Element inspector"><FloatingInspector /></aside>
         <BottomHighlighterBar />
         <FloatingBottomStrip />
+        {codePanelOpen && (
+          <Suspense fallback={null}>
+            <aside aria-label="DSL code pane"><CodePane /></aside>
+          </Suspense>
+        )}
         <FloatingZoomHud />
         <CanvasHints />
         <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />

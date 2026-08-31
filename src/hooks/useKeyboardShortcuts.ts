@@ -24,6 +24,11 @@ const META_SHORTCUTS: Record<string, KeyHandler> = {
   'mod+f': (store) => {
     store.setSearchOpen(!store.searchOpen)
   },
+  // Meta (not global) so the pane can be closed while focus is inside its
+  // CodeMirror editor, which is contentEditable and suppresses global keys.
+  'mod+e': (store) => {
+    if (store.workspace) store.toggleCodePanel()
+  },
 }
 
 /**

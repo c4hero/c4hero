@@ -15,6 +15,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'searchOpen' | 'commandPaletteOpen'
   | 'canvasSettingsOpen' | 'canvasGuideOpen' | 'addElementPanelOpen' | 'highlighterOpenFacet'
   | 'viewsPanelOpen' | 'createViewDialogOpen'
+  | 'codePanelOpen' | 'setCodePanelOpen' | 'toggleCodePanel'
   | 'pendingDelete' | 'confirmDelete' | 'cancelDelete'
   | 'presentationMode' | 'setPresentationMode'
   | 'minimapEnabled' | 'snapToGrid' | 'toggleMinimap' | 'toggleSnapToGrid'
@@ -54,6 +55,7 @@ export const createUiSlice: StateCreator<
   highlighterOpenFacet: null,
   viewsPanelOpen: false,
   createViewDialogOpen: false,
+  codePanelOpen: false,
   pendingDelete: null,
   presentationMode: false,
   minimapEnabled: true,
@@ -120,6 +122,11 @@ export const createUiSlice: StateCreator<
   setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),
   setViewsPanelOpen: (open) => set({ viewsPanelOpen: open }),
   toggleViewsPanel: () => set((s) => { s.viewsPanelOpen = !s.viewsPanelOpen }),
+  setCodePanelOpen: (open) => set({ codePanelOpen: open, commandPaletteOpen: false }),
+  toggleCodePanel: () => set((s) => {
+    s.codePanelOpen = !s.codePanelOpen
+    if (s.codePanelOpen) s.commandPaletteOpen = false
+  }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
 
   toggleMinimap: () => set((s) => { s.minimapEnabled = !s.minimapEnabled }),

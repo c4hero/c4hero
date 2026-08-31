@@ -4,6 +4,7 @@ import type {
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
 import type { AiFeatureId } from '@/lib/ai/types'
+import type { ParseError } from '@/lib/dsl'
 export interface CascadeImpact {
   /** Top-level elements explicitly selected for deletion. */
   elementCount: number
@@ -107,6 +108,12 @@ export interface WorkspaceState extends UndoState {
   loadWorkspace: (workspace: Workspace) => void
   closeWorkspace: () => void
   updateWorkspaceMeta: (patch: { name?: string; description?: string }) => void
+  /** Replace the whole workspace from DSL text (the code pane's apply path).
+   *  Strict: any parse error or integrity violation leaves the store untouched.
+   *  A successful apply is ONE undo entry and carries per-view element layout
+   *  (x/y/pinned/locked + view locks) over from the current workspace for every
+   *  view key + element id that survives the edit. */
+  replaceWorkspaceFromDSL: (text: string) => { ok: boolean; errors: ParseError[] }
 
   // Navigation
   setActiveView: (key: string) => void
@@ -247,6 +254,11 @@ export interface WorkspaceState extends UndoState {
   viewsPanelOpen: boolean
   setViewsPanelOpen: (open: boolean) => void
   toggleViewsPanel: () => void
+
+  // DSL code pane (floating right dock)
+  codePanelOpen: boolean
+  setCodePanelOpen: (open: boolean) => void
+  toggleCodePanel: () => void
 
   // UI toggles
   toggleLeftPanel: () => void
