@@ -73,6 +73,10 @@ const editorTheme = EditorView.theme({
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
     lineHeight: '1.5',
   },
+  // The native caret defaults to black — invisible on the dark glass
+  // background. An accent caret is the pane's core "you can type here" cue.
+  '.cm-content': { caretColor: 'var(--color-accent)' },
+  '.cm-content ::selection': { background: 'color-mix(in srgb, var(--color-accent) 35%, transparent)' },
   '.cm-gutters': {
     background: 'transparent',
     border: 'none',
