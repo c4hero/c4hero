@@ -8,7 +8,6 @@ export default function FloatingInspector() {
   const selectedRelId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const selectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
-  const codePanelOpen = useWorkspaceStore((s) => s.codePanelOpen)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -59,9 +58,7 @@ export default function FloatingInspector() {
         // Frame matched to the AI assistant panel so the two read as a set.
         position: 'fixed',
         top: 64,
-        // The DSL code pane docks at right: 14 (see CodePane) — sit left of it
-        // so the inspector and the code the user is editing stay both visible.
-        right: codePanelOpen ? 'calc(24px + min(440px, 45vw))' : 14,
+        right: 14,
         zIndex: 50,
         width: 'min(360px, calc(100vw - 28px))',
         maxHeight: 'calc(100dvh - 136px)',
