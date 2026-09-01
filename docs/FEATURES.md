@@ -45,6 +45,13 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 ## Export
 
 - **PNG** and **SVG** export of the current view, with optional padding control.
+- **Standalone interactive HTML** — one `.html` file containing every view of the
+  workspace, laid out and rendered as inline SVG, plus a small read-only viewer:
+  view tabs, pan and zoom, drill-through, search, and a details panel for any
+  element. No network, no dependencies, no c4hero required. The file carries its
+  own `Content-Security-Policy` forbidding outside requests, so it renders the
+  same in a wiki, in a chat attachment, or from a build artifact years later.
+  It also renders the first view with scripts blocked.
 - **DSL** export (Save As) writes a clean `.dsl` plus its sidecar JSON.
 - Exports are deterministic — same workspace, same bytes — so they diff cleanly in pull requests.
 

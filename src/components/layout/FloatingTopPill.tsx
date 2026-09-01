@@ -22,6 +22,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
+import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
 
 import { listDSLFiles, readDSLFile, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/folderIO'
 import { parseDSL } from '@/lib/dsl'
@@ -52,6 +53,7 @@ export default function FloatingTopPill() {
 
   const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
   const showUndoRedo = useSettingsStore((s) => s.showUndoRedo)
+  const colorTheme = useSettingsStore((s) => s.colorTheme)
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [copyToast, setCopyToast] = useState<string | null>(null)
@@ -146,7 +148,7 @@ export default function FloatingTopPill() {
 
   const wsName = workspace.name ?? 'workspace'
 
-  async function handleExport(format: 'dsl' | 'png' | 'svg', theme: ExportTheme = 'dark') {
+  async function handleExport(format: 'dsl' | 'png' | 'svg' | 'html', theme: ExportTheme = 'dark') {
     if (!workspace) return
     try {
       switch (format) {
@@ -161,6 +163,18 @@ export default function FloatingTopPill() {
         case 'svg': {
           const svg = exportCanvasAsSVG(theme)
           if (svg) downloadFile(svg, `${wsName}-${theme}.svg`, 'image/svg+xml')
+          break
+        }
+        case 'html': {
+          // Loaded on demand — the standalone viewer pulls in the layout engine,
+          // which most sessions never need.
+          const { exportWorkspaceAsHtml, htmlExportFilename } = await import('@/lib/htmlExport')
+          const html = exportWorkspaceAsHtml(workspace, {
+            themeStyles: THEMES[colorTheme],
+            background: THEME_CANVAS_BACKGROUNDS[colorTheme] ?? undefined,
+            generator: `c4hero ${__APP_VERSION__}`,
+          })
+          downloadFile(html, htmlExportFilename(workspace), 'text/html')
           break
         }
       }

@@ -8,7 +8,7 @@ import DialogShell from '@/components/shared/DialogShell'
 const log = createLogger('ExportDialog')
 
 interface ExportDialogProps {
-  onExport: (format: 'dsl' | 'png' | 'svg', theme?: ExportTheme) => Promise<void>
+  onExport: (format: 'dsl' | 'png' | 'svg' | 'html', theme?: ExportTheme) => Promise<void>
   onCopy: (type: 'png-dark' | 'png-light' | 'png-current' | 'dsl') => Promise<void>
   onClose: () => void
 }
@@ -17,6 +17,9 @@ interface ExportAction {
   id: string
   icon: LucideIcon
   label: string
+  /** Screen-reader name, when the visible label repeats across rows
+   *  ("Download" appears under more than one format). */
+  ariaLabel?: string
   fn: () => Promise<void>
 }
 
@@ -48,6 +51,7 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
     id,
     icon: Icon,
     label,
+    ariaLabel,
     fn,
   }: ExportAction) {
     const isLoading = busy === id
@@ -57,8 +61,8 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
         key={id}
         onClick={() => act(id, fn)}
         disabled={!!busy}
-        title={label}
-        aria-label={label}
+        title={ariaLabel ?? label}
+        aria-label={ariaLabel ?? label}
         aria-busy={isLoading}
         style={{
           display: 'flex',
@@ -110,10 +114,17 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
       ],
     },
     {
+      label: 'Interactive HTML',
+      ext: '.html — one file, works offline',
+      actions: [
+        { id: 'dl-.html', icon: Download, label: 'Download', ariaLabel: 'Download interactive HTML', fn: () => onExport('html') },
+      ],
+    },
+    {
       label: 'Structurizr DSL',
       ext: '.dsl',
       actions: [
-        { id: 'dl-.dsl', icon: Download, label: 'Download', fn: () => onExport('dsl') },
+        { id: 'dl-.dsl', icon: Download, label: 'Download', ariaLabel: 'Download Structurizr DSL', fn: () => onExport('dsl') },
         { id: 'cp-.dsl', icon: Copy,     label: 'Copy',     fn: () => onCopy('dsl') },
       ],
     },

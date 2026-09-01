@@ -56,7 +56,7 @@ A more detailed feature catalogue lives in [`docs/FEATURES.md`](docs/FEATURES.md
 
 c4hero runs in any modern browser. **Folder collections** rely on the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API), which is currently only available in Chromium browsers (Chrome, Edge, Brave, Arc, Opera).
 
-In Firefox and Safari you can still open and edit a single `.dsl` file at a time, export PNG / SVG / DSL, and use every other feature. When folder workflows aren't supported, c4hero automatically falls back to the single-file flow.
+In Firefox and Safari you can still open and edit a single `.dsl` file at a time, export PNG / SVG / DSL / standalone HTML, and use every other feature. When folder workflows aren't supported, c4hero automatically falls back to the single-file flow.
 
 ## Local development
 
