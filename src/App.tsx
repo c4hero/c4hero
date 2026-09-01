@@ -160,6 +160,7 @@ export default function App() {
         <ConfirmDeleteDialog
           message={pendingDelete.message}
           impact={pendingDelete.impact}
+          targetIds={pendingDelete.targetIds}
           onConfirm={() => { pendingDelete.onConfirm(); cancelDelete() }}
           onCancel={cancelDelete}
         />

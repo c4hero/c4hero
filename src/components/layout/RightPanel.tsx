@@ -273,7 +273,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               onClick={() => {
                 if (!workspace) return
                 const impact = computeCascadeImpact(workspace, [element.id])
-                confirmDelete({ message: formatImpactSummary(impact), impact }, () => deleteElement(element.id))
+                confirmDelete({ message: formatImpactSummary(impact), impact, targetIds: [element.id] }, () => deleteElement(element.id))
               }}
               className="btn-icon !min-h-7 !min-w-7 !p-1"
               aria-label="Delete from model"

@@ -62,7 +62,7 @@ function backspaceLikeHandler(destructive: boolean): KeyHandler {
 
     const impact = computeCascadeImpact(ws, ids)
     const message = formatImpactSummary(impact)
-    store.confirmDelete({ message, impact }, () => store.deleteElements(ids))
+    store.confirmDelete({ message, impact, targetIds: ids }, () => store.deleteElements(ids))
   }
 }
 

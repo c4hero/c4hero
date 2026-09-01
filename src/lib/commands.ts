@@ -164,7 +164,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         if (ids.length === 0) return
         const impact = computeCascadeImpact(s.workspace, ids)
         s.confirmDelete(
-          { message: formatImpactSummary(impact), impact },
+          { message: formatImpactSummary(impact), impact, targetIds: ids },
           () => s.deleteElements(ids),
         )
       },

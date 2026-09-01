@@ -1,20 +1,35 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { CascadeImpact } from '@/store/workspace-helpers'
+import { useWorkspaceStore } from '@/store/workspace'
+import { analyzeImpact, type ImpactReport } from '@/lib/impactAnalysis'
+import ImpactReportBody from '@/components/impact/ImpactReportBody'
 
 interface Props {
   message: string
   impact?: CascadeImpact
+  /** Element ids being deleted — when set, the full removal-impact report
+   *  ("what breaks if this is removed") renders inline in the confirmation. */
+  targetIds?: string[]
   onConfirm: () => void
   onCancel: () => void
 }
 
-export default function ConfirmDeleteDialog({ message, impact, onConfirm, onCancel }: Props) {
+export default function ConfirmDeleteDialog({ message, impact, targetIds, onConfirm, onCancel }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
+  const workspace = useWorkspaceStore((s) => s.workspace)
+
+  // The full blast-radius report, shown instead of the bare cascade counts
+  // whenever the deletion targets are known (element deletes; relationship,
+  // view, and file deletes pass a plain message and keep the compact dialog).
+  const report = useMemo<ImpactReport | null>(
+    () => (workspace && targetIds && targetIds.length > 0 ? analyzeImpact(workspace, targetIds) : null),
+    [workspace, targetIds],
+  )
 
   const impactItems: string[] = []
-  if (impact) {
+  if (impact && !report) {
     const { descendantContainers: c, descendantComponents: comp, relationships: r, scopedViews: v } = impact
     if (c > 0) impactItems.push(`${c} ${c === 1 ? 'container' : 'containers'}`)
     if (comp > 0) impactItems.push(`${comp} ${comp === 1 ? 'component' : 'components'}`)
@@ -71,7 +86,8 @@ export default function ConfirmDeleteDialog({ message, impact, onConfirm, onCanc
           left: '50%',
           transform: 'translate(-50%, -50%)',
           zIndex: 201,
-          width: 320,
+          width: report ? 'min(560px, 94vw)' : 320,
+          maxHeight: '82vh',
           padding: '20px 20px 16px',
           borderRadius: 'var(--radius-lg)',
           display: 'flex',
@@ -115,6 +131,21 @@ export default function ConfirmDeleteDialog({ message, impact, onConfirm, onCanc
           </div>
         </div>
 
+        {report && (
+          <div
+            aria-label="Removal impact"
+            style={{
+              overflowY: 'auto',
+              minHeight: 0,
+              margin: '0 -20px',
+              borderTop: '1px solid var(--color-border)',
+              borderBottom: '1px solid var(--color-border)',
+            }}
+          >
+            <ImpactReportBody report={report} />
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button
             onClick={onCancel}
@@ -137,7 +168,7 @@ export default function ConfirmDeleteDialog({ message, impact, onConfirm, onCanc
               fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
             }}
           >
-            {impactItems.length > 0 ? 'Delete from model' : 'Delete'}
+            {report || impactItems.length > 0 ? 'Delete from model' : 'Delete'}
           </button>
         </div>
       </div>
