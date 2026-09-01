@@ -606,6 +606,13 @@ export default function Canvas() {
       setEdges(initialEdges)
       setNodes((prev) => {
         const byId = new Map(initialNodes.map(n => [n.id, n]))
+        // An element ID edit (updateElementId, or a name commit re-deriving an
+        // auto ID) changes node ids without changing the structural signal.
+        // The per-node merge below keys on id, so the mounted nodes would keep
+        // their stale ids — and React Flow drops every edge whose endpoint id
+        // no longer matches a node. Remount from initialNodes instead; the
+        // positions are already carried in them, so the viewport stays put.
+        if (prev.some(n => !byId.has(n.id))) return initialNodes
         return prev.map(n => {
           const next = byId.get(n.id)
           // draggable must be carried over here too: locking a node changes
