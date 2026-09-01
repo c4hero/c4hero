@@ -3,7 +3,7 @@ import { useWorkspaceStore, getSelectedElement, getSelectedDeploymentElement, ge
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location, Workspace } from '@/types/model'
-import { X, Plus, ArrowRight, ArrowUpRight, ArrowDownLeft, ExternalLink, Eye, EyeOff, ChevronRight, Trash2, Sparkles, Loader2, Lock, LockOpen, Radar, RefreshCw } from 'lucide-react'
+import { X, Plus, ArrowRight, ArrowUpRight, ArrowDownLeft, ExternalLink, Eye, EyeOff, ChevronRight, Trash2, Sparkles, Loader2, Lock, LockOpen, RefreshCw } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
@@ -135,7 +135,6 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const deleteElement = useWorkspaceStore((s) => s.deleteElement)
   const removeElementsFromView = useWorkspaceStore((s) => s.removeElementsFromView)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
-  const openImpactPanel = useWorkspaceStore((s) => s.openImpactPanel)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const isFocal = useMemo(
@@ -249,15 +248,9 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               <EyeOff size={14} />
             </button>
           )}
-          <button
-            onClick={() => openImpactPanel([element.id])}
-            className="btn-icon !min-h-7 !min-w-7 !p-1"
-            aria-label="What breaks if this is removed"
-            title="What breaks if this is removed"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            <Radar size={14} />
-          </button>
+          {/* No standalone impact button here: the delete confirmation shows the
+              full removal-impact report itself, and exploratory impact (without
+              deleting) stays reachable via the command palette. */}
           {isFocal ? (
             <button
               disabled

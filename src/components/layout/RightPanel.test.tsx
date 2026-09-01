@@ -84,13 +84,14 @@ describe('RightPanel', () => {
     expect(screen.getByText('Person')).toBeTruthy()
   })
 
-  it('opens the removal-impact panel from the inspector', () => {
+  it('has no standalone impact button — the delete confirmation carries the report', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     useWorkspaceStore.getState().selectElements(['alice'])
     render(<RightPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'What breaks if this is removed' }))
-    expect(useWorkspaceStore.getState().impactTargetIds).toEqual(['alice'])
+    // Exploratory impact stays reachable via the command palette only; the
+    // inspector's delete flow surfaces the full report in its confirmation.
+    expect(screen.queryByRole('button', { name: 'What breaks if this is removed' })).toBeNull()
   })
 
   it('tucks the element ID behind a collapsed Advanced section', async () => {
