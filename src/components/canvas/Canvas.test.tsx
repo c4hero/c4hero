@@ -226,6 +226,32 @@ describe('Canvas rendering', () => {
     expect(rf!.getEdges().map((e) => e.id)).toContain('r2')
   })
 
+  it('keeps edges attached after an element ID rename (TEA-242)', async () => {
+    seed('ctx')
+    await renderCanvas()
+    await screen.findByText('Alice')
+    expect(rf!.getEdges().map((e) => e.id)).toContain('r2')
+
+    // An ID rename changes node ids WITHOUT changing the structural signal
+    // (same view key, element count, layoutVersion) — the non-structural sync
+    // branch must remount the nodes under their new ids or React Flow drops
+    // every edge pointing at the renamed element until a full reload.
+    act(() => {
+      const error = useWorkspaceStore.getState().updateElementId('sys', 'platform')
+      expect(error).toBeNull()
+    })
+
+    await waitFor(() => {
+      const nodeIds = new Set(rf!.getNodes().map((n) => n.id))
+      expect(nodeIds.has('platform')).toBe(true)
+      expect(nodeIds.has('sys')).toBe(false)
+      const edge = rf!.getEdges().find((e) => e.id === 'r2')
+      expect(edge).toBeTruthy()
+      expect(nodeIds.has(edge!.source)).toBe(true)
+      expect(nodeIds.has(edge!.target)).toBe(true)
+    })
+  })
+
   it('renders a component view scoped to a container', async () => {
     seed('comp')
     await renderCanvas()
