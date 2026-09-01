@@ -45,8 +45,6 @@ const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDial
 
 export default function FloatingTopPill() {
   const workspace = useWorkspaceStore((s) => s.workspace)
-  const codePanelOpen = useWorkspaceStore((s) => s.codePanelOpen)
-  const toggleCodePanel = useWorkspaceStore((s) => s.toggleCodePanel)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const undo = useWorkspaceStore((s) => s.undo)
   const redo = useWorkspaceStore((s) => s.redo)
@@ -289,31 +287,6 @@ export default function FloatingTopPill() {
           </button>
         )}
 
-        {/* DSL source — the workspace's plain-text form lives beside its name */}
-        {!isMobile && (
-          <button
-            onClick={toggleCodePanel}
-            className="hover-subtle"
-            data-active={codePanelOpen ? 'true' : undefined}
-            title={codePanelOpen ? 'Hide DSL code pane (mod+E)' : 'Show DSL code pane (mod+E)'}
-            aria-label={codePanelOpen ? 'Hide DSL code pane' : 'Show DSL code pane'}
-            style={{
-              padding: '0 10px',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              flexShrink: 0,
-              border: 'none',
-              borderRight: '1px solid var(--color-border)',
-              cursor: 'pointer',
-              color: codePanelOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
-              background: codePanelOpen ? 'var(--color-accent-active)' : 'transparent',
-            }}
-          >
-            <Code size={14} />
-          </button>
-        )}
-
         {/* View switcher */}
         <ViewSwitcher
           isMobile={isMobile}
@@ -486,6 +459,7 @@ export default function FloatingTopPill() {
           currentDescription={workspace?.description ?? ''}
           onUpdateMeta={(patch) => useWorkspaceStore.getState().updateWorkspaceMeta(patch)}
           onSelect={handleSwitchWorkspace}
+          onEditDsl={() => { setWsPickerOpen(false); useWorkspaceStore.getState().setCodePanelOpen(true) }}
           onNewWorkspace={() => { setWsPickerOpen(false); setShowNewWorkspace(true) }}
           onManageWorkspaces={handleManageWorkspaces}
           onChangeCollection={handleChangeCollection}
@@ -562,6 +536,7 @@ function WorkspaceSwitcherPanel({
   currentDescription,
   onUpdateMeta,
   onSelect,
+  onEditDsl,
   onNewWorkspace,
   onManageWorkspaces,
   onChangeCollection,
@@ -573,6 +548,7 @@ function WorkspaceSwitcherPanel({
   currentDescription: string
   onUpdateMeta: (patch: { name?: string; description?: string }) => void
   onSelect: (filename: string) => Promise<void>
+  onEditDsl: () => void
   onNewWorkspace: () => void
   onManageWorkspaces: () => void
   onChangeCollection: () => void
@@ -647,6 +623,25 @@ function WorkspaceSwitcherPanel({
               outline: 'none', resize: 'none', fontFamily: 'inherit',
             }}
           />
+          {/* The workspace's plain-text form — opens the DSL editor window */}
+          <button
+            onClick={onEditDsl}
+            className="hover-subtle"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '7px 10px', borderRadius: 8,
+              border: '1px solid var(--color-border)',
+              background: 'transparent',
+              fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)',
+              cursor: 'pointer',
+            }}
+          >
+            <Code size={13} />
+            Edit as DSL
+            <kbd style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 5px' }}>
+              mod+E
+            </kbd>
+          </button>
         </div>
 
         {/* Header */}

@@ -35,8 +35,9 @@ test.describe('DSL code pane', () => {
     const page = workspace.page
     await workspace.parseAndLoad(DSL)
 
-    // Open via the tool rail; the editor shows the serialized workspace.
-    await page.getByRole('button', { name: 'Show DSL code pane' }).click()
+    // Open from the workspace shade; the editor shows the serialized workspace.
+    await page.getByRole('button', { name: /CodePane/ }).click()
+    await page.getByRole('button', { name: 'Edit as DSL' }).click()
     const editor = page.locator('[data-code-pane-editor] .cm-content')
     await expect(editor).toBeVisible()
     await expect(editor).toContainText('softwareSystem')
@@ -81,7 +82,8 @@ test.describe('DSL code pane', () => {
   test('behaves as a movable, resizable window with min/max and editor undo', async ({ workspace }) => {
     const page = workspace.page
     await workspace.parseAndLoad(DSL)
-    await page.getByRole('button', { name: 'Show DSL code pane' }).click()
+    await page.getByRole('button', { name: /CodePane/ }).click()
+    await page.getByRole('button', { name: 'Edit as DSL' }).click()
 
     const pane = page.locator('[data-canvas-chrome="code-pane"]')
     const header = page.locator('[data-code-pane-header]')
