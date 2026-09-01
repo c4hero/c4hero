@@ -11,7 +11,7 @@ import { tags as t } from '@lezer/highlight'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeDSL } from '@/lib/dsl'
 import type { ParseError } from '@/lib/dsl'
-import { readJSON, writeJSON } from '@/lib/safeStorage'
+import { readJSON, writeJSON, readString, writeString } from '@/lib/safeStorage'
 import { structurizrLanguage } from './structurizrLanguage'
 import { createDslSyncEngine, type DslSyncStatus } from './dslSyncEngine'
 
@@ -24,6 +24,7 @@ const fromStoreSync = Annotation.define<boolean>()
 interface PaneRect { x: number; y: number; w: number; h: number }
 
 const RECT_STORAGE_KEY = 'c4hero_code_pane_rect'
+const EDITED_STORAGE_KEY = 'c4hero_code_pane_edited'
 const MARGIN = 14
 const MIN_W = 320
 const MIN_H = 180
@@ -172,11 +173,28 @@ export default function CodePane() {
   const setCodePanelOpen = useWorkspaceStore((s) => s.setCodePanelOpen)
   const activeWorkspaceFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
   const workspaceName = useWorkspaceStore((s) => s.workspace?.name)
-  const hostRef = useRef<HTMLDivElement>(null)
+  const hostElRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const [status, setStatus] = useState<DslSyncStatus>({ errors: [], serializeError: null, pendingApply: false })
+  const statusRef = useRef(status)
   const [copied, setCopied] = useState(false)
   const [histDepths, setHistDepths] = useState({ undo: 0, redo: 0 })
+  // Once the user has successfully applied a text edit (ever, persisted), the
+  // footer stops teaching "this is editable" and shows live sync state instead.
+  const [everApplied, setEverApplied] = useState(() => readString(EDITED_STORAGE_KEY) === '1')
+
+  // The host div is destroyed and recreated when the pane switches between its
+  // inline (docked) and portal (maximized) render targets — re-attach the
+  // long-lived CodeMirror DOM instead of losing the editor. CodeMirror
+  // explicitly supports moving view.dom between parents.
+  const hostRefCb = useCallback((el: HTMLDivElement | null) => {
+    hostElRef.current = el
+    const view = viewRef.current
+    if (el && view && view.dom.parentElement !== el) {
+      el.appendChild(view.dom)
+      view.requestMeasure()
+    }
+  }, [])
 
   // ── Window state ──
   const [rect, setRect] = useState<PaneRect>(() => {
@@ -258,8 +276,6 @@ export default function CodePane() {
 
   // ── Editor + sync engine ──
   useEffect(() => {
-    if (!hostRef.current) return
-
     const engine = createDslSyncEngine({
       readText: () => viewRef.current?.state.doc.toString() ?? '',
       writeText: (text) => {
@@ -283,11 +299,20 @@ export default function CodePane() {
         }
       },
       apply: (text) => useWorkspaceStore.getState().replaceWorkspaceFromDSL(text),
-      onStatus: setStatus,
+      onStatus: (s) => {
+        // pendingApply true -> false with no errors = a successful text apply:
+        // the user has learned the pane is editable, stop teaching it.
+        const prev = statusRef.current
+        statusRef.current = s
+        if (prev.pendingApply && !s.pendingApply && s.errors.length === 0) {
+          setEverApplied(true)
+          writeString(EDITED_STORAGE_KEY, '1')
+        }
+        setStatus(s)
+      },
     })
 
     const view = new EditorView({
-      parent: hostRef.current,
       state: EditorState.create({
         doc: '',
         extensions: [
@@ -320,7 +345,10 @@ export default function CodePane() {
       }),
     })
     viewRef.current = view
+    hostElRef.current?.appendChild(view.dom)
     engine.init()
+    // Focus on open: a blinking cursor is the clearest "you can type here".
+    view.focus()
 
     const unsubscribe = useWorkspaceStore.subscribe((state, prev) => {
       if (state.workspace !== prev.workspace) engine.handleStoreChange()
@@ -355,11 +383,14 @@ export default function CodePane() {
   const filename = activeWorkspaceFilename ?? `${workspaceName ?? 'workspace'}.dsl`
   const errorCount = status.errors.length
 
-  // Rendered through a portal: the canvas chrome wrapper is position:fixed and
-  // forms its own stacking context, so z-index inside it can never beat
-  // root-level chrome (e.g. the what's-new pill). A floating window must
-  // participate in root-level stacking to layer correctly when moved anywhere.
-  return createPortal(
+  // Layering: docked, the pane renders INLINE inside the canvas chrome wrapper
+  // (a position:fixed stacking context) at z 40 — above the diagram's nodes
+  // and edges, below the tools, panels, and dialogs (z 50+). Maximized, it is
+  // the user's whole focus and must cover root-level chrome too (e.g. the
+  // what's-new pill), which nothing inside the wrapper can do — so it escapes
+  // through a portal to document.body at z 80. The editor DOM survives the
+  // container switch via hostRefCb's re-attach.
+  const pane = (
     <div
       data-canvas-chrome="code-pane"
       data-canvas-fit-chrome
@@ -370,9 +401,7 @@ export default function CodePane() {
         top: rect.y,
         width: rect.w,
         height: minimized ? 'auto' : rect.h,
-        // A floating window layers above the docked panels; maximized it is
-        // the user's whole focus and covers the pills too.
-        zIndex: maximized ? 80 : 60,
+        zIndex: maximized ? 80 : 40,
         display: 'flex',
         flexDirection: 'column',
         borderRadius: 12,
@@ -416,26 +445,6 @@ export default function CodePane() {
         >
           DSL · {filename}
         </span>
-        {errorCount > 0 && (
-          <span
-            data-code-pane-errors
-            title={status.errors.map((e) => `${e.line}:${e.column} ${e.message}`).join('\n')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 'var(--text-xxs)',
-              color: 'var(--color-danger, #f85149)',
-              border: '1px solid color-mix(in srgb, var(--color-danger, #f85149) 40%, transparent)',
-              borderRadius: 999,
-              padding: '1px 7px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <TriangleAlert size={10} />
-            {errorCount} {errorCount === 1 ? 'error' : 'errors'} — canvas not updated
-          </span>
-        )}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
           <button
             onClick={editorUndo}
@@ -524,10 +533,56 @@ export default function CodePane() {
       {/* Editor — kept mounted while minimized (display:none) so CodeMirror
           state, history, and the sync engine survive the collapse. */}
       <div
-        ref={hostRef}
+        ref={hostRefCb}
         data-code-pane-editor
         style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: minimized ? 'none' : 'block' }}
       />
+
+      {/* Status footer — the pane's editability made visible: teaches that the
+          text is live until the first successful apply, then reports sync state. */}
+      {!minimized && (
+        <div
+          data-code-pane-footer
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '4px 10px',
+            borderTop: '1px solid var(--color-border)',
+            fontSize: 'var(--text-xxs)',
+            color: 'var(--color-text-muted)',
+            flexShrink: 0,
+            minHeight: 22,
+          }}
+        >
+          {errorCount > 0 ? (
+            <span
+              data-code-pane-errors
+              title={status.errors.map((e) => `${e.line}:${e.column} ${e.message}`).join('\n')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--color-danger, #f85149)' }}
+            >
+              <TriangleAlert size={10} />
+              {errorCount} {errorCount === 1 ? 'error' : 'errors'} — canvas not updated
+            </span>
+          ) : status.pendingApply ? (
+            <span>Editing — applies when it parses cleanly…</span>
+          ) : everApplied ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--color-status-live, #3fb950)' }} />
+              In sync with canvas
+            </span>
+          ) : (
+            <span style={{ color: 'var(--color-text-secondary)' }}>
+              Editable — changes here update the canvas as you type
+            </span>
+          )}
+          {status.pendingApply && (
+            <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap', opacity: 0.8 }}>
+              Mod+Enter applies now
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Resize handles */}
       {!minimized && !maximized && (
@@ -539,9 +594,10 @@ export default function CodePane() {
           <div onPointerDown={onResizeStart('bottom-right')} style={{ ...EDGE_STYLE, right: 0, bottom: 0, width: 12, height: 12, cursor: 'nwse-resize' }} />
         </>
       )}
-    </div>,
-    document.body,
+    </div>
   )
+
+  return maximized ? createPortal(pane, document.body) : pane
 }
 
 const EDGE_STYLE: React.CSSProperties = {

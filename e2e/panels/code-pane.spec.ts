@@ -53,6 +53,8 @@ test.describe('DSL code pane', () => {
     // The debounced apply lands and the canvas gains the node.
     await expect(await workspace.getNodeByName('Payments')).toBeVisible({ timeout: 5000 })
     await expect(page.locator('[data-code-pane-errors]')).toBeHidden()
+    // The status footer flips from teaching editability to live sync state.
+    await expect(page.locator('[data-code-pane-footer]')).toContainText('In sync with canvas')
 
     // Break the document — errors surface, canvas stays on the last good state.
     // (`person` without a name is a real parse error; many truncated documents
