@@ -16,6 +16,7 @@ vi.mock('lucide-react', () => ({
   AlertTriangle: () => null,
   Settings: () => null,
   ChevronDown: () => null,
+  ChevronRight: () => null,
   // elementMeta icons
   UserRound: () => null,
   Globe: () => null,

@@ -125,6 +125,10 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const updateElementId = useWorkspaceStore((s) => s.updateElementId)
   const resyncElementId = useWorkspaceStore((s) => s.resyncElementId)
   const [idError, setIdError] = useState<string | null>(null)
+  // Collapsed by default — the ID is an advanced, rarely-edited setting. The
+  // open state intentionally survives selection changes so bulk ID editing
+  // across elements doesn't mean re-opening the section every time.
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   // A successful ID commit (and any selection change) lands here with a new
   // element.id — stale errors must not stick to the fresh value.
   useEffect(() => setIdError(null), [element.id])
@@ -315,44 +319,6 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               <FieldLabel>Name</FieldLabel>
               <EditableField value={element.name} placeholder="Element name" aria-label="Element name" onLiveChange={(v) => updateElementLive(element.id, { name: v })} onCommit={(v) => updateElement(element.id, { name: v })} />
             </div>
-            <div>
-              <FieldLabel>ID</FieldLabel>
-              <div className="flex items-center gap-1.5">
-                <div className="flex-1">
-                  <EditableField
-                    value={element.id}
-                    placeholder="Identifier"
-                    mono
-                    aria-label="Element ID"
-                    aria-invalid={!!idError}
-                    aria-describedby={idError ? `id-error-${element.id}` : undefined}
-                    onCommit={(v) => {
-                      const next = v.trim()
-                      if (next === element.id) { setIdError(null); return }
-                      setIdError(updateElementId(element.id, next))
-                    }}
-                  />
-                </div>
-                {!element.idIsAuto && (
-                  <button
-                    onClick={() => resyncElementId(element.id)}
-                    className="btn-icon !min-h-8 !min-w-8 !p-1.5 shrink-0"
-                    title="Sync ID from name — it will follow future renames again"
-                    aria-label="Sync ID from name"
-                  >
-                    <RefreshCw size={14} />
-                  </button>
-                )}
-              </div>
-              {idError && (
-                <p id={`id-error-${element.id}`} role="alert" className="mt-1 text-[11px]" style={{ color: 'var(--color-status-removed, #eb5757)' }}>
-                  {idError}
-                </p>
-              )}
-              <p className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                {element.idIsAuto ? 'Follows the name. Used as the identifier in exported DSL.' : 'Pinned. Used as the identifier in exported DSL.'}
-              </p>
-            </div>
             {hasLocation && (
               <div>
                 <FieldLabel>Location</FieldLabel>
@@ -486,6 +452,69 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             {appearsInViews.length > 0 && (
               <AppearsInViews views={appearsInViews} />
             )}
+
+            {/* Advanced: DSL-facing settings, rarely needed — collapsed by default. */}
+            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((o) => !o)}
+                aria-expanded={advancedOpen}
+                className="hover-surface flex w-full items-center gap-1.5 rounded-md px-1 py-1"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--color-text-muted)',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                <ChevronRight size={11} style={{ transform: advancedOpen ? 'rotate(90deg)' : undefined, transition: 'transform 0.12s' }} />
+                Advanced
+              </button>
+              {advancedOpen && (
+                <div className="mt-2">
+                  <FieldLabel>ID</FieldLabel>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex-1">
+                      <EditableField
+                        value={element.id}
+                        placeholder="Identifier"
+                        mono
+                        aria-label="Element ID"
+                        aria-invalid={!!idError}
+                        aria-describedby={idError ? `id-error-${element.id}` : undefined}
+                        onCommit={(v) => {
+                          const next = v.trim()
+                          if (next === element.id) { setIdError(null); return }
+                          setIdError(updateElementId(element.id, next))
+                        }}
+                      />
+                    </div>
+                    {!element.idIsAuto && (
+                      <button
+                        onClick={() => resyncElementId(element.id)}
+                        className="btn-icon !min-h-8 !min-w-8 !p-1.5 shrink-0"
+                        title="Sync ID from name — it will follow future renames again"
+                        aria-label="Sync ID from name"
+                      >
+                        <RefreshCw size={14} />
+                      </button>
+                    )}
+                  </div>
+                  {idError && (
+                    <p id={`id-error-${element.id}`} role="alert" className="mt-1 text-[11px]" style={{ color: 'var(--color-status-removed, #eb5757)' }}>
+                      {idError}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                    {element.idIsAuto ? 'Follows the name. Used as the identifier in exported DSL.' : 'Pinned. Used as the identifier in exported DSL.'}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

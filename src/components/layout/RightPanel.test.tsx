@@ -83,6 +83,28 @@ describe('RightPanel', () => {
     expect(screen.getByText('Person')).toBeTruthy()
   })
 
+  it('tucks the element ID behind a collapsed Advanced section', async () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectElements(['alice'])
+    render(<RightPanel />)
+
+    // Collapsed by default — the ID field is not in the document.
+    expect(screen.queryByLabelText('Element ID')).toBeNull()
+
+    const disclosure = screen.getByRole('button', { name: /advanced/i })
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false')
+    await userEvent.click(disclosure)
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true')
+
+    // Expanded: the ID is editable and commits through updateElementId.
+    const idField = screen.getByLabelText('Element ID') as HTMLInputElement
+    expect(idField.value).toBe('alice')
+    await userEvent.clear(idField)
+    await userEvent.type(idField, 'customer')
+    fireEvent.blur(idField)
+    expect(useWorkspaceStore.getState().workspace!.model.people[0].id).toBe('customer')
+  })
+
   it('shows relationship description when relationship selected', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     useWorkspaceStore.getState().selectRelationship('rel1')
