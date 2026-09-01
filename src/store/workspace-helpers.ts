@@ -178,6 +178,85 @@ export function uniqueElementName(base: string, ws: Workspace): string {
   return `${base} ${n}`
 }
 
+/** Every ID that lives in the workspace's DSL identifier namespace: model
+ *  elements, relationships, groups, and the deployment tree. Used to keep
+ *  user-set and derived element IDs collision-free (the serializer would
+ *  otherwise suffix-rename on export, breaking ID stability). */
+export function collectTakenIds(ws: Workspace): Set<string> {
+  const taken = new Set<string>()
+  forEachElementHelper(ws, (el) => { taken.add(el.id) })
+  for (const r of ws.model.relationships) taken.add(r.id)
+  for (const g of ws.model.groups) taken.add(g.id)
+  const walkNode = (n: DeploymentNode): void => {
+    taken.add(n.id)
+    for (const i of n.infrastructureNodes) taken.add(i.id)
+    for (const ci of n.containerInstances) taken.add(ci.id)
+    for (const si of n.softwareSystemInstances) taken.add(si.id)
+    for (const child of n.children) walkNode(child)
+  }
+  for (const env of ws.model.deploymentEnvironments) {
+    taken.add(env.id)
+    for (const n of env.deploymentNodes) walkNode(n)
+  }
+  return taken
+}
+
+/** Rewrite every reference to a model element's ID, in place. The caller has
+ *  already validated the new ID (format, uniqueness). Returns the auto-view
+ *  key renames so the caller can patch view-key references held outside the
+ *  workspace (activeViewKey, viewHistory).
+ *
+ *  Covers: the element itself, relationship endpoints, group membership, view
+ *  membership, view scope fields, dynamic-step endpoints, deployment
+ *  instances, and the keys of parser-synthesised auto views (they embed the
+ *  scope element's ID, e.g. `SystemContext-<id>` — left stale, the layout
+ *  sidecar written against the old key would orphan on the next import). */
+export function renameElementId(ws: Workspace, oldId: string, newId: string): { from: string; to: string }[] {
+  forEachElementHelper(ws, (el) => {
+    if (el.id !== oldId) return false
+    el.id = newId
+    return true
+  })
+  for (const r of ws.model.relationships) {
+    if (r.sourceId === oldId) r.sourceId = newId
+    if (r.destinationId === oldId) r.destinationId = newId
+  }
+  for (const g of ws.model.groups) {
+    g.elementIds = g.elementIds.map(id => (id === oldId ? newId : id))
+  }
+  const walkNode = (n: DeploymentNode): void => {
+    for (const ci of n.containerInstances) {
+      if (ci.containerId === oldId) ci.containerId = newId
+    }
+    for (const si of n.softwareSystemInstances) {
+      if (si.softwareSystemId === oldId) si.softwareSystemId = newId
+    }
+    for (const child of n.children) walkNode(child)
+  }
+  for (const env of ws.model.deploymentEnvironments) {
+    for (const n of env.deploymentNodes) walkNode(n)
+  }
+  const keyRenames: { from: string; to: string }[] = []
+  forEachView(ws, (v) => {
+    for (const el of v.elements) {
+      if (el.id === oldId) el.id = newId
+    }
+    for (const r of v.relationships) {
+      if (r.sourceId === oldId) r.sourceId = newId
+      if (r.destinationId === oldId) r.destinationId = newId
+    }
+    if (v.softwareSystemId === oldId) v.softwareSystemId = newId
+    if (v.containerId === oldId) v.containerId = newId
+    if (v.autoKey && v.key.split('-').includes(oldId)) {
+      const from = v.key
+      v.key = v.key.split('-').map(seg => (seg === oldId ? newId : seg)).join('-')
+      keyRenames.push({ from, to: v.key })
+    }
+  })
+  invalidateElementIndex(ws)
+  return keyRenames
+}
+
 /** Add an element to the active view (no-op if no view is active or the
  *  element is already present). */
 /** Which element types each C4 view kind may show — a higher-level view never
@@ -436,7 +515,10 @@ export function duplicateElementsInTree(
   ws: Workspace,
   ids: string[],
   activeViewKey: string,
-  nanoid: () => string,
+  /** Mint a fresh unique ID — derived from `name` when given (elements),
+   *  random otherwise (relationships). Must track its own mints: clones are
+   *  built before they're pushed, so the workspace alone can't dedupe them. */
+  freshId: (name?: string) => string,
 ): string[] {
   const newIds: string[] = []
   const view = findViewHelper(ws, activeViewKey)
@@ -454,26 +536,30 @@ export function duplicateElementsInTree(
     const inView = view.elements.find((e) => e.id === id)
     const offsetX = (inView?.x ?? 200) + 60
     const offsetY = (inView?.y ?? 200) + 30
-    const newId = nanoid()
+    const newName = uniqueElementName(`${element.name} copy`, ws)
+    const newId = freshId(newName)
     let cloned = false
 
     if (element.type === 'person') {
       ws.model.people.push({
         ...deepCloneMaybeDraft(element),
         id: newId,
-        name: uniqueElementName(`${element.name} copy`, ws),
+        idIsAuto: true,
+        name: newName,
       })
       cloned = true
     } else if (element.type === 'softwareSystem') {
       const clonedContainers = element.containers.map((c) => ({
         ...deepCloneMaybeDraft(c),
-        id: nanoid(),
-        components: c.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: nanoid() })),
+        id: freshId(c.name),
+        idIsAuto: true,
+        components: c.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: freshId(comp.name), idIsAuto: true })),
       }))
       ws.model.softwareSystems.push({
         ...deepCloneMaybeDraft(element),
         id: newId,
-        name: uniqueElementName(`${element.name} copy`, ws),
+        idIsAuto: true,
+        name: newName,
         containers: clonedContainers,
       })
       cloned = true
@@ -483,8 +569,9 @@ export function duplicateElementsInTree(
         parent.containers.push({
           ...deepCloneMaybeDraft(element),
           id: newId,
-          name: uniqueElementName(`${element.name} copy`, ws),
-          components: element.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: nanoid() })),
+          idIsAuto: true,
+          name: newName,
+          components: element.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: freshId(comp.name), idIsAuto: true })),
         })
         cloned = true
       }
@@ -495,7 +582,8 @@ export function duplicateElementsInTree(
             container.components.push({
               ...deepCloneMaybeDraft(element),
               id: newId,
-              name: uniqueElementName(`${element.name} copy`, ws),
+              idIsAuto: true,
+              name: newName,
             })
             cloned = true
             break outer
@@ -553,7 +641,7 @@ export function duplicateElementsInTree(
     const newSourceId = idMapping.get(rel.sourceId)
     const newDestId = idMapping.get(rel.destinationId)
     if (newSourceId && newDestId) {
-      const newRelId = nanoid()
+      const newRelId = freshId()
       ws.model.relationships.push({
         ...deepCloneMaybeDraft(rel),
         id: newRelId,
