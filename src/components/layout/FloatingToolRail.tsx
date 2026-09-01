@@ -16,7 +16,6 @@ import {
   Sparkles,
   Lock,
   LockOpen,
-  Code,
 } from 'lucide-react'
 import { useAiSettingsStore, isAiReady } from '@/store/ai-settings'
 import { missingInfoGaps } from '@/lib/ai'
@@ -84,8 +83,6 @@ export default function FloatingToolRail() {
 
   const canvasSettingsOpen = useWorkspaceStore((s) => s.canvasSettingsOpen)
   const setCanvasSettingsOpen = useWorkspaceStore((s) => s.setCanvasSettingsOpen)
-  const codePanelOpen = useWorkspaceStore((s) => s.codePanelOpen)
-  const toggleCodePanel = useWorkspaceStore((s) => s.toggleCodePanel)
 
   const arrangeFlyoutRef = useRef<HTMLDivElement>(null)
 
@@ -365,15 +362,6 @@ export default function FloatingToolRail() {
         label={multiSelectMode ? 'Multi-select: ON (tap to turn off)' : 'Multi-select (tap multiple nodes)'}
         active={multiSelectMode}
         onClick={() => setMultiSelectMode(!multiSelectMode)}
-      />
-
-      {/* DSL code pane */}
-      <RailSep />
-      <RailBtn
-        icon={<Code size={16} />}
-        label={codePanelOpen ? 'Hide DSL code pane' : 'Show DSL code pane'}
-        active={codePanelOpen}
-        onClick={toggleCodePanel}
       />
 
       {/* Zoom to fit */}

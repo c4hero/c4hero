@@ -20,6 +20,7 @@ import {
   FolderSymlink,
   LayoutGrid,
   Sparkles,
+  Code,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 
@@ -44,6 +45,8 @@ const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDial
 
 export default function FloatingTopPill() {
   const workspace = useWorkspaceStore((s) => s.workspace)
+  const codePanelOpen = useWorkspaceStore((s) => s.codePanelOpen)
+  const toggleCodePanel = useWorkspaceStore((s) => s.toggleCodePanel)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const undo = useWorkspaceStore((s) => s.undo)
   const redo = useWorkspaceStore((s) => s.redo)
@@ -286,6 +289,31 @@ export default function FloatingTopPill() {
           </button>
         )}
 
+        {/* DSL source — the workspace's plain-text form lives beside its name */}
+        {!isMobile && (
+          <button
+            onClick={toggleCodePanel}
+            className="hover-subtle"
+            data-active={codePanelOpen ? 'true' : undefined}
+            title={codePanelOpen ? 'Hide DSL code pane (mod+E)' : 'Show DSL code pane (mod+E)'}
+            aria-label={codePanelOpen ? 'Hide DSL code pane' : 'Show DSL code pane'}
+            style={{
+              padding: '0 10px',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+              border: 'none',
+              borderRight: '1px solid var(--color-border)',
+              cursor: 'pointer',
+              color: codePanelOpen ? 'var(--color-accent)' : 'var(--color-text-muted)',
+              background: codePanelOpen ? 'var(--color-accent-active)' : 'transparent',
+            }}
+          >
+            <Code size={14} />
+          </button>
+        )}
+
         {/* View switcher */}
         <ViewSwitcher
           isMobile={isMobile}
@@ -414,6 +442,8 @@ export default function FloatingTopPill() {
             <MenuItemRow icon={FolderSymlink} label="Workspaces…" onClick={() => { setHamburgerOpen(false); openWsPicker() }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow icon={Sparkles} label="AI assistant…" onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setAiPanelOpen(true) }} />
+            <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+            <MenuItemRow icon={Code} label="DSL code…" onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setCodePanelOpen(true) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
