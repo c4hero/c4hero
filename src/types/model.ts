@@ -23,6 +23,11 @@ export function isLineStyle(v: string): v is LineStyle {
 
 export interface BaseElement {
   id: string
+  /** True while the ID is auto-derived from the name: renaming the element
+   *  re-derives it. Cleared the moment the user edits the ID directly.
+   *  Absent (= pinned) on imported and pre-existing elements — an identifier
+   *  someone wrote in DSL must never be rewritten by a rename. */
+  idIsAuto?: boolean
   name: string
   description?: string
   tags: string[]
