@@ -8,7 +8,8 @@ import { createBlankWorkspace } from '@/lib/templates'
 import { saveDSLFile } from '@/lib/fileIO'
 import { announce } from '@/lib/announce'
 import SaveIndicator from '@/components/layout/SaveIndicator'
-import ViewSwitcher, { ViewSwitcherPanel, LEVEL_BADGE } from '@/components/layout/ViewSwitcher'
+import ViewSwitcher, { ViewSwitcherPanel } from '@/components/layout/ViewSwitcher'
+import { LEVEL_BADGE } from '@/components/layout/viewLabels'
 import {
   Download,
   Command,

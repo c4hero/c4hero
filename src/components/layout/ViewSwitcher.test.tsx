@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import type { Workspace, View } from '@/types/model'
-import ViewSwitcher, { ViewSwitcherPanel, VIEW_TYPE_LABELS, LEVEL_BADGE } from './ViewSwitcher'
+import ViewSwitcher, { ViewSwitcherPanel } from './ViewSwitcher'
+import { VIEW_TYPE_LABELS, LEVEL_BADGE } from './viewLabels'
 
 function makeWs(views?: Partial<Workspace['views']>): Workspace {
   return {
