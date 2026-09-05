@@ -994,6 +994,11 @@ export default function Canvas() {
   // Safety: never leave the chrome faded if we unmount mid-drag.
   useEffect(() => () => document.documentElement.removeAttribute('data-canvas-panning'), [])
 
+  // Same for the minimap's hide timer: unmounting between a pan ending and the
+  // 1500ms fade leaves it queued, and it then calls setState on a torn-down
+  // tree — which in a test environment is a hard error, not just a warning.
+  useEffect(() => () => { if (hideTimer.current) clearTimeout(hideTimer.current) }, [])
+
   const multiSelectModeRef = useRef(multiSelectMode)
   useEffect(() => { multiSelectModeRef.current = multiSelectMode }, [multiSelectMode])
 
