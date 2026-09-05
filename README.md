@@ -5,11 +5,11 @@
 [![Latest release](https://img.shields.io/github/v/release/c4hero/c4hero?label=release)](https://github.com/c4hero/c4hero/releases)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](#local-development)
 
-> A visual GUI for designing C4 architecture diagrams. Saves to plain Structurizr DSL in your repo. Local-first, Apache-2.0, no signup.
+> **Draw C4 diagrams. Own the files.** A visual canvas for the [C4 model](https://c4model.com) that saves to plain Structurizr DSL on your machine. Local-first, git-friendly, no account, Apache-2.0.
 
 *I built c4hero because I wanted to design C4 diagrams in a real editor — drag, drop, connect — and still get Structurizr's portable plain-text format on disk.*
 
-**Try it: [c4hero.com](https://c4hero.com) · Open the app: [app.c4hero.com](https://app.c4hero.com)**
+**Website: [c4hero.com](https://c4hero.com) · Open the app: [app.c4hero.com](https://app.c4hero.com) · [What's new in 0.5.0](CHANGELOG.md)**
 
 ![c4hero canvas showing the Big Bank sample's container view — top pill with workspace + view picker, left tool rail, the rendered C4 diagram, and the right-side element inspector for "Personal Banking Customer"](docs/screenshots/canvas-hero.png)
 
@@ -17,7 +17,7 @@
 
 ## The 30-second pitch
 
-Design C4 diagrams visually — drop people, software systems, and containers onto the canvas, wire up relationships, and let auto-layout handle the rest. c4hero saves your work as plain Structurizr DSL:
+Drop people, software systems, containers, and components onto the canvas, wire up relationships, drill from System Landscape down to Components, and let auto-layout handle the rest. c4hero saves your work as plain Structurizr DSL:
 
 ```dsl
 workspace "E-Commerce Platform" {
@@ -39,24 +39,31 @@ workspace "E-Commerce Platform" {
 }
 ```
 
-You never have to write that by hand — but you can. Already have a `.dsl` file? Open it and keep editing; c4hero round-trips Structurizr DSL both ways. Your architecture lives in your repo, reviews in pull requests, and never gets locked behind a vendor's login screen.
+You never have to write that by hand — but you can, right next to the canvas. Already have a `.dsl` file? Open it and keep editing; c4hero round-trips Structurizr DSL both ways. Your architecture lives in your repo, reviews in pull requests, and never gets locked behind a vendor's login screen.
 
-## Why c4hero
+New to C4? Start with [c4model.com](https://c4model.com), then open one of the built-in samples (Big Bank, microservices, monolith, event-driven) from the welcome screen.
 
-- **Local-first.** Files stay on your device. There is no c4hero server. No accounts, no syncing, and no telemetry unless a hosted deployment explicitly enables privacy-preserving analytics or error reporting.
-- **Plain text.** `.dsl` files diff cleanly in git, review in PRs, and survive any tool you use after this one.
-- **Structurizr-compatible.** Read and write the same DSL the official Structurizr tools use — c4hero is one option in an interoperable ecosystem, not a fork.
-- **Fast.** Code-split bundle, idle-scheduled autosave, dagre auto-layout, no network round-trips during editing.
-- **Accessible.** Focus-trap dialogs, ARIA-labeled canvas, keyboard shortcuts for every common action, `prefers-reduced-motion` support.
-- **Optional AI, bring-your-own-key.** An opt-in assistant shows an instant **model-health** readout, walks you through **guided cleanup** of missing descriptions/technologies/links, runs a **deep review** of your architecture, **interviews** you to fill in a view, builds or edits the model from a **plain-English** prompt, and auto-suggests inspector fields — all reviewed before anything is applied. Every text box also supports **voice-to-text** dictation. Bring your own **Anthropic, OpenAI, or Google Gemini** API key (the provider layer is pluggable for adding more). Your key is stored only in your browser and sent only to that provider — c4hero never sees it, and nothing runs until you opt in. Open it from the tool rail, the menu, or the command palette ("AI: …").
+## What you get
 
-A more detailed feature catalogue lives in [`docs/FEATURES.md`](docs/FEATURES.md).
+- **The whole C4 view set.** System Landscape, System Context, Container, Component, plus Deployment views for where things run and Dynamic views for how a flow unfolds. Every view is a focused slice of one underlying model, with drill-through between levels. Code-level (L4) diagrams are out of scope.
+- **Structurizr DSL, native.** Read and write the same DSL the official Structurizr tools use, verified against the real Structurizr parser in CI. A live code pane (`mod+e`) shows the workspace as DSL beside the canvas and edits flow both ways; text that doesn't parse never touches your model. Element IDs are readable `camelCase` derived from names, so the exported DSL reads like code.
+- **Files you own.** Open a folder of `.dsl` files as a collection or a single file. Layout lives in a sidecar JSON next to each workspace, so positions survive text edits. Installable as a PWA and works offline. There is no c4hero server.
+- **Know what breaks before you delete.** Ask what happens if an element goes away and get the exact blast radius: children removed with it, relationships that lose an endpoint, dependents a few hops out, and views that disappear. Counted from your model, never estimated.
+- **Layout you control.** Dagre auto-arrange in any direction, snap-to-grid, smart edge routing, zoom-to-fit, minimap. Lock a single node or freeze a whole view's layout.
+- **Find and highlight.** Search across views (`mod+f`), a highlighter that stacks tag, status, technology, and team filters, and a presentation mode for walkthroughs.
+- **Share without friction.** Export PNG or SVG, copy straight to the clipboard, or export the whole workspace as one self-contained interactive HTML file — every view, browsable offline, no dependencies, deterministic so it diffs in review.
+- **Keyboard-first.** `mod+k` opens a command palette with every action; undo, redo, duplicate, drill-in, add-element, and presentation mode all have shortcuts.
+- **Themes.** Several built-in canvas themes (including the classic Structurizr palette, sepia, and slate), plus a Tag Manager to restyle any tag's colour, shape, and opacity across the model.
+- **Optional AI, bring-your-own-key.** An opt-in assistant shows a model-health readout, walks you through guided cleanup, runs a deep architecture review, interviews you to fill in a view, and builds or edits the model from plain English. Every change previews first, preserves your layout, and is undoable. Bring an Anthropic, OpenAI, or Google Gemini key: it stays in your browser, requests go straight to the provider, and nothing runs until you turn it on.
+- **Accessible.** Focus-trap dialogs, ARIA-labelled canvas, `prefers-reduced-motion` support.
+
+The full catalogue lives in [`docs/FEATURES.md`](docs/FEATURES.md). How the code is put together is in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Browser support
 
 c4hero runs in any modern browser. **Folder collections** rely on the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API), which is currently only available in Chromium browsers (Chrome, Edge, Brave, Arc, Opera).
 
-In Firefox and Safari you can still open and edit a single `.dsl` file at a time, export PNG / SVG / DSL / standalone HTML, and use every other feature. When folder workflows aren't supported, c4hero automatically falls back to the single-file flow.
+In Firefox and Safari you can still open and edit a single `.dsl` file at a time, export PNG / SVG / DSL / interactive HTML, and use every other feature. When folder workflows aren't supported, c4hero automatically falls back to the single-file flow.
 
 ## Local development
 
@@ -78,18 +85,23 @@ The Vite dev server runs on `http://localhost:3004` with `strictPort: true`.
 ### Available commands
 
 ```bash
-npm run dev          # dev server with HMR
-npm run build        # production bundle in dist/
-npm run preview      # serve the production bundle
-npm run typecheck    # tsc -b
-npm run lint         # eslint
-npm test             # unit tests with Vitest
-npm run test:unit    # vitest only
-npm run test:watch   # vitest in watch mode
-npm run test:e2e     # playwright only
-npm run audit        # npm audit (production)
-npm run check        # lint + typecheck + unit tests + build
+npm run dev               # dev server with HMR
+npm run build             # production bundle in dist/
+npm run preview           # serve the production bundle
+npm run typecheck         # tsc -b
+npm run lint              # eslint
+npm test                  # unit tests with Vitest
+npm run test:watch        # vitest in watch mode
+npm run test:coverage     # vitest with coverage (what CI runs)
+npm run test:conformance  # DSL round-trip checks against the Structurizr parser
+npm run test:e2e          # playwright
+npm run audit             # npm audit (production) with allowlist
+npm run check             # lint + typecheck + unit tests + build
 ```
+
+### Stack
+
+React 19 + TypeScript (strict), Vite, Zustand + immer, React Flow (`@xyflow/react`), CodeMirror 6 for the DSL pane, a hand-written Structurizr DSL lexer/parser/serializer, Vitest + Playwright. Static deploy, no backend.
 
 ### Package distribution
 
@@ -101,11 +113,11 @@ Deployment guidance — Vercel pipeline, env-var expectations, security headers 
 
 ## Privacy
 
-c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a c4hero server. The open source build has hosted observability off by default; `app.c4hero.com` may enable Cloudflare Web Analytics for aggregate usage counts and Sentry for scrubbed error reports. Full details in [`PRIVACY.md`](PRIVACY.md).
+c4hero is local-first. Workspaces stay on your device; nothing is uploaded to a c4hero server. AI provider keys are stored only in your browser and sent only to the provider you chose. The open source build has hosted observability off by default; `app.c4hero.com` may enable Cloudflare Web Analytics for aggregate usage counts and Sentry for scrubbed error reports. Full details in [`PRIVACY.md`](PRIVACY.md).
 
 ## Changelog
 
-See [`CHANGELOG.md`](CHANGELOG.md) for a list of notable changes. The current release is tagged in [GitHub Releases](https://github.com/c4hero/c4hero/releases).
+See [`CHANGELOG.md`](CHANGELOG.md) for notable changes. Releases are tagged in [GitHub Releases](https://github.com/c4hero/c4hero/releases).
 
 ## Maintenance
 
