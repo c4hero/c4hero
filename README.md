@@ -15,33 +15,30 @@
 
 ---
 
-## The 30-second pitch
+## How it works
 
-Drop people, software systems, containers, and components onto the canvas, wire up relationships, drill from System Landscape down to Components, and let auto-layout handle the rest. c4hero saves your work as plain Structurizr DSL:
+1. **Open a folder or a `.dsl` file.** Existing Structurizr DSL loads as-is, no conversion. Or start from a built-in sample (Big Bank, microservices, monolith, event-driven).
+2. **Model on the canvas.** Add people, systems, containers, and components, wire relationships, drill between levels, let auto-layout do the tidying.
+3. **Save.** What lands on disk is plain Structurizr DSL, ready to commit and review like any other file:
 
 ```dsl
 workspace "E-Commerce Platform" {
   model {
-    customer = person "Customer" "Browses + buys"
+    customer = person "Customer"
     platform = softwareSystem "E-Commerce Platform" {
       apiGateway = container "API Gateway" "Routes + auth" "Node.js"
-      userService = container "User Service" "Accounts + profiles" "Spring Boot"
       orderService = container "Order Service" "Cart + checkout" "Go"
-      postgres = container "Postgres" "Users + orders" "Database"
     }
     customer -> apiGateway "Browses"
-    apiGateway -> userService "Authenticates"
     apiGateway -> orderService "Routes"
-    userService -> postgres "Reads + writes"
-    orderService -> postgres "Reads + writes"
   }
   views { container platform "Containers" { include * } }
 }
 ```
 
-You never have to write that by hand — but you can, right next to the canvas. Already have a `.dsl` file? Open it and keep editing; c4hero round-trips Structurizr DSL both ways. Your architecture lives in your repo, reviews in pull requests, and never gets locked behind a vendor's login screen.
+The canvas and the text are two views of the same model. Edit either one, in c4hero or in any other Structurizr tool, and the other follows. Layout is kept in a sidecar file so hand-placed positions survive text edits.
 
-New to C4? Start with [c4model.com](https://c4model.com), then open one of the built-in samples (Big Bank, microservices, monolith, event-driven) from the welcome screen.
+New to C4? Start with [c4model.com](https://c4model.com).
 
 ## What you get
 
