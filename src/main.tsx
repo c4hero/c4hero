@@ -9,6 +9,7 @@ import { initCloudflareAnalytics } from './lib/observability/cloudflareAnalytics
 import { initSentry } from './lib/observability/sentry'
 import { normalizeRemoteLogEndpoint } from './lib/remoteLogEndpoint'
 import { useWorkspaceStore } from './store/workspace'
+import { setTestFileSource } from './lib/testFileSource'
 import {
   createBigBankSample,
   createBlankWorkspace,
@@ -63,6 +64,24 @@ if (import.meta.env.DEV) {
       default: throw new Error(`Unknown template: ${name}`)
     }
   }
+  // In-memory stand-in for a watched file on disk (FSA isn't drivable from
+  // Playwright). `set` replaces the "file", `remove` deletes it, `clear`
+  // uninstalls the source.
+  ;(window as unknown as Record<string, unknown>).__testFileSource = (() => {
+    let snapshot: { content: string; sidecarJson?: string } | null = null
+    const install = (filename: string) => {
+      setTestFileSource({ filename, read: async () => snapshot })
+    }
+    return {
+      install: (filename: string, content: string, sidecarJson?: string) => {
+        snapshot = { content, sidecarJson }
+        install(filename)
+      },
+      set: (content: string, sidecarJson?: string) => { snapshot = { content, sidecarJson } },
+      remove: () => { snapshot = null },
+      clear: () => { snapshot = null; setTestFileSource(null) },
+    }
+  })()
   ;(window as unknown as Record<string, unknown>).__testListViews = () => {
     const ws = useWorkspaceStore.getState().workspace
     if (!ws) return []

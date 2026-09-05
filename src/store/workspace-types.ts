@@ -42,6 +42,23 @@ export interface UndoState {
 
 export type HighlighterFacet = 'tags' | 'status' | 'tech' | 'teams'
 
+// ─── Disk watch ──────────────────────────────────────────────────────
+
+/** Why an external file change was not applied automatically. */
+export interface DiskConflict {
+  /** Display name of the changed file (e.g. 'payments.dsl'). */
+  filename: string
+  /** What's on disk now, so "Reload" doesn't need another read. */
+  snapshot: { content: string; sidecarJson?: string }
+  /** Content hashes of that snapshot, for "Keep mine" suppression. */
+  hashes: { dsl: string; sidecar: string }
+  /** 'dirty': there are unsaved local edits. 'unparseable': the new text has
+   *  parse errors or parses to an empty model; the canvas is kept as-is. */
+  reason: 'dirty' | 'unparseable'
+  /** Human-readable detail for the 'unparseable' case. */
+  detail?: string
+}
+
 // ─── State Interface ─────────────────────────────────────────────────
 
 export interface WorkspaceState extends UndoState {
@@ -103,12 +120,34 @@ export interface WorkspaceState extends UndoState {
   activeWorkspaceFilename: string | null
   setActiveWorkspaceFilename: (name: string | null) => void
 
+  // Disk watch (TEA-323): reload the workspace when the .dsl changes on disk.
+  /** User preference, persisted. Default on; only effective when a file/folder handle exists. */
+  watchDisk: boolean
+  setWatchDisk: (on: boolean) => void
+  toggleWatchDisk: () => void
+  /** An external change that could not be applied silently — see DiskConflict. */
+  diskConflict: DiskConflict | null
+  setDiskConflict: (conflict: DiskConflict | null) => void
+  /** The watched file disappeared from disk; the in-memory model is kept. */
+  diskFileMissing: boolean
+  setDiskFileMissing: (missing: boolean) => void
+  /** True while the DSL code pane holds text not yet applied (or failing to
+   *  apply) — a disk reload must never hot-swap text under the user's cursor. */
+  codePaneDirty: boolean
+  setCodePaneDirty: (dirty: boolean) => void
+
   // Scope validation
   scopeViolations: ScopeViolation[]
   revalidateScope: () => void
 
   // Workspace lifecycle
   loadWorkspace: (workspace: Workspace) => void
+  /** Swap in a workspace re-read from disk (watch mode). Unlike loadWorkspace
+   *  this keeps the active view when its key survives (else the nearest view
+   *  of the same type, else the first), prunes view history, re-selects the
+   *  surviving selection, and leaves canvas filters alone. Undo history is
+   *  cleared: disk is the source of truth and the workspace was clean. */
+  reloadWorkspaceFromDisk: (workspace: Workspace) => void
   closeWorkspace: () => void
   updateWorkspaceMeta: (patch: { name?: string; description?: string }) => void
   /** Replace the whole workspace from DSL text (the code pane's apply path).

@@ -111,13 +111,22 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
   const jsonInputRef = useRef<HTMLInputElement>(null)
   const dslInputRef = useRef<HTMLInputElement>(null)
 
-  // Load workspace list when entering collection view
+  // Load workspace list when entering collection view, and refresh it when the
+  // tab comes back into focus — files added or removed outside c4hero (another
+  // editor, a `git checkout`) should show up without a reload (TEA-323).
   useEffect(() => {
-    if (view === 'collection') {
+    if (view !== 'collection') return
+    const refresh = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       const dir = getCurrentDirHandle()
-      if (dir) {
-        listCurrentDSLFiles().then(setFolderWorkspaces)
-      }
+      if (dir) listCurrentDSLFiles().then(setFolderWorkspaces)
+    }
+    refresh()
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', refresh)
     }
   }, [view])
 

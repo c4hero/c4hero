@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar,
+  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -289,6 +289,19 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['dsl', 'code', 'editor', 'structurizr', 'text', 'source'],
       when: () => !!store().workspace,
       execute: () => store().toggleCodePanel(),
+    },
+    {
+      id: 'toggle-watch-mode',
+      label: 'Watch Mode',
+      category: 'view',
+      icon: store().watchDisk ? Eye : EyeOff,
+      keywords: ['watch', 'disk', 'reload', 'file', 'sync', 'external', 'git'],
+      when: () => !!store().workspace,
+      execute: () => {
+        const s = store()
+        s.toggleWatchDisk()
+        announce(store().watchDisk ? 'Watch mode on — reloads when the file changes on disk' : 'Watch mode off')
+      },
     },
     {
       id: 'new-view',

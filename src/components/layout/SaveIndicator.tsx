@@ -23,6 +23,7 @@ export default function SaveIndicator() {
   const currentUndoLength = useWorkspaceStore((s) => s.undoStack.length)
   const isDirty = currentUndoLength > 0
   const lastSavedUndoLength = useWorkspaceStore((s) => s.lastSavedUndoLength)
+  const watchDisk = useWorkspaceStore((s) => s.watchDisk)
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [savedUndoLength, setSavedUndoLength] = useState(lastSavedUndoLength)
@@ -80,6 +81,8 @@ export default function SaveIndicator() {
     : isFileDirty ? 'Unsaved changes \u2014 click to save'
     : 'All changes saved'
   const isUnlinked = canLinkFiles && !hasFileHandle && saveStatus === 'idle'
+  const watching = watchDisk && hasFileHandle
+  const tooltipWithWatch = watching && saveStatus === 'idle' ? `${tooltip} · watching for changes on disk` : tooltip
 
   const dotBg = isUnlinked ? 'var(--color-warning)' : dotColor
   const dotShadow = isUnlinked ? '0 0 6px var(--color-warning)' : dotGlow
@@ -99,8 +102,9 @@ export default function SaveIndicator() {
         borderRight: '1px solid var(--color-border)',
         flexShrink: 0,
       }}
-      title={tooltip}
+      title={tooltipWithWatch}
       aria-label={tooltip}
+      data-watching-disk={watching ? 'true' : undefined}
     >
       {!canLinkFiles ? (
         // No File System Access API — clicking saves by triggering a browser

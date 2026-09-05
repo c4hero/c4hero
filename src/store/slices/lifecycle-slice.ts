@@ -62,6 +62,7 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
 export type LifecycleSlice = Pick<WorkspaceState,
   | 'workspace'
   | 'loadWorkspace' | 'closeWorkspace' | 'updateWorkspaceMeta'
+  | 'reloadWorkspaceFromDisk'
   | 'replaceWorkspaceFromDSL'
   | 'scopeViolations' | 'revalidateScope'
   | 'activeWorkspaceFilename' | 'setActiveWorkspaceFilename'
@@ -105,6 +106,8 @@ export const createLifecycleSlice: StateCreator<
       pendingZoomConfirm: null,
       createViewDefaults: null,
       impactTargetIds: null,
+      diskConflict: null,
+      diskFileMissing: false,
       undoStack: [],
       redoStack: [],
       lastSavedUndoLength: 0, // reset so the save indicator doesn't inherit a stale saved position
@@ -115,6 +118,41 @@ export const createLifecycleSlice: StateCreator<
       activeTeamFilter: [],
       lastClearedHighlightFilters: null,
       scopeViolations: validateScope(workspace),
+    })
+  },
+
+  reloadWorkspaceFromDisk: (workspace) => {
+    normalizeWorkspaceShape(workspace)
+    set((s) => {
+      const previousActive = s.activeViewKey ? findViewHelper(s.workspace ?? workspace, s.activeViewKey) : undefined
+      const survivingIds = new Set<string>()
+      forEachElementHelper(workspace, (el) => { survivingIds.add(el.id) })
+
+      s.workspace = workspace
+      // Keep the user's place: same key, else the nearest view of the same
+      // type, else the first view — never dump them onto a random diagram.
+      if (s.activeViewKey && findViewHelper(workspace, s.activeViewKey)) {
+        // unchanged
+      } else if (previousActive) {
+        const sameType = allViewsOf(workspace).find((v) => v.type === previousActive.type)
+        s.activeViewKey = sameType?.key ?? getFirstViewKey(workspace)
+      } else {
+        s.activeViewKey = getFirstViewKey(workspace)
+      }
+      s.viewHistory = s.viewHistory.filter((k) => !!findViewHelper(workspace, k))
+      s.selectedElementIds = s.selectedElementIds.filter((id) => survivingIds.has(id))
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
+      s.focusElementId = null
+      s.pendingDelete = null
+      s.pendingZoomConfirm = null
+      s.impactTargetIds = null
+      s.undoStack = []
+      s.redoStack = []
+      s.lastSavedUndoLength = 0
+      s.diskConflict = null
+      s.diskFileMissing = false
+      s.scopeViolations = validateScope(workspace)
     })
   },
 
@@ -135,6 +173,8 @@ export const createLifecycleSlice: StateCreator<
       pendingZoomConfirm: null,
       createViewDefaults: null,
       impactTargetIds: null,
+      diskConflict: null,
+      diskFileMissing: false,
       undoStack: [],
       redoStack: [],
       lastClearedHighlightFilters: null,

@@ -5,6 +5,7 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useAutoSave } from '@/hooks/useAutoSave'
+import { useDiskWatch } from '@/hooks/useDiskWatch'
 import { useRouteSync, useRefreshRedirect } from '@/hooks/useRouteSync'
 import FloatingTopPill from '@/components/layout/FloatingTopPill'
 import WhatsNewPill from '@/components/whatsnew/WhatsNewPill'
@@ -12,6 +13,7 @@ import FloatingToolRail from '@/components/layout/FloatingToolRail'
 import FloatingViewsPanel from '@/components/layout/FloatingViewsPanel'
 import FloatingInspector from '@/components/layout/FloatingInspector'
 import FloatingBottomStrip from '@/components/layout/FloatingBottomStrip'
+import DiskConflictBar from '@/components/layout/DiskConflictBar'
 import BottomHighlighterBar from '@/components/layout/highlighter/BottomHighlighterBar'
 import FloatingZoomHud from '@/components/layout/FloatingZoomHud'
 import MultiSelectBar from '@/components/layout/MultiSelectBar'
@@ -49,6 +51,7 @@ export default function App() {
 
   useKeyboardShortcuts()
   useAutoSave()
+  useDiskWatch()
   useRouteSync()
   useRefreshRedirect()
 
@@ -87,6 +90,7 @@ export default function App() {
           </ErrorBoundary>
         </main>
         <nav aria-label="Workspace navigation"><FloatingTopPill /></nav>
+        <DiskConflictBar />
         <MultiSelectBar />
         <nav aria-label="Tools"><FloatingToolRail /></nav>
         <FloatingViewsPanel />
