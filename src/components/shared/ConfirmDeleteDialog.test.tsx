@@ -1,8 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
+import { useWorkspaceStore } from '@/store/workspace'
+import type { Workspace } from '@/types/model'
 
-vi.mock('lucide-react', () => ({ Trash2: () => null }))
+vi.mock('lucide-react', () => ({ Trash2: () => null, ArrowRight: () => null }))
+
+function makeWs(): Workspace {
+  return {
+    name: 'Test',
+    model: {
+      people: [{ id: 'alice', type: 'person', name: 'Alice', tags: ['Element', 'Person'], properties: {} }],
+      softwareSystems: [{ id: 'api', type: 'softwareSystem', name: 'API', tags: ['Element', 'Software System'], properties: {}, containers: [] }],
+      relationships: [{ id: 'rel1', sourceId: 'alice', destinationId: 'api', description: 'uses', tags: ['Relationship'], properties: {} }],
+      groups: [],
+      deploymentEnvironments: [],
+    },
+    views: {
+      systemLandscapeViews: [],
+      systemContextViews: [],
+      containerViews: [],
+      componentViews: [],
+      dynamicViews: [],
+      deploymentViews: [],
+      configuration: { styles: { elements: [], relationships: [] } },
+    },
+  }
+}
 
 describe('ConfirmDeleteDialog', () => {
   let onConfirm: ReturnType<typeof vi.fn>
@@ -11,6 +35,7 @@ describe('ConfirmDeleteDialog', () => {
   beforeEach(() => {
     onConfirm = vi.fn()
     onCancel = vi.fn()
+    useWorkspaceStore.getState().closeWorkspace()
   })
 
   it('renders with the message text visible', () => {
@@ -209,6 +234,44 @@ describe('ConfirmDeleteDialog', () => {
     render(<ConfirmDeleteDialog message='Delete this view "Foo"?' onConfirm={() => {}} onCancel={() => {}} />)
     expect(screen.getByRole('button', { name: /^delete$/i })).toBeTruthy()
     expect(screen.queryByRole('list', { name: /cascade impact/i })).toBeNull()
+  })
+
+  it('renders the full removal-impact report inline when targetIds are provided', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    render(
+      <ConfirmDeleteDialog
+        message='Delete "API" from the model?'
+        impact={{
+          elementCount: 1, elementNames: ['API'],
+          descendantContainers: 0, descendantComponents: 0,
+          relationships: 1, scopedViews: 0,
+        }}
+        targetIds={['api']}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    )
+    // The full report replaces the compact bullet list.
+    expect(screen.queryByRole('list', { name: /cascade impact/i })).toBeNull()
+    expect(screen.getByRole('region', { name: /goes away/i })).toBeTruthy()
+    expect(screen.getAllByText('API').length).toBeGreaterThan(0)
+    // Alice depends on the deleted system: she breaks and loses her only link.
+    expect(screen.getByRole('region', { name: /breaks now/i })).toBeTruthy()
+    expect(screen.getByRole('region', { name: /relationships removed/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /delete from model/i })).toBeTruthy()
+  })
+
+  it('falls back to the compact dialog when no workspace is open', () => {
+    render(
+      <ConfirmDeleteDialog
+        message="Delete workspace file?"
+        targetIds={['ghost']}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    )
+    expect(screen.queryByRole('region', { name: /goes away/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeTruthy()
   })
 
   it('keeps "Delete" label when impact has all zero counts', () => {

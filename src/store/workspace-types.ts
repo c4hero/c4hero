@@ -22,6 +22,9 @@ export interface CascadeImpact {
 export interface PendingDelete {
   message: string
   impact?: CascadeImpact
+  /** Element ids being deleted — when set, the confirmation dialog renders the
+   *  full removal-impact report (what breaks, orphans, affected views) inline. */
+  targetIds?: string[]
   onConfirm: () => void
 }
 
@@ -59,7 +62,7 @@ export interface WorkspaceState extends UndoState {
   commandPaletteOpen: boolean
   pendingDelete: PendingDelete | null
   confirmDelete: (
-    payload: string | { message: string; impact?: CascadeImpact },
+    payload: string | { message: string; impact?: CascadeImpact; targetIds?: string[] },
     onConfirm: () => void,
   ) => void
   cancelDelete: () => void
@@ -293,5 +296,10 @@ export interface WorkspaceState extends UndoState {
   setTeamFilterMode: (mode: 'any' | 'all') => void
   createViewDialogOpen: boolean
   setCreateViewDialogOpen: (open: boolean) => void
+  /** Elements the impact panel is analysing, snapshotted when it opened.
+   *  Null when the panel is closed. */
+  impactTargetIds: string[] | null
+  openImpactPanel: (ids: string[]) => void
+  closeImpactPanel: () => void
   setPresentationMode: (on: boolean) => void
 }

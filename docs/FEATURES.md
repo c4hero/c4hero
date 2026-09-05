@@ -31,6 +31,13 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 - **Inspector** (right panel) for element and relationship properties: name, description, technology, owner (with autocomplete from existing teams), URL, status, tags.
 - **Add Element panel** (left): quick-create new elements or pull existing-but-out-of-view elements onto the canvas. Auto-wires relationships from the model on add.
 - **Multi-select** mode (M) for batch operations: group, delete, duplicate.
+- **Removal impact** — before you delete anything, see exactly what goes with it:
+  the children rolled up, every relationship that loses an endpoint, the elements
+  that pointed at it (and what pointed at those, a few hops out), the elements
+  left with nothing attached, and the views that disappear because their scope
+  element did. Deterministic — counted off the model, never estimated. Open it
+  from the inspector or the command palette, select the blast radius on the
+  canvas, then delete through the usual confirmation.
 - **Highlighter panel** (H): tag, status, technology, and team filters that stack across facets to highlight matching subgraphs without hiding the rest of the diagram. Each facet has Any-of / All-of mode.
 - **Search** (⌘F): jump to any element across views.
 - **Command palette** (⌘K): every action is reachable from here, with shortcuts shown alongside.

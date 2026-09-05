@@ -17,6 +17,7 @@ vi.mock('lucide-react', () => ({
   Trash2: () => null,
   Lock: () => null,
   LockOpen: () => null,
+  Radar: () => null,
   RefreshCw: () => null,
   AlertTriangle: () => null,
   Settings: () => null,
@@ -81,6 +82,16 @@ describe('RightPanel', () => {
     useWorkspaceStore.getState().selectElements(['alice'])
     render(<RightPanel />)
     expect(screen.getByText('Person')).toBeTruthy()
+  })
+
+  it('has no standalone impact button — the delete confirmation carries the report', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectElements(['alice'])
+    render(<RightPanel />)
+
+    // Exploratory impact stays reachable via the command palette only; the
+    // inspector's delete flow surfaces the full report in its confirmation.
+    expect(screen.queryByRole('button', { name: 'What breaks if this is removed' })).toBeNull()
   })
 
   it('tucks the element ID behind a collapsed Advanced section', async () => {

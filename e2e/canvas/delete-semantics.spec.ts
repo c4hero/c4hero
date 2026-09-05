@@ -50,9 +50,17 @@ test.describe('Delete semantics', () => {
 
     const dialog = workspace.page.getByRole('dialog', { name: /confirm delete/i })
     await expect(dialog).toBeVisible()
-    // Impact list should mention the actual cascade scope
-    await expect(dialog.getByRole('list', { name: /cascade impact/i })).toBeVisible()
-    await expect(dialog.getByRole('listitem').filter({ hasText: new RegExp(`${sys!.containers.length} container`) })).toBeVisible()
+    // The confirmation embeds the full removal-impact report. Its "Goes away"
+    // section is the cascade scope the old compact impact list summarised: the
+    // target plus every child rolled up with it.
+    await expect(dialog.locator('[aria-label="Removal impact"]')).toBeVisible()
+    const goesAway = dialog.getByRole('region', { name: 'Goes away' })
+    await expect(goesAway).toBeVisible()
+    const rolledUp = sys!.containers.reduce((n, c) => n + 1 + c.components.length, 0)
+    await expect(
+      goesAway.getByRole('heading', { name: new RegExp(`Goes away\\s*\\(${1 + rolledUp}\\)`) })
+    ).toBeVisible()
+    await expect(goesAway.getByText(sys!.containers[0].name).first()).toBeVisible()
 
     await dialog.getByRole('button', { name: /delete from model/i }).click()
 

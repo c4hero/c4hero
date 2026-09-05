@@ -394,10 +394,11 @@ test.describe('multi-select bar — delete', () => {
     // Click "Delete from model" in the toolbar
     await workspace.page.locator('[data-canvas-chrome="multi-select-bar"]').getByRole('button', { name: /delete from model/i }).click()
 
-    // Confirm dialog appears with impact list
+    // Confirm dialog appears with the removal-impact report
     const dialog = workspace.page.getByRole('dialog', { name: /confirm delete/i })
     await expect(dialog).toBeVisible()
-    await expect(dialog.getByRole('list', { name: /cascade impact/i })).toBeVisible()
+    await expect(dialog.locator('[aria-label="Removal impact"]')).toBeVisible()
+    await expect(dialog.getByRole('region', { name: 'Goes away' })).toBeVisible()
   })
 })
 

@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles,
+  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -164,10 +164,19 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         if (ids.length === 0) return
         const impact = computeCascadeImpact(s.workspace, ids)
         s.confirmDelete(
-          { message: formatImpactSummary(impact), impact },
+          { message: formatImpactSummary(impact), impact, targetIds: ids },
           () => s.deleteElements(ids),
         )
       },
+    },
+    {
+      id: 'impact-of-removal',
+      label: 'What breaks if I remove this?',
+      category: 'edit',
+      icon: Radar,
+      keywords: ['impact', 'blast', 'radius', 'remove', 'delete', 'dependents', 'risk', 'what if'],
+      when: () => store().selectedElementIds.length > 0,
+      execute: () => { store().openImpactPanel(store().selectedElementIds) },
     },
     {
       id: 'select-all',

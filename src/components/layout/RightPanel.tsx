@@ -248,6 +248,9 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               <EyeOff size={14} />
             </button>
           )}
+          {/* No standalone impact button here: the delete confirmation shows the
+              full removal-impact report itself, and exploratory impact (without
+              deleting) stays reachable via the command palette. */}
           {isFocal ? (
             <button
               disabled
@@ -263,7 +266,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               onClick={() => {
                 if (!workspace) return
                 const impact = computeCascadeImpact(workspace, [element.id])
-                confirmDelete({ message: formatImpactSummary(impact), impact }, () => deleteElement(element.id))
+                confirmDelete({ message: formatImpactSummary(impact), impact, targetIds: [element.id] }, () => deleteElement(element.id))
               }}
               className="btn-icon !min-h-7 !min-w-7 !p-1"
               aria-label="Delete from model"
