@@ -289,7 +289,7 @@ test.describe('Collection workspace canvas DSL journey', () => {
     await workspace.fillEditableField('Element name', workspaceName)
     await workspace.fillEditableField('Description', 'Handles customer checkout traffic')
 
-    await workspace.clickCanvas({ x: 30, y: 180 })
+    await workspace.clickCanvas({ x: 30, y: 30 })
     await page.keyboard.press('Shift+P')
     await workspace.expectInspectorFor('New Person')
     await workspace.fillEditableField('Element name', 'Shopper')
@@ -301,7 +301,7 @@ test.describe('Collection workspace canvas DSL journey', () => {
     await workspace.fillEditableField('Description', 'Places orders')
     await workspace.fillEditableField('Technology', 'HTTPS')
 
-    await workspace.clickCanvas({ x: 30, y: 180 })
+    await workspace.clickCanvas({ x: 30, y: 30 })
     await workspace.createView('Container', 'Checkout Containers', workspaceName)
     await expect(page.getByRole('button', { name: 'Switch view' })).toContainText('Checkout Containers')
 
@@ -311,7 +311,7 @@ test.describe('Collection workspace canvas DSL journey', () => {
     await workspace.fillEditableField('Description', 'Serves checkout UI')
     await workspace.fillEditableField('Technology', 'React')
 
-    await workspace.clickCanvas({ x: 30, y: 180 })
+    await workspace.clickCanvas({ x: 30, y: 30 })
     await page.keyboard.press('Shift+C')
     await workspace.expectInspectorFor('New Container')
     await workspace.fillEditableField('Element name', 'Order API')

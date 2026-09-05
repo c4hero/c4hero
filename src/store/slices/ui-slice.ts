@@ -15,6 +15,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'searchOpen' | 'commandPaletteOpen'
   | 'canvasSettingsOpen' | 'canvasGuideOpen' | 'addElementPanelOpen' | 'highlighterOpenFacet'
   | 'viewsPanelOpen' | 'createViewDialogOpen'
+  | 'codePanelOpen' | 'setCodePanelOpen' | 'toggleCodePanel'
   | 'impactTargetIds' | 'openImpactPanel' | 'closeImpactPanel'
   | 'pendingDelete' | 'confirmDelete' | 'cancelDelete'
   | 'presentationMode' | 'setPresentationMode'
@@ -55,6 +56,7 @@ export const createUiSlice: StateCreator<
   highlighterOpenFacet: null,
   viewsPanelOpen: false,
   createViewDialogOpen: false,
+  codePanelOpen: false,
   impactTargetIds: null,
   pendingDelete: null,
   presentationMode: false,
@@ -122,6 +124,11 @@ export const createUiSlice: StateCreator<
   setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),
   setViewsPanelOpen: (open) => set({ viewsPanelOpen: open }),
   toggleViewsPanel: () => set((s) => { s.viewsPanelOpen = !s.viewsPanelOpen }),
+  setCodePanelOpen: (open) => set({ codePanelOpen: open, commandPaletteOpen: false }),
+  toggleCodePanel: () => set((s) => {
+    s.codePanelOpen = !s.codePanelOpen
+    if (s.codePanelOpen) s.commandPaletteOpen = false
+  }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
 
   // The targets are snapshotted when the panel opens: the analysis answers a

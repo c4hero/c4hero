@@ -21,6 +21,7 @@ import {
   FolderSymlink,
   LayoutGrid,
   Sparkles,
+  Code,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
@@ -430,6 +431,8 @@ export default function FloatingTopPill() {
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow icon={Sparkles} label="AI assistant…" onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setAiPanelOpen(true) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+            <MenuItemRow icon={Code} label="DSL code…" onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setCodePanelOpen(true) }} />
+            <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow
@@ -471,6 +474,7 @@ export default function FloatingTopPill() {
           currentDescription={workspace?.description ?? ''}
           onUpdateMeta={(patch) => useWorkspaceStore.getState().updateWorkspaceMeta(patch)}
           onSelect={handleSwitchWorkspace}
+          onEditDsl={() => { setWsPickerOpen(false); useWorkspaceStore.getState().setCodePanelOpen(true) }}
           onNewWorkspace={() => { setWsPickerOpen(false); setShowNewWorkspace(true) }}
           onManageWorkspaces={handleManageWorkspaces}
           onChangeCollection={handleChangeCollection}
@@ -547,6 +551,7 @@ function WorkspaceSwitcherPanel({
   currentDescription,
   onUpdateMeta,
   onSelect,
+  onEditDsl,
   onNewWorkspace,
   onManageWorkspaces,
   onChangeCollection,
@@ -558,6 +563,7 @@ function WorkspaceSwitcherPanel({
   currentDescription: string
   onUpdateMeta: (patch: { name?: string; description?: string }) => void
   onSelect: (filename: string) => Promise<void>
+  onEditDsl: () => void
   onNewWorkspace: () => void
   onManageWorkspaces: () => void
   onChangeCollection: () => void
@@ -632,6 +638,25 @@ function WorkspaceSwitcherPanel({
               outline: 'none', resize: 'none', fontFamily: 'inherit',
             }}
           />
+          {/* The workspace's plain-text form — opens the DSL editor window */}
+          <button
+            onClick={onEditDsl}
+            className="hover-subtle"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '7px 10px', borderRadius: 8,
+              border: '1px solid var(--color-border)',
+              background: 'transparent',
+              fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)',
+              cursor: 'pointer',
+            }}
+          >
+            <Code size={13} />
+            Edit as DSL
+            <kbd style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 5px' }}>
+              mod+E
+            </kbd>
+          </button>
         </div>
 
         {/* Header */}

@@ -281,6 +281,16 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       execute: () => store().toggleViewsPanel(),
     },
     {
+      id: 'toggle-code-pane',
+      label: 'Toggle DSL Code Pane',
+      category: 'view',
+      icon: FileCode,
+      shortcut: `${mod}E`,
+      keywords: ['dsl', 'code', 'editor', 'structurizr', 'text', 'source'],
+      when: () => !!store().workspace,
+      execute: () => store().toggleCodePanel(),
+    },
+    {
       id: 'new-view',
       label: 'New View',
       category: 'view',

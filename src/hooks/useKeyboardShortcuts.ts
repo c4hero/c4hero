@@ -24,6 +24,11 @@ const META_SHORTCUTS: Record<string, KeyHandler> = {
   'mod+f': (store) => {
     store.setSearchOpen(!store.searchOpen)
   },
+  // Meta (not global) so the pane can be closed while focus is inside its
+  // CodeMirror editor, which is contentEditable and suppresses global keys.
+  'mod+e': (store) => {
+    if (store.workspace) store.toggleCodePanel()
+  },
 }
 
 /**
@@ -233,6 +238,9 @@ export function useKeyboardShortcuts() {
       // Meta shortcuts (work even in inputs)
       const combo = getKeyCombo(e)
       if (META_SHORTCUTS[combo]) {
+        // Inside the DSL code editor, mod+f belongs to the editor's own
+        // find panel (CodeMirror searchKeymap) — don't open app search.
+        if (combo === 'mod+f' && target.closest?.('[data-code-pane-editor]')) return
         e.preventDefault()
         META_SHORTCUTS[combo](store, rf)
         return
