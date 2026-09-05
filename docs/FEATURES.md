@@ -25,6 +25,7 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 - **Single-file mode** (all browsers): open a `.dsl` file directly. Saves either go back to the source handle (where supported) or trigger a download.
 - **Recent collections / files** are remembered in `localStorage` and re-openable from the welcome screen.
 - **Crash recovery**: the active workspace is mirrored to `localStorage`. If the tab crashes or you close it mid-edit, the next launch offers to restore.
+- **Watch mode**: the open `.dsl` (and its sidecar) is polled while the tab is visible and reloaded when it changes outside c4hero — an external editor, a `git checkout`. Active view, viewport, and selection are kept. If you have unsaved local edits, a conflict bar offers *Reload* or *Keep mine* instead of picking for you; unparseable text is reported and not applied; a deleted file leaves your model in place. c4hero's own saves are recognised and never trigger a reload. Toggle via the *Watch Mode* command (default on when a file or folder is linked).
 
 ## Editing UX
 

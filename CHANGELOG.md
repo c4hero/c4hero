@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Watch mode: the canvas follows the file on disk.** Disk sync used to be
+  one-way — c4hero wrote, nothing read back — so editing the `.dsl` in another
+  editor or switching git branches left a stale diagram that the next autosave
+  would silently overwrite. Now the open workspace (and its sidecar) is watched
+  and reloaded within a couple of seconds of changing, keeping your active
+  view, viewport and selection. Check out the PR branch and the diagram is just
+  there. Unsaved local edits are never discarded: a conflict bar offers
+  *Reload (discard my changes)* or *Keep mine*. Text that doesn't parse, or
+  parses to an empty model, is reported and left unapplied; a deleted file
+  leaves your work on the canvas with a hint to save. Only visible tabs poll,
+  c4hero's own saves never count as changes, and the collection list refreshes
+  when the tab regains focus. Toggle it with the *Watch Mode* command;
+  default on wherever a file or folder is linked. (TEA-323)
+
 ## [0.5.0] - 2026-09-05
 
 ### Added

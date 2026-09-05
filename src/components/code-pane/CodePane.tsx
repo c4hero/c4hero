@@ -308,6 +308,8 @@ export default function CodePane() {
         // the user has learned the pane is editable, stop teaching it.
         const prev = statusRef.current
         statusRef.current = s
+        // Disk watch must not hot-swap the model under unapplied/broken text.
+        useWorkspaceStore.getState().setCodePaneDirty(s.pendingApply || s.errors.length > 0)
         if (prev.pendingApply && !s.pendingApply && s.errors.length === 0) {
           setEverApplied(true)
           writeString(EDITED_STORAGE_KEY, '1')
@@ -361,6 +363,7 @@ export default function CodePane() {
     return () => {
       unsubscribe()
       engine.dispose()
+      useWorkspaceStore.getState().setCodePaneDirty(false)
       view.destroy()
       viewRef.current = null
     }
