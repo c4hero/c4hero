@@ -2,11 +2,13 @@
 // changes. The pill/dialog UI (components/whatsnew) shows WHATS_NEW when its id
 // differs from the one the user last dismissed.
 //
-// Authoring convention: bump this as part of the PR that ships a user-visible
-// feature — new `id` (date-slug), fresh `items`, user-facing language. Leave it
-// alone for fixes/chores nobody needs an announcement for. `null` keeps the
-// whole feature dormant, which is also the "off switch" for forks that don't
-// want release notes: no config, no code changes, just no content.
+// Authoring convention: bump this once per release, in the release PR — new
+// `id` (date-slug), fresh `items`, user-facing language — curated across
+// everything that shipped rather than accreted one bullet per feature PR.
+// Per-PR changelog entries in CHANGELOG.md are what feed it. Leave it alone for
+// fixes/chores nobody needs an announcement for. `null` keeps the whole feature
+// dormant, which is also the "off switch" for forks that don't want release
+// notes: no config, no code changes, just no content.
 
 export interface WhatsNewItem {
   title: string
@@ -26,25 +28,27 @@ export interface WhatsNewRelease {
 }
 
 export const WHATS_NEW: WhatsNewRelease | null = {
-  // The "-r2" re-arms this announcement for users who visited during the
-  // window where the first-launch rule silently seeded them (see below).
-  id: '2026-08-deployment-dynamic-views-r2',
-  date: 'August 2026',
+  id: '2026-09-code-pane-impact-export',
+  date: 'September 2026',
   items: [
     {
-      title: 'Deployment views',
-      body: 'Model deployment environments — nodes, infrastructure, and container/system instances — and see them rendered as nested boundaries on the canvas, with relationships drawn automatically between instances.',
+      title: 'Live DSL code pane',
+      body: 'Open the workspace as Structurizr DSL beside the canvas and edit either one — changes flow both ways. Your layout survives the round trip, and a document that does not parse simply never applies.',
     },
     {
-      title: 'Dynamic views',
-      body: 'Author ordered interaction steps over your model and see them numbered on the diagram, including repeated steps and responses.',
+      title: 'See what breaks before you delete',
+      body: 'Ask what happens if an element is removed and get the exact blast radius: what goes with it, which relationships lose an end, what depended on it, and which views disappear. Counted from your model, not estimated.',
     },
     {
-      title: 'Clearer scoped views',
-      body: 'The deployment topology editor now shows the view’s scope, flags elements the scope hides, and links straight to the unscoped view.',
+      title: 'Export one interactive HTML file',
+      body: 'Every view, rendered and wrapped in a small read-only viewer with tabs, zoom, drill-through and search. No dependencies and no network calls, so it opens from disk or a wiki years later.',
+    },
+    {
+      title: 'Readable element IDs',
+      body: 'Elements now take a readable id derived from their name instead of a random string, and you can edit it. Exported DSL reads like something a person wrote.',
     },
   ],
-  link: { label: 'Full release notes', url: 'https://github.com/c4hero/c4hero/blob/main/CHANGELOG.md' },
+  link: { label: 'Full release notes', url: 'https://c4hero.com/changelog' },
 }
 
 /** Build-time opt-in: the what's-new pill only ever shows on builds with
