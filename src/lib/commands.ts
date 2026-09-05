@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles,
+  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -15,6 +15,8 @@ import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import { announce } from '@/lib/announce'
+import { useSettingsStore } from '@/store/settings'
+import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
 import type { ReactFlowInstance } from '@xyflow/react'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -162,10 +164,19 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         if (ids.length === 0) return
         const impact = computeCascadeImpact(s.workspace, ids)
         s.confirmDelete(
-          { message: formatImpactSummary(impact), impact },
+          { message: formatImpactSummary(impact), impact, targetIds: ids },
           () => s.deleteElements(ids),
         )
       },
+    },
+    {
+      id: 'impact-of-removal',
+      label: 'What breaks if I remove this?',
+      category: 'edit',
+      icon: Radar,
+      keywords: ['impact', 'blast', 'radius', 'remove', 'delete', 'dependents', 'risk', 'what if'],
+      when: () => store().selectedElementIds.length > 0,
+      execute: () => { store().openImpactPanel(store().selectedElementIds) },
     },
     {
       id: 'select-all',
@@ -406,6 +417,32 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         if (!s.workspace) return
         try {
           await saveDSLFile(serializeDSL(s.workspace), `${s.workspace.name ?? 'workspace'}.dsl`)
+        } catch (error) {
+          announce(error instanceof Error ? error.message : 'Export failed')
+        }
+      },
+    },
+    {
+      id: 'export-html',
+      label: 'Export as interactive HTML',
+      category: 'export',
+      icon: FileCode,
+      keywords: ['export', 'html', 'share', 'standalone', 'offline', 'wiki', 'interactive'],
+      when: () => !!store().workspace,
+      execute: async () => {
+        const s = store()
+        if (!s.workspace) return
+        try {
+          // Loaded on demand — the standalone viewer pulls in the layout engine.
+          const { exportWorkspaceAsHtml, htmlExportFilename } = await import('@/lib/htmlExport')
+          const theme = useSettingsStore.getState().colorTheme
+          const html = exportWorkspaceAsHtml(s.workspace, {
+            themeStyles: THEMES[theme],
+            background: THEME_CANVAS_BACKGROUNDS[theme] ?? undefined,
+            generator: `c4hero ${__APP_VERSION__}`,
+          })
+          downloadFile(html, htmlExportFilename(s.workspace), 'text/html')
+          announce('Exported interactive HTML')
         } catch (error) {
           announce(error instanceof Error ? error.message : 'Export failed')
         }

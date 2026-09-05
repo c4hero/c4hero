@@ -6,15 +6,18 @@ import FloatingInspector from './FloatingInspector'
 vi.mock('lucide-react', () => ({
   X: () => null,
   MoreHorizontal: () => null,
+  RefreshCw: () => null,
   Plus: () => null,
   ArrowRight: () => null,
   ExternalLink: () => null,
   Eye: () => null,
   Layers: () => null,
   Trash2: () => null,
+  Radar: () => null,
   AlertTriangle: () => null,
   Settings: () => null,
   ChevronDown: () => null,
+  ChevronRight: () => null,
   // elementMeta icons
   UserRound: () => null,
   Globe: () => null,

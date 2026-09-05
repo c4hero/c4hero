@@ -606,6 +606,13 @@ export default function Canvas() {
       setEdges(initialEdges)
       setNodes((prev) => {
         const byId = new Map(initialNodes.map(n => [n.id, n]))
+        // An element ID edit (updateElementId, or a name commit re-deriving an
+        // auto ID) changes node ids without changing the structural signal.
+        // The per-node merge below keys on id, so the mounted nodes would keep
+        // their stale ids — and React Flow drops every edge whose endpoint id
+        // no longer matches a node. Remount from initialNodes instead; the
+        // positions are already carried in them, so the viewport stays put.
+        if (prev.some(n => !byId.has(n.id))) return initialNodes
         return prev.map(n => {
           const next = byId.get(n.id)
           // draggable must be carried over here too: locking a node changes
@@ -986,6 +993,11 @@ export default function Canvas() {
 
   // Safety: never leave the chrome faded if we unmount mid-drag.
   useEffect(() => () => document.documentElement.removeAttribute('data-canvas-panning'), [])
+
+  // Same for the minimap's hide timer: unmounting between a pan ending and the
+  // 1500ms fade leaves it queued, and it then calls setState on a torn-down
+  // tree — which in a test environment is a hard error, not just a warning.
+  useEffect(() => () => { if (hideTimer.current) clearTimeout(hideTimer.current) }, [])
 
   const multiSelectModeRef = useRef(multiSelectMode)
   useEffect(() => { multiSelectModeRef.current = multiSelectMode }, [multiSelectMode])

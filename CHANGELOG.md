@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **See what breaks before you delete it.** The inspector and the command
+  palette can now answer "what happens if I remove this?" for any element or
+  selection: the children that go with it, every relationship that loses an
+  endpoint, the elements that depended on it (and what depended on those, a few
+  hops out), anything left with nothing attached, and the views that disappear
+  because their scope element did. It's a plain graph walk over the model using
+  the same cascade rules as the real delete — nothing is estimated, and no AI is
+  involved. Select the blast radius on the canvas from there, or go ahead and
+  delete through the usual confirmation. (TEA-72)
+- **Export the whole workspace as one interactive HTML file.** Every view, laid
+  out and rendered as inline SVG, wrapped in a small read-only viewer: view
+  tabs, pan and zoom, drill-through, search and an element details panel. The
+  file has no dependencies and makes no network requests — its own
+  `Content-Security-Policy` forbids them — so it works from disk, in a wiki, as
+  a chat attachment or from a years-old build artifact, with or without c4hero.
+  Exports are deterministic, so they diff cleanly in review. Find it in the
+  Export dialog or the command palette ("Export as interactive HTML"). (TEA-88)
+
 ## [0.4.0] - 2026-08-30
 
 ### Added

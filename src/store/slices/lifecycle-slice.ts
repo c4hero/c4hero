@@ -104,6 +104,7 @@ export const createLifecycleSlice: StateCreator<
       pendingDelete: null,  // dismiss any in-flight delete confirmation from a previous workspace
       pendingZoomConfirm: null,
       createViewDefaults: null,
+      impactTargetIds: null,
       undoStack: [],
       redoStack: [],
       lastSavedUndoLength: 0, // reset so the save indicator doesn't inherit a stale saved position
@@ -133,6 +134,7 @@ export const createLifecycleSlice: StateCreator<
       pendingDelete: null, // dismiss any in-flight delete confirmation dialog
       pendingZoomConfirm: null,
       createViewDefaults: null,
+      impactTargetIds: null,
       undoStack: [],
       redoStack: [],
       lastClearedHighlightFilters: null,

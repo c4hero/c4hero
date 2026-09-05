@@ -17,6 +17,8 @@ vi.mock('lucide-react', () => ({
   Trash2: () => null,
   Lock: () => null,
   LockOpen: () => null,
+  Radar: () => null,
+  RefreshCw: () => null,
   AlertTriangle: () => null,
   Settings: () => null,
   ChevronDown: () => null,
@@ -80,6 +82,38 @@ describe('RightPanel', () => {
     useWorkspaceStore.getState().selectElements(['alice'])
     render(<RightPanel />)
     expect(screen.getByText('Person')).toBeTruthy()
+  })
+
+  it('has no standalone impact button — the delete confirmation carries the report', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectElements(['alice'])
+    render(<RightPanel />)
+
+    // Exploratory impact stays reachable via the command palette only; the
+    // inspector's delete flow surfaces the full report in its confirmation.
+    expect(screen.queryByRole('button', { name: 'What breaks if this is removed' })).toBeNull()
+  })
+
+  it('tucks the element ID behind a collapsed Advanced section', async () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectElements(['alice'])
+    render(<RightPanel />)
+
+    // Collapsed by default — the ID field is not in the document.
+    expect(screen.queryByLabelText('Element ID')).toBeNull()
+
+    const disclosure = screen.getByRole('button', { name: /advanced/i })
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false')
+    await userEvent.click(disclosure)
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true')
+
+    // Expanded: the ID is editable and commits through updateElementId.
+    const idField = screen.getByLabelText('Element ID') as HTMLInputElement
+    expect(idField.value).toBe('alice')
+    await userEvent.clear(idField)
+    await userEvent.type(idField, 'customer')
+    fireEvent.blur(idField)
+    expect(useWorkspaceStore.getState().workspace!.model.people[0].id).toBe('customer')
   })
 
   it('shows relationship description when relationship selected', () => {

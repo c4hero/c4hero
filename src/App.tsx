@@ -29,6 +29,7 @@ const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
 const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
 const AiPanel = lazy(() => import('@/components/ai/AiPanel'))
 const CodePane = lazy(() => import('@/components/code-pane/CodePane'))
+const ImpactDialog = lazy(() => import('@/components/impact/ImpactDialog'))
 
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -40,6 +41,7 @@ export default function App() {
   const aiPanelOpen = useWorkspaceStore((s) => s.aiPanelOpen)
   const setAiPanelOpen = useWorkspaceStore((s) => s.setAiPanelOpen)
   const aiSettingsOpen = useWorkspaceStore((s) => s.aiSettingsOpen)
+  const impactTargetIds = useWorkspaceStore((s) => s.impactTargetIds)
   const setAiSettingsOpen = useWorkspaceStore((s) => s.setAiSettingsOpen)
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const navigate = useNavigate()
@@ -165,6 +167,7 @@ export default function App() {
         <ConfirmDeleteDialog
           message={pendingDelete.message}
           impact={pendingDelete.impact}
+          targetIds={pendingDelete.targetIds}
           onConfirm={() => { pendingDelete.onConfirm(); cancelDelete() }}
           onCancel={cancelDelete}
         />
@@ -173,6 +176,14 @@ export default function App() {
       {/* Zoom-in confirm — shown when a user clicks zoom on an element with
           no existing child view. Offers fast create or "Customize…" for full control. */}
       <ZoomConfirmDialog />
+
+      {/* Removal impact — what a delete would take with it, shown before the
+          user commits to one. */}
+      {onCanvas && impactTargetIds !== null && (
+        <Suspense fallback={<LoadingDot />}>
+          <ImpactDialog />
+        </Suspense>
+      )}
 
       {/* What's-new pill — outside routes so it greets the user wherever they
           land (welcome or canvas); presentation mode returns earlier and never

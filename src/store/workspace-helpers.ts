@@ -178,6 +178,85 @@ export function uniqueElementName(base: string, ws: Workspace): string {
   return `${base} ${n}`
 }
 
+/** Every ID that lives in the workspace's DSL identifier namespace: model
+ *  elements, relationships, groups, and the deployment tree. Used to keep
+ *  user-set and derived element IDs collision-free (the serializer would
+ *  otherwise suffix-rename on export, breaking ID stability). */
+export function collectTakenIds(ws: Workspace): Set<string> {
+  const taken = new Set<string>()
+  forEachElementHelper(ws, (el) => { taken.add(el.id) })
+  for (const r of ws.model.relationships) taken.add(r.id)
+  for (const g of ws.model.groups) taken.add(g.id)
+  const walkNode = (n: DeploymentNode): void => {
+    taken.add(n.id)
+    for (const i of n.infrastructureNodes) taken.add(i.id)
+    for (const ci of n.containerInstances) taken.add(ci.id)
+    for (const si of n.softwareSystemInstances) taken.add(si.id)
+    for (const child of n.children) walkNode(child)
+  }
+  for (const env of ws.model.deploymentEnvironments) {
+    taken.add(env.id)
+    for (const n of env.deploymentNodes) walkNode(n)
+  }
+  return taken
+}
+
+/** Rewrite every reference to a model element's ID, in place. The caller has
+ *  already validated the new ID (format, uniqueness). Returns the auto-view
+ *  key renames so the caller can patch view-key references held outside the
+ *  workspace (activeViewKey, viewHistory).
+ *
+ *  Covers: the element itself, relationship endpoints, group membership, view
+ *  membership, view scope fields, dynamic-step endpoints, deployment
+ *  instances, and the keys of parser-synthesised auto views (they embed the
+ *  scope element's ID, e.g. `SystemContext-<id>` — left stale, the layout
+ *  sidecar written against the old key would orphan on the next import). */
+export function renameElementId(ws: Workspace, oldId: string, newId: string): { from: string; to: string }[] {
+  forEachElementHelper(ws, (el) => {
+    if (el.id !== oldId) return false
+    el.id = newId
+    return true
+  })
+  for (const r of ws.model.relationships) {
+    if (r.sourceId === oldId) r.sourceId = newId
+    if (r.destinationId === oldId) r.destinationId = newId
+  }
+  for (const g of ws.model.groups) {
+    g.elementIds = g.elementIds.map(id => (id === oldId ? newId : id))
+  }
+  const walkNode = (n: DeploymentNode): void => {
+    for (const ci of n.containerInstances) {
+      if (ci.containerId === oldId) ci.containerId = newId
+    }
+    for (const si of n.softwareSystemInstances) {
+      if (si.softwareSystemId === oldId) si.softwareSystemId = newId
+    }
+    for (const child of n.children) walkNode(child)
+  }
+  for (const env of ws.model.deploymentEnvironments) {
+    for (const n of env.deploymentNodes) walkNode(n)
+  }
+  const keyRenames: { from: string; to: string }[] = []
+  forEachView(ws, (v) => {
+    for (const el of v.elements) {
+      if (el.id === oldId) el.id = newId
+    }
+    for (const r of v.relationships) {
+      if (r.sourceId === oldId) r.sourceId = newId
+      if (r.destinationId === oldId) r.destinationId = newId
+    }
+    if (v.softwareSystemId === oldId) v.softwareSystemId = newId
+    if (v.containerId === oldId) v.containerId = newId
+    if (v.autoKey && v.key.split('-').includes(oldId)) {
+      const from = v.key
+      v.key = v.key.split('-').map(seg => (seg === oldId ? newId : seg)).join('-')
+      keyRenames.push({ from, to: v.key })
+    }
+  })
+  invalidateElementIndex(ws)
+  return keyRenames
+}
+
 /** Add an element to the active view (no-op if no view is active or the
  *  element is already present). */
 /** Which element types each C4 view kind may show — a higher-level view never
@@ -436,7 +515,10 @@ export function duplicateElementsInTree(
   ws: Workspace,
   ids: string[],
   activeViewKey: string,
-  nanoid: () => string,
+  /** Mint a fresh unique ID — derived from `name` when given (elements),
+   *  random otherwise (relationships). Must track its own mints: clones are
+   *  built before they're pushed, so the workspace alone can't dedupe them. */
+  freshId: (name?: string) => string,
 ): string[] {
   const newIds: string[] = []
   const view = findViewHelper(ws, activeViewKey)
@@ -454,26 +536,30 @@ export function duplicateElementsInTree(
     const inView = view.elements.find((e) => e.id === id)
     const offsetX = (inView?.x ?? 200) + 60
     const offsetY = (inView?.y ?? 200) + 30
-    const newId = nanoid()
+    const newName = uniqueElementName(`${element.name} copy`, ws)
+    const newId = freshId(newName)
     let cloned = false
 
     if (element.type === 'person') {
       ws.model.people.push({
         ...deepCloneMaybeDraft(element),
         id: newId,
-        name: uniqueElementName(`${element.name} copy`, ws),
+        idIsAuto: true,
+        name: newName,
       })
       cloned = true
     } else if (element.type === 'softwareSystem') {
       const clonedContainers = element.containers.map((c) => ({
         ...deepCloneMaybeDraft(c),
-        id: nanoid(),
-        components: c.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: nanoid() })),
+        id: freshId(c.name),
+        idIsAuto: true,
+        components: c.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: freshId(comp.name), idIsAuto: true })),
       }))
       ws.model.softwareSystems.push({
         ...deepCloneMaybeDraft(element),
         id: newId,
-        name: uniqueElementName(`${element.name} copy`, ws),
+        idIsAuto: true,
+        name: newName,
         containers: clonedContainers,
       })
       cloned = true
@@ -483,8 +569,9 @@ export function duplicateElementsInTree(
         parent.containers.push({
           ...deepCloneMaybeDraft(element),
           id: newId,
-          name: uniqueElementName(`${element.name} copy`, ws),
-          components: element.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: nanoid() })),
+          idIsAuto: true,
+          name: newName,
+          components: element.components.map((comp) => ({ ...deepCloneMaybeDraft(comp), id: freshId(comp.name), idIsAuto: true })),
         })
         cloned = true
       }
@@ -495,7 +582,8 @@ export function duplicateElementsInTree(
             container.components.push({
               ...deepCloneMaybeDraft(element),
               id: newId,
-              name: uniqueElementName(`${element.name} copy`, ws),
+              idIsAuto: true,
+              name: newName,
             })
             cloned = true
             break outer
@@ -553,7 +641,7 @@ export function duplicateElementsInTree(
     const newSourceId = idMapping.get(rel.sourceId)
     const newDestId = idMapping.get(rel.destinationId)
     if (newSourceId && newDestId) {
-      const newRelId = nanoid()
+      const newRelId = freshId()
       ws.model.relationships.push({
         ...deepCloneMaybeDraft(rel),
         id: newRelId,
@@ -578,22 +666,26 @@ export function duplicateElementsInTree(
   return newIds
 }
 
+/** What a cascade delete of `ids` would take with it. */
+export interface CascadeIds {
+  /** The explicitly targeted ids. */
+  idSet: Set<string>
+  /** Containers removed because they (or their parent system) were targeted. */
+  deletedContainerIds: Set<string>
+  /** Components removed because they, their container, or its system was targeted. */
+  deletedComponentIds: Set<string>
+  /** Everything above, together — every id that would cease to exist. */
+  allDeletedIds: Set<string>
+}
+
 /**
- * Cascade-delete elements from the workspace tree:
- *   - removes the targeted elements from the model
- *   - removes any children rolled up under them (containers in deleted
- *     systems, components in deleted containers)
- *   - prunes relationships whose endpoints were deleted
- *   - removes view element refs and view relationship refs that point at
- *     deleted IDs
- *   - removes scoped views (systemContext / container / component) whose
- *     scope element was deleted
- *   - removes deleted IDs from group memberships
- *
- * Mutates the workspace in place. The caller is expected to have cloned
- * the workspace before invoking.
+ * Roll a set of targeted element ids up into everything a delete would remove.
+ * The single source of truth for cascade scope: `cascadeDeleteElements` (which
+ * performs the delete), `computeCascadeImpact` (which previews it for the
+ * confirm dialog) and the impact analysis all call this, so a change to the
+ * cascade rule can't leave one of them behind.
  */
-export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): CascadeDeleteResult {
+export function collectCascadeIds(ws: Workspace, ids: Iterable<string>): CascadeIds {
   const idSet = new Set(ids)
   const deletedContainerIds = new Set<string>()
   const deletedComponentIds = new Set<string>()
@@ -620,6 +712,27 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
   }
 
   const allDeletedIds = new Set([...idSet, ...deletedContainerIds, ...deletedComponentIds])
+
+  return { idSet, deletedContainerIds, deletedComponentIds, allDeletedIds }
+}
+
+/**
+ * Cascade-delete elements from the workspace tree:
+ *   - removes the targeted elements from the model
+ *   - removes any children rolled up under them (containers in deleted
+ *     systems, components in deleted containers)
+ *   - prunes relationships whose endpoints were deleted
+ *   - removes view element refs and view relationship refs that point at
+ *     deleted IDs
+ *   - removes scoped views (systemContext / container / component) whose
+ *     scope element was deleted
+ *   - removes deleted IDs from group memberships
+ *
+ * Mutates the workspace in place. The caller is expected to have cloned
+ * the workspace before invoking.
+ */
+export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): CascadeDeleteResult {
+  const { idSet, deletedContainerIds, allDeletedIds } = collectCascadeIds(ws, ids)
 
   // Filter people + tree
   ws.model.people = ws.model.people.filter((p) => !idSet.has(p.id))
@@ -750,14 +863,12 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
  * Mutation-free dry run of `cascadeDeleteElements`. Returns counts so a confirm
  * dialog can warn the user about the actual blast radius before they proceed.
  *
- * Mirrors the traversal in `cascadeDeleteElements` exactly — keep the two in
- * sync. If a delete rule changes there, change it here too.
+ * Shares `collectCascadeIds` with the real delete, so the preview and the
+ * deletion can't disagree about scope.
  */
 export function computeCascadeImpact(ws: Workspace, ids: Iterable<string>): CascadeImpact {
   const idSet = new Set(ids)
   const elementNames: string[] = []
-  const deletedContainerIds = new Set<string>()
-  const deletedComponentIds = new Set<string>()
 
   // Up-front pass: collect names of every explicitly-selected element exactly once.
   // This is separated from the cascade traversal below so that a selected child
@@ -776,33 +887,11 @@ export function computeCascadeImpact(ws: Workspace, ids: Iterable<string>): Casc
     }
   }
 
-  // SYNC with cascadeDeleteElements traversal — see keep-in-sync note in JSDoc above.
-  // Cascade pass: determine which containers/components get implicitly deleted.
-  for (const sys of ws.model.softwareSystems) {
-    if (idSet.has(sys.id)) {
-      for (const c of sys.containers) {
-        deletedContainerIds.add(c.id)
-        for (const comp of c.components) deletedComponentIds.add(comp.id)
-      }
-    } else {
-      for (const c of sys.containers) {
-        if (idSet.has(c.id)) {
-          deletedContainerIds.add(c.id)
-          for (const comp of c.components) deletedComponentIds.add(comp.id)
-        } else {
-          for (const comp of c.components) {
-            if (idSet.has(comp.id)) deletedComponentIds.add(comp.id)
-          }
-        }
-      }
-    }
-  }
+  const { deletedContainerIds, deletedComponentIds, allDeletedIds } = collectCascadeIds(ws, ids)
 
   // Don't double-count: subtract IDs the caller listed explicitly that also turned up via cascade.
   const descendantContainers = [...deletedContainerIds].filter((id) => !idSet.has(id)).length
   const descendantComponents = [...deletedComponentIds].filter((id) => !idSet.has(id)).length
-
-  const allDeletedIds = new Set([...idSet, ...deletedContainerIds, ...deletedComponentIds])
 
   let relationships = 0
   for (const r of ws.model.relationships) {

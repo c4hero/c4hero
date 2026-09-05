@@ -508,7 +508,7 @@ export default function MultiSelectBar() {
             )
             if (ids.length === 0) return
             const impact = computeCascadeImpact(workspace, ids)
-            confirmDelete({ message: formatImpactSummary(impact), impact }, () => deleteElements(ids))
+            confirmDelete({ message: formatImpactSummary(impact), impact, targetIds: ids }, () => deleteElements(ids))
           }}
         >
           <Trash2 size={14} />

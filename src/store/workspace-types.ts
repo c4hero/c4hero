@@ -23,6 +23,9 @@ export interface CascadeImpact {
 export interface PendingDelete {
   message: string
   impact?: CascadeImpact
+  /** Element ids being deleted — when set, the confirmation dialog renders the
+   *  full removal-impact report (what breaks, orphans, affected views) inline. */
+  targetIds?: string[]
   onConfirm: () => void
 }
 
@@ -60,7 +63,7 @@ export interface WorkspaceState extends UndoState {
   commandPaletteOpen: boolean
   pendingDelete: PendingDelete | null
   confirmDelete: (
-    payload: string | { message: string; impact?: CascadeImpact },
+    payload: string | { message: string; impact?: CascadeImpact; targetIds?: string[] },
     onConfirm: () => void,
   ) => void
   cancelDelete: () => void
@@ -147,6 +150,13 @@ export interface WorkspaceState extends UndoState {
   /** Same as updateElement but does NOT push an undo entry — for live typing previews */
   updateElementLive: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified', technology?: string }) => void
   updateElementTechnology: (id: string, technology: string) => void
+  /** Rename an element's ID (its DSL identifier), rewriting every reference.
+   *  Pins the ID — later renames stop re-deriving it. Returns a validation
+   *  error message, or null on success (a same-ID commit is a silent no-op). */
+  updateElementId: (id: string, newId: string) => string | null
+  /** Re-derive the ID from the current name and mark it auto again (renames
+   *  resume re-deriving it) — the "sync from name" affordance. */
+  resyncElementId: (id: string) => void
   deleteElement: (id: string) => void
   deleteElements: (ids: string[]) => void
   duplicateElements: (ids: string[]) => string[]
@@ -298,5 +308,10 @@ export interface WorkspaceState extends UndoState {
   setTeamFilterMode: (mode: 'any' | 'all') => void
   createViewDialogOpen: boolean
   setCreateViewDialogOpen: (open: boolean) => void
+  /** Elements the impact panel is analysing, snapshotted when it opened.
+   *  Null when the panel is closed. */
+  impactTargetIds: string[] | null
+  openImpactPanel: (ids: string[]) => void
+  closeImpactPanel: () => void
   setPresentationMode: (on: boolean) => void
 }

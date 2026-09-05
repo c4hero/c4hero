@@ -16,6 +16,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'canvasSettingsOpen' | 'canvasGuideOpen' | 'addElementPanelOpen' | 'highlighterOpenFacet'
   | 'viewsPanelOpen' | 'createViewDialogOpen'
   | 'codePanelOpen' | 'setCodePanelOpen' | 'toggleCodePanel'
+  | 'impactTargetIds' | 'openImpactPanel' | 'closeImpactPanel'
   | 'pendingDelete' | 'confirmDelete' | 'cancelDelete'
   | 'presentationMode' | 'setPresentationMode'
   | 'minimapEnabled' | 'snapToGrid' | 'toggleMinimap' | 'toggleSnapToGrid'
@@ -56,6 +57,7 @@ export const createUiSlice: StateCreator<
   viewsPanelOpen: false,
   createViewDialogOpen: false,
   codePanelOpen: false,
+  impactTargetIds: null,
   pendingDelete: null,
   presentationMode: false,
   minimapEnabled: true,
@@ -129,6 +131,12 @@ export const createUiSlice: StateCreator<
   }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
 
+  // The targets are snapshotted when the panel opens: the analysis answers a
+  // question about a specific set of elements, and changing the canvas
+  // selection underneath it would silently rewrite the question.
+  openImpactPanel: (ids) => set({ impactTargetIds: [...ids], commandPaletteOpen: false }),
+  closeImpactPanel: () => set({ impactTargetIds: null }),
+
   toggleMinimap: () => set((s) => { s.minimapEnabled = !s.minimapEnabled }),
   toggleSnapToGrid: () => set((s) => { s.snapToGrid = !s.snapToGrid }),
   setMultiSelectMode: (on) => set({ multiSelectMode: on }),
@@ -137,7 +145,7 @@ export const createUiSlice: StateCreator<
   confirmDelete: (payload, onConfirm) => set({
     pendingDelete: typeof payload === 'string'
       ? { message: payload, onConfirm }
-      : { message: payload.message, impact: payload.impact, onConfirm },
+      : { message: payload.message, impact: payload.impact, targetIds: payload.targetIds, onConfirm },
   }),
   cancelDelete: () => set({ pendingDelete: null }),
 })
