@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import type { View } from '@/types/model'
+import { VIEW_TYPE_LABELS, LEVEL_BADGE } from './viewLabels'
 import {
   ChevronDown,
   Plus,
@@ -10,24 +11,6 @@ import {
   Copy,
 } from 'lucide-react'
 
-const VIEW_TYPE_LABELS: Record<string, string> = {
-  systemLandscape: 'System Landscape',
-  systemContext: 'System Context',
-  container: 'Container',
-  component: 'Component',
-  dynamic: 'Dynamic',
-  deployment: 'Deployment',
-}
-
-const LEVEL_BADGE: Record<string, string> = {
-  systemLandscape: 'Map',
-  systemContext: 'L1',
-  container: 'L2',
-  component: 'L3',
-  dynamic: 'Dyn',
-  deployment: 'Dep',
-}
-
 interface ViewSwitcherProps {
   isMobile: boolean
   open: boolean
@@ -35,8 +18,6 @@ interface ViewSwitcherProps {
   onClose: () => void
   onShowCreateView: () => void
 }
-
-export { VIEW_TYPE_LABELS, LEVEL_BADGE }
 
 export default function ViewSwitcher({ isMobile, open, onToggle }: ViewSwitcherProps) {
   const workspace = useWorkspaceStore((s) => s.workspace)
