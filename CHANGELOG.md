@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-05
+
 ### Added
 
 - **Edit the DSL next to the canvas, live in both directions.** A dockable
@@ -34,6 +36,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a chat attachment or from a years-old build artifact, with or without c4hero.
   Exports are deterministic, so they diff cleanly in review. Find it in the
   Export dialog or the command palette ("Export as interactive HTML"). (TEA-88)
+- **Readable, editable element IDs.** Elements used to carry random eight-letter
+  ids, which then became the identifiers in exported DSL. New elements now
+  derive a `camelCase` id from their name and keep re-deriving it as you rename,
+  so the DSL keeps tracking what things are called. Edit the id yourself in the
+  inspector and it pins — renames stop touching it — with a sync button to go
+  back to deriving. Identifiers that came from imported DSL are pinned from the
+  start, because whoever wrote `paymentService = container ...` chose that name.
+  Changing an id cascades through every relationship, view, group and deployment
+  instance that references it, as a single undo step. Existing workspaces need
+  no migration. (TEA-242)
+
+### Fixed
+
+- **The what's-new pill now reaches returning users.** The 0.4.0 announcement
+  went out to nobody: no existing user had a dismissed-id stored yet, so every
+  one of them looked like a brand-new visitor and was silently seeded instead of
+  shown the release. Prior use is now detected from any other `c4hero*` browser
+  storage key, and genuinely new visitors are still seeded in silence.
+  (TEA-248)
 
 ## [0.4.0] - 2026-08-30
 
