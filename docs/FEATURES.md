@@ -70,6 +70,7 @@ to the provider you choose — c4hero never sees your key or your model data.
 Open it from the tool rail, the menu, or the command palette (`AI: …`), or toggle
 it with the `I` shortcut.
 
+- **Live model list.** With a key set, the picker shows the models the provider currently offers (filtered to chat-capable ones), cached per key for 24h with a manual refresh. Falls back to curated suggestions without a key or offline; any model id can still be typed. Retired curated defaults resolve to their same-family successor so cheap-draft routing stays valid.
 - **Bring your own key** — **Anthropic**, **OpenAI**, or **Google Gemini**, with a
   recommended balanced-tier model per provider (and any model you prefer). The
   provider layer is pluggable for adding more.

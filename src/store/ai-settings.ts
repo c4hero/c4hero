@@ -1,11 +1,13 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
 import { isRecord } from '@/lib/guards'
 import { readJSON, writeJSON } from '@/lib/safeStorage'
 import { createProvider, type AiProvider } from '@/lib/ai'
 import {
-  AI_PROVIDER_IDS, AI_PROVIDER_META, isAiProviderId, type AiProviderId,
+  AI_PROVIDER_IDS, AI_PROVIDER_META, isAiProviderId, type AiProviderId, type AiModelOption,
 } from '@/lib/ai/providerMeta'
+import { resolveCuratedModel } from '@/lib/ai/modelCatalog'
+import { useAiModelsStore } from './ai-models'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -78,12 +80,20 @@ export function normalizeAiSettings(value: unknown): AiSettings {
   }
 }
 
-/** Resolved config for the active provider: its id, key, and model. */
-export function activeAiConfig(settings: AiSettings): { provider: AiProviderId; apiKey: string; model: string } {
+/** Resolved config for the active provider: its id, key, and model.
+ *  `live` (the provider's current model list, when known) lets a curated
+ *  default that the provider has since retired resolve to its same-family
+ *  successor; an id the user typed or picked explicitly is never rewritten. */
+export function activeAiConfig(
+  settings: AiSettings,
+  live?: AiModelOption[] | null,
+): { provider: AiProviderId; apiKey: string; model: string } {
+  const chosen = settings.models[settings.provider]
+  const curatedDefault = AI_PROVIDER_META[settings.provider].defaultModel
   return {
     provider: settings.provider,
     apiKey: settings.apiKeys[settings.provider] ?? '',
-    model: settings.models[settings.provider] || AI_PROVIDER_META[settings.provider].defaultModel,
+    model: chosen && chosen !== curatedDefault ? chosen : resolveCuratedModel(curatedDefault, live),
   }
 }
 
@@ -91,11 +101,12 @@ export function activeAiConfig(settings: AiSettings): { provider: AiProviderId; 
  *  routing is on, else the selected model. Returns the SAME string as
  *  `activeAiConfig().model` when routing is off or the cheap tier already equals
  *  the selection — callers can compare to decide whether a second provider is
- *  even needed. */
-export function draftModel(settings: AiSettings): string {
-  const { model } = activeAiConfig(settings)
+ *  even needed. The cheap id is curated, so it resolves against `live` too. */
+export function draftModel(settings: AiSettings, live?: AiModelOption[] | null): string {
+  const { model } = activeAiConfig(settings, live)
   if (!settings.routeCheapDrafts) return model
-  return AI_PROVIDER_META[settings.provider].cheapModel || model
+  const cheap = AI_PROVIDER_META[settings.provider].cheapModel
+  return cheap ? resolveCuratedModel(cheap, live) : model
 }
 
 /** True when the active provider has a non-empty key — i.e. AI can actually run.
@@ -170,8 +181,17 @@ export function useAiProvider(): {
 } {
   const settings = useAiSettingsStore()
   const ready = isAiReady(settings)
-  const { provider: providerId, apiKey, model } = activeAiConfig(settings)
-  const draft = draftModel(settings)
+  // Live model list for the active provider (cache-first, refreshed at most
+  // once a day). Only used to keep curated default/cheap ids pointing at models
+  // the provider still offers — chat never waits on it.
+  const live = useAiModelsStore((s) => s.lists[settings.provider]?.models ?? null)
+  const refreshModels = useAiModelsStore((s) => s.refresh)
+  const activeKey = settings.apiKeys[settings.provider] ?? ''
+  useEffect(() => {
+    if (activeKey.trim()) void refreshModels(settings.provider, activeKey)
+  }, [settings.provider, activeKey, refreshModels])
+  const { provider: providerId, apiKey, model } = activeAiConfig(settings, live)
+  const draft = draftModel(settings, live)
   const provider = useMemo(
     () => (ready ? createProvider(providerId, { apiKey, model }) : null),
     [ready, providerId, apiKey, model],
