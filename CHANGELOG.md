@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Edit the DSL next to the canvas, live in both directions.** A dockable
+  code pane on the right holds the workspace as Structurizr DSL: edit the model
+  on the canvas and the text follows, type in the text and the canvas follows.
+  A clean parse applies as a single undo entry and carries element positions,
+  pins and locks across, so nothing you laid out is lost round-tripping through
+  text. Parse errors surface as gutter diagnostics and simply don't apply —
+  a half-typed document can never empty your model. Open it with `mod+e`, the
+  tool rail, or the command palette. (TEA-252)
 - **See what breaks before you delete it.** The inspector and the command
   palette can now answer "what happens if I remove this?" for any element or
   selection: the children that go with it, every relationship that loses an
