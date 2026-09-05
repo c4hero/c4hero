@@ -1,7 +1,9 @@
-import { useState, type CSSProperties } from 'react'
-import { X, KeyRound, ExternalLink, ArrowRight, ArrowLeft, Check, ShieldCheck, Activity } from 'lucide-react'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { X, KeyRound, ExternalLink, ArrowRight, ArrowLeft, Check, ShieldCheck, Activity, RefreshCw } from 'lucide-react'
 import { useAiSettingsStore } from '@/store/ai-settings'
+import { useAiModelsStore } from '@/store/ai-models'
 import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
+import { pickerOptions } from '@/lib/ai/modelCatalog'
 import { resetAiUsage } from '@/lib/ai'
 import { C, iconBtn, fieldLabel, keyInput, headerRow, secondaryBtn, primaryBtn } from './aiTheme'
 import { useAiUsage, formatTokens } from './aiUsage'
@@ -91,6 +93,20 @@ export function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?
   // (or closing) must not leave a half-typed key/provider written to the store.
   const [draft, setDraft] = useState<{ provider: AiProviderId; apiKeys: Record<AiProviderId, string>; models: Record<AiProviderId, string> } | null>(null)
   const editMeta = AI_PROVIDER_META[draft?.provider ?? provider]
+  // Live model list for the provider being edited (TEA-249). Cache-first; the
+  // fetch runs when the draft has a key for that provider. Curated list otherwise.
+  const draftProvider = draft?.provider ?? provider
+  const draftKey = (draft ? draft.apiKeys[draftProvider] : apiKeys[draftProvider]) ?? ''
+  const liveList = useAiModelsStore((s) => s.lists[draftProvider])
+  const listStatus = useAiModelsStore((s) => s.status[draftProvider])
+  const listError = useAiModelsStore((s) => s.error[draftProvider])
+  const refreshModels = useAiModelsStore((s) => s.refresh)
+  useEffect(() => {
+    if (edit && draftKey.trim()) void refreshModels(draftProvider, draftKey)
+  }, [edit, draftProvider, draftKey, refreshModels])
+  const draftModelId = draft ? (draft.models[draft.provider] || editMeta.defaultModel) : ''
+  const modelOptions = pickerOptions(draftProvider, liveList?.models, draftModelId)
+  const [customModel, setCustomModel] = useState('')
   function startEdit() { setDraft({ provider, apiKeys: { ...apiKeys }, models: { ...models } }); setReveal(false); setEdit(true) }
   function cancelEdit() { setDraft(null); setEdit(false) }
   function saveEdit() { if (draft) update({ provider: draft.provider, apiKeys: draft.apiKeys, models: draft.models }); setDraft(null); setEdit(false) }
@@ -165,9 +181,19 @@ export function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={fieldLabel}>Model</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {editMeta.models.map((m) => {
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={fieldLabel}>Model</div>
+                <ModelListStatus
+                  providerLabel={editMeta.label.replace(/ \(Claude\)$/, '')}
+                  hasKey={!!draftKey.trim()}
+                  list={liveList}
+                  status={listStatus}
+                  error={listError}
+                  onRefresh={() => { void refreshModels(draftProvider, draftKey, { force: true }) }}
+                />
+              </div>
+              <div data-model-picker style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 264, overflowY: 'auto' }}>
+                {modelOptions.map((m) => {
                   const on = (draft && (draft.models[draft.provider] || editMeta.defaultModel)) === m.id
                   const recommended = m.id === editMeta.defaultModel
                   return (
@@ -182,6 +208,20 @@ export function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?
                   )
                 })}
               </div>
+              {/* Any model id the provider accepts can be typed in — the list is a
+                  suggestion, not a whitelist. */}
+              <input
+                type="text"
+                aria-label="Other model id"
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                onBlur={() => { const id = customModel.trim(); if (id) { setDraft((d) => (d ? { ...d, models: { ...d.models, [d.provider]: id } } : d)); setCustomModel('') } }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() } }}
+                placeholder="Or type a model id…"
+                autoComplete="off"
+                spellCheck={false}
+                style={{ ...keyInput, height: 34, fontSize: 12 }}
+              />
             </div>
             <SecurityNote />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -193,6 +233,43 @@ export function SettingsView({ onClose, onDone }: { onClose: () => void; onDone?
       </div>
     </div>
   )
+}
+
+// One-line provenance for the model picker: live list (and how fresh), loading,
+// fetch failed (curated list shown), or no key yet. Never blocks anything.
+function ModelListStatus({ providerLabel, hasKey, list, status, error, onRefresh }: {
+  providerLabel: string
+  hasKey: boolean
+  list: { fetchedAt: number; source: 'fetched' | 'cache' } | undefined
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  error: string | undefined
+  onRefresh: () => void
+}) {
+  const style: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.muted, whiteSpace: 'nowrap', minWidth: 0 }
+  const refreshBtn = (
+    <button type="button" onClick={onRefresh} className="c4ai-ghost" aria-label="Refresh model list" title="Refresh model list"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 6px', borderRadius: 6, border: 'none', background: 'transparent', color: C.accent, fontSize: 11, cursor: 'pointer' }}>
+      <RefreshCw size={11} /> Refresh
+    </button>
+  )
+  if (!hasKey) return <span data-model-list-status="curated" style={style}>Suggested models — add a key to list what's available</span>
+  if (status === 'loading' && !list) return <span data-model-list-status="loading" style={style}><RefreshCw size={11} /> Fetching models from {providerLabel}…</span>
+  if (list) {
+    // No clock read here (render stays pure): a list fetched this session is
+    // "just now"; a cached one says so, with the exact time on hover.
+    const fresh = list.source === 'fetched' ? 'just now' : 'cached'
+    const when = `Fetched ${new Date(list.fetchedAt).toLocaleString()}`
+    const title = error ? `${when}. Last refresh failed: ${error}. Showing the previous list.` : when
+    return (
+      <span data-model-list-status="live" style={style} title={title}>
+        Live from {providerLabel} · {fresh}{refreshBtn}
+      </span>
+    )
+  }
+  if (status === 'error') {
+    return <span data-model-list-status="error" style={{ ...style, color: C.warnText }} title={error}>Couldn't fetch models — showing suggestions{refreshBtn}</span>
+  }
+  return <span data-model-list-status="curated" style={style}>Suggested models{refreshBtn}</span>
 }
 
 // Session usage meter (TEA-47): calls fired this session (+ tokens where the
