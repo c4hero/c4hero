@@ -24,6 +24,7 @@ function deepCloneMaybeDraft<T>(value: T): T {
 export function normalizeWorkspaceShape(ws: Workspace): Workspace {
   ws.views.dynamicViews ??= []
   ws.views.deploymentViews ??= []
+  ws.views.customViews ??= []
   ws.model.deploymentEnvironments ??= []
   return ws
 }
@@ -39,6 +40,7 @@ export function allViewsOf(ws: Workspace): View[] {
     // existed lack these arrays until re-serialized.
     ...(ws.views.dynamicViews ?? []),
     ...(ws.views.deploymentViews ?? []),
+    ...(ws.views.customViews ?? []),
   ]
 }
 
@@ -57,6 +59,7 @@ export function forEachElementHelper(ws: Workspace, fn: (el: ModelElement) => bo
       for (const comp of c.components) { if (fn(comp)) return }
     }
   }
+  for (const custom of (ws.model.customElements ?? [])) { if (fn(custom)) return }
 }
 
 /** Find an element by ID in the model tree */
@@ -101,7 +104,7 @@ export function invalidateElementIndex(ws: Workspace): void {
 
 /** Patch shape that updateElement / updateElementLive both consume. */
 export type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>>
-  & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string }
+  & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string; properties?: Record<string, string>; metadata?: string }
 
 /** Apply a patch to an element in-place. Returns true only when the
  *  element was found AND at least one field changed. Returning false
@@ -131,6 +134,22 @@ export function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch
       const cur = (el as Container | Component).technology
       if (cur !== patch.technology) { (el as Container | Component).technology = patch.technology; changed = true }
     }
+    if (patch.properties !== undefined) {
+      // Very naive deep-equal check
+      const cur = el.properties || {}
+      const curKeys = Object.keys(cur)
+      const patchKeys = Object.keys(patch.properties)
+      if (curKeys.length !== patchKeys.length || curKeys.some(k => cur[k] !== patch.properties![k])) {
+        el.properties = patch.properties
+        changed = true
+      }
+    }
+    if ('metadata' in patch && el.type === 'custom') {
+      if ((el as any).metadata !== patch.metadata) {
+        (el as any).metadata = patch.metadata
+        changed = true
+      }
+    }
     return true
   })
   return changed
@@ -157,7 +176,7 @@ export function elementExists(ws: Workspace, id: string): boolean {
 }
 
 /** The view-type array keys — used wherever we need to iterate or locate views by type. */
-export const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews'] as const
+export const VIEW_ARRAY_KEYS = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews', 'customViews'] as const
 
 /** Apply a callback to every view in the workspace (mutates views in place). */
 export function forEachView(ws: Workspace, fn: (v: View) => void): void {
@@ -274,6 +293,7 @@ const VIEW_ELEMENT_TYPES: Record<View['type'], ReadonlySet<ModelElement['type']>
   // Deployment views show deployment elements (nodes/instances), which are not
   // ModelElements — plain model elements are never dropped into them directly.
   deployment: new Set<ModelElement['type']>(),
+  custom: new Set<ModelElement['type']>(['custom']),
 }
 
 /** True when a view of `viewType` is allowed to display an element of `elementType`. */
@@ -497,6 +517,7 @@ export function appendScopedView(
     case 'component': ws.views.componentViews.push(view); break
     case 'dynamic': (ws.views.dynamicViews ??= []).push(view); break
     case 'deployment': (ws.views.deploymentViews ??= []).push(view); break
+    case 'custom': (ws.views.customViews ??= []).push(view); break
   }
   return view
 }

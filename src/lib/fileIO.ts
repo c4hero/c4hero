@@ -5,6 +5,7 @@ import { isFiniteNumber, isNonEmptyString, isRecord, isStringArray, isStringReco
 import { sidecarName } from '@/lib/sidecar'
 import { safeSuggestedDslName } from '@/lib/filenames'
 import { readJSON, writeJSON, writeString, removeKey } from '@/lib/safeStorage'
+import { assertSaveSafe } from '@/lib/dsl/oracle/oracle'
 
 const log = createLogger('fileIO')
 
@@ -111,6 +112,7 @@ export function getCurrentFileHandle(): FileSystemFileHandle | null {
 export async function writeToCurrentHandle(content: string): Promise<boolean> {
   if (!currentFileHandle || !hasFileSystemAccess()) return false
   try {
+    await assertSaveSafe(content)
     const writable = await currentFileHandle.createWritable()
     await writable.write(content)
     await writable.close()
@@ -242,6 +244,7 @@ export async function saveDSLFile(content: string, suggestedName?: string): Prom
           excludeAcceptAllOption: false,
         })
       }
+      await assertSaveSafe(content)
       const writable = await currentFileHandle.createWritable()
       await writable.write(content)
       await writable.close()

@@ -3,6 +3,18 @@ import type { Workspace } from '@/types/model'
 
 // We need to mock localStorage before importing fileIO so the module-level
 // code picks up the mock. We use vi.stubGlobal in each test.
+vi.mock('@/lib/dsl/oracle/oracle', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/dsl/oracle/oracle')>()
+  return {
+    ...mod,
+    assertSaveSafe: vi.fn().mockImplementation(async (dsl: string) => {
+      // By default, allow everything except 'corrupted dsl'
+      if (dsl === 'corrupted dsl') {
+        throw new Error('DSL validation failed: Invalid DSL')
+      }
+    })
+  }
+})
 
 function makeMockLocalStorage() {
   const store: Record<string, string> = {}
@@ -522,5 +534,21 @@ describe('isWorkspaceShape edge cases', () => {
     const bad = makeWorkspace()
     bad.views.configuration.styles.elements.push({ tag: 'Element', fontSize: Number.NaN })
     expect(isWorkspaceShape(bad)).toBe(false)
+  })
+})
+
+describe('Oracle save-gate wiring', () => {
+  it('rejects corrupted dsl and blocks write', async () => {
+    const handle = { createWritable: vi.fn() }
+    const showSaveFilePicker = vi.fn().mockResolvedValue(handle)
+    vi.stubGlobal('showOpenFilePicker', vi.fn())
+    vi.stubGlobal('showSaveFilePicker', showSaveFilePicker)
+    vi.stubGlobal('window', { showSaveFilePicker, showOpenFilePicker: vi.fn() })
+
+    const { saveDSLFile } = await import('./fileIO')
+    const saved = await saveDSLFile('corrupted dsl', 'test.dsl')
+
+    expect(saved).toBe(false)
+    expect(handle.createWritable).not.toHaveBeenCalled()
   })
 })

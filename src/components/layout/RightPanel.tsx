@@ -144,6 +144,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const tech = (element as Container | Component).technology
   const hasTech = element.type === 'container' || element.type === 'component'
   const hasLocation = element.type === 'person' || element.type === 'softwareSystem'
+  const isCustom = element.type === 'custom'
   const location = (element as Person | SoftwareSystem).location
   const typeColor = TYPE_COLORS[element.type] ?? 'var(--color-accent)'
   const safeUrl = element.url ? normalizeSafeExternalUrl(element.url) : null
@@ -368,6 +369,32 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                 {aiReady && missingDesc && <SuggestButton onClick={() => suggest(['description'])} busy={busyField === 'description'} multiline title="Write a description with AI" />}
               </div>
             </div>
+
+            {isCustom && (
+              <>
+                <div>
+                  <FieldLabel>Metadata</FieldLabel>
+                  <EditableField value={(element as any).metadata ?? ''} placeholder="Type badge..." aria-label="Metadata" onLiveChange={(v) => updateElementLive(element.id, { metadata: v || undefined })} onCommit={(v) => updateElement(element.id, { metadata: v || undefined })} />
+                </div>
+                <div>
+                  <FieldLabel>Properties (key=value)</FieldLabel>
+                  <EditableField
+                    value={Object.entries(element.properties || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
+                    placeholder="key=value"
+                    aria-label="Properties"
+                    multiline
+                    onCommit={(v) => {
+                      const props = v.split('\n').reduce((acc, line) => {
+                        const idx = line.indexOf('=')
+                        if (idx > 0) acc[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
+                        return acc
+                      }, {} as Record<string, string>)
+                      updateElement(element.id, { properties: props })
+                    }}
+                  />
+                </div>
+              </>
+            )}
 
             {/* Status */}
             <div>

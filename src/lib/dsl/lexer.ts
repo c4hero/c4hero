@@ -320,6 +320,22 @@ export function lex(input: string): LexResult {
             continue
         }
 
+        const lastToken = tokens.length > 0 ? tokens[tokens.length - 1] : undefined
+        if (lastToken && lastToken.type === 'KEYWORD' && lastToken.value.toLowerCase() === 'url') {
+            if (ch !== '{' && ch !== '=' && ch !== '}' && ch !== '"') {
+                let value = ''
+                while (pos < input.length) {
+                    const c = peek()
+                    if (c === ' ' || c === '\t' || c === '\r' || c === '\n') break
+                    value += advance()
+                }
+                if (value.length > 0) {
+                    tokens.push({ type: 'STRING', value, line: startLine, column: startCol })
+                    continue
+                }
+            }
+        }
+
         if (ch === '{') {
             advance()
             tokens.push({ type: 'LBRACE', value: '{', line: startLine, column: startCol })

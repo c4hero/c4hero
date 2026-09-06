@@ -9,6 +9,7 @@ export const VIEW_TYPE_LABELS: Record<string, string> = {
   component: 'Component',
   dynamic: 'Dynamic',
   deployment: 'Deployment',
+  custom: 'Custom View',
 }
 
 export const LEVEL_BADGE: Record<string, string> = {
@@ -18,4 +19,5 @@ export const LEVEL_BADGE: Record<string, string> = {
   component: 'L3',
   dynamic: 'Dyn',
   deployment: 'Dep',
+  custom: 'Cst',
 }

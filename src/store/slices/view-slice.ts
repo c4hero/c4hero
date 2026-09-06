@@ -60,7 +60,7 @@ export const createViewSlice: StateCreator<
       const idx = (ws.views[arrKey] ?? []).findIndex(v => v.key === key)
       if (idx !== -1) {
         pushUndoSnapshot(s)
-        ws.views[arrKey].splice(idx, 1)
+        ws.views[arrKey]!.splice(idx, 1)
         found = true
         break
       }
@@ -107,7 +107,7 @@ export const createViewSlice: StateCreator<
           key: newKey,
           title: `${src.title ?? 'View'} copy`,
         }
-        ws.views[arrKey].push(copy)
+        ws.views[arrKey]!.push(copy)
         s.activeViewKey = newKey
         s.selectedElementIds = []
         s.selectedRelationshipId = null

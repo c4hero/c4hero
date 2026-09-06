@@ -1,0 +1,48 @@
+{
+  "name": "custom-views",
+  "model": {
+    "customElements": [
+      {
+        "id": "paiIntent",
+        "type": "custom",
+        "name": "pai",
+        "metadata": "Intention",
+        "tags": "Element,Intention",
+        "relationships": [
+          {
+            "id": "1",
+            "sourceId": "paiIntent",
+            "destinationId": "paiPlan",
+            "description": "codified by"
+          }
+        ]
+      },
+      {
+        "id": "paiPlan",
+        "type": "custom",
+        "name": "pai plan",
+        "metadata": "Plan",
+        "tags": "Element,Plan"
+      }
+    ]
+  },
+  "views": {
+    "customViews": [
+      {
+        "key": "flow-map",
+        "description": "Flow map",
+        "title": "Flow",
+        "elements": [
+          { "id": "paiIntent" },
+          { "id": "paiPlan" }
+        ],
+        "relationships": [
+          { "id": "1" }
+        ],
+        "autoLayout": {
+          "direction": "LeftRight"
+        }
+      }
+    ]
+  }
+}

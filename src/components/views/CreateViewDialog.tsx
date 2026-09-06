@@ -11,6 +11,7 @@ const ALL_VIEW_TYPES: { value: ViewType; label: string }[] = [
   { value: 'component', label: 'Component' },
   { value: 'dynamic', label: 'Dynamic' },
   { value: 'deployment', label: 'Deployment' },
+  { value: 'custom', label: 'Custom View' },
 ]
 
 function allowedViewTypes(scope: string | undefined) {

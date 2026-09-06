@@ -12,7 +12,7 @@ const TYPE_LABEL: Record<ImpactRef['type'], string> = {
   person: 'Person',
   softwareSystem: 'Software System',
   container: 'Container',
-  component: 'Component',
+  component: 'Component', custom: 'Custom',
 }
 
 const SIDE_NOTE: Record<ImpactLink['side'], string> = {

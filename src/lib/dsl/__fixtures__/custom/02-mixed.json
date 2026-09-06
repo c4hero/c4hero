@@ -1,0 +1,44 @@
+{
+  "name": "mixed",
+  "model": {
+    "people": [
+      {
+        "id": "dev",
+        "name": "Developer",
+        "tags": "Element,Person",
+        "relationships": [
+          {
+            "id": "1",
+            "sourceId": "dev",
+            "destinationId": "paiIntent",
+            "description": "reads"
+          }
+        ]
+      }
+    ],
+    "softwareSystems": [
+      {
+        "id": "sys",
+        "name": "System",
+        "tags": "Element,Software System"
+      }
+    ],
+    "customElements": [
+      {
+        "id": "paiIntent",
+        "type": "custom",
+        "name": "pai",
+        "metadata": "Intention",
+        "tags": "Element,Intention",
+        "relationships": [
+          {
+            "id": "2",
+            "sourceId": "paiIntent",
+            "destinationId": "sys",
+            "description": "dictates"
+          }
+        ]
+      }
+    ]
+  }
+}

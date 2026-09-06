@@ -16,6 +16,7 @@ interface ViewsContainer {
     componentViews: View[]
     dynamicViews: View[]
     deploymentViews: View[]
+    customViews?: View[]
 }
 
 /** Generate a stable, unique view key when the DSL doesn't provide one.
@@ -30,6 +31,7 @@ function ensureViewKey(view: View, viewsContainer: ViewsContainer, elementRef: s
         : view.type === 'container' ? 'Containers'
         : view.type === 'component' ? 'Components'
         : view.type === 'dynamic' ? 'Dynamic'
+        : view.type === 'custom' ? 'Custom'
         : 'Deployment'
     const base = elementRef ? `${typeKey}-${elementRef}` : typeKey
     const existing = [
@@ -39,6 +41,7 @@ function ensureViewKey(view: View, viewsContainer: ViewsContainer, elementRef: s
         ...viewsContainer.componentViews,
         ...viewsContainer.dynamicViews,
         ...viewsContainer.deploymentViews,
+        ...(viewsContainer.customViews || []),
     ]
     let candidate = base
     let suffix = 2
@@ -128,7 +131,16 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 }
                 continue
             }
-            if (kw === 'filtered' || kw === 'custom') {
+            if (kw === 'custom') {
+                const view = parseCustomView(p, model)
+                if (view) {
+                    if (!views.customViews) views.customViews = []
+                    ensureViewKey(view, views, undefined)
+                    views.customViews.push(view)
+                }
+                continue
+            }
+            if (kw === 'filtered') {
                 p.advance()
                 while (p.check('STRING') || p.check('IDENTIFIER')) p.advance()
                 p.skipNewlines()
@@ -154,6 +166,31 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
 
         p.advance()
     }
+}
+
+
+function parseCustomView(p: ContextAwareParser, model: Model): View | null {
+    p.advance() // consume 'custom'
+    const key = p.readOptionalStringOrIdentifier() ?? ''
+    const positionalDescription = p.readOptionalString()
+
+    const view: View = {
+        type: 'custom' as any,
+        key,
+        title: positionalDescription,
+        description: positionalDescription,
+        elements: [],
+        relationships: [],
+    }
+
+    p.skipNewlines()
+    if (p.match('LBRACE')) {
+        parseViewBody(p, view, model)
+        p.skipNewlines()
+        p.expect('RBRACE')
+    }
+
+    return view
 }
 
 function parseSystemLandscapeView(p: ContextAwareParser, model: Model): View | null {

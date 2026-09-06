@@ -116,6 +116,30 @@ describe('RightPanel', () => {
     expect(useWorkspaceStore.getState().workspace!.model.people[0].id).toBe('customer')
   })
 
+  it('renders metadata and properties for custom elements and mutates Model on edit', async () => {
+    const ws = makeWs()
+    ws.model.customElements = [{ id: 'custom-1', type: 'custom', name: 'Custom Thing', metadata: 'MetaX', properties: { p1: 'v1' }, tags: [], relationships: [] }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.getState().selectElements(['custom-1'])
+    render(<RightPanel />)
+
+    const metadataField = screen.getByLabelText('Metadata') as HTMLInputElement
+    expect(metadataField.value).toBe('MetaX')
+    await userEvent.clear(metadataField)
+    await userEvent.type(metadataField, 'NewMeta')
+    fireEvent.blur(metadataField)
+    
+    expect(useWorkspaceStore.getState().workspace!.model.customElements![0].metadata).toBe('NewMeta')
+
+    const propsField = screen.getByLabelText('Properties') as HTMLTextAreaElement
+    expect(propsField.value).toBe('p1=v1')
+    await userEvent.clear(propsField)
+    await userEvent.type(propsField, 'p2=v2\np3=v3')
+    fireEvent.blur(propsField)
+
+    expect(useWorkspaceStore.getState().workspace!.model.customElements![0].properties).toEqual({ p2: 'v2', p3: 'v3' })
+  })
+
   it('shows relationship description when relationship selected', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     useWorkspaceStore.getState().selectRelationship('rel1')

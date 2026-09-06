@@ -1247,3 +1247,20 @@ workspace {
     expect(workspace.model.softwareSystems).toHaveLength(1)
   })
 })
+
+describe('URL parsing', () => {
+  it('accepts unquoted URL after url keyword', () => {
+    const dsl = `
+workspace {
+  model {
+    softwareSystem "System" {
+      url https://example.com/foo?bar=baz#test
+    }
+  }
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(workspace.model.softwareSystems[0].url).toBe('https://example.com/foo?bar=baz#test')
+  })
+})

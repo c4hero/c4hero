@@ -68,6 +68,7 @@ const TYPE_LABEL: Record<ModelElement['type'], string> = {
   softwareSystem: 'Software System',
   container: 'Container',
   component: 'Component',
+  custom: 'Custom',
 }
 
 // ─── Public API ──────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ const VIEW_TYPE_LABELS: Record<string, string> = {
   component: 'Component',
   dynamic: 'Dynamic',
   deployment: 'Deployment',
+  custom: 'Custom View',
 }
 
 export default function FloatingViewsPanel() {

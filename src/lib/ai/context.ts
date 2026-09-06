@@ -164,6 +164,7 @@ const VIEW_TYPE_LABELS: Record<View['type'], string> = {
   component: 'Component',
   dynamic: 'Dynamic',
   deployment: 'Deployment',
+  custom: 'Custom',
 }
 
 /** Short human label for a view, e.g. "Container view "Containers"". */

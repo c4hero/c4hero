@@ -107,6 +107,17 @@ function expandWildcard(model: Model, view: View): ElementInView[] {
                 else if (c.id !== containerId && c.components.some(comp => relatedToComponents.has(comp.id))) addId(c.id)
             }
         }
+    } else if (view.type === 'custom') {
+        // Custom view wildcard expands to all elements in the model
+        for (const p of model.people) addId(p.id)
+        for (const s of model.softwareSystems) {
+            addId(s.id)
+            for (const c of s.containers) {
+                addId(c.id)
+                for (const comp of c.components) addId(comp.id)
+            }
+        }
+        for (const c of (model.customElements || [])) addId(c.id)
     }
 
     return ids.map(id => ({ id }))
@@ -621,6 +632,7 @@ export function parse(input: string): ParseResult {
         ...ws.views.containerViews,
         ...ws.views.componentViews,
         ...ws.views.deploymentViews,
+        ...(ws.views.customViews ?? [])
     ]
     for (const view of allViews) {
         const excluded = parser.getExcludedIdsForView(view)
@@ -658,6 +670,40 @@ export function parse(input: string): ParseResult {
             view.relationships = ws.model.relationships
                 .filter(r => elementIds.has(r.sourceId) && elementIds.has(r.destinationId))
                 .map(r => ({ id: r.id }))
+        }
+    }
+
+    // Post-process: route custom relationships.
+    // In Structurizr JSON, relationships involving a CustomElement (as source or destination)
+    // are not stored in the top-level model.relationships array. Instead, they are nested
+    // inside the `relationships` array of the relationship's SOURCE element.
+    const isCustom = (id: string) => ws.model.customElements?.some(c => c.id === id)
+    const customRels = ws.model.relationships.filter(r => isCustom(r.sourceId) || isCustom(r.destinationId))
+    const standardRels = ws.model.relationships.filter(r => !isCustom(r.sourceId) && !isCustom(r.destinationId))
+
+    ws.model.relationships = standardRels
+
+    if (customRels.length > 0) {
+        const getElement = (id: string) => {
+            const findInSys = (sys: import('@/types/model').SoftwareSystem) => {
+                if (sys.id === id) return sys
+                for (const c of sys.containers) {
+                    if (c.id === id) return c
+                    for (const cmp of c.components) {
+                        if (cmp.id === id) return cmp
+                    }
+                }
+            }
+            return ws.model.people.find(p => p.id === id)
+                ?? ws.model.softwareSystems.map(findInSys).find(Boolean)
+                ?? ws.model.customElements?.find(c => c.id === id)
+        }
+        for (const rel of customRels) {
+            const source = getElement(rel.sourceId)
+            if (source) {
+                source.relationships = source.relationships ?? []
+                source.relationships.push(rel)
+            }
         }
     }
 

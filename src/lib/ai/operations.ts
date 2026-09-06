@@ -381,6 +381,7 @@ const VIEW_KIND_LABEL: Record<ViewType, string> = {
   component: 'a component',
   dynamic: 'a dynamic',
   deployment: 'a deployment',
+  custom: 'a custom',
 }
 
 /** Human-readable, one-line-per-op preview, resolving existing ids to names. */

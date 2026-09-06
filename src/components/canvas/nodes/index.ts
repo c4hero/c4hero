@@ -6,6 +6,7 @@ import ComponentNode from './ComponentNode'
 import GroupNode from './GroupNode'
 import BoundaryNode from './BoundaryNode'
 import InfrastructureNode from './InfrastructureNode'
+import CustomNode from './CustomNode'
 
 export const nodeTypes: NodeTypes = {
   person: PersonNode,
@@ -15,4 +16,5 @@ export const nodeTypes: NodeTypes = {
   group: GroupNode,
   boundary: BoundaryNode,
   infrastructureNode: InfrastructureNode,
+  custom: CustomNode,
 }

@@ -35,6 +35,7 @@ export interface BaseElement {
   url?: string
   status?: ElementStatus
   owner?: string
+  relationships?: Relationship[]
 }
 
 export interface Person extends BaseElement {
@@ -69,7 +70,7 @@ export interface Group {
   parentId?: string
 }
 
-export type ModelElement = Person | SoftwareSystem | Container | Component
+export type ModelElement = Person | SoftwareSystem | Container | Component | CustomElement
 
 // ─── Deployment elements ─────────────────────────────────────────────
 
@@ -139,7 +140,7 @@ export interface Relationship {
 
 // ─── Views ───────────────────────────────────────────────────────────
 
-export type ViewType = 'systemLandscape' | 'systemContext' | 'container' | 'component' | 'dynamic' | 'deployment'
+export type ViewType = 'systemLandscape' | 'systemContext' | 'container' | 'component' | 'dynamic' | 'deployment' | 'custom'
 
 export interface ElementInView {
   id: string
@@ -240,11 +241,21 @@ export interface ViewConfiguration {
   themes?: string[]
 }
 
+// ─── Custom Elements ───────────────────────────────────────────────────
+
+export interface CustomElement extends BaseElement {
+  type: 'custom'
+  metadata?: string
+  relationships: Relationship[]
+}
+
 // ─── Model ───────────────────────────────────────────────────────────
 
 export interface Model {
+  properties?: Record<string, string>
   people: Person[]
   softwareSystems: SoftwareSystem[]
+  customElements?: CustomElement[]
   relationships: Relationship[]
   groups: Group[]
   deploymentEnvironments: DeploymentEnvironment[]
@@ -266,6 +277,7 @@ export interface Workspace {
     componentViews: View[]
     dynamicViews: View[]
     deploymentViews: View[]
+    customViews?: View[]
     configuration: ViewConfiguration
   }
 }

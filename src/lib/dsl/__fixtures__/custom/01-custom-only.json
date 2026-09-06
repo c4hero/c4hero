@@ -1,0 +1,44 @@
+{
+  "name": "dy-flow flow-knowledge",
+  "model": {
+    "customElements": [
+      {
+        "id": "paiIntent",
+        "type": "custom",
+        "name": "pai = OS-runnable cmd",
+        "metadata": "Intention",
+        "description": "User mandate verbatim: pai is the RUNABLE cmd by itself IN THE OS",
+        "tags": "Element,Intention,Locked",
+        "properties": {
+          "source": "flow/intentions/2026-09-04_ai-launcher-preserved-pai-wrap.md",
+          "date": "2026-09-04",
+          "status": "locked"
+        },
+        "url": "https://github.com/buihongduc132/dy-flow/blob/main/flow/intentions/2026-09-04_ai-launcher-preserved-pai-wrap.md",
+        "relationships": [
+          {
+            "id": "1",
+            "sourceId": "paiIntent",
+            "destinationId": "paiPlan",
+            "description": "codified by"
+          }
+        ]
+      },
+      {
+        "id": "paiPlan",
+        "type": "custom",
+        "name": "pai-wb-native-sl-loop",
+        "metadata": "Plan",
+        "description": "Declarative items 1-9",
+        "tags": "Element,Plan,Active",
+        "properties": {
+          "source": "flow/plans/pai-wb-native-sl-loop.md",
+          "items": "9",
+          "done": "3",
+          "status": "active"
+        },
+        "relationships": []
+      }
+    ]
+  }
+}
