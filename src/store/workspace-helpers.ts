@@ -515,6 +515,15 @@ export function appendScopedView(
  * Returns the array of newly-created element IDs (in the order they were
  * created). Empty array means no elements were duplicated.
  */
+/** The system or container that directly holds `id` (undefined for top-level). */
+export function findParentHelper(ws: Workspace, id: string): SoftwareSystem | Container | undefined {
+  for (const sys of ws.model.softwareSystems) {
+    if (sys.containers.some((c) => c.id === id)) return sys
+    for (const c of sys.containers) if (c.components.some((x) => x.id === id)) return c
+  }
+  return undefined
+}
+
 export function duplicateElementsInTree(
   ws: Workspace,
   ids: string[],
@@ -667,6 +676,20 @@ export function duplicateElementsInTree(
   // possibly relationships); evict the stale id→element index so the next
   // reader rebuilds it against the post-mutation tree.
   invalidateElementIndex(ws)
+  // Provenance (TEA-325): a top-level copy is new root content; a nested copy
+  // lives wherever its parent lives.
+  const setSubtree = (el: ModelElement, path: string | undefined) => {
+    if (path) el.sourcePath = path
+    else delete el.sourcePath
+    if (el.type === 'softwareSystem') for (const c of el.containers) setSubtree(c, path)
+    if (el.type === 'container') for (const x of el.components) setSubtree(x, path)
+  }
+  for (const newId of newIds) {
+    const copy = findElementHelper(ws, newId)
+    if (!copy) continue
+    if (copy.type === 'person' || copy.type === 'softwareSystem') { setSubtree(copy, undefined); continue }
+    setSubtree(copy, findParentHelper(ws, newId)?.sourcePath)
+  }
   return newIds
 }
 

@@ -39,10 +39,12 @@ describe('read-only included content (TEA-325)', () => {
     expect(store().workspace!.model.people[0].description).toBe('root')
   })
 
-  it('never deletes read-only elements, even inside a mixed selection', () => {
+  it('never deletes read-only elements, nor elements a read-only file still references', () => {
+    // `a` is read-only; `b` is writable but ro.dsl declares `a -> b`, which
+    // would dangle if `b` went — and ro.dsl is never rewritten.
     store().deleteElements(['a', 'b'])
-    const ids = store().workspace!.model.softwareSystems.map((s) => s.id)
-    expect(ids).toEqual(['a'])
+    const ids = store().workspace!.model.softwareSystems.map((s) => s.id).sort()
+    expect(ids).toEqual(['a', 'b'])
   })
 
   it('blocks relationship edits and deletes owned by a read-only file', () => {

@@ -114,7 +114,11 @@ export const createElementSlice: StateCreator<
       const tags = extraTag ? ['Element', 'Container', extraTag] : ['Element', 'Container']
       const finalName = uniqueElementName(name, ws)
       id = mintIdFor(ws, finalName)
+      // A child lives in its parent's file (TEA-325): inherit the source so
+      // the fragment write-back carries it; a read-only parent can't take it.
+      if (isReadOnlySource(ws, system.sourcePath)) { announce(`${system.name} is defined in a read-only file`); return }
       const container: Container = { id, type: 'container', idIsAuto: true, name: finalName, tags, properties: {}, components: [] }
+      if (system.sourcePath) container.sourcePath = system.sourcePath
       system.containers.push(container)
       // A container belongs ONLY in its own system's container views — never in
       // the active view if that view is scoped to a different system (that would
@@ -160,7 +164,9 @@ export const createElementSlice: StateCreator<
         pushUndoSnapshot(s)
         const finalName = uniqueElementName(name, ws)
         id = mintIdFor(ws, finalName)
+        if (isReadOnlySource(ws, container.sourcePath)) { announce(`${container.name} is defined in a read-only file`); return }
         const comp: Component = { id, type: 'component', idIsAuto: true, name: finalName, tags: ['Element', 'Component'], properties: {} }
+        if (container.sourcePath) comp.sourcePath = container.sourcePath
         container.components.push(comp)
         // A component belongs ONLY in its own container's component views (not in
         // a different container's active view). Add to every component view
@@ -264,7 +270,14 @@ export const createElementSlice: StateCreator<
       if (!s.workspace) return
       // Never delete content owned by a read-only included file (TEA-325).
       const ws = s.workspace
-      const deletable = ids.filter((id) => !isReadOnlySource(ws, findElementHelper(ws, id)?.sourcePath))
+      // …and content a read-only file still points at: deleting it would leave
+      // that file (which is never rewritten) with a dangling reference.
+      const pinnedByReadOnlyRel = new Set<string>()
+      for (const r of ws.model.relationships) {
+        if (isReadOnlySource(ws, r.sourcePath)) { pinnedByReadOnlyRel.add(r.sourceId); pinnedByReadOnlyRel.add(r.destinationId) }
+      }
+      const deletable = ids.filter((id) => !isReadOnlySource(ws, findElementHelper(ws, id)?.sourcePath) && !pinnedByReadOnlyRel.has(id))
+      if (deletable.length < ids.length) announce('Some elements are defined in, or referenced by, a read-only included file and were kept')
       if (deletable.length === 0) return
       ids = deletable
       pushUndoSnapshot(s)

@@ -121,6 +121,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                     themes.push(p.advance().value)
                 }
                 views.configuration.themes = themes
+                p.themesLine = token.line
                 continue
             }
             if (kw === 'dynamic') {

@@ -9,7 +9,6 @@ import {
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
-import { serializeDSL } from '@/lib/dsl'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
@@ -430,7 +429,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.workspace) return
         try {
-          await saveDSLFile(serializeDSL(s.workspace), `${s.workspace.name ?? 'workspace'}.dsl`)
+          await saveDSLFile(serializeRoot(s.workspace), `${s.workspace.name ?? 'workspace'}.dsl`)
         } catch (error) {
           announce(error instanceof Error ? error.message : 'Export failed')
         }

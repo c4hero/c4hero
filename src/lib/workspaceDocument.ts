@@ -63,7 +63,7 @@ export function stitchWorkspaceDocument(
   resolved: ResolveIncludesResult,
   texts: Map<string, string>,
 ): WorkspaceDocumentResult {
-  const { workspace, errors: rawErrors, warnings: rawWarnings, declarationLines, viewLines } = parseDSL(resolved.content)
+  const { workspace, errors: rawErrors, warnings: rawWarnings, declarationLines, viewLines, directiveLines, styleLines, themesLine } = parseDSL(resolved.content)
   if (!workspace.name && input.fallbackName) workspace.name = input.fallbackName
 
   // Provenance: map every declaration back to the file it was read from.
@@ -88,6 +88,18 @@ export function stitchWorkspaceDocument(
     const p = fileOf(line)
     if (p) view.sourcePath = p
   }
+  // Directives, styles and themes that live in an included file belong to
+  // it; re-emitting them into the root would duplicate (and mis-resolve) them.
+  workspace.directives?.forEach((d, i) => {
+    const p = fileOf(directiveLines[i])
+    if (p) d.sourcePath = p
+  })
+  for (const style of [...workspace.views.configuration.styles.elements, ...workspace.views.configuration.styles.relationships]) {
+    const p = fileOf(styleLines.get(style))
+    if (p) style.sourcePath = p
+  }
+  const themesPath = fileOf(themesLine)
+  if (themesPath) workspace.views.configuration.themesSourcePath = themesPath
 
   workspace.includedFiles = resolved.files.map((path) => classifyIncluded(path, texts.get(path) ?? '', resolved.scopes.get(path)))
 

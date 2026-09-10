@@ -130,6 +130,11 @@ export interface ParseResult {
     declarationLines: Map<string, number>
     /** Same for views, keyed by the View object (keys are assigned late). */
     viewLines: Map<View, number>
+    /** Source line of each `workspace.directives` entry, parallel array. */
+    directiveLines: number[]
+    /** Source line per style object and of the `themes` line. */
+    styleLines: Map<object, number>
+    themesLine: number | undefined
     /** Non-fatal notes: the model loaded, but something was preserved rather
      *  than understood (e.g. an unresolved `!include`). */
     warnings: ParseError[]
@@ -166,6 +171,17 @@ export class ContextAwareParser {
     directives: WorkspaceDirective[] = []
     declarationLines = new Map<string, number>()
     viewLines = new Map<View, number>()
+    /** Source line of each entry in `directives`, parallel array. */
+    directiveLines: number[] = []
+    /** Source line per parsed style object and of the `themes` line. */
+    styleLines = new Map<object, number>()
+    themesLine: number | undefined
+    /** Last element / environment / group declared in the model block being
+     *  parsed — the anchor a following `!` directive is re-emitted after.
+     *  Reset on entering a group body (see parseModelBody). */
+    lastModelDeclId: string | undefined
+    /** Group body currently being parsed, for directive placement. */
+    currentGroupId: string | undefined
 
     /** Line of the most recently consumed token — the declaration line for
      *  whatever was just parsed. */
@@ -389,7 +405,13 @@ export class ContextAwareParser {
         // would make Structurizr reject the very references we write.
         const raw = value.trim()
         if (/^!identifiers\b/.test(raw)) return
-        this.directives.push({ scope, raw })
+        const directive: WorkspaceDirective = { scope, raw }
+        if (scope === 'model') {
+            if (this.currentGroupId) directive.groupId = this.currentGroupId
+            if (this.lastModelDeclId) directive.after = this.lastModelDeclId
+        }
+        this.directives.push(directive)
+        this.directiveLines.push((token ?? this.peek()).line)
         if (/^!include\b/.test(raw)) {
             const t = token ?? this.peek()
             this.warnings.push({
@@ -505,7 +527,7 @@ export class ContextAwareParser {
             if (this.check('KEYWORD', 'extends') || this.check('IDENTIFIER', 'extends')) {
                 this.skipToNextLine()
                 this.skipBraceBlock()
-                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines }
+                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine }
             }
 
             workspace.name = this.readOptionalString() || undefined
@@ -520,7 +542,7 @@ export class ContextAwareParser {
         }
 
         if (this.directives.length > 0) workspace.directives = this.directives
-        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines }
+        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine }
     }
 
     private createEmptyWorkspace(): Workspace {
@@ -711,5 +733,8 @@ export function parse(input: string): ParseResult {
         warnings,
         declarationLines: result.declarationLines,
         viewLines: result.viewLines,
+        directiveLines: result.directiveLines,
+        styleLines: result.styleLines,
+        themesLine: result.themesLine,
     }
 }

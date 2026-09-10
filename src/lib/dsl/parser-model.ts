@@ -111,7 +111,15 @@ export function parseModelBody(
                     const memberRefs: string[] = []
                     const beforePeople = model.people.length
                     const beforeSystems = model.softwareSystems.length
+                    // Directives inside the group anchor to declarations
+                    // inside it (or its top), never to something outside.
+                    const outerGroup = p.currentGroupId
+                    const outerLast = p.lastModelDeclId
+                    p.currentGroupId = groupId
+                    p.lastModelDeclId = undefined
                     parseModelBody(p, model, memberRefs, groupId)
+                    p.currentGroupId = outerGroup
+                    p.lastModelDeclId = outerLast
                     p.skipNewlines()
                     p.expect('RBRACE')
                     const definedIds = [
@@ -123,19 +131,20 @@ export function parseModelBody(
                     if (parentGroupId) group.parentId = parentGroupId
                     p.declarationLines.set(groupId, p.lastLine())
                     model.groups.push(group)
+                    p.lastModelDeclId = groupId
                 }
                 continue
             }
 
             if (kw === 'person') {
                 const person = parsePerson(p)
-                if (person) model.people.push(person)
+                if (person) { model.people.push(person); p.lastModelDeclId = person.id }
                 continue
             }
 
             if (kw === 'softwaresystem') {
                 const sys = parseSoftwareSystem(p, undefined, model)
-                if (sys) model.softwareSystems.push(sys)
+                if (sys) { model.softwareSystems.push(sys); p.lastModelDeclId = sys.id }
                 continue
             }
 
@@ -180,10 +189,10 @@ export function parseModelBody(
 
                     if (elementKw === 'person') {
                         const person = parsePerson(p, varName)
-                        if (person) model.people.push(person)
+                        if (person) { model.people.push(person); p.lastModelDeclId = person.id }
                     } else if (elementKw === 'softwaresystem') {
                         const sys = parseSoftwareSystem(p, varName, model)
-                        if (sys) model.softwareSystems.push(sys)
+                        if (sys) { model.softwareSystems.push(sys); p.lastModelDeclId = sys.id }
                     } else if (elementKw === 'deploymentenvironment') {
                         parseDeploymentEnvironment(p, model, varName)
                     } else {

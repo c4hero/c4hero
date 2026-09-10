@@ -197,7 +197,7 @@ export default function FloatingTopPill() {
       if (type === 'png-dark') ok = await copyCanvasAsPNG('dark')
       else if (type === 'png-light') ok = await copyCanvasAsPNG('light')
       else if (type === 'png-current') ok = await copyCanvasAsPNG('current')
-      else if (type === 'dsl') ok = await copyTextToClipboard(serializeDSL(workspace))
+      else if (type === 'dsl') ok = await copyTextToClipboard(serializeRoot(workspace))
       const themeLabel = type === 'png-dark' ? 'dark' : type === 'png-light' ? 'light' : 'current'
       const label = type === 'dsl' ? 'DSL' : `PNG (${themeLabel})`
       const msg = ok ? `Copied ${label}` : 'Copy failed'

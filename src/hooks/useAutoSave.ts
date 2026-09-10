@@ -8,8 +8,11 @@ import { createLogger } from '@/lib/logger'
 
 const log = createLogger('useAutoSave')
 
-/** Last fragment written per included path, so unchanged files aren't rewritten. */
+/** Last fragment written per included path, so unchanged files aren't
+ *  rewritten. Scoped to one root file: switching folder or workspace must
+ *  not let a memo from another workspace suppress a needed write. */
 const lastIncludedWrites = new Map<string, string>()
+let lastIncludedWritesFor: string | null = null
 
 const scheduleIdle = typeof requestIdleCallback === 'function'
   ? requestIdleCallback
@@ -71,6 +74,8 @@ export function useAutoSave() {
               if (sidecar) writeSidecarFile(filename, serializeSidecar(sidecar))
               // Write-back: each writable !include'd file gets its own fragment,
               // only when it actually changed (TEA-325).
+              const scope = `${dirHandle.name}/${filename}`
+              if (lastIncludedWritesFor !== scope) { lastIncludedWrites.clear(); lastIncludedWritesFor = scope }
               for (const w of planIncludedWrites(state.workspace)) {
                 if (lastIncludedWrites.get(w.path) === w.content) continue
                 lastIncludedWrites.set(w.path, w.content)

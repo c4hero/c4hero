@@ -71,10 +71,12 @@ export function serialize(workspace: Workspace, opts: SerializeOptions = {}): st
 function filterBySource(ws: Workspace, source: string | null): Workspace {
     const owned = (item: { sourcePath?: string }) => (source === null ? item.sourcePath === undefined : item.sourcePath === source)
     const model = ws.model
+    const config = ws.views.configuration
     return {
         ...ws,
-        // Preserved `!` lines belong to the root document only.
-        directives: source === null ? ws.directives : undefined,
+        // Preserved `!` lines belong to the root document only, and only
+        // the ones written there — not ones read from an included file.
+        directives: source === null ? ws.directives?.filter(owned) : undefined,
         model: {
             ...model,
             people: model.people.filter(owned),
@@ -94,6 +96,14 @@ function filterBySource(ws: Workspace, source: string | null): Workspace {
             componentViews: ws.views.componentViews.filter(owned),
             dynamicViews: (ws.views.dynamicViews ?? []).filter(owned),
             deploymentViews: (ws.views.deploymentViews ?? []).filter(owned),
+            configuration: {
+                ...config,
+                styles: {
+                    elements: config.styles.elements.filter(owned),
+                    relationships: config.styles.relationships.filter(owned),
+                },
+                themes: source === null && config.themesSourcePath ? undefined : (source === null ? config.themes : undefined),
+            },
         },
     }
 }
@@ -541,13 +551,34 @@ class SerializerContext {
     // ─── Model ──────────────────────────────────────────────────────
 
     /** Re-emit preserved `!` lines for one block, verbatim and in original
-     *  order, ahead of any generated content. Returns true if any were written. */
+     *  order. Model-scope lines that were written after a declaration (or
+     *  inside a group) are held back for `emitDirectivesAfter` /
+     *  `emitGroupDirectives` so their single-pass ordering survives; the rest
+     *  go ahead of any generated content. Returns true if any were written. */
     private emitDirectives(scope: 'workspace' | 'model' | 'views'): boolean {
         let any = false
         for (const d of this.workspace.directives ?? []) {
             if (d.scope !== scope) continue
+            if (scope === 'model' && (d.after || d.groupId)) continue
             this.emit(d.raw)
             any = true
+        }
+        return any
+    }
+
+    /** Model-scope directives anchored right after `id` (an element,
+     *  environment or group that has just been emitted). */
+    private emitDirectivesAfter(id: string): void {
+        for (const d of this.workspace.directives ?? []) {
+            if (d.scope === 'model' && d.after === id) this.emit(d.raw)
+        }
+    }
+
+    /** Directives written at the top of a group block. */
+    private emitGroupDirectives(groupId: string): boolean {
+        let any = false
+        for (const d of this.workspace.directives ?? []) {
+            if (d.scope === 'model' && d.groupId === groupId && !d.after) { this.emit(d.raw); any = true }
         }
         return any
     }
@@ -565,13 +596,17 @@ class SerializerContext {
             this.emitBlank()
         }
 
-        this.serializeGroupScope(this.topLevelGroups, element => this.serializeModelElement(element))
+        this.serializeGroupScope(this.topLevelGroups, element => {
+            this.serializeModelElement(element)
+            this.emitDirectivesAfter(element.id)
+        })
 
         // Deployment environments (before relationships — instance identifiers
         // must be defined before any relationship lines that reference them)
         for (const env of model.deploymentEnvironments ?? []) {
             this.emitBlank()
             this.serializeDeploymentEnvironment(env)
+            this.emitDirectivesAfter(env.id)
         }
 
         // Relationships
@@ -609,7 +644,7 @@ class SerializerContext {
     ): void {
         this.emit(`group "${this.escapeString(scoped.group.name)}" {`)
         this.depth++
-        let emitted = false
+        let emitted = this.emitGroupDirectives(scoped.group.id)
         for (const child of scoped.children) {
             if (emitted) this.emitBlank()
             this.serializeGroup(child, serializeElement)
@@ -622,6 +657,7 @@ class SerializerContext {
         }
         this.depth--
         this.emit('}')
+        this.emitDirectivesAfter(scoped.group.id)
     }
 
     private serializeModelElement(element: Person | SoftwareSystem): void {

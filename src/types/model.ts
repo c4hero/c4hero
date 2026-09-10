@@ -227,6 +227,8 @@ export interface View {
 
 export interface ElementStyle {
   tag: string
+  /** See BaseElement.sourcePath. */
+  sourcePath?: string
   background?: string
   color?: string
   shape?: string
@@ -240,6 +242,8 @@ export interface ElementStyle {
 
 export interface RelationshipStyle {
   tag: string
+  /** See BaseElement.sourcePath. */
+  sourcePath?: string
   color?: string
   thickness?: number
   dashed?: boolean
@@ -253,6 +257,8 @@ export interface ViewConfiguration {
     relationships: RelationshipStyle[]
   }
   themes?: string[]
+  /** File the `themes` line came from, when `!include`d. */
+  themesSourcePath?: string
 }
 
 // ─── Model ───────────────────────────────────────────────────────────
@@ -277,6 +283,16 @@ export interface WorkspaceDirective {
   scope: 'workspace' | 'model' | 'views'
   /** The whole line as written, trimmed. */
   raw: string
+  /** Model scope only: the group block the line was written in. */
+  groupId?: string
+  /** Model scope only: id of the element / environment / group declared just
+   *  before this line in the same block. The serializer re-emits the line
+   *  right after that declaration, so a `!include` that references earlier
+   *  root content keeps its single-pass ordering. Absent = top of the block. */
+  after?: string
+  /** Set when the line came from an `!include`d file; never re-emitted into
+   *  the root. See BaseElement.sourcePath. */
+  sourcePath?: string
 }
 
 export interface IncludedFile {
