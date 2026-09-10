@@ -2,6 +2,9 @@ import type { StateCreator } from 'zustand'
 import type { Workspace } from '@/types/model'
 import type { WorkspaceState } from '../workspace-types'
 import { pushUndoSnapshot } from '../internals'
+import { readString, writeString } from '@/lib/safeStorage'
+
+const WATCH_DISK_KEY = 'c4hero_watch_disk'
 
 // Per-batch bookkeeping for setBatchApplying's no-op guard (single store instance).
 let batchBaseWs: Workspace | null = null
@@ -16,6 +19,9 @@ export type UiSlice = Pick<WorkspaceState,
   | 'canvasSettingsOpen' | 'canvasGuideOpen' | 'addElementPanelOpen' | 'highlighterOpenFacet'
   | 'viewsPanelOpen' | 'createViewDialogOpen'
   | 'codePanelOpen' | 'setCodePanelOpen' | 'toggleCodePanel'
+  | 'watchDisk' | 'setWatchDisk' | 'toggleWatchDisk'
+  | 'diskConflict' | 'setDiskConflict' | 'diskFileMissing' | 'setDiskFileMissing'
+  | 'codePaneDirty' | 'setCodePaneDirty'
   | 'impactTargetIds' | 'openImpactPanel' | 'closeImpactPanel'
   | 'pendingDelete' | 'confirmDelete' | 'cancelDelete'
   | 'presentationMode' | 'setPresentationMode'
@@ -57,6 +63,10 @@ export const createUiSlice: StateCreator<
   viewsPanelOpen: false,
   createViewDialogOpen: false,
   codePanelOpen: false,
+  watchDisk: readString(WATCH_DISK_KEY) !== '0',
+  diskConflict: null,
+  diskFileMissing: false,
+  codePaneDirty: false,
   impactTargetIds: null,
   pendingDelete: null,
   presentationMode: false,
@@ -130,6 +140,16 @@ export const createUiSlice: StateCreator<
     if (s.codePanelOpen) s.commandPaletteOpen = false
   }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
+
+  setWatchDisk: (on) => {
+    writeString(WATCH_DISK_KEY, on ? '1' : '0')
+    // Turning the watch off also drops any prompt it raised.
+    set(on ? { watchDisk: true } : { watchDisk: false, diskConflict: null, diskFileMissing: false })
+  },
+  toggleWatchDisk: () => get().setWatchDisk(!get().watchDisk),
+  setDiskConflict: (conflict) => set({ diskConflict: conflict }),
+  setDiskFileMissing: (missing) => set({ diskFileMissing: missing }),
+  setCodePaneDirty: (dirty) => set((s) => { if (s.codePaneDirty !== dirty) s.codePaneDirty = dirty }),
 
   // The targets are snapshotted when the panel opens: the analysis answers a
   // question about a specific set of elements, and changing the canvas

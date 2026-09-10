@@ -2,6 +2,8 @@ import { sidecarName } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
 import { readTextFileWithLimit } from '@/lib/fileIO'
 import { isRecord } from '@/lib/guards'
+import { recordSelfDslWrite, recordSelfSidecarWrite } from '@/lib/saveCoordinator'
+import type { WatchedSnapshot } from '@/lib/fileWatch'
 
 const log = createLogger('folderIO')
 
@@ -105,10 +107,36 @@ export async function readDSLFile(filename: string): Promise<{ content: string; 
   }
 }
 
+/** Read a workspace file for the disk watcher. Unlike `readDSLFile` this is
+ *  silent and distinguishes "gone" (`null`) from a transient failure (throws),
+ *  because it runs every couple of seconds. */
+export async function readDSLFileForWatch(filename: string): Promise<WatchedSnapshot | null> {
+  if (!currentDirHandle) return null
+  let content: string
+  try {
+    const fileHandle = await currentDirHandle.getFileHandle(filename)
+    const file = await fileHandle.getFile()
+    content = await readTextFileWithLimit(file, 'DSL file')
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+  let sidecarJson: string | undefined
+  try {
+    const sidecarHandle = await currentDirHandle.getFileHandle(sidecarName(filename))
+    const sidecarFile = await sidecarHandle.getFile()
+    sidecarJson = await readTextFileWithLimit(sidecarFile, 'Sidecar file')
+  } catch {
+    // No sidecar — expected for new workspaces
+  }
+  return { content, sidecarJson }
+}
+
 /** Write DSL content to a file in the current directory (creates if not present) */
 export async function writeDSLFile(filename: string, content: string): Promise<boolean> {
   if (!currentDirHandle) return false
   try {
+    recordSelfDslWrite(content)
     const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true })
     const writable = await fileHandle.createWritable()
     await writable.write(content)
@@ -125,6 +153,7 @@ export async function writeSidecarFile(dslFilename: string, json: string): Promi
   if (!currentDirHandle) return false
   try {
     const filename = sidecarName(dslFilename)
+    recordSelfSidecarWrite(json)
     const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true })
     const writable = await fileHandle.createWritable()
     await writable.write(json)

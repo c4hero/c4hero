@@ -5,6 +5,8 @@ import { isFiniteNumber, isNonEmptyString, isRecord, isStringArray, isStringReco
 import { sidecarName } from '@/lib/sidecar'
 import { safeSuggestedDslName } from '@/lib/filenames'
 import { readJSON, writeJSON, writeString, removeKey } from '@/lib/safeStorage'
+import { recordSelfDslWrite, recordSelfSidecarWrite } from '@/lib/saveCoordinator'
+import type { WatchedSnapshot } from '@/lib/fileWatch'
 
 const log = createLogger('fileIO')
 
@@ -107,10 +109,36 @@ export function getCurrentFileHandle(): FileSystemFileHandle | null {
   return currentFileHandle
 }
 
+/** Read the open single file (and its sidecar, when one is linked) for the
+ *  disk watcher. Resolves `null` when the file no longer exists; rethrows
+ *  anything else so a transient failure isn't mistaken for a deletion. */
+export async function readCurrentFile(): Promise<WatchedSnapshot | null> {
+  if (!currentFileHandle) return null
+  let content: string
+  try {
+    const file = await currentFileHandle.getFile()
+    content = await readTextFileWithLimit(file, 'DSL file')
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+  let sidecarJson: string | undefined
+  if (currentSidecarHandle) {
+    try {
+      const sidecarFile = await currentSidecarHandle.getFile()
+      sidecarJson = await readTextFileWithLimit(sidecarFile, 'Sidecar file')
+    } catch {
+      // Sidecar gone or unreadable: treat as "no sidecar" rather than "file gone".
+    }
+  }
+  return { content, sidecarJson }
+}
+
 /** Write DSL content to the current file handle (for auto-save) */
 export async function writeToCurrentHandle(content: string): Promise<boolean> {
   if (!currentFileHandle || !hasFileSystemAccess()) return false
   try {
+    recordSelfDslWrite(content)
     const writable = await currentFileHandle.createWritable()
     await writable.write(content)
     await writable.close()
@@ -125,6 +153,7 @@ export async function writeToCurrentHandle(content: string): Promise<boolean> {
 export async function writeSidecarToHandle(json: string): Promise<boolean> {
   if (!hasFileSystemAccess()) return false
   try {
+    recordSelfSidecarWrite(json)
     // If we have an existing sidecar handle, write to it
     if (currentSidecarHandle) {
       const writable = await currentSidecarHandle.createWritable()
@@ -242,6 +271,7 @@ export async function saveDSLFile(content: string, suggestedName?: string): Prom
           excludeAcceptAllOption: false,
         })
       }
+      recordSelfDslWrite(content)
       const writable = await currentFileHandle.createWritable()
       await writable.write(content)
       await writable.close()
