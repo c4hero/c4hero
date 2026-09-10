@@ -37,7 +37,9 @@ export function parseDeploymentEnvironment(p: ContextAwareParser, model: Model, 
         p.expect('RBRACE')
     }
 
+    p.declarationLines.set(id, p.lastLine())
     model.deploymentEnvironments.push(env)
+    p.lastModelDeclId = id
 }
 
 function parseDeploymentEnvironmentBody(p: ContextAwareParser, env: DeploymentEnvironment, model: Model): void {

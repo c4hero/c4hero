@@ -4,6 +4,7 @@ import LoadingDot from '@/components/shared/LoadingDot'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
 import { serializeDSL } from '@/lib/dsl'
+import { serializeRoot } from '@/lib/includeWriteback'
 import { createBlankWorkspace } from '@/lib/templates'
 import { saveDSLFile } from '@/lib/fileIO'
 import { announce } from '@/lib/announce'
@@ -26,11 +27,11 @@ import {
 import { useSettingsStore } from '@/store/settings'
 import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
 
-import { listDSLFiles, readDSLFile, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/folderIO'
+import { listDSLFiles, readDSLFile, readDSLFileAt, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/folderIO'
 import { parseDSL } from '@/lib/dsl'
 import { useNavigate } from 'react-router-dom'
 import { WorkspaceTile } from '@/components/welcome/WelcomeLeaves'
-import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
+import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 
 interface WsEntry {
   filename: string
@@ -110,10 +111,11 @@ export default function FloatingTopPill() {
     setWsPickerOpen(false)
     const file = await readDSLFile(filename)
     if (!file) return
-    const { workspace } = parseWorkspaceDocument({
+    const { workspace } = await loadWorkspaceDocument({
       content: file.content,
       fallbackName: filename.replace(/\.dsl$/, ''),
       sidecarJson: file.sidecarJson,
+      readInclude: readDSLFileAt,
     })
     loadWorkspace(workspace)
     useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
@@ -155,7 +157,7 @@ export default function FloatingTopPill() {
     try {
       switch (format) {
         case 'dsl':
-          await saveDSLFile(serializeDSL(workspace), `${wsName}.dsl`)
+          await saveDSLFile(serializeRoot(workspace), `${wsName}.dsl`)
           break
         case 'png': {
           const blob = await exportCanvasAsPNG(theme)
@@ -195,7 +197,7 @@ export default function FloatingTopPill() {
       if (type === 'png-dark') ok = await copyCanvasAsPNG('dark')
       else if (type === 'png-light') ok = await copyCanvasAsPNG('light')
       else if (type === 'png-current') ok = await copyCanvasAsPNG('current')
-      else if (type === 'dsl') ok = await copyTextToClipboard(serializeDSL(workspace))
+      else if (type === 'dsl') ok = await copyTextToClipboard(serializeRoot(workspace))
       const themeLabel = type === 'png-dark' ? 'dark' : type === 'png-light' ? 'light' : 'current'
       const label = type === 'dsl' ? 'DSL' : `PNG (${themeLabel})`
       const msg = ok ? `Copied ${label}` : 'Copy failed'

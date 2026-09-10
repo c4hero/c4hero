@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
-import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile } from '@/lib/folderIO'
+import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile, readDSLFileAt } from '@/lib/folderIO'
 import { loadFromLocalStorage } from '@/lib/fileIO'
 import { createLogger } from '@/lib/logger'
-import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
+import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 
 const log = createLogger('routeSync')
 
@@ -154,11 +154,13 @@ export function useRefreshRedirect() {
       }
 
       // 3. Parse, apply sidecar, load into store
-      const { workspace: parsed, errors } = parseWorkspaceDocument({
+      const { workspace: parsed, errors } = await loadWorkspaceDocument({
         content: file.content,
         fallbackName: workspaceSlug,
         sidecarJson: file.sidecarJson,
+        readInclude: readDSLFileAt,
       })
+      if (cancelled) return
       if (errors.length > 0) log.warn('DSL parse warnings', errors)
 
       useWorkspaceStore.getState().loadWorkspace(parsed)

@@ -107,6 +107,49 @@ export async function readDSLFile(filename: string): Promise<{ content: string; 
   }
 }
 
+/** Walk `a/b/c.dsl` from the current directory handle. `create` makes
+ *  intermediate directories; the file itself is created only by the writer. */
+async function resolveFileHandle(relPath: string, create: boolean): Promise<FileSystemFileHandle | null> {
+  if (!currentDirHandle) return null
+  const parts = relPath.split('/').filter((p) => p !== '' && p !== '.')
+  if (parts.length === 0 || parts.some((p) => p === '..')) return null
+  let dir = currentDirHandle
+  try {
+    for (const seg of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(seg, { create })
+    return await dir.getFileHandle(parts[parts.length - 1], { create })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+}
+
+/** Read a text file at a path relative to the open folder (for `!include`
+ *  resolution). `null` when it does not exist; throws on other failures. */
+export async function readDSLFileAt(relPath: string): Promise<string | null> {
+  const handle = await resolveFileHandle(relPath, false)
+  if (!handle) return null
+  const file = await handle.getFile()
+  return readTextFileWithLimit(file, 'Included DSL file')
+}
+
+/** Write a text file at a path relative to the open folder (include
+ *  write-back). Never creates the file: an included file that vanished is
+ *  not silently recreated. */
+export async function writeDSLFileAt(relPath: string, content: string): Promise<boolean> {
+  try {
+    const handle = await resolveFileHandle(relPath, false)
+    if (!handle) return false
+    recordSelfDslWrite(content)
+    const writable = await handle.createWritable()
+    await writable.write(content)
+    await writable.close()
+    return true
+  } catch (err) {
+    log.error('writeDSLFileAt failed', { relPath, err })
+    return false
+  }
+}
+
 /** Read a workspace file for the disk watcher. Unlike `readDSLFile` this is
  *  silent and distinguishes "gone" (`null`) from a transient failure (throws),
  *  because it runs every couple of seconds. */

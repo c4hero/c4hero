@@ -3,6 +3,7 @@
 
 import type {
     Workspace,
+    WorkspaceDirective,
     Model,
     View,
     ElementInView,
@@ -123,6 +124,20 @@ export interface ParseError {
 export interface ParseResult {
     workspace: Workspace
     errors: ParseError[]
+    /** Source line (1-based) where each element / relationship / group /
+     *  deployment environment id was declared. Lets a caller that flattened
+     *  `!include`s map ids back to their file (TEA-325 B). */
+    declarationLines: Map<string, number>
+    /** Same for views, keyed by the View object (keys are assigned late). */
+    viewLines: Map<View, number>
+    /** Source line of each `workspace.directives` entry, parallel array. */
+    directiveLines: number[]
+    /** Source line per style object and of the `themes` line. */
+    styleLines: Map<object, number>
+    themesLine: number | undefined
+    /** Non-fatal notes: the model loaded, but something was preserved rather
+     *  than understood (e.g. an unresolved `!include`). */
+    warnings: ParseError[]
 }
 
 // ─── ID Generation ───────────────────────────────────────────────────
@@ -151,6 +166,29 @@ export class ContextAwareParser {
     tokens: Token[]
     pos = 0
     errors: ParseError[] = []
+    warnings: ParseError[] = []
+    /** Preprocessor lines captured verbatim, in source order (TEA-325). */
+    directives: WorkspaceDirective[] = []
+    declarationLines = new Map<string, number>()
+    viewLines = new Map<View, number>()
+    /** Source line of each entry in `directives`, parallel array. */
+    directiveLines: number[] = []
+    /** Source line per parsed style object and of the `themes` line. */
+    styleLines = new Map<object, number>()
+    themesLine: number | undefined
+    /** Last element / environment / group declared in the model block being
+     *  parsed — the anchor a following `!` directive is re-emitted after.
+     *  Reset on entering a group body (see parseModelBody). */
+    lastModelDeclId: string | undefined
+    /** Group body currently being parsed, for directive placement. */
+    currentGroupId: string | undefined
+
+    /** Line of the most recently consumed token — the declaration line for
+     *  whatever was just parsed. */
+    lastLine(): number {
+        const t = this.tokens[this.pos - 1] ?? this.tokens[this.pos]
+        return t?.line ?? 1
+    }
     depth = 0
 
     // Variable name <-> element id mappings
@@ -310,6 +348,7 @@ export class ContextAwareParser {
      */
     registerElement(id: string, name: string, _type: string, varName?: string, parentPath?: string): string {
         this.elementsById.set(id, { name, type: _type })
+        if (!this.declarationLines.has(id)) this.declarationLines.set(id, this.lastLine())
         this.nameToId.set(name, id)
         if (varName) {
             this.varToId.set(varName, id)
@@ -352,9 +391,34 @@ export class ContextAwareParser {
      *  line into the keyword's value, so `!identifiers hierarchical` arrives as
      *  a single token. c4hero always registers bare *and* qualified names, so
      *  the flag only records intent — resolution prefers qualified regardless. */
-    noteDirective(value: string): void {
+    noteDirective(value: string, scope: WorkspaceDirective['scope'] = 'workspace', token?: Token): void {
         if (/^!identifiers\b/.test(value) && /\bhierarchical\b/.test(value)) {
             this.hierarchicalIdentifiers = true
+        }
+        // Preserve every directive byte-for-byte (minus surrounding whitespace)
+        // so a save never deletes a line the user wrote. Includes are kept but
+        // their content is not loaded here — say so, as a warning not an error.
+        //
+        // `!identifiers` is the one exception: it is a parse *mode*, not data.
+        // c4hero registers both flat and qualified names on read and always
+        // serializes flat identifiers, so re-emitting `!identifiers hierarchical`
+        // would make Structurizr reject the very references we write.
+        const raw = value.trim()
+        if (/^!identifiers\b/.test(raw)) return
+        const directive: WorkspaceDirective = { scope, raw }
+        if (scope === 'model') {
+            if (this.currentGroupId) directive.groupId = this.currentGroupId
+            if (this.lastModelDeclId) directive.after = this.lastModelDeclId
+        }
+        this.directives.push(directive)
+        this.directiveLines.push((token ?? this.peek()).line)
+        if (/^!include\b/.test(raw)) {
+            const t = token ?? this.peek()
+            this.warnings.push({
+                message: `${raw} is preserved but not resolved — included content is not shown`,
+                line: t.line,
+                column: t.column,
+            })
         }
     }
 
@@ -463,7 +527,7 @@ export class ContextAwareParser {
             if (this.check('KEYWORD', 'extends') || this.check('IDENTIFIER', 'extends')) {
                 this.skipToNextLine()
                 this.skipBraceBlock()
-                return { workspace, errors: this.errors }
+                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine }
             }
 
             workspace.name = this.readOptionalString() || undefined
@@ -477,7 +541,8 @@ export class ContextAwareParser {
             }
         }
 
-        return { workspace, errors: this.errors }
+        if (this.directives.length > 0) workspace.directives = this.directives
+        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine }
     }
 
     private createEmptyWorkspace(): Workspace {
@@ -533,7 +598,7 @@ export class ContextAwareParser {
                     }
                 } else if (token.value.startsWith('!')) {
                     // Preprocessor directive — consume keyword + inline args on this line
-                    this.noteDirective(token.value)
+                    this.noteDirective(token.value, 'workspace', token)
                     this.advance()
                     this.skipToNextLine()
                 } else if (kw === 'configuration') {
@@ -603,6 +668,7 @@ export function parse(input: string): ParseResult {
 
     // Combine lexer and parser errors
     const errors = [...lexResult.errors, ...result.errors]
+    const warnings = result.warnings
 
     // Implied instance relationships are NOT materialized here — the canvas
     // derives them per deployment view via deriveInstanceRelationships(), so
@@ -664,5 +730,11 @@ export function parse(input: string): ParseResult {
     return {
         workspace: ws,
         errors,
+        warnings,
+        declarationLines: result.declarationLines,
+        viewLines: result.viewLines,
+        directiveLines: result.directiveLines,
+        styleLines: result.styleLines,
+        themesLine: result.themesLine,
     }
 }
