@@ -188,9 +188,12 @@ workspace {
     expect(reparsed.workspace.model.softwareSystems[0].location).not.toBe('External')
   })
 
-  it('leaves an empty owner property as a property, so it survives round-trip', () => {
-    // The serializer only re-emits a truthy owner field; hoisting "" would
-    // drop the property on the next save.
+  it('parses an empty owner property without hoisting it, and drops it on save', () => {
+    // Hoisting "" onto the owner field would be wrong (the field is truthy-
+    // gated), so it stays a property on parse. It cannot be written back,
+    // though: the real parser rejects `"owner" ""` with "A property value
+    // must be specified" — found by the generated conformance corpus
+    // (TEA-63) — so the serializer skips empty-valued properties.
     const source = `
 workspace {
   model {
@@ -210,7 +213,8 @@ workspace {
     expect(sys.properties.owner).toBe('')
 
     const dsl1 = serializeDSL(workspace)
-    expect(dsl1).toContain('"owner" ""')
+    expect(dsl1).not.toContain('"owner" ""')
+    expect(dsl1).not.toContain('properties')
     const reparsed = parseDSL(dsl1)
     expect(serializeDSL(reparsed.workspace)).toBe(dsl1)
   })
