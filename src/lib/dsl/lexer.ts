@@ -108,11 +108,24 @@ export interface LexResult {
  * The consume-one escape rule in one place: the step length at position `i`
  * inside a quoted string is 2 when a backslash begins one of the two real
  * escapes (`\"` or `\n`), else 1 — a backslash before anything else is a
- * literal consumed alone. readString and scanQuotedString both step with
- * this, so the tokenizer and boundary scanner cannot drift apart.
+ * literal consumed alone. readString (in modern mode) and scanQuotedString
+ * both step with this. Legacy mode (TEA-167) uses escapeStepLegacy in
+ * readString only; scanQuotedString always applies the Structurizr rule.
  */
 export function escapeStep(input: string, i: number): 1 | 2 {
     return input[i] === '\\' && (input[i + 1] === '"' || input[i + 1] === 'n') ? 2 : 1
+}
+
+/** The JSON-style rule c4hero used before TEA-163: `\\`, `\"`, `\n` and `\t`
+ *  are all two-character escapes. Only applied to files detected as legacy. */
+function escapeStepLegacy(input: string, i: number): 1 | 2 {
+    const n = input[i + 1]
+    return input[i] === '\\' && (n === '\\' || n === '"' || n === 'n' || n === 't') ? 2 : 1
+}
+
+export interface LexOptions {
+    /** Decode `\\` and `\t` as well (files saved by pre-TEA-163 c4hero). */
+    legacyEscapes?: boolean
 }
 
 /**
@@ -129,7 +142,9 @@ export function scanQuotedString(input: string, start: number): number {
     return i < input.length ? i + 1 : input.length
 }
 
-export function lex(input: string): LexResult {
+export function lex(input: string, opts: LexOptions = {}): LexResult {
+    const legacy = opts.legacyEscapes === true
+    const step = legacy ? escapeStepLegacy : escapeStep
     const tokens: Token[] = []
     const errors: LexerError[] = []
     let pos = 0
@@ -179,17 +194,17 @@ export function lex(input: string): LexResult {
             // `\t` is not an escape. On a miss, only the backslash itself is
             // consumed — the next char is re-examined, because it may start
             // an escape of its own (`a\\"b` is literal-\ then \" → `a\"b`).
-            // escapeStep (above) is the single home of that rule; consuming
-            // two chars here is what made c4hero disagree with every other
-            // Structurizr tool on backslash-heavy values.
-            // Known consequence: files saved by pre-TEA-163 c4hero used
-            // JSON-style `\\`/`\t` escapes and now read back literally;
-            // detecting and migrating those legacy files is TEA-167.
-            if (escapeStep(input, pos) === 2) {
+            // escapeStep is the single home of that rule; consuming two chars
+            // here is what made c4hero disagree with every other Structurizr
+            // tool on backslash-heavy values. Files saved by pre-TEA-163
+            // c4hero (`\\`, `\t`) are decoded when `legacy` is set; see
+            // escapeStepLegacy.
+            if (step(input, pos) === 2) {
                 const escaped = peekAt(1)
                 advance()
                 advance()
-                value += escaped === 'n' ? '\n' : '"'
+                // `\"` and `\\` decode to themselves; only n and t change.
+                value += escaped === 'n' ? '\n' : escaped === 't' ? '\t' : escaped
             } else {
                 value += advance()
             }
