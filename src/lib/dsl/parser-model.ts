@@ -638,6 +638,7 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
         const val = p.readOptionalString()
         if (val !== undefined) element.url = val
     } else if (keyword === 'status') {
+        p.sawLegacyKeyword = true
         const val = p.peek()
         if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD' || val.type === 'STRING') {
             const s = p.advance().value
@@ -646,9 +647,11 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
             }
         }
     } else if (keyword === 'owner') {
+        p.sawLegacyKeyword = true
         const val = p.readOptionalString()
         if (val !== undefined) element.owner = val
     } else if (keyword === 'location') {
+        p.sawLegacyKeyword = true
         const val = p.peek()
         if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD') {
             const loc = p.advance().value

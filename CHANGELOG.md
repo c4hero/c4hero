@@ -36,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a trailing backslash is, and an element whose only properties were empty
   no longer gets an empty block. Found by the new generated conformance
   corpus. (TEA-63)
+- **Files saved by an older c4hero no longer load with drifted strings.**
+  Before v0.3 c4hero wrote JSON-style escapes (`\\` for a backslash, `\t`
+  for a tab); since the lexer started mirroring Structurizr, where only `\"`
+  and `\n` are escapes, those files read back with doubled backslashes and a
+  literal `\t`, and the next autosave could write the misread values back.
+  Old files are now recognised by the keyword lines only that serializer
+  produced (`status`, `owner`, `location`, `lineStyle`, `interactionStyle`),
+  decoded with the old rule, and migrated to Structurizr's format on the
+  next save, with a note in the code pane. A file that has `\\` or `\t` in
+  a string but no such marker is read by Structurizr's rule and flagged with
+  a warning instead of being changed silently. (TEA-167)
 - **Saving no longer deletes `!include`, `!const`, `!var`, `!docs` or `!adrs`
   lines.** The parser used to consume every `!` preprocessor directive and
   drop it, so opening a real Structurizr workspace whose model is split across
