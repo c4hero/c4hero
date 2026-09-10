@@ -121,6 +121,7 @@ export function parseModelBody(
                     const allIds = [...new Set([...definedIds, ...memberRefs])]
                     const group: Group = { id: groupId, name: groupName, elementIds: allIds }
                     if (parentGroupId) group.parentId = parentGroupId
+                    p.declarationLines.set(groupId, p.lastLine())
                     model.groups.push(group)
                 }
                 continue
@@ -301,7 +302,7 @@ function parseSoftwareSystemBody(
         const token = p.peek()
 
         if (token.type === 'COMMENT') { p.advance(); continue }
-        if (token.type === 'KEYWORD' && token.value.startsWith('!')) { p.advance(); p.skipToNextLine(); continue }
+        if (token.type === 'KEYWORD' && token.value.startsWith('!')) { (sys.directives ??= []).push(token.value.trim()); p.advance(); p.skipToNextLine(); continue }
 
         if (token.type === 'KEYWORD') {
             const kw = token.value.toLowerCase()
@@ -323,6 +324,7 @@ function parseSoftwareSystemBody(
                             elementIds: sys.containers.slice(beforeContainers).map(container => container.id),
                         }
                         if (parentGroupId) group.parentId = parentGroupId
+                        p.declarationLines.set(groupId, p.lastLine())
                         model.groups.push(group)
                     }
                 }
@@ -445,7 +447,7 @@ function parseContainerBody(
         const token = p.peek()
 
         if (token.type === 'COMMENT') { p.advance(); continue }
-        if (token.type === 'KEYWORD' && token.value.startsWith('!')) { p.advance(); p.skipToNextLine(); continue }
+        if (token.type === 'KEYWORD' && token.value.startsWith('!')) { (container.directives ??= []).push(token.value.trim()); p.advance(); p.skipToNextLine(); continue }
 
         if (token.type === 'KEYWORD') {
             const kw = token.value.toLowerCase()
@@ -467,6 +469,7 @@ function parseContainerBody(
                             elementIds: container.components.slice(beforeComponents).map(component => component.id),
                         }
                         if (parentGroupId) group.parentId = parentGroupId
+                        p.declarationLines.set(groupId, p.lastLine())
                         model.groups.push(group)
                     }
                 }
@@ -570,6 +573,7 @@ function parseSimpleElementBlock(p: ContextAwareParser, element: Person | Compon
         if (token.type === 'COMMENT') { p.advance(); continue }
 
         if (token.type === 'KEYWORD' && token.value.startsWith('!')) {
+            (element.directives ??= []).push(token.value.trim())
             p.advance()
             p.skipToNextLine()
             continue
@@ -581,7 +585,9 @@ function parseSimpleElementBlock(p: ContextAwareParser, element: Person | Compon
                 p.advance()
                 const groupName = p.readOptionalString()
                 if (groupName && model) {
-                    model.groups.push({ id: nextId(), name: groupName, elementIds: [element.id] })
+                    const gid = nextId()
+                    p.declarationLines.set(gid, p.lastLine())
+                    model.groups.push({ id: gid, name: groupName, elementIds: [element.id] })
                 }
                 continue
             }

@@ -65,6 +65,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseSystemLandscapeView(p, model)
                 if (view) {
                     ensureViewKey(view, views, undefined)
+                    p.viewLines.set(view, p.lastLine())
                     views.systemLandscapeViews.push(view)
                 }
                 continue
@@ -73,6 +74,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseElementView(p, 'systemContext', model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId)
+                    p.viewLines.set(view, p.lastLine())
                     views.systemContextViews.push(view)
                 }
                 continue
@@ -81,6 +83,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseElementView(p, 'container', model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId)
+                    p.viewLines.set(view, p.lastLine())
                     views.containerViews.push(view)
                 }
                 continue
@@ -89,6 +92,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseElementView(p, 'component', model)
                 if (view) {
                     ensureViewKey(view, views, view.containerId)
+                    p.viewLines.set(view, p.lastLine())
                     views.componentViews.push(view)
                 }
                 continue
@@ -123,6 +127,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseDynamicView(p, model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId ?? view.containerId)
+                    p.viewLines.set(view, p.lastLine())
                     views.dynamicViews.push(view)
                 }
                 continue
@@ -131,6 +136,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseDeploymentView(p, model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId ?? view.environment)
+                    p.viewLines.set(view, p.lastLine())
                     views.deploymentViews.push(view)
                 }
                 continue

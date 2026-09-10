@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { isReadOnlySource } from '@/lib/includeWriteback'
 import type { WorkspaceState } from '../workspace-types'
 import type { Person, SoftwareSystem, Container, Component, Workspace } from '@/types/model'
 import { announce } from '@/lib/announce'
@@ -261,6 +262,11 @@ export const createElementSlice: StateCreator<
     if (ids.length === 0) return
     set((s) => {
       if (!s.workspace) return
+      // Never delete content owned by a read-only included file (TEA-325).
+      const ws = s.workspace
+      const deletable = ids.filter((id) => !isReadOnlySource(ws, findElementHelper(ws, id)?.sourcePath))
+      if (deletable.length === 0) return
+      ids = deletable
       pushUndoSnapshot(s)
       cascadeDeleteElements(s.workspace, ids)
       // If the active view was among the ones just removed, fall back to the first remaining view.

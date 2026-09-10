@@ -1,3 +1,4 @@
+import { isReadOnlySource } from '@/lib/includeWriteback'
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
@@ -110,6 +111,9 @@ export function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch
   let changed = false
   forEachElementHelper(ws, (el) => {
     if (el.id !== id) return false
+    // Content from a read-only included file is shown but never edited: the
+    // edit would be dropped on save (TEA-325).
+    if (isReadOnlySource(ws, el.sourcePath)) return true
     // Use 'key in patch' for fields that can be legitimately cleared to undefined.
     // This distinguishes { status: undefined } (clear) from {} (leave unchanged),
     // which matters because the UI passes { status: undefined } when the user

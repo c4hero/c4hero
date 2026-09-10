@@ -147,6 +147,10 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const location = (element as Person | SoftwareSystem).location
   const typeColor = TYPE_COLORS[element.type] ?? 'var(--color-accent)'
   const safeUrl = element.url ? normalizeSafeExternalUrl(element.url) : null
+  // Provenance for multi-file workspaces (TEA-325): where this element is
+  // declared, and whether edits here can be written back to that file.
+  const includedFile = element.sourcePath ? workspace?.includedFiles?.find((f) => f.path === element.sourcePath) : undefined
+  const sourceReadOnly = !!element.sourcePath && !(includedFile?.writable ?? false)
 
   // AI auto-suggest: fill empty description / technology / tag fields. Only
   // available when a key is set and AI is enabled. These are all mechanical
@@ -368,6 +372,20 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                 {aiReady && missingDesc && <SuggestButton onClick={() => suggest(['description'])} busy={busyField === 'description'} multiline title="Write a description with AI" />}
               </div>
             </div>
+
+            {element.sourcePath && (
+              <div
+                data-element-source
+                data-read-only={sourceReadOnly ? 'true' : undefined}
+                title={sourceReadOnly
+                  ? `Declared in ${element.sourcePath}. ${includedFile?.reason ? `This file is ${includedFile.reason}, so ` : ''}edits here can't be written back to it yet — change it in that file.`
+                  : `Declared in ${element.sourcePath}. Edits are saved back to that file.`}
+                style={{ fontSize: 'var(--text-xxs)', color: sourceReadOnly ? 'var(--color-warning)' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Defined in {element.sourcePath}</span>
+                {sourceReadOnly && <span style={{ flex: 'none', fontWeight: 600 }}>· read-only</span>}
+              </div>
+            )}
 
             {/* Status */}
             <div>

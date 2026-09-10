@@ -35,6 +35,13 @@ export interface BaseElement {
   url?: string
   status?: ElementStatus
   owner?: string
+  /** `!` directive lines written inside this element's block (e.g. an
+   *  `!include` of its containers). Preserved verbatim, re-emitted first. */
+  directives?: string[]
+  /** Path (relative to the root workspace file) of the included file that
+   *  declared this element. Absent for root-owned content. Never serialized
+   *  into DSL; used to route writes and to mark read-only sources (TEA-325). */
+  sourcePath?: string
 }
 
 export interface Person extends BaseElement {
@@ -67,6 +74,8 @@ export interface Group {
    *  Older c4hero workspaces omit this; strict subset membership still lets
    *  the serializer infer their hierarchy. */
   parentId?: string
+  /** See BaseElement.sourcePath. */
+  sourcePath?: string
 }
 
 export type ModelElement = Person | SoftwareSystem | Container | Component
@@ -114,6 +123,8 @@ export interface DeploymentEnvironment {
   id: string
   name: string
   deploymentNodes: DeploymentNode[]
+  /** See BaseElement.sourcePath. */
+  sourcePath?: string
 }
 
 export type DeploymentElement =
@@ -135,6 +146,8 @@ export interface Relationship {
   url?: string
   tags: string[]
   properties: Record<string, string>
+  /** See BaseElement.sourcePath. */
+  sourcePath?: string
 }
 
 // ─── Views ───────────────────────────────────────────────────────────
@@ -184,6 +197,8 @@ export interface AutoLayout {
 export interface View {
   type: ViewType
   key: string
+  /** See BaseElement.sourcePath. */
+  sourcePath?: string
   /** True when `key` was synthesised by the parser because the DSL omitted one.
    *  The serializer skips emitting auto keys so the source DSL roundtrips
    *  byte-identical for views without explicit keys. */
@@ -264,12 +279,28 @@ export interface WorkspaceDirective {
   raw: string
 }
 
+export interface IncludedFile {
+  /** Path relative to the root workspace file, as written in `!include`. */
+  path: string
+  /** True when c4hero can write this file back as a plain model fragment. */
+  writable: boolean
+  /** Why it is read-only, for the UI. */
+  reason?: string
+  /** The file's text as read at load time. Lets the code pane re-stitch the
+   *  full document without touching disk. */
+  text?: string
+}
+
 export interface Workspace {
   name?: string
   description?: string
   scope?: WorkspaceScope
   /** Preserved preprocessor directives (TEA-325 phase A). Absent when none. */
   directives?: WorkspaceDirective[]
+  /** Files pulled in through `!include` when this workspace was loaded from a
+   *  folder (TEA-325 phase B). Content from a writable file is saved back to
+   *  that file; a read-only file's content is shown but never modified. */
+  includedFiles?: IncludedFile[]
   model: Model
   views: {
     systemLandscapeViews: View[]

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-file workspaces: `!include` is resolved when you open a folder.**
+  A root `workspace.dsl` that pulls in `teams/payments.dsl` and
+  `teams/identity.dsl` now renders the whole stitched model, so an
+  organisation can keep one landscape over models that each team owns in its
+  own file. Every element, relationship, group and view remembers which file
+  declared it — the inspector shows *Defined in teams/payments.dsl* — and
+  parse errors in an included file name that file and line. Saving never
+  flattens: the root file keeps its own content plus the `!include` lines,
+  and a plain model fragment included from inside `model { }` is written back
+  to its own file with just the content it declared. Anything c4hero can't
+  route back yet (a file included inside an element or the views block, a
+  file with its own `!` directives, or one wrapped in `model { }`) is shown
+  read-only and its edits are refused rather than dropped. Cycles, missing
+  files and oversized include graphs fail with a clear message instead of a
+  hang or a half-loaded model. Includes are relative to the including file;
+  URLs, absolute paths and paths that escape the folder are left as-is.
+  (TEA-325, phase B)
+
 ### Fixed
 
 - **Saving no longer deletes `!include`, `!const`, `!var`, `!docs` or `!adrs`

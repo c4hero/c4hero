@@ -9,7 +9,7 @@ import { lintGutter, setDiagnostics, type Diagnostic } from '@codemirror/lint'
 import { search, searchKeymap, openSearchPanel } from '@codemirror/search'
 import { tags as t } from '@lezer/highlight'
 import { useWorkspaceStore } from '@/store/workspace'
-import { serializeDSL } from '@/lib/dsl'
+import { serializeRoot } from '@/lib/includeWriteback'
 import type { ParseError } from '@/lib/dsl'
 import { readJSON, writeJSON, readString, writeString } from '@/lib/safeStorage'
 import { structurizrLanguage } from './structurizrLanguage'
@@ -297,7 +297,7 @@ export default function CodePane() {
         const ws = useWorkspaceStore.getState().workspace
         if (!ws) return { error: 'No workspace open' }
         try {
-          return { text: serializeDSL(ws) }
+          return { text: serializeRoot(ws) }
         } catch (err) {
           return { error: err instanceof Error ? err.message : 'Serialization failed' }
         }

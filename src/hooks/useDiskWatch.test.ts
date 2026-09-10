@@ -23,39 +23,39 @@ describe('applyDiskSnapshot', () => {
     store().loadWorkspace(workspace)
   })
 
-  it('reloads clean DSL and reports success', () => {
+  it('reloads clean DSL and reports success', async () => {
     const snapshot = { content: DSL.replace('"User"', '"Customer"') }
-    expect(applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))).toBe(true)
+    expect(await applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))).toBe(true)
     expect(store().workspace!.model.people[0].name).toBe('Customer')
     expect(store().diskConflict).toBeNull()
   })
 
-  it('applies the sidecar from disk alongside the DSL', () => {
+  it('applies the sidecar from disk alongside the DSL', async () => {
     const sidecar = JSON.stringify({
       version: 1,
       views: { Land: { elements: { u: { x: 123, y: 456 } } } },
     })
     const snapshot = { content: DSL, sidecarJson: sidecar }
-    expect(applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))).toBe(true)
+    expect(await applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))).toBe(true)
     const land = store().workspace!.views.systemLandscapeViews[0]
     const placed = land.elements.find((e) => e.id === 'u')
     expect(placed?.x).toBe(123)
     expect(placed?.y).toBe(456)
   })
 
-  it('raises an unparseable conflict instead of applying broken text', () => {
+  it('raises an unparseable conflict instead of applying broken text', async () => {
     const before = store().workspace
     const snapshot = { content: 'workspace "Broken" { model { u = person }' }
-    expect(applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))).toBe(false)
+    expect(await applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))).toBe(false)
     expect(store().workspace).toBe(before)
     expect(store().diskConflict?.reason).toBe('unparseable')
     expect(store().diskConflict?.detail).toMatch(/parse error/)
   })
 
-  it('refuses to empty a populated model silently', () => {
+  it('refuses to empty a populated model silently', async () => {
     const before = store().workspace
     const snapshot = { content: 'workspace "Empty" { model { } views { } }' }
-    expect(applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))).toBe(false)
+    expect(await applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))).toBe(false)
     expect(store().workspace).toBe(before)
     expect(store().diskConflict?.detail).toMatch(/empty model/)
   })

@@ -21,9 +21,9 @@ export default function DiskConflictBar() {
 
   const reload = () => {
     if (!conflict) return
-    if (applyDiskSnapshot(conflict.filename, conflict.snapshot, conflict.hashes)) {
-      useWorkspaceStore.getState().setDiskConflict(null)
-    }
+    void applyDiskSnapshot(conflict.filename, conflict.snapshot, conflict.hashes).then((ok) => {
+      if (ok) useWorkspaceStore.getState().setDiskConflict(null)
+    })
   }
   const keepMine = () => {
     if (!conflict) return

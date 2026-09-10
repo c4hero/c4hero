@@ -124,6 +124,12 @@ export interface ParseError {
 export interface ParseResult {
     workspace: Workspace
     errors: ParseError[]
+    /** Source line (1-based) where each element / relationship / group /
+     *  deployment environment id was declared. Lets a caller that flattened
+     *  `!include`s map ids back to their file (TEA-325 B). */
+    declarationLines: Map<string, number>
+    /** Same for views, keyed by the View object (keys are assigned late). */
+    viewLines: Map<View, number>
     /** Non-fatal notes: the model loaded, but something was preserved rather
      *  than understood (e.g. an unresolved `!include`). */
     warnings: ParseError[]
@@ -158,6 +164,15 @@ export class ContextAwareParser {
     warnings: ParseError[] = []
     /** Preprocessor lines captured verbatim, in source order (TEA-325). */
     directives: WorkspaceDirective[] = []
+    declarationLines = new Map<string, number>()
+    viewLines = new Map<View, number>()
+
+    /** Line of the most recently consumed token — the declaration line for
+     *  whatever was just parsed. */
+    lastLine(): number {
+        const t = this.tokens[this.pos - 1] ?? this.tokens[this.pos]
+        return t?.line ?? 1
+    }
     depth = 0
 
     // Variable name <-> element id mappings
@@ -317,6 +332,7 @@ export class ContextAwareParser {
      */
     registerElement(id: string, name: string, _type: string, varName?: string, parentPath?: string): string {
         this.elementsById.set(id, { name, type: _type })
+        if (!this.declarationLines.has(id)) this.declarationLines.set(id, this.lastLine())
         this.nameToId.set(name, id)
         if (varName) {
             this.varToId.set(varName, id)
@@ -489,7 +505,7 @@ export class ContextAwareParser {
             if (this.check('KEYWORD', 'extends') || this.check('IDENTIFIER', 'extends')) {
                 this.skipToNextLine()
                 this.skipBraceBlock()
-                return { workspace, errors: this.errors, warnings: this.warnings }
+                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines }
             }
 
             workspace.name = this.readOptionalString() || undefined
@@ -504,7 +520,7 @@ export class ContextAwareParser {
         }
 
         if (this.directives.length > 0) workspace.directives = this.directives
-        return { workspace, errors: this.errors, warnings: this.warnings }
+        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines }
     }
 
     private createEmptyWorkspace(): Workspace {
@@ -693,5 +709,7 @@ export function parse(input: string): ParseResult {
         workspace: ws,
         errors,
         warnings,
+        declarationLines: result.declarationLines,
+        viewLines: result.viewLines,
     }
 }

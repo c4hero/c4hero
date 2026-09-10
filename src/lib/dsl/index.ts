@@ -8,14 +8,15 @@
 
 import type { Workspace } from '@/types/model'
 import { parse } from './parser'
-import type { ParseError } from './parser'
-import { serialize } from './serializer'
+import type { ParseError, ParseResult } from './parser'
+import { serialize, type SerializeOptions } from './serializer'
 import { generateDefaultViews } from './auto-views'
 
 export type { ParseError }
+export type { SerializeOptions }
 export { GroupSerializationError } from './serializer'
 
-export interface ParseDSLResult {
+export interface ParseDSLResult extends ParseResult {
     workspace: Workspace
     errors: ParseError[]
     /** Non-fatal: content preserved but not understood (unresolved `!include`). */
@@ -44,6 +45,6 @@ export function parseDSL(input: string): ParseDSLResult {
  * Produces clean, idiomatic DSL with 4-space indentation,
  * blank lines between sections, and proper formatting.
  */
-export function serializeDSL(workspace: Workspace): string {
-    return serialize(workspace)
+export function serializeDSL(workspace: Workspace, opts?: SerializeOptions): string {
+    return serialize(workspace, opts)
 }

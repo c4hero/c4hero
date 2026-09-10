@@ -7,6 +7,9 @@ import { checkModelIntegrity } from '@/lib/modelIntegrity'
 import { pushUndoSnapshot } from '../internals'
 import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
+import { hasIncludedFiles } from '@/lib/includeWriteback'
+import { restitchWorkspaceDocument } from '@/lib/workspaceDocument'
+
 
 /** Map element id -> element name for every element in the model tree. */
 function elementNamesById(ws: Workspace): Map<string, string> {
@@ -193,7 +196,12 @@ export const createLifecycleSlice: StateCreator<
     let errors: ReturnType<WorkspaceState['replaceWorkspaceFromDSL']>['errors']
     let warnings: ReturnType<WorkspaceState['replaceWorkspaceFromDSL']>['errors'] = []
     try {
-      ;({ workspace: parsed, errors, warnings } = parseDSL(text))
+      const currentWs = get().workspace!
+      // A multi-file workspace: the pane shows the root file, so re-stitch
+      // the included texts captured at load before parsing (TEA-325).
+      ;({ workspace: parsed, errors, warnings } = hasIncludedFiles(currentWs)
+        ? restitchWorkspaceDocument(text, currentWs, currentWs.name)
+        : parseDSL(text))
     } catch (err) {
       return {
         ok: false,

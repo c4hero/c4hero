@@ -4,7 +4,7 @@ import { useWorkspaceStore } from '@/store/workspace'
 import { useRouteSync, useRefreshRedirect } from './useRouteSync'
 import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile } from '@/lib/folderIO'
 import { loadFromLocalStorage } from '@/lib/fileIO'
-import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
+import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 import type { Workspace } from '@/types/model'
 
 // Controllable router doubles — this file-level mock overrides the static one
@@ -35,7 +35,7 @@ vi.mock('@/lib/fileIO', async (importOriginal) => ({
 
 vi.mock('@/lib/workspaceDocument', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/workspaceDocument')>()),
-  parseWorkspaceDocument: vi.fn(),
+  loadWorkspaceDocument: vi.fn(),
 }))
 
 function makeWs(): Workspace {
@@ -86,7 +86,7 @@ beforeEach(() => {
   vi.mocked(restoreDirHandleByName).mockReset().mockResolvedValue(null)
   vi.mocked(readDSLFile).mockReset().mockResolvedValue(null)
   vi.mocked(loadFromLocalStorage).mockReset().mockReturnValue(null)
-  vi.mocked(parseWorkspaceDocument).mockReset().mockReturnValue({ workspace: makeWs(), errors: [] })
+  vi.mocked(loadWorkspaceDocument).mockReset().mockResolvedValue({ workspace: makeWs(), errors: [], warnings: [] })
 })
 
 describe('useRouteSync — state → URL', () => {
@@ -217,7 +217,7 @@ describe('useRefreshRedirect', () => {
   it('restores the workspace from disk and applies the URL view key', async () => {
     vi.mocked(restoreDirHandleByName).mockResolvedValue(teamHandle)
     vi.mocked(readDSLFile).mockResolvedValue({ content: 'workspace {}', sidecarJson: '{}' })
-    vi.mocked(parseWorkspaceDocument).mockReturnValue({
+    vi.mocked(loadWorkspaceDocument).mockResolvedValue({
       workspace: makeWs(),
       errors: [{ message: 'warn', line: 1, column: 1 }],
     })
