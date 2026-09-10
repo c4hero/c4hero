@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
-import { detectLegacyEscapes, lex } from './lexer'
+import { lex } from './lexer'
 
 // What pre-TEA-163 c4hero actually wrote for a container named `C:\Program Files`
 // with a tab in its description and a status.
@@ -24,27 +24,44 @@ const LEGACY = `workspace "Old" {
 }
 `
 
-describe('detectLegacyEscapes', () => {
+describe('legacy detection', () => {
   it.each([
     ['status', 'status Live'],
     ['location', 'location External'],
-    ['lineStyle', 'lineStyle Curved'],
-    ['interactionStyle', 'interactionStyle Synchronous'],
     ['owner', 'owner "Team Payments"'],
-  ])('recognises a bare %s line', (_k, line) => {
-    expect(detectLegacyEscapes(`workspace {\n  model {\n    a = person "A" {\n      ${line}\n    }\n  }\n}`)).toBe(true)
+  ])('recognises a bare %s line in an element body', (_k, line) => {
+    const { legacyEscapes } = parseDSL(`workspace {\n  model {\n    a = person "A" {\n      ${line}\n    }\n  }\n}`)
+    expect(legacyEscapes).toBe(true)
   })
 
-  it('ignores the same words inside strings, quoted property keys, and comments', () => {
-    expect(detectLegacyEscapes('workspace { model { a = person "status Live" } }')).toBe(false)
-    expect(detectLegacyEscapes('workspace { model { a = person "A" {\n properties {\n "status" "Live"\n }\n } } }')).toBe(false)
-    expect(detectLegacyEscapes('workspace {\n // status Live\n model { } }')).toBe(false)
-    expect(detectLegacyEscapes('workspace {\n model {\n statusPage = softwareSystem "S"\n } }')).toBe(false)
+  it.each([
+    ['lineStyle', 'lineStyle Curved'],
+    ['interactionStyle', 'interactionStyle Synchronous'],
+  ])('recognises a bare %s line in a relationship body', (_k, line) => {
+    const { legacyEscapes } = parseDSL(`workspace {\n  model {\n    a = person "A"\n    b = person "B"\n    a -> b "x" {\n      ${line}\n    }\n  }\n}`)
+    expect(legacyEscapes).toBe(true)
+  })
+
+  it('is not fooled by the same words as property keys, inside strings, in comments, or as identifiers', () => {
+    // Structurizr accepts unquoted property keys, so these are all legal
+    // hand-written files that must keep the Structurizr escape rule.
+    for (const src of [
+      'workspace { model { a = softwareSystem "C:\\\\x" { properties { owner "Team" } } } }',
+      'workspace { model { a = person "A"\n b = person "B"\n a -> b "x" { properties { lineStyle Curved } } } }',
+      'workspace { model { a = person "status Live" } views { properties { status Live } } }',
+      'workspace {\n // status Live\n model { } }',
+      'workspace {\n model {\n statusPage = softwareSystem "S"\n } }',
+    ]) {
+      const { legacyEscapes, workspace } = parseDSL(src)
+      expect(legacyEscapes, src).toBe(false)
+      const sys = workspace.model.softwareSystems[0]
+      if (sys?.name.startsWith('C:')) expect(sys.name).toBe('C:\\\\x') // two literal backslashes, as Structurizr reads it
+    }
   })
 
   it('is false for modern c4hero output', () => {
     const { workspace } = parseDSL(LEGACY)
-    expect(detectLegacyEscapes(serializeDSL(workspace))).toBe(false)
+    expect(parseDSL(serializeDSL(workspace)).legacyEscapes).toBe(false)
   })
 })
 
@@ -91,12 +108,11 @@ describe('legacy decoding', () => {
 
 describe('the residual gap is surfaced, not silent', () => {
   it('warns when \\\\ or \\t appear in strings but no legacy marker is present', () => {
-    const looks = (src: string) => lex(src).legacyLookingEscapes
+    const looks = (src: string) => parseDSL(src).warnings.some((w) => /Structurizr reads literally/.test(w.message))
     expect(looks('workspace { model { a = person "C:\\\\x" } }')).toBe(true)
     expect(looks('workspace { model { a = person "a\\tb" } }')).toBe(true)
     expect(looks('workspace { model { a = person "C:\\x" } }')).toBe(false)
     expect(looks('workspace { // "\\\\" in a comment\n model { } }')).toBe(false)
-    expect(lex('"a\\\\b"', { legacyEscapes: true }).legacyLookingEscapes).toBe(false)
 
     const { warnings, legacyEscapes } = parseDSL('workspace { model { a = person "C:\\\\x" } }')
     expect(legacyEscapes).toBe(false)

@@ -102,10 +102,6 @@ export interface LexerError {
 export interface LexResult {
     tokens: Token[]
     errors: LexerError[]
-    /** Set when, under the modern rule, a string contained `\\` or `\t` —
-     *  sequences that were escapes in pre-TEA-163 files. The parser turns
-     *  this into a warning when no legacy marker was found (TEA-167). */
-    legacyLookingEscapes: boolean
 }
 
 /**
@@ -125,23 +121,6 @@ export function escapeStep(input: string, i: number): 1 | 2 {
 function escapeStepLegacy(input: string, i: number): 1 | 2 {
     const n = input[i + 1]
     return input[i] === '\\' && (n === '\\' || n === '"' || n === 'n' || n === 't') ? 2 : 1
-}
-
-// Lines only pre-TEA-163 c4hero ever wrote. Real Structurizr has no such
-// keywords (its parser rejects them) and modern c4hero emits these facts as
-// tags and quoted properties, so a bare keyword line at the start of a line
-// is a sound "saved by an old c4hero" marker. Values were unquoted enums
-// (`status Live`, `location External`, `lineStyle Curved`,
-// `interactionStyle Synchronous`) or a quoted string (`owner "Team"`).
-const LEGACY_MARKER = /^[ \t]*(?:status|location|lineStyle|interactionStyle)[ \t]+[A-Za-z]+[ \t]*(?:\/\/.*|#.*)?$|^[ \t]*owner[ \t]+"/m
-
-/** True when `input` was written by a c4hero older than TEA-163 (v0.3), whose
- *  strings used JSON-style escapes. Sound but not complete: a legacy file
- *  that set none of status / owner / location / lineStyle / interactionStyle
- *  carries no marker and is read with the Structurizr rule (see
- *  `hasLegacyLookingEscapes` for the warning that covers that case). */
-export function detectLegacyEscapes(input: string): boolean {
-    return LEGACY_MARKER.test(input)
 }
 
 export interface LexOptions {
@@ -166,7 +145,6 @@ export function scanQuotedString(input: string, start: number): number {
 export function lex(input: string, opts: LexOptions = {}): LexResult {
     const legacy = opts.legacyEscapes === true
     const step = legacy ? escapeStepLegacy : escapeStep
-    let legacyLookingEscapes = false
     const tokens: Token[] = []
     const errors: LexerError[] = []
     let pos = 0
@@ -228,7 +206,6 @@ export function lex(input: string, opts: LexOptions = {}): LexResult {
                 // `\"` and `\\` decode to themselves; only n and t change.
                 value += escaped === 'n' ? '\n' : escaped === 't' ? '\t' : escaped
             } else {
-                if (!legacy && peek() === '\\' && (peekAt(1) === '\\' || peekAt(1) === 't')) legacyLookingEscapes = true
                 value += advance()
             }
         }
@@ -445,5 +422,5 @@ export function lex(input: string, opts: LexOptions = {}): LexResult {
     }
 
     tokens.push({ type: 'EOF', value: '', line, column })
-    return { tokens, errors, legacyLookingEscapes }
+    return { tokens, errors }
 }
