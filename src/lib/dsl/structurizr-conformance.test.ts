@@ -34,6 +34,7 @@ import { createMicroservicesTemplate } from '@/lib/templates/microservices'
 import { createMonolithTemplate } from '@/lib/templates/monolith'
 import { createEventDrivenTemplate } from '@/lib/templates/eventDriven'
 import type { Workspace } from '@/types/model'
+import { generateWorkspace, representable } from './fuzz/generateWorkspace'
 
 const CLI = process.env.STRUCTURIZR_CLI ?? join(process.cwd(), '.structurizr-cli', 'structurizr.sh')
 const CLI_AVAILABLE = existsSync(CLI)
@@ -552,6 +553,78 @@ workspace "Grouped" {
 // which is the same false-confidence failure this whole file exists to prevent.
 // The CI job sets STRUCTURIZR_CONFORMANCE=1, so a broken CLI download turns
 // into a red build instead of a green skip.
+// ─── Generated corpus (TEA-63) ─────────────────────────────────────────
+//
+// The fixtures above are a handful of hand-picked shapes. This runs a seeded
+// generator over many workspaces full of hostile strings, tags, groups,
+// views and styles, and asks the real parser two questions: does it accept
+// what c4hero wrote, and did it store the values c4hero meant? A failure
+// names the seed, so `generateWorkspace(seed)` reproduces it exactly.
+//
+// Each case is one JVM start, so the count is capped; raise
+// CONFORMANCE_SEEDS locally to sweep further.
+describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance: generated corpus', () => {
+    const validateSeeds = Array.from({ length: Number(process.env.CONFORMANCE_SEEDS ?? 24) }, (_, i) => i + 1)
+    const fidelitySeeds = validateSeeds.slice(0, Number(process.env.CONFORMANCE_FIDELITY_SEEDS ?? 8))
+
+    it.each(validateSeeds)('seed %i serializes to DSL Structurizr accepts', (seed) => {
+        const dsl = serializeDSL(generateWorkspace(seed))
+        expect(validate(dsl), `seed ${seed}:\n${dsl}`).toBeNull()
+    })
+
+    /** Names the real parser stored for people, systems, containers and components. */
+    function storedNames(model: Record<string, unknown>): Record<string, string[]> {
+        const m = model.model as {
+            people?: { name: string }[]
+            softwareSystems?: { name: string; containers?: { name: string; components?: { name: string }[] }[] }[]
+        } | undefined
+        const systems = m?.softwareSystems ?? []
+        return {
+            person: (m?.people ?? []).map(p => p.name).sort(),
+            softwareSystem: systems.map(s => s.name).sort(),
+            container: systems.flatMap(s => (s.containers ?? []).map(c => c.name)).sort(),
+            component: systems.flatMap(s => (s.containers ?? []).flatMap(c => (c.components ?? []).map(x => x.name))).sort(),
+        }
+    }
+
+    /** What c4hero meant, after the documented unrepresentable-backslash rule. */
+    function intendedNames(ws: Workspace): Record<string, string[]> {
+        return {
+            person: ws.model.people.map(p => representable(p.name)).sort(),
+            softwareSystem: ws.model.softwareSystems.map(s => representable(s.name)).sort(),
+            container: ws.model.softwareSystems.flatMap(s => s.containers.map(c => representable(c.name))).sort(),
+            component: ws.model.softwareSystems.flatMap(s => s.containers.flatMap(c => c.components.map(x => representable(x.name)))).sort(),
+        }
+    }
+
+    /** Relationships the real parser stored, from every nesting level, minus
+     *  the ones it *implied* between ancestors (those carry linkedRelationshipId). */
+    function authoredRelationships(model: Record<string, unknown>): ExportedRelationship[] {
+        type Rel = ExportedRelationship & { linkedRelationshipId?: string }
+        type El = { relationships?: Rel[]; containers?: El[]; components?: El[] }
+        const m = model.model as { people?: El[]; softwareSystems?: El[] } | undefined
+        const out: Rel[] = []
+        const walk = (el: El) => {
+            out.push(...(el.relationships ?? []))
+            for (const c of el.containers ?? []) walk(c)
+            for (const c of el.components ?? []) walk(c)
+        }
+        for (const p of m?.people ?? []) walk(p)
+        for (const s of m?.softwareSystems ?? []) walk(s)
+        return out.filter(r => !r.linkedRelationshipId)
+    }
+
+    it.each(fidelitySeeds)('seed %i: the real parser stores the values c4hero meant', (seed) => {
+        const ws = generateWorkspace(seed)
+        const model = exportModel(serializeDSL(ws))
+        expect(storedNames(model), `seed ${seed}`).toEqual(intendedNames(ws))
+
+        const wantRels = ws.model.relationships.map(r => representable(r.description ?? '')).sort()
+        const gotRels = authoredRelationships(model).map(r => r.description ?? '').sort()
+        expect(gotRels, `seed ${seed} relationship descriptions`).toEqual(wantRels)
+    })
+})
+
 describe('Structurizr conformance harness', () => {
     it('has the CLI installed when conformance is required', () => {
         if (process.env.STRUCTURIZR_CONFORMANCE !== '1') return
