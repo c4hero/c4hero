@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff,
+  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff, FileInput,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -38,6 +38,15 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
 
   const commands: Command[] = [
     // ─── Create ──────────────────────────────────────────
+    {
+      id: 'import-foreign',
+      label: 'Import PlantUML / Mermaid',
+      category: 'create',
+      icon: FileInput,
+      keywords: ['import', 'plantuml', 'puml', 'mermaid', 'c4', 'convert'],
+      when: () => !!store().workspace,
+      execute: () => { store().setImportDialogOpen(true) },
+    },
     {
       id: 'add-person',
       label: 'Add Person',

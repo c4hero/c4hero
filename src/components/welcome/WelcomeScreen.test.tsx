@@ -5,6 +5,7 @@ import WelcomeScreen from './WelcomeScreen'
 // Mock lucide-react to avoid SVG issues
 vi.mock('lucide-react', () => ({
   FileText: () => null,
+  FileInput: () => null,
   Play: () => null,
   LayoutTemplate: () => null,
   Sparkles: () => null,
