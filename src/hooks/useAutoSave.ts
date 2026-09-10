@@ -1,12 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { saveToLocalStorage, getCurrentFileHandle, writeToCurrentHandle, writeSidecarToHandle } from '@/lib/fileIO'
-import { getCurrentDirHandle, writeDSLFile, writeSidecarFile } from '@/lib/folderIO'
-import { serializeDSL } from '@/lib/dsl'
+import { getCurrentDirHandle, writeDSLFile, writeSidecarFile, writeDSLFileAt } from '@/lib/folderIO'
+import { serializeRoot, planIncludedWrites } from '@/lib/includeWriteback'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('useAutoSave')
+
+/** Last fragment written per included path, so unchanged files aren't
+ *  rewritten. Scoped to one root file: switching folder or workspace must
+ *  not let a memo from another workspace suppress a needed write. */
+const lastIncludedWrites = new Map<string, string>()
+let lastIncludedWritesFor: string | null = null
 
 const scheduleIdle = typeof requestIdleCallback === 'function'
   ? requestIdleCallback
@@ -55,7 +61,7 @@ export function useAutoSave() {
 
         if (hasSingleFile || (dirHandle && filename)) {
           try {
-            const dsl = serializeDSL(state.workspace)
+            const dsl = serializeRoot(state.workspace)
             const sidecar = extractSidecar(state.workspace)
 
             if (hasSingleFile) {
@@ -66,6 +72,17 @@ export function useAutoSave() {
             if (dirHandle && filename) {
               writeDSLFile(filename, dsl)
               if (sidecar) writeSidecarFile(filename, serializeSidecar(sidecar))
+              // Write-back: each writable !include'd file gets its own fragment,
+              // only when it actually changed (TEA-325).
+              const scope = `${dirHandle.name}/${filename}`
+              if (lastIncludedWritesFor !== scope) { lastIncludedWrites.clear(); lastIncludedWritesFor = scope }
+              for (const w of planIncludedWrites(state.workspace)) {
+                if (lastIncludedWrites.get(w.path) === w.content) continue
+                lastIncludedWrites.set(w.path, w.content)
+                writeDSLFileAt(w.path, w.content).then((ok) => {
+                  if (!ok) log.warn('Included file write-back failed', w.path)
+                })
+              }
             }
 
             useWorkspaceStore.getState().setLastSavedUndoLength(state.undoStack.length)

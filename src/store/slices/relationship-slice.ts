@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { isReadOnlySource } from '@/lib/includeWriteback'
 import type { WorkspaceState } from '../workspace-types'
 import type { Relationship, View, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
@@ -97,6 +98,7 @@ export const createRelationshipSlice: StateCreator<
     if (!s.workspace) return
     const rel = s.workspace.model.relationships.find(r => r.id === id)
     if (!rel) return
+    if (isReadOnlySource(s.workspace, rel.sourcePath)) return
     // Use 'key in patch' for optional fields that the UI may legitimately clear by passing
     // undefined (e.g. empty text field → { description: undefined }). Only push undo if at
     // least one field actually changed.
@@ -165,7 +167,9 @@ export const createRelationshipSlice: StateCreator<
   deleteRelationship: (id) => set((s) => {
     if (!s.workspace) return
     const ws = s.workspace
-    if (!ws.model.relationships.some(r => r.id === id)) return
+    const target = ws.model.relationships.find(r => r.id === id)
+    if (!target) return
+    if (isReadOnlySource(ws, target.sourcePath)) return
     pushUndoSnapshot(s)
     ws.model.relationships = ws.model.relationships.filter(r => r.id !== id)
     forEachView(ws, (v) => {

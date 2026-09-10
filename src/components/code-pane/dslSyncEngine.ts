@@ -4,6 +4,8 @@ import type { ParseError } from '@/lib/dsl'
 export interface DslSyncStatus {
   /** Parse/integrity errors from the last rejected apply (empty when clean). */
   errors: ParseError[]
+  /** Non-fatal notes from the last successful apply (e.g. an unresolved `!include`). */
+  warnings: ParseError[]
   /** Serialization failure (e.g. GroupSerializationError) — store-to-editor sync is stalled. */
   serializeError: string | null
   /** True while the editor holds text that has not (yet) been applied to the store. */
@@ -18,7 +20,7 @@ export interface DslSyncEngineOpts {
   /** Serialize the current workspace, or report why it can't be. */
   serialize: () => { text: string } | { error: string }
   /** Apply editor text to the store (replaceWorkspaceFromDSL). */
-  apply: (text: string) => { ok: boolean; errors: ParseError[] }
+  apply: (text: string) => { ok: boolean; errors: ParseError[]; warnings?: ParseError[] }
   onStatus: (status: DslSyncStatus) => void
   /** Debounce for editor keystrokes before an apply attempt. */
   editorDebounceMs?: number
@@ -49,10 +51,10 @@ export function createDslSyncEngine(opts: DslSyncEngineOpts) {
   let disposed = false
   let editorTimer: ReturnType<typeof setTimeout> | null = null
   let storeTimer: ReturnType<typeof setTimeout> | null = null
-  const status: DslSyncStatus = { errors: [], serializeError: null, pendingApply: false }
+  const status: DslSyncStatus = { errors: [], warnings: [], serializeError: null, pendingApply: false }
 
   function emit() {
-    opts.onStatus({ ...status, errors: [...status.errors] })
+    opts.onStatus({ ...status, errors: [...status.errors], warnings: [...status.warnings] })
   }
 
   function syncFromStore() {
@@ -72,7 +74,7 @@ export function createDslSyncEngine(opts: DslSyncEngineOpts) {
     if (disposed) return
     const text = opts.readText()
     applying = true
-    let result: { ok: boolean; errors: ParseError[] }
+    let result: { ok: boolean; errors: ParseError[]; warnings?: ParseError[] }
     try {
       result = opts.apply(text)
     } catch (err) {
@@ -87,6 +89,7 @@ export function createDslSyncEngine(opts: DslSyncEngineOpts) {
     }
     if (result.ok) {
       status.errors = []
+      status.warnings = result.warnings ?? []
       status.pendingApply = false
       // The workspace was just rebuilt from this text, so any earlier
       // serialization failure is moot — don't leave a stale banner up.

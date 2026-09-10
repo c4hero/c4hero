@@ -50,9 +50,62 @@ export class GroupSerializationError extends Error {
 
 // ─── Public API ─────────────────────────────────────────────────────
 
-export function serialize(workspace: Workspace): string {
-    const ctx = new SerializerContext(workspace)
-    return ctx.serialize()
+export interface SerializeOptions {
+    /** Which file's content to emit (TEA-325 phase B):
+     *  - `undefined` (default): everything, as one document.
+     *  - `null`: the root file only — content that came from an `!include`d
+     *    file is skipped (its `!include` line is still written).
+     *  - a path: only content declared in that included file, as a bare
+     *    model fragment (no `workspace`/`model` wrapper) ready to write back. */
+    source?: string | null
+}
+
+export function serialize(workspace: Workspace, opts: SerializeOptions = {}): string {
+    if (opts.source === undefined) return new SerializerContext(workspace).serialize()
+    const filtered = filterBySource(workspace, opts.source)
+    const ctx = new SerializerContext(filtered, workspace)
+    return opts.source === null ? ctx.serialize() : ctx.serializeFragment()
+}
+
+/** Shallow copy of `ws` keeping only content owned by `source` (`null` = root). */
+function filterBySource(ws: Workspace, source: string | null): Workspace {
+    const owned = (item: { sourcePath?: string }) => (source === null ? item.sourcePath === undefined : item.sourcePath === source)
+    const model = ws.model
+    const config = ws.views.configuration
+    return {
+        ...ws,
+        // Preserved `!` lines belong to the root document only, and only
+        // the ones written there — not ones read from an included file.
+        directives: source === null ? ws.directives?.filter(owned) : undefined,
+        model: {
+            ...model,
+            people: model.people.filter(owned),
+            softwareSystems: model.softwareSystems.filter(owned).map((sys) => ({
+                ...sys,
+                containers: sys.containers.filter(owned).map((c) => ({ ...c, components: c.components.filter(owned) })),
+            })),
+            relationships: model.relationships.filter(owned),
+            groups: model.groups.filter(owned),
+            deploymentEnvironments: (model.deploymentEnvironments ?? []).filter(owned),
+        },
+        views: {
+            ...ws.views,
+            systemLandscapeViews: ws.views.systemLandscapeViews.filter(owned),
+            systemContextViews: ws.views.systemContextViews.filter(owned),
+            containerViews: ws.views.containerViews.filter(owned),
+            componentViews: ws.views.componentViews.filter(owned),
+            dynamicViews: (ws.views.dynamicViews ?? []).filter(owned),
+            deploymentViews: (ws.views.deploymentViews ?? []).filter(owned),
+            configuration: {
+                ...config,
+                styles: {
+                    elements: config.styles.elements.filter(owned),
+                    relationships: config.styles.relationships.filter(owned),
+                },
+                themes: source === null && config.themesSourcePath ? undefined : (source === null ? config.themes : undefined),
+            },
+        },
+    }
 }
 
 // ─── Serializer Context ─────────────────────────────────────────────
@@ -73,9 +126,11 @@ class SerializerContext {
     private componentGroups = new Map<string, GroupScope<Component>>()
     private hasNestedGroups = false
 
-    constructor(workspace: Workspace) {
+    /** `idSource` supplies the identifier maps when `workspace` is a filtered
+     *  view of a larger model, so cross-file references still resolve. */
+    constructor(workspace: Workspace, idSource: Workspace = workspace) {
         this.workspace = workspace
-        this.buildIdMaps()
+        this.buildIdMaps(idSource)
         this.topLevelGroups = this.buildGroupScope(
             [...workspace.model.people, ...workspace.model.softwareSystems],
             true,
@@ -266,8 +321,8 @@ class SerializerContext {
         return `element ${id}`
     }
 
-    private buildIdMaps(): void {
-        const model = this.workspace.model
+    private buildIdMaps(idSource: Workspace): void {
+        const model = idSource.model
 
         for (const person of model.people) {
             this.registerElement(person.id)
@@ -459,6 +514,17 @@ class SerializerContext {
 
     // ─── Main Serialize ─────────────────────────────────────────────
 
+    /** Emit the model block's *contents* only, at column 0 — the shape of a
+     *  file that is `!include`d from inside `model { }`. */
+    serializeFragment(): string {
+        this.serializeModel()
+        // Drop `model {` / `}` and one level of indent.
+        const body = this.lines.slice(1, -1).map((l) => (l.startsWith('    ') ? l.slice(4) : l))
+        while (body.length > 0 && body[body.length - 1] === '') body.pop()
+        while (body.length > 0 && body[0] === '') body.shift()
+        return body.join('\n') + (body.length > 0 ? '\n' : '')
+    }
+
     serialize(): string {
         const ws = this.workspace
         const parts: string[] = []
@@ -469,6 +535,8 @@ class SerializerContext {
 
         this.emit(parts.join(' ') + ' {')
         this.depth++
+
+        if (this.emitDirectives('workspace')) this.emitBlank()
 
         this.emitBlank()
         this.serializeModel()
@@ -500,24 +568,63 @@ class SerializerContext {
 
     // ─── Model ──────────────────────────────────────────────────────
 
+    /** Re-emit preserved `!` lines for one block, verbatim and in original
+     *  order. Model-scope lines that were written after a declaration (or
+     *  inside a group) are held back for `emitDirectivesAfter` /
+     *  `emitGroupDirectives` so their single-pass ordering survives; the rest
+     *  go ahead of any generated content. Returns true if any were written. */
+    private emitDirectives(scope: 'workspace' | 'model' | 'views'): boolean {
+        let any = false
+        for (const d of this.workspace.directives ?? []) {
+            if (d.scope !== scope) continue
+            if (scope === 'model' && (d.after || d.groupId)) continue
+            this.emit(d.raw)
+            any = true
+        }
+        return any
+    }
+
+    /** Model-scope directives anchored right after `id` (an element,
+     *  environment or group that has just been emitted). */
+    private emitDirectivesAfter(id: string): void {
+        for (const d of this.workspace.directives ?? []) {
+            if (d.scope === 'model' && d.after === id) this.emit(d.raw)
+        }
+    }
+
+    /** Directives written at the top of a group block. */
+    private emitGroupDirectives(groupId: string): boolean {
+        let any = false
+        for (const d of this.workspace.directives ?? []) {
+            if (d.scope === 'model' && d.groupId === groupId && !d.after) { this.emit(d.raw); any = true }
+        }
+        return any
+    }
+
     private serializeModel(): void {
         this.emit('model {')
         this.depth++
 
         const model = this.workspace.model
 
+        if (this.emitDirectives('model')) this.emitBlank()
+
         if (this.hasNestedGroups) {
             this.serializeProperties({ 'structurizr.groupSeparator': GROUP_SEPARATOR })
             this.emitBlank()
         }
 
-        this.serializeGroupScope(this.topLevelGroups, element => this.serializeModelElement(element))
+        this.serializeGroupScope(this.topLevelGroups, element => {
+            this.serializeModelElement(element)
+            this.emitDirectivesAfter(element.id)
+        })
 
         // Deployment environments (before relationships — instance identifiers
         // must be defined before any relationship lines that reference them)
         for (const env of model.deploymentEnvironments ?? []) {
             this.emitBlank()
             this.serializeDeploymentEnvironment(env)
+            this.emitDirectivesAfter(env.id)
         }
 
         // Relationships
@@ -555,7 +662,7 @@ class SerializerContext {
     ): void {
         this.emit(`group "${this.escapeString(scoped.group.name)}" {`)
         this.depth++
-        let emitted = false
+        let emitted = this.emitGroupDirectives(scoped.group.id)
         for (const child of scoped.children) {
             if (emitted) this.emitBlank()
             this.serializeGroup(child, serializeElement)
@@ -568,6 +675,7 @@ class SerializerContext {
         }
         this.depth--
         this.emit('}')
+        this.emitDirectivesAfter(scoped.group.id)
     }
 
     private serializeModelElement(element: Person | SoftwareSystem): void {
@@ -696,7 +804,7 @@ class SerializerContext {
         const extraTags = this.locationAwareTags(person, ['Element', 'Person'])
         const props = this.elementProperties(person)
         const hasProperties = Object.keys(props).length > 0
-        const hasBlock = !!person.url || hasProperties
+        const hasBlock = !!person.url || hasProperties || !!person.directives?.length
 
         const parts: string[] = []
         parts.push('person')
@@ -711,6 +819,7 @@ class SerializerContext {
         if (hasBlock) {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
+            for (const d of person.directives ?? []) this.emit(d)
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
             if (hasProperties) this.serializeProperties(props)
             this.depth--
@@ -725,7 +834,7 @@ class SerializerContext {
         const extraTags = this.locationAwareTags(sys, ['Element', 'Software System'])
         const props = this.elementProperties(sys)
         const hasProperties = Object.keys(props).length > 0
-        const hasBody = sys.containers.length > 0 || !!sys.url || hasProperties
+        const hasBody = sys.containers.length > 0 || !!sys.url || hasProperties || !!sys.directives?.length
 
         const parts: string[] = []
         parts.push('softwareSystem')
@@ -741,6 +850,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
 
+            for (const d of sys.directives ?? []) this.emit(d)
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
             if (hasProperties) this.serializeProperties(props)
 
@@ -759,7 +869,7 @@ class SerializerContext {
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
         const props = this.elementProperties(container)
         const hasProperties = Object.keys(props).length > 0
-        const hasBody = container.components.length > 0 || !!container.url || hasProperties
+        const hasBody = container.components.length > 0 || !!container.url || hasProperties || !!container.directives?.length
 
         const parts: string[] = []
         parts.push('container')
@@ -778,6 +888,7 @@ class SerializerContext {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
 
+            for (const d of container.directives ?? []) this.emit(d)
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
             if (hasProperties) this.serializeProperties(props)
             const scope = this.componentGroups.get(container.id)
@@ -795,7 +906,7 @@ class SerializerContext {
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
         const props = this.elementProperties(comp)
         const hasProperties = Object.keys(props).length > 0
-        const hasBlock = !!comp.url || hasProperties
+        const hasBlock = !!comp.url || hasProperties || !!comp.directives?.length
 
         const parts: string[] = []
         parts.push('component')
@@ -813,6 +924,7 @@ class SerializerContext {
         if (hasBlock) {
             this.emit(`${prefix}${parts.join(' ')} {`)
             this.depth++
+            for (const d of comp.directives ?? []) this.emit(d)
             if (comp.url) this.emit(`url "${this.escapeString(comp.url)}"`)
             if (hasProperties) this.serializeProperties(props)
             this.depth--
@@ -870,7 +982,7 @@ class SerializerContext {
         this.depth++
 
         const views = this.workspace.views
-        let needsBlank = false
+        let needsBlank = this.emitDirectives('views')
 
         // Skip parser-synthesised views — they exist to give the canvas
         // something to render when the DSL declares no views; serializing them
