@@ -28,24 +28,16 @@ export interface WhatsNewRelease {
 }
 
 export const WHATS_NEW: WhatsNewRelease | null = {
-  id: '2026-09-code-pane-impact-export',
+  id: '2026-09-watch-mode-live-models',
   date: 'September 2026',
   items: [
     {
-      title: 'Live DSL code pane',
-      body: 'Open the workspace as Structurizr DSL beside the canvas and edit either one — changes flow both ways. Your layout survives the round trip, and a document that does not parse simply never applies.',
+      title: 'The canvas follows the file on disk',
+      body: 'Edit the .dsl in another editor or check out a different git branch and the diagram reloads within a couple of seconds, keeping your view and selection. Unsaved local edits are never discarded: you choose Reload or Keep mine.',
     },
     {
-      title: 'See what breaks before you delete',
-      body: 'Ask what happens if an element is removed and get the exact blast radius: what goes with it, which relationships lose an end, what depended on it, and which views disappear. Counted from your model, not estimated.',
-    },
-    {
-      title: 'Export one interactive HTML file',
-      body: 'Every view, rendered and wrapped in a small read-only viewer with tabs, zoom, drill-through and search. No dependencies and no network calls, so it opens from disk or a wiki years later.',
-    },
-    {
-      title: 'Readable element IDs',
-      body: 'Elements now take a readable id derived from their name instead of a random string, and you can edit it. Exported DSL reads like something a person wrote.',
+      title: 'AI model picker lists what your key can use',
+      body: 'With a key set, settings ask the provider for its current models and show them, so new releases appear without waiting for a c4hero update. Cached for a day, with the curated list as a fallback.',
     },
   ],
   link: { label: 'Full release notes', url: 'https://c4hero.com/changelog' },

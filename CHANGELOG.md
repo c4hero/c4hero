@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-10
+
 ### Added
 
 - **Watch mode: the canvas follows the file on disk.** Disk sync used to be
@@ -22,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   c4hero's own saves never count as changes, and the collection list refreshes
   when the tab regains focus. Toggle it with the *Watch Mode* command;
   default on wherever a file or folder is linked. (TEA-323)
+- **The AI model picker now lists what your key can actually use.** With a
+  key present, c4hero asks the provider for its current models (Anthropic
+  `/v1/models`, OpenAI `/v1/models`, Gemini `/v1beta/models`), keeps the
+  chat-capable ones, and shows them — so new releases such as the Claude 5
+  family appear without a code change. The list is cached for a day per key
+  so settings open instantly and work offline; a *Refresh* control forces a
+  re-fetch. No key, a failed fetch, or a cold cache falls back to the curated
+  suggestions, never an empty picker, and you can still type any model id.
+  Curated default and cheap-draft ids that a provider has retired resolve to
+  their same-family successor, so per-task routing keeps working. The fetch
+  never blocks chat. (TEA-249)
 
 ## [0.5.0] - 2026-09-05
 
