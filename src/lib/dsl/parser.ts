@@ -9,7 +9,7 @@ import type {
     ElementInView,
 } from '@/types/model'
 import { expandDeploymentElements } from '@/lib/deployment'
-import { lex } from './lexer'
+import { lex, detectLegacyEscapes, hasLegacyLookingEscapes } from './lexer'
 import type { Token, TokenType } from './lexer'
 import { parseViewsBody } from './parser-views'
 import { parseModelBody } from './parser-model'
@@ -124,6 +124,9 @@ export interface ParseError {
 export interface ParseResult {
     workspace: Workspace
     errors: ParseError[]
+    /** The input was recognised as saved by a pre-TEA-163 c4hero and its
+     *  `\\` / `\t` escapes were decoded (TEA-167). Saving migrates it. */
+    legacyEscapes: boolean
     /** Source line (1-based) where each element / relationship / group /
      *  deployment environment id was declared. Lets a caller that flattened
      *  `!include`s map ids back to their file (TEA-325 B). */
@@ -505,7 +508,7 @@ export class ContextAwareParser {
             if (this.check('KEYWORD', 'extends') || this.check('IDENTIFIER', 'extends')) {
                 this.skipToNextLine()
                 this.skipBraceBlock()
-                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines }
+                return { workspace, errors: this.errors, warnings: this.warnings, legacyEscapes: false, declarationLines: this.declarationLines, viewLines: this.viewLines }
             }
 
             workspace.name = this.readOptionalString() || undefined
@@ -520,7 +523,7 @@ export class ContextAwareParser {
         }
 
         if (this.directives.length > 0) workspace.directives = this.directives
-        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines }
+        return { workspace, errors: this.errors, warnings: this.warnings, legacyEscapes: false, declarationLines: this.declarationLines, viewLines: this.viewLines }
     }
 
     private createEmptyWorkspace(): Workspace {
@@ -640,13 +643,30 @@ export class ContextAwareParser {
 
 export function parse(input: string): ParseResult {
     globalIdCounter = 0 // Reset per parse call to avoid growing IDs across invocations
-    const lexResult = lex(input)
+    // Files saved by c4hero before TEA-163 used JSON-style escapes. Detect
+    // them by the keyword lines only that serializer wrote, decode with the
+    // old rule, and say so — saving rewrites the file in Structurizr's rule.
+    const legacyEscapes = detectLegacyEscapes(input)
+    const lexResult = lex(input, { legacyEscapes })
     const parser = new ContextAwareParser(lexResult.tokens)
     const result = parser.parse()
 
     // Combine lexer and parser errors
     const errors = [...lexResult.errors, ...result.errors]
     const warnings = result.warnings
+    if (legacyEscapes) {
+        warnings.unshift({
+            message: 'Saved by an older c4hero: \\\\ and \\t escape sequences were converted. Saving writes the file in Structurizr\'s format.',
+            line: 1,
+            column: 1,
+        })
+    } else if (hasLegacyLookingEscapes(input)) {
+        warnings.unshift({
+            message: 'Strings contain \\\\ or \\t, which Structurizr reads literally (two backslashes; backslash + t). If this file was saved by c4hero before v0.3, those were escapes — check the affected values.',
+            line: 1,
+            column: 1,
+        })
+    }
 
     // Implied instance relationships are NOT materialized here — the canvas
     // derives them per deployment view via deriveInstanceRelationships(), so
@@ -709,6 +729,7 @@ export function parse(input: string): ParseResult {
         workspace: ws,
         errors,
         warnings,
+        legacyEscapes,
         declarationLines: result.declarationLines,
         viewLines: result.viewLines,
     }

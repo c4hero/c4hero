@@ -115,6 +115,55 @@ export function escapeStep(input: string, i: number): 1 | 2 {
     return input[i] === '\\' && (input[i + 1] === '"' || input[i + 1] === 'n') ? 2 : 1
 }
 
+/** The JSON-style rule c4hero used before TEA-163: `\\`, `\"`, `\n` and `\t`
+ *  are all two-character escapes. Only applied to files detected as legacy. */
+function escapeStepLegacy(input: string, i: number): 1 | 2 {
+    const n = input[i + 1]
+    return input[i] === '\\' && (n === '\\' || n === '"' || n === 'n' || n === 't') ? 2 : 1
+}
+
+// Lines only pre-TEA-163 c4hero ever wrote. Real Structurizr has no such
+// keywords (its parser rejects them) and modern c4hero emits these facts as
+// tags and quoted properties, so a bare keyword line at the start of a line
+// is a sound "saved by an old c4hero" marker. Values were unquoted enums
+// (`status Live`, `location External`, `lineStyle Curved`,
+// `interactionStyle Synchronous`) or a quoted string (`owner "Team"`).
+const LEGACY_MARKER = /^[ \t]*(?:status|location|lineStyle|interactionStyle)[ \t]+[A-Za-z]+[ \t]*(?:\/\/.*|#.*)?$|^[ \t]*owner[ \t]+"/m
+
+/** True when `input` was written by a c4hero older than TEA-163 (v0.3), whose
+ *  strings used JSON-style escapes. Sound but not complete: a legacy file
+ *  that set none of status / owner / location / lineStyle / interactionStyle
+ *  carries no marker and is read with the Structurizr rule (see
+ *  `hasLegacyLookingEscapes` for the warning that covers that case). */
+export function detectLegacyEscapes(input: string): boolean {
+    return LEGACY_MARKER.test(input)
+}
+
+/** True when a string literal in `input` contains `\\` or `\t` — sequences
+ *  that mean something different under the legacy rule. Used only to warn. */
+export function hasLegacyLookingEscapes(input: string): boolean {
+    let i = 0
+    while (i < input.length) {
+        const ch = input[i]
+        if (ch === '"') {
+            const end = scanQuotedString(input, i)
+            const body = input.slice(i + 1, end - 1)
+            if (/\\\\|\\t/.test(body)) return true
+            i = end
+            continue
+        }
+        if (ch === '/' && input[i + 1] === '/') { while (i < input.length && input[i] !== '\n') i++; continue }
+        if (ch === '#') { while (i < input.length && input[i] !== '\n') i++; continue }
+        i++
+    }
+    return false
+}
+
+export interface LexOptions {
+    /** Decode `\\` and `\t` as well (files saved by pre-TEA-163 c4hero). */
+    legacyEscapes?: boolean
+}
+
 /**
  * Index just past the closing quote of the string literal opening at `start`
  * (which must point at the opening `"`), or `input.length` if unterminated.
@@ -129,7 +178,8 @@ export function scanQuotedString(input: string, start: number): number {
     return i < input.length ? i + 1 : input.length
 }
 
-export function lex(input: string): LexResult {
+export function lex(input: string, opts: LexOptions = {}): LexResult {
+    const legacy = opts.legacyEscapes === true
     const tokens: Token[] = []
     const errors: LexerError[] = []
     let pos = 0
@@ -185,11 +235,11 @@ export function lex(input: string): LexResult {
             // Known consequence: files saved by pre-TEA-163 c4hero used
             // JSON-style `\\`/`\t` escapes and now read back literally;
             // detecting and migrating those legacy files is TEA-167.
-            if (escapeStep(input, pos) === 2) {
+            if ((legacy ? escapeStepLegacy : escapeStep)(input, pos) === 2) {
                 const escaped = peekAt(1)
                 advance()
                 advance()
-                value += escaped === 'n' ? '\n' : '"'
+                value += escaped === 'n' ? '\n' : escaped === 't' ? '\t' : escaped === '\\' ? '\\' : '"'
             } else {
                 value += advance()
             }
