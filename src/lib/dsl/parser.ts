@@ -9,7 +9,7 @@ import type {
     ElementInView,
 } from '@/types/model'
 import { expandDeploymentElements } from '@/lib/deployment'
-import { lex, detectLegacyEscapes, hasLegacyLookingEscapes } from './lexer'
+import { lex, detectLegacyEscapes } from './lexer'
 import type { Token, TokenType } from './lexer'
 import { parseViewsBody } from './parser-views'
 import { parseModelBody } from './parser-model'
@@ -496,7 +496,9 @@ export class ContextAwareParser {
 
     // ─── Main Parse ──────────────────────────────────────────────────
 
-    parse(): ParseResult {
+    /** The document-level decision (`legacyEscapes`) belongs to the outer
+     *  parse(), which owns the lexer; this method never sets it. */
+    parse(): Omit<ParseResult, 'legacyEscapes'> {
         const workspace = this.createEmptyWorkspace()
 
         this.skipNewlines()
@@ -508,7 +510,7 @@ export class ContextAwareParser {
             if (this.check('KEYWORD', 'extends') || this.check('IDENTIFIER', 'extends')) {
                 this.skipToNextLine()
                 this.skipBraceBlock()
-                return { workspace, errors: this.errors, warnings: this.warnings, legacyEscapes: false, declarationLines: this.declarationLines, viewLines: this.viewLines }
+                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines }
             }
 
             workspace.name = this.readOptionalString() || undefined
@@ -523,7 +525,7 @@ export class ContextAwareParser {
         }
 
         if (this.directives.length > 0) workspace.directives = this.directives
-        return { workspace, errors: this.errors, warnings: this.warnings, legacyEscapes: false, declarationLines: this.declarationLines, viewLines: this.viewLines }
+        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines }
     }
 
     private createEmptyWorkspace(): Workspace {
@@ -660,7 +662,7 @@ export function parse(input: string): ParseResult {
             line: 1,
             column: 1,
         })
-    } else if (hasLegacyLookingEscapes(input)) {
+    } else if (lexResult.legacyLookingEscapes) {
         warnings.unshift({
             message: 'Strings contain \\\\ or \\t, which Structurizr reads literally (two backslashes; backslash + t). If this file was saved by c4hero before v0.3, those were escapes — check the affected values.',
             line: 1,

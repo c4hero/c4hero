@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
-import { detectLegacyEscapes, hasLegacyLookingEscapes, lex } from './lexer'
+import { detectLegacyEscapes, lex } from './lexer'
 
 // What pre-TEA-163 c4hero actually wrote for a container named `C:\Program Files`
 // with a tab in its description and a status.
@@ -91,10 +91,12 @@ describe('legacy decoding', () => {
 
 describe('the residual gap is surfaced, not silent', () => {
   it('warns when \\\\ or \\t appear in strings but no legacy marker is present', () => {
-    expect(hasLegacyLookingEscapes('workspace { model { a = person "C:\\\\x" } }')).toBe(true)
-    expect(hasLegacyLookingEscapes('workspace { model { a = person "a\\tb" } }')).toBe(true)
-    expect(hasLegacyLookingEscapes('workspace { model { a = person "C:\\x" } }')).toBe(false)
-    expect(hasLegacyLookingEscapes('workspace { // "\\\\" in a comment\n model { } }')).toBe(false)
+    const looks = (src: string) => lex(src).legacyLookingEscapes
+    expect(looks('workspace { model { a = person "C:\\\\x" } }')).toBe(true)
+    expect(looks('workspace { model { a = person "a\\tb" } }')).toBe(true)
+    expect(looks('workspace { model { a = person "C:\\x" } }')).toBe(false)
+    expect(looks('workspace { // "\\\\" in a comment\n model { } }')).toBe(false)
+    expect(lex('"a\\\\b"', { legacyEscapes: true }).legacyLookingEscapes).toBe(false)
 
     const { warnings, legacyEscapes } = parseDSL('workspace { model { a = person "C:\\\\x" } }')
     expect(legacyEscapes).toBe(false)

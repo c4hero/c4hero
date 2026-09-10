@@ -102,14 +102,19 @@ export interface LexerError {
 export interface LexResult {
     tokens: Token[]
     errors: LexerError[]
+    /** Set when, under the modern rule, a string contained `\\` or `\t` —
+     *  sequences that were escapes in pre-TEA-163 files. The parser turns
+     *  this into a warning when no legacy marker was found (TEA-167). */
+    legacyLookingEscapes: boolean
 }
 
 /**
  * The consume-one escape rule in one place: the step length at position `i`
  * inside a quoted string is 2 when a backslash begins one of the two real
  * escapes (`\"` or `\n`), else 1 — a backslash before anything else is a
- * literal consumed alone. readString and scanQuotedString both step with
- * this, so the tokenizer and boundary scanner cannot drift apart.
+ * literal consumed alone. readString (in modern mode) and scanQuotedString
+ * both step with this. Legacy mode (TEA-167) uses escapeStepLegacy in
+ * readString only; scanQuotedString always applies the Structurizr rule.
  */
 export function escapeStep(input: string, i: number): 1 | 2 {
     return input[i] === '\\' && (input[i + 1] === '"' || input[i + 1] === 'n') ? 2 : 1
@@ -139,26 +144,6 @@ export function detectLegacyEscapes(input: string): boolean {
     return LEGACY_MARKER.test(input)
 }
 
-/** True when a string literal in `input` contains `\\` or `\t` — sequences
- *  that mean something different under the legacy rule. Used only to warn. */
-export function hasLegacyLookingEscapes(input: string): boolean {
-    let i = 0
-    while (i < input.length) {
-        const ch = input[i]
-        if (ch === '"') {
-            const end = scanQuotedString(input, i)
-            const body = input.slice(i + 1, end - 1)
-            if (/\\\\|\\t/.test(body)) return true
-            i = end
-            continue
-        }
-        if (ch === '/' && input[i + 1] === '/') { while (i < input.length && input[i] !== '\n') i++; continue }
-        if (ch === '#') { while (i < input.length && input[i] !== '\n') i++; continue }
-        i++
-    }
-    return false
-}
-
 export interface LexOptions {
     /** Decode `\\` and `\t` as well (files saved by pre-TEA-163 c4hero). */
     legacyEscapes?: boolean
@@ -180,6 +165,8 @@ export function scanQuotedString(input: string, start: number): number {
 
 export function lex(input: string, opts: LexOptions = {}): LexResult {
     const legacy = opts.legacyEscapes === true
+    const step = legacy ? escapeStepLegacy : escapeStep
+    let legacyLookingEscapes = false
     const tokens: Token[] = []
     const errors: LexerError[] = []
     let pos = 0
@@ -229,18 +216,19 @@ export function lex(input: string, opts: LexOptions = {}): LexResult {
             // `\t` is not an escape. On a miss, only the backslash itself is
             // consumed — the next char is re-examined, because it may start
             // an escape of its own (`a\\"b` is literal-\ then \" → `a\"b`).
-            // escapeStep (above) is the single home of that rule; consuming
-            // two chars here is what made c4hero disagree with every other
-            // Structurizr tool on backslash-heavy values.
-            // Known consequence: files saved by pre-TEA-163 c4hero used
-            // JSON-style `\\`/`\t` escapes and now read back literally;
-            // detecting and migrating those legacy files is TEA-167.
-            if ((legacy ? escapeStepLegacy : escapeStep)(input, pos) === 2) {
+            // escapeStep is the single home of that rule; consuming two chars
+            // here is what made c4hero disagree with every other Structurizr
+            // tool on backslash-heavy values. Files saved by pre-TEA-163
+            // c4hero (`\\`, `\t`) are decoded when `legacy` is set; see
+            // escapeStepLegacy.
+            if (step(input, pos) === 2) {
                 const escaped = peekAt(1)
                 advance()
                 advance()
-                value += escaped === 'n' ? '\n' : escaped === 't' ? '\t' : escaped === '\\' ? '\\' : '"'
+                // `\"` and `\\` decode to themselves; only n and t change.
+                value += escaped === 'n' ? '\n' : escaped === 't' ? '\t' : escaped
             } else {
+                if (!legacy && peek() === '\\' && (peekAt(1) === '\\' || peekAt(1) === 't')) legacyLookingEscapes = true
                 value += advance()
             }
         }
@@ -457,5 +445,5 @@ export function lex(input: string, opts: LexOptions = {}): LexResult {
     }
 
     tokens.push({ type: 'EOF', value: '', line, column })
-    return { tokens, errors }
+    return { tokens, errors, legacyLookingEscapes }
 }
