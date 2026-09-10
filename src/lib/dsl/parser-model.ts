@@ -76,7 +76,7 @@ export function parseModelBody(
             // Preprocessor directives (!include, !const, !var, !identifiers, !docs, !adrs).
             // c4hero doesn't evaluate them, but must consume the keyword plus any inline
             // arguments on the same line to avoid mis-parsing them as model elements.
-            p.noteDirective(token.value)
+            p.noteDirective(token.value, 'model', token)
             p.advance()
             p.skipToNextLine()
             continue
@@ -111,7 +111,15 @@ export function parseModelBody(
                     const memberRefs: string[] = []
                     const beforePeople = model.people.length
                     const beforeSystems = model.softwareSystems.length
+                    // Directives inside the group anchor to declarations
+                    // inside it (or its top), never to something outside.
+                    const outerGroup = p.currentGroupId
+                    const outerLast = p.lastModelDeclId
+                    p.currentGroupId = groupId
+                    p.lastModelDeclId = undefined
                     parseModelBody(p, model, memberRefs, groupId)
+                    p.currentGroupId = outerGroup
+                    p.lastModelDeclId = outerLast
                     p.skipNewlines()
                     p.expect('RBRACE')
                     const definedIds = [
@@ -121,20 +129,22 @@ export function parseModelBody(
                     const allIds = [...new Set([...definedIds, ...memberRefs])]
                     const group: Group = { id: groupId, name: groupName, elementIds: allIds }
                     if (parentGroupId) group.parentId = parentGroupId
+                    p.declarationLines.set(groupId, p.lastLine())
                     model.groups.push(group)
+                    p.lastModelDeclId = groupId
                 }
                 continue
             }
 
             if (kw === 'person') {
                 const person = parsePerson(p)
-                if (person) model.people.push(person)
+                if (person) { model.people.push(person); p.lastModelDeclId = person.id }
                 continue
             }
 
             if (kw === 'softwaresystem') {
                 const sys = parseSoftwareSystem(p, undefined, model)
-                if (sys) model.softwareSystems.push(sys)
+                if (sys) { model.softwareSystems.push(sys); p.lastModelDeclId = sys.id }
                 continue
             }
 
@@ -179,10 +189,10 @@ export function parseModelBody(
 
                     if (elementKw === 'person') {
                         const person = parsePerson(p, varName)
-                        if (person) model.people.push(person)
+                        if (person) { model.people.push(person); p.lastModelDeclId = person.id }
                     } else if (elementKw === 'softwaresystem') {
                         const sys = parseSoftwareSystem(p, varName, model)
-                        if (sys) model.softwareSystems.push(sys)
+                        if (sys) { model.softwareSystems.push(sys); p.lastModelDeclId = sys.id }
                     } else if (elementKw === 'deploymentenvironment') {
                         parseDeploymentEnvironment(p, model, varName)
                     } else {
@@ -301,7 +311,7 @@ function parseSoftwareSystemBody(
         const token = p.peek()
 
         if (token.type === 'COMMENT') { p.advance(); continue }
-        if (token.type === 'KEYWORD' && token.value.startsWith('!')) { p.advance(); p.skipToNextLine(); continue }
+        if (token.type === 'KEYWORD' && token.value.startsWith('!')) { (sys.directives ??= []).push(token.value.trim()); p.advance(); p.skipToNextLine(); continue }
 
         if (token.type === 'KEYWORD') {
             const kw = token.value.toLowerCase()
@@ -323,6 +333,7 @@ function parseSoftwareSystemBody(
                             elementIds: sys.containers.slice(beforeContainers).map(container => container.id),
                         }
                         if (parentGroupId) group.parentId = parentGroupId
+                        p.declarationLines.set(groupId, p.lastLine())
                         model.groups.push(group)
                     }
                 }
@@ -445,7 +456,7 @@ function parseContainerBody(
         const token = p.peek()
 
         if (token.type === 'COMMENT') { p.advance(); continue }
-        if (token.type === 'KEYWORD' && token.value.startsWith('!')) { p.advance(); p.skipToNextLine(); continue }
+        if (token.type === 'KEYWORD' && token.value.startsWith('!')) { (container.directives ??= []).push(token.value.trim()); p.advance(); p.skipToNextLine(); continue }
 
         if (token.type === 'KEYWORD') {
             const kw = token.value.toLowerCase()
@@ -467,6 +478,7 @@ function parseContainerBody(
                             elementIds: container.components.slice(beforeComponents).map(component => component.id),
                         }
                         if (parentGroupId) group.parentId = parentGroupId
+                        p.declarationLines.set(groupId, p.lastLine())
                         model.groups.push(group)
                     }
                 }
@@ -570,6 +582,7 @@ function parseSimpleElementBlock(p: ContextAwareParser, element: Person | Compon
         if (token.type === 'COMMENT') { p.advance(); continue }
 
         if (token.type === 'KEYWORD' && token.value.startsWith('!')) {
+            (element.directives ??= []).push(token.value.trim())
             p.advance()
             p.skipToNextLine()
             continue
@@ -581,7 +594,9 @@ function parseSimpleElementBlock(p: ContextAwareParser, element: Person | Compon
                 p.advance()
                 const groupName = p.readOptionalString()
                 if (groupName && model) {
-                    model.groups.push({ id: nextId(), name: groupName, elementIds: [element.id] })
+                    const gid = nextId()
+                    p.declarationLines.set(gid, p.lastLine())
+                    model.groups.push({ id: gid, name: groupName, elementIds: [element.id] })
                 }
                 continue
             }

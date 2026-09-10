@@ -3,7 +3,7 @@ import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
-import { serializeDSL } from '@/lib/dsl'
+import { serializeRoot } from '@/lib/includeWriteback'
 import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
@@ -87,7 +87,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   'mod+s': (store) => {
     if (store.workspace) {
       try {
-        const dsl = serializeDSL(store.workspace)
+        const dsl = serializeRoot(store.workspace)
         saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)
         const sidecar = extractSidecar(store.workspace)
         if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))

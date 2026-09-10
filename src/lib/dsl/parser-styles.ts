@@ -22,15 +22,17 @@ export function parseStylesBody(p: ContextAwareParser, config: ViewConfiguration
 
             if (kw === 'element') {
                 p.advance()
+                const line = token.line
                 const style = parseElementStyleBlock(p)
-                if (style) config.styles.elements.push(style)
+                if (style) { p.styleLines.set(style, line); config.styles.elements.push(style) }
                 continue
             }
 
             if (kw === 'relationship') {
                 p.advance()
+                const line = token.line
                 const style = parseRelationshipStyleBlock(p)
-                if (style) config.styles.relationships.push(style)
+                if (style) { p.styleLines.set(style, line); config.styles.relationships.push(style) }
                 continue
             }
         }

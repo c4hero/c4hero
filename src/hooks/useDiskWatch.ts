@@ -1,10 +1,10 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getCurrentFileHandle, readCurrentFile } from '@/lib/fileIO'
-import { getCurrentDirHandle, readDSLFileForWatch } from '@/lib/folderIO'
+import { getCurrentDirHandle, readDSLFileForWatch, readDSLFileAt } from '@/lib/folderIO'
 import { createFileWatcher, type SnapshotHashes, type WatchedSnapshot } from '@/lib/fileWatch'
 import { isSelfWrite, resetSaveCoordinator } from '@/lib/saveCoordinator'
-import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
+import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 import { announce } from '@/lib/announce'
 import { createLogger } from '@/lib/logger'
 import { getTestFileSource, subscribeTestFileSource } from '@/lib/testFileSource'
@@ -34,13 +34,14 @@ function hasUnsavedLocalEdits(): boolean {
 
 /** Parse what's on disk and swap it in. Returns false (and raises a conflict)
  *  when the text can't be applied safely. */
-export function applyDiskSnapshot(filename: string, snapshot: WatchedSnapshot, hashes: SnapshotHashes): boolean {
+export async function applyDiskSnapshot(filename: string, snapshot: WatchedSnapshot, hashes: SnapshotHashes): Promise<boolean> {
   const store = useWorkspaceStore.getState()
   const current = store.workspace
-  const { workspace, errors } = parseWorkspaceDocument({
+  const { workspace, errors } = await loadWorkspaceDocument({
     content: snapshot.content,
     fallbackName: filename.replace(/\.dsl$/, ''),
     sidecarJson: snapshot.sidecarJson,
+    readInclude: getCurrentDirHandle() ? readDSLFileAt : undefined,
   })
   if (errors.length > 0) {
     store.setDiskConflict({
@@ -122,7 +123,7 @@ export function useDiskWatch() {
           announce(`${filename} changed on disk — you have unsaved changes`)
           return
         }
-        applyDiskSnapshot(filename, snapshot, hashes)
+        void applyDiskSnapshot(filename, snapshot, hashes)
       },
     })
     watcherRef.current = watcher

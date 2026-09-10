@@ -225,8 +225,10 @@ export function lex(input: string): LexResult {
             }
         }
 
-        // Check if this is an opaque directive
-        if (OPAQUE_DIRECTIVES.has(value)) {
+        // Every `!` directive is opaque: the rest of the line is its argument
+        // and travels with the keyword so the parser can preserve it verbatim
+        // (TEA-325). The named set documents the ones Structurizr defines.
+        if (value.startsWith('!') || OPAQUE_DIRECTIVES.has(value)) {
             // Read the rest of the line as part of the value
             let rest = ''
             while (pos < input.length && peek() !== '\n') {

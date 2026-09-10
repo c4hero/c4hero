@@ -65,6 +65,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseSystemLandscapeView(p, model)
                 if (view) {
                     ensureViewKey(view, views, undefined)
+                    p.viewLines.set(view, p.lastLine())
                     views.systemLandscapeViews.push(view)
                 }
                 continue
@@ -73,6 +74,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseElementView(p, 'systemContext', model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId)
+                    p.viewLines.set(view, p.lastLine())
                     views.systemContextViews.push(view)
                 }
                 continue
@@ -81,6 +83,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseElementView(p, 'container', model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId)
+                    p.viewLines.set(view, p.lastLine())
                     views.containerViews.push(view)
                 }
                 continue
@@ -89,8 +92,16 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseElementView(p, 'component', model)
                 if (view) {
                     ensureViewKey(view, views, view.containerId)
+                    p.viewLines.set(view, p.lastLine())
                     views.componentViews.push(view)
                 }
+                continue
+            }
+            if (token.value.startsWith('!')) {
+                // Preprocessor directive inside views — preserved verbatim.
+                p.noteDirective(token.value, 'views', token)
+                p.advance()
+                p.skipToNextLine()
                 continue
             }
             if (kw === 'styles') {
@@ -110,12 +121,14 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                     themes.push(p.advance().value)
                 }
                 views.configuration.themes = themes
+                p.themesLine = token.line
                 continue
             }
             if (kw === 'dynamic') {
                 const view = parseDynamicView(p, model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId ?? view.containerId)
+                    p.viewLines.set(view, p.lastLine())
                     views.dynamicViews.push(view)
                 }
                 continue
@@ -124,6 +137,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 const view = parseDeploymentView(p, model)
                 if (view) {
                     ensureViewKey(view, views, view.softwareSystemId ?? view.environment)
+                    p.viewLines.set(view, p.lastLine())
                     views.deploymentViews.push(view)
                 }
                 continue

@@ -8,6 +8,7 @@ import { createLogger } from '@/lib/logger'
 import {
   openFolder,
   readDSLFile,
+  readDSLFileAt,
   writeDSLFile,
   hasFolderAccess,
   getCurrentDirHandle,
@@ -21,7 +22,7 @@ import {
 import { getRecentFolders, addRecentFolder, pruneRecentFolders, removeRecentFolder } from '@/lib/fileIO'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { sidecarName } from '@/lib/sidecar'
-import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
+import { parseWorkspaceDocument, loadWorkspaceDocument } from '@/lib/workspaceDocument'
 import { AlertTriangle } from 'lucide-react'
 import {
   TemplateDialog,
@@ -299,10 +300,11 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     try {
       const file = await readDSLFile(filename)
       if (!file) return
-      const { workspace, errors } = parseWorkspaceDocument({
+      const { workspace, errors } = await loadWorkspaceDocument({
         content: file.content,
         fallbackName: filename.replace(/\.dsl$/, ''),
         sidecarJson: file.sidecarJson,
+        readInclude: readDSLFileAt,
       })
       if (errors.length > 0) log.warn("DSL parse warnings", errors)
       loadWorkspace(workspace)

@@ -63,6 +63,7 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
         tags: initialTags,
         properties: {},
     }
+    p.declarationLines.set(rel.id, p.lastLine())
 
     p.skipNewlines()
     if (p.check('LBRACE')) {

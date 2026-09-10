@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Save } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { serializeDSL } from '@/lib/dsl'
+import { serializeRoot } from '@/lib/includeWriteback'
 import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess } from '@/lib/fileIO'
 import { getCurrentDirHandle } from '@/lib/folderIO'
 import { announce } from '@/lib/announce'
@@ -39,7 +39,7 @@ export default function SaveIndicator() {
     setSaveStatus('saving')
     try {
       const wsName = workspace.name ?? 'workspace'
-      const dsl = serializeDSL(workspace)
+      const dsl = serializeRoot(workspace)
       const ok = await saveDSLFile(dsl, `${wsName}.dsl`)
       if (!ok) throw new Error('Save failed')
       const n = useWorkspaceStore.getState().undoStack.length
