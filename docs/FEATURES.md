@@ -17,6 +17,7 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 - Parses and serializes the [Structurizr DSL](https://docs.structurizr.com/dsl/language) — the same format used by Structurizr Lite, Studio, and the Java/JSON exporters.
 - Round-trips: `parse(serialize(workspace)) === workspace` for everything c4hero models. Substantial round-trip test coverage protects this contract.
 - Supports element styles, relationship styles, tags (with cascade), `properties { … }` blocks, owners, technology, status, custom URLs, and `!docs` / `!adrs` references.
+- **Preprocessor directives survive.** `!include`, `!const`, `!var`, `!docs`, `!adrs` and any other `!` line are kept verbatim in their block and re-emitted on save. `!include` is not resolved yet (the code pane flags it), but the line is never lost.
 - Sidecar JSON file (`<workspace>.c4hero.json`) holds non-DSL metadata — node positions, view auto-layout direction, viewport state — so layout survives DSL edits.
 
 ## File workflows

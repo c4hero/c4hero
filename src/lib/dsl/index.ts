@@ -18,6 +18,8 @@ export { GroupSerializationError } from './serializer'
 export interface ParseDSLResult {
     workspace: Workspace
     errors: ParseError[]
+    /** Non-fatal: content preserved but not understood (unresolved `!include`). */
+    warnings: ParseError[]
 }
 
 /**

@@ -76,7 +76,7 @@ export function parseModelBody(
             // Preprocessor directives (!include, !const, !var, !identifiers, !docs, !adrs).
             // c4hero doesn't evaluate them, but must consume the keyword plus any inline
             // arguments on the same line to avoid mis-parsing them as model elements.
-            p.noteDirective(token.value)
+            p.noteDirective(token.value, 'model', token)
             p.advance()
             p.skipToNextLine()
             continue

@@ -93,6 +93,13 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 }
                 continue
             }
+            if (token.value.startsWith('!')) {
+                // Preprocessor directive inside views — preserved verbatim.
+                p.noteDirective(token.value, 'views', token)
+                p.advance()
+                p.skipToNextLine()
+                continue
+            }
             if (kw === 'styles') {
                 p.advance()
                 p.skipNewlines()

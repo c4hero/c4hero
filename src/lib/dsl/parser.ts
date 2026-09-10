@@ -3,6 +3,7 @@
 
 import type {
     Workspace,
+    WorkspaceDirective,
     Model,
     View,
     ElementInView,
@@ -123,6 +124,9 @@ export interface ParseError {
 export interface ParseResult {
     workspace: Workspace
     errors: ParseError[]
+    /** Non-fatal notes: the model loaded, but something was preserved rather
+     *  than understood (e.g. an unresolved `!include`). */
+    warnings: ParseError[]
 }
 
 // ─── ID Generation ───────────────────────────────────────────────────
@@ -151,6 +155,9 @@ export class ContextAwareParser {
     tokens: Token[]
     pos = 0
     errors: ParseError[] = []
+    warnings: ParseError[] = []
+    /** Preprocessor lines captured verbatim, in source order (TEA-325). */
+    directives: WorkspaceDirective[] = []
     depth = 0
 
     // Variable name <-> element id mappings
@@ -352,9 +359,28 @@ export class ContextAwareParser {
      *  line into the keyword's value, so `!identifiers hierarchical` arrives as
      *  a single token. c4hero always registers bare *and* qualified names, so
      *  the flag only records intent — resolution prefers qualified regardless. */
-    noteDirective(value: string): void {
+    noteDirective(value: string, scope: WorkspaceDirective['scope'] = 'workspace', token?: Token): void {
         if (/^!identifiers\b/.test(value) && /\bhierarchical\b/.test(value)) {
             this.hierarchicalIdentifiers = true
+        }
+        // Preserve every directive byte-for-byte (minus surrounding whitespace)
+        // so a save never deletes a line the user wrote. Includes are kept but
+        // their content is not loaded here — say so, as a warning not an error.
+        //
+        // `!identifiers` is the one exception: it is a parse *mode*, not data.
+        // c4hero registers both flat and qualified names on read and always
+        // serializes flat identifiers, so re-emitting `!identifiers hierarchical`
+        // would make Structurizr reject the very references we write.
+        const raw = value.trim()
+        if (/^!identifiers\b/.test(raw)) return
+        this.directives.push({ scope, raw })
+        if (/^!include\b/.test(raw)) {
+            const t = token ?? this.peek()
+            this.warnings.push({
+                message: `${raw} is preserved but not resolved — included content is not shown`,
+                line: t.line,
+                column: t.column,
+            })
         }
     }
 
@@ -463,7 +489,7 @@ export class ContextAwareParser {
             if (this.check('KEYWORD', 'extends') || this.check('IDENTIFIER', 'extends')) {
                 this.skipToNextLine()
                 this.skipBraceBlock()
-                return { workspace, errors: this.errors }
+                return { workspace, errors: this.errors, warnings: this.warnings }
             }
 
             workspace.name = this.readOptionalString() || undefined
@@ -477,7 +503,8 @@ export class ContextAwareParser {
             }
         }
 
-        return { workspace, errors: this.errors }
+        if (this.directives.length > 0) workspace.directives = this.directives
+        return { workspace, errors: this.errors, warnings: this.warnings }
     }
 
     private createEmptyWorkspace(): Workspace {
@@ -533,7 +560,7 @@ export class ContextAwareParser {
                     }
                 } else if (token.value.startsWith('!')) {
                     // Preprocessor directive — consume keyword + inline args on this line
-                    this.noteDirective(token.value)
+                    this.noteDirective(token.value, 'workspace', token)
                     this.advance()
                     this.skipToNextLine()
                 } else if (kw === 'configuration') {
@@ -603,6 +630,7 @@ export function parse(input: string): ParseResult {
 
     // Combine lexer and parser errors
     const errors = [...lexResult.errors, ...result.errors]
+    const warnings = result.warnings
 
     // Implied instance relationships are NOT materialized here — the canvas
     // derives them per deployment view via deriveInstanceRelationships(), so
@@ -664,5 +692,6 @@ export function parse(input: string): ParseResult {
     return {
         workspace: ws,
         errors,
+        warnings,
     }
 }

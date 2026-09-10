@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Saving no longer deletes `!include`, `!const`, `!var`, `!docs` or `!adrs`
+  lines.** The parser used to consume every `!` preprocessor directive and
+  drop it, so opening a real Structurizr workspace whose model is split across
+  files and saving it silently removed the include lines — the same
+  data-loss family as the escape-sequence drift. Directives are now kept
+  verbatim, in their original block and order, and written back on save.
+  Included content is not loaded yet; the code pane says so with a
+  "preserved, not resolved" note rather than pretending the model is
+  complete. (TEA-325, phase A)
+
 ## [0.6.0] - 2026-09-10
 
 ### Added

@@ -254,10 +254,22 @@ export interface Model {
 
 export type WorkspaceScope = 'softwaresystem' | 'landscape' | 'none'
 
+/** A `!` preprocessor line (`!include`, `!const`, `!var`, `!identifiers`,
+ *  `!docs`, `!adrs`, …) that c4hero does not evaluate but must never lose.
+ *  Kept verbatim and re-emitted at the top of the block it came from, in
+ *  original order. */
+export interface WorkspaceDirective {
+  scope: 'workspace' | 'model' | 'views'
+  /** The whole line as written, trimmed. */
+  raw: string
+}
+
 export interface Workspace {
   name?: string
   description?: string
   scope?: WorkspaceScope
+  /** Preserved preprocessor directives (TEA-325 phase A). Absent when none. */
+  directives?: WorkspaceDirective[]
   model: Model
   views: {
     systemLandscapeViews: View[]

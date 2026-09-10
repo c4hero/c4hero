@@ -452,6 +452,8 @@ class SerializerContext {
         this.emit(parts.join(' ') + ' {')
         this.depth++
 
+        if (this.emitDirectives('workspace')) this.emitBlank()
+
         this.emitBlank()
         this.serializeModel()
         this.emitBlank()
@@ -482,11 +484,25 @@ class SerializerContext {
 
     // ─── Model ──────────────────────────────────────────────────────
 
+    /** Re-emit preserved `!` lines for one block, verbatim and in original
+     *  order, ahead of any generated content. Returns true if any were written. */
+    private emitDirectives(scope: 'workspace' | 'model' | 'views'): boolean {
+        let any = false
+        for (const d of this.workspace.directives ?? []) {
+            if (d.scope !== scope) continue
+            this.emit(d.raw)
+            any = true
+        }
+        return any
+    }
+
     private serializeModel(): void {
         this.emit('model {')
         this.depth++
 
         const model = this.workspace.model
+
+        if (this.emitDirectives('model')) this.emitBlank()
 
         if (this.hasNestedGroups) {
             this.serializeProperties({ 'structurizr.groupSeparator': GROUP_SEPARATOR })
@@ -851,7 +867,7 @@ class SerializerContext {
         this.depth++
 
         const views = this.workspace.views
-        let needsBlank = false
+        let needsBlank = this.emitDirectives('views')
 
         // Skip parser-synthesised views — they exist to give the canvas
         // something to render when the DSL declares no views; serializing them

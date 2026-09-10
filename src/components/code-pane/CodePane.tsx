@@ -179,7 +179,7 @@ export default function CodePane() {
   const workspaceName = useWorkspaceStore((s) => s.workspace?.name)
   const hostElRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
-  const [status, setStatus] = useState<DslSyncStatus>({ errors: [], serializeError: null, pendingApply: false })
+  const [status, setStatus] = useState<DslSyncStatus>({ errors: [], warnings: [], serializeError: null, pendingApply: false })
   const statusRef = useRef(status)
   const [copied, setCopied] = useState(false)
   const [histDepths, setHistDepths] = useState({ undo: 0, redo: 0 })
@@ -581,6 +581,15 @@ export default function CodePane() {
           ) : (
             <span style={{ color: 'var(--color-text-secondary)' }}>
               Editable — changes here update the canvas as you type
+            </span>
+          )}
+          {!status.pendingApply && errorCount === 0 && status.warnings.length > 0 && (
+            <span
+              data-code-pane-warnings
+              title={status.warnings.map((w) => `${w.line}:${w.column} ${w.message}`).join('\n')}
+              style={{ marginLeft: 'auto', whiteSpace: 'nowrap', opacity: 0.8 }}
+            >
+              {status.warnings.length} {status.warnings.length === 1 ? 'directive' : 'directives'} preserved, not resolved
             </span>
           )}
           {status.pendingApply && (

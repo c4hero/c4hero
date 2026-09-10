@@ -191,8 +191,9 @@ export const createLifecycleSlice: StateCreator<
     // error, never escape into the caller's timer callback.
     let parsed: Workspace
     let errors: ReturnType<WorkspaceState['replaceWorkspaceFromDSL']>['errors']
+    let warnings: ReturnType<WorkspaceState['replaceWorkspaceFromDSL']>['errors'] = []
     try {
-      ;({ workspace: parsed, errors } = parseDSL(text))
+      ;({ workspace: parsed, errors, warnings } = parseDSL(text))
     } catch (err) {
       return {
         ok: false,
@@ -245,7 +246,7 @@ export const createLifecycleSlice: StateCreator<
       clearSelectionDraft(s)
       s.scopeViolations = validateScope(parsed)
     })
-    return { ok: true, errors: [] }
+    return { ok: true, errors: [], warnings }
   },
 
   updateWorkspaceMeta: (patch) => set((s) => {

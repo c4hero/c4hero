@@ -155,7 +155,7 @@ export interface WorkspaceState extends UndoState {
    *  A successful apply is ONE undo entry and carries per-view element layout
    *  (x/y/pinned/locked + view locks) over from the current workspace for every
    *  view key + element id that survives the edit. */
-  replaceWorkspaceFromDSL: (text: string) => { ok: boolean; errors: ParseError[] }
+  replaceWorkspaceFromDSL: (text: string) => { ok: boolean; errors: ParseError[]; warnings?: ParseError[] }
 
   // Navigation
   setActiveView: (key: string) => void
