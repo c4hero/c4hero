@@ -423,17 +423,35 @@ class SerializerContext {
         for (const [key, val] of Object.entries(user)) {
             if (!(key in props)) props[key] = val
         }
-        return props
+        return this.emittableProperties(props)
+    }
+
+    /** Drop entries whose key or value encodes to nothing: Structurizr rejects
+     *  `"key" ""` and a nameless property, so they are unrepresentable. Applied
+     *  before any `hasProperties` check so an element with only such entries
+     *  gets no empty block. Found by the generated conformance corpus (TEA-63). */
+    private emittableProperties(props: Record<string, string>): Record<string, string> {
+        const out: Record<string, string> = Object.create(null)
+        for (const [key, val] of Object.entries(props)) {
+            if (this.escapeString(key).length > 0 && this.escapeString(val).length > 0) out[key] = val
+        }
+        return out
     }
 
     /** Emit a `properties { }` block for any user-defined key/value pairs. */
     private serializeProperties(props: Record<string, string>): void {
+        // Structurizr rejects `"key" ""` ("A property value must be specified")
+        // and a nameless property, so entries that encode to nothing are
+        // unrepresentable and skipped — the same rule as trailing backslashes.
+        // Found by the generated conformance corpus (TEA-63).
         const entries = Object.entries(props)
+            .map(([key, val]) => [this.escapeString(key), this.escapeString(val)] as const)
+            .filter(([key, val]) => key.length > 0 && val.length > 0)
         if (entries.length === 0) return
         this.emit('properties {')
         this.depth++
         for (const [key, val] of entries) {
-            this.emit(`"${this.escapeString(key)}" "${this.escapeString(val)}"`)
+            this.emit(`"${key}" "${val}"`)
         }
         this.depth--
         this.emit('}')
@@ -653,6 +671,7 @@ class SerializerContext {
         const varName = this.idToVar.get(id)
         const ref = this.idToVar.get(referencedId) ?? referencedId
         const extraTags = this.getExtraTags(tags, defaultTags)
+        properties = this.emittableProperties(properties)
         const hasProperties = Object.keys(properties).length > 0
         const hasBlock = !!url || hasProperties
 

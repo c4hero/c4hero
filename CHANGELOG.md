@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A property with an empty value no longer makes the saved file invalid.**
+  Structurizr rejects `"key" ""` ("A property value must be specified"), so
+  an element or relationship carrying an empty property produced DSL the
+  real parser refused. Such entries are now left out on save, the same way
+  a trailing backslash is, and an element whose only properties were empty
+  no longer gets an empty block. Found by the new generated conformance
+  corpus. (TEA-63)
+
 ## [0.6.0] - 2026-09-10
 
 ### Added
