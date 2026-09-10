@@ -201,14 +201,20 @@ export class ModelBuilder {
     return this.orphanSystem
   }
 
+  /** Synthesised holder container per system, so repeated orphan components
+   *  share one. Tracked here rather than as a property so nothing internal
+   *  leaks into the user's DSL. */
+  private readonly orphanHolders = new Map<string, Container>()
+
   private orphanContainer(line: number, what: string): Container {
     const sys = this.enclosingSystem() ?? this.orphanParent(line, what)
-    let holder = sys.containers.find((c) => c.properties['c4hero.import.synthesised'] === 'true')
+    let holder = this.orphanHolders.get(sys.id)
     if (!holder) {
       holder = {
         id: this.idFor(undefined, `${sys.id}Components`), type: 'container', name: `${sys.name} components`, tags: ['Element', 'Container'],
-        properties: { 'c4hero.import.synthesised': 'true' }, components: [],
+        properties: {}, components: [],
       }
+      this.orphanHolders.set(sys.id, holder)
       sys.containers.push(holder)
       this.warn(line, `${what} declared outside a Container_Boundary — placed in a synthesised container "${holder.name}"`)
     }

@@ -126,6 +126,7 @@ Component(comp, "Comp", "Go")`)
     expect(sys.name).toBe('Orphans')
     expect(sys.containers.map((c) => c.name)).toEqual(['Web', 'Orphans components'])
     expect(sys.containers[1].components[0].name).toBe('Comp')
+    expect(sys.containers[1].properties).toEqual({}) // no internal marker leaks into the DSL
     expect(r.warnings.map((w) => w.message)).toEqual([
       'Container "Web" declared outside a System_Boundary — placed in a synthesised software system "Orphans"',
       'Component "Comp" declared outside a Container_Boundary — placed in a synthesised container "Orphans components"',
