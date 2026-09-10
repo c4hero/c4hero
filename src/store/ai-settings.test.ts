@@ -106,3 +106,25 @@ describe('isAiReady', () => {
     expect(isAiReady({ ...base, provider: 'openai' })).toBe(false)
   })
 })
+
+describe('live-list resolution (TEA-249)', () => {
+  const base = normalizeAiSettings({ provider: 'anthropic', apiKeys: { anthropic: 'k' } })
+  const live = [{ id: 'claude-opus-5', label: '' }, { id: 'claude-sonnet-5', label: '' }, { id: 'claude-haiku-4-5', label: '' }]
+
+  it('upgrades the curated default when the provider no longer offers it', () => {
+    expect(activeAiConfig(base).model).toBe('claude-sonnet-4-6')
+    expect(activeAiConfig(base, live).model).toBe('claude-sonnet-5')
+  })
+
+  it('never rewrites an explicitly chosen model', () => {
+    const chosen = normalizeAiSettings({ provider: 'anthropic', models: { anthropic: 'claude-opus-4-8' } })
+    expect(activeAiConfig(chosen, live).model).toBe('claude-opus-4-8')
+  })
+
+  it('resolves the cheap-draft tier against the live list too', () => {
+    expect(draftModel(base, live)).toBe('claude-haiku-4-5')
+    const liveNoHaiku = [{ id: 'claude-haiku-5', label: '' }, { id: 'claude-sonnet-5', label: '' }]
+    expect(draftModel(base, liveNoHaiku)).toBe('claude-haiku-5')
+    expect(draftModel({ ...base, routeCheapDrafts: false }, liveNoHaiku)).toBe('claude-sonnet-5')
+  })
+})
