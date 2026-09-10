@@ -22,6 +22,7 @@ import {
   LayoutGrid,
   Sparkles,
   Code,
+  FileInput,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
@@ -41,6 +42,7 @@ interface WsEntry {
 }
 
 const ExportDialog = lazy(() => import('@/components/dialogs/ExportDialog'))
+const ImportDialog = lazy(() => import('@/components/dialogs/ImportDialog'))
 const CommandPalette = lazy(() => import('@/components/command-palette/CommandPalette'))
 const CreateViewDialog = lazy(() => import('@/components/views/CreateViewDialog'))
 const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDialog'))
@@ -73,6 +75,7 @@ export default function FloatingTopPill() {
   const navigate = useNavigate()
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace)
   const activeFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
+  const importDialogOpen = useWorkspaceStore((s) => s.importDialogOpen)
 
   const openWsPicker = useCallback(async () => {
     const filenames = await listDSLFiles()
@@ -434,6 +437,7 @@ export default function FloatingTopPill() {
             <MenuItemRow icon={Code} label="DSL code…" onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setCodePanelOpen(true) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
+            <MenuItemRow icon={FileInput} label="Import PlantUML / Mermaid…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(false); setWsPickerOpen(false); useWorkspaceStore.getState().setImportDialogOpen(true) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow
               icon={Command}
@@ -487,6 +491,22 @@ export default function FloatingTopPill() {
             onExport={handleExport}
             onCopy={handleCopy}
             onClose={() => setExportDialogOpen(false)}
+          />
+        </Suspense>
+      )}
+      {importDialogOpen && (
+        <Suspense fallback={<LoadingDot />}>
+          <ImportDialog
+            position="shade"
+            onClose={() => useWorkspaceStore.getState().setImportDialogOpen(false)}
+            onImport={(result) => {
+              // Same as instantiating a template without a folder file: an
+              // unsaved single-file workspace whose Save As suggests <name>.dsl.
+              const s = useWorkspaceStore.getState()
+              s.loadWorkspace(result.workspace)
+              s.setActiveWorkspaceFilename(null)
+              if (result.initialViewKey) s.setActiveView(result.initialViewKey)
+            }}
           />
         </Suspense>
       )}

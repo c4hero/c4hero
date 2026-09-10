@@ -1,4 +1,4 @@
-import { FolderOpen, FileText, Plus, ChevronRight, X } from 'lucide-react'
+import { FolderOpen, FileText, Plus, ChevronRight, X, FileInput } from 'lucide-react'
 import { hasFolderAccess } from '@/lib/folderIO'
 import RowMenu from './RowMenu'
 import {
@@ -17,6 +17,7 @@ export default function StartupView({
   onOpenRecent,
   onRemoveRecent,
   onOpenFile,
+  onImportForeign,
   recentFolders,
 }: {
   onCreateCollection: () => void
@@ -24,6 +25,8 @@ export default function StartupView({
   onOpenRecent: (path: string) => void
   onRemoveRecent: (name: string) => void
   onOpenFile: () => void
+  /** Import a C4-PlantUML or Mermaid C4 file (TEA-255). */
+  onImportForeign: () => void
   recentFolders: RecentFolder[]
 }) {
   const canUseCollections = hasFolderAccess()
@@ -53,6 +56,10 @@ export default function StartupView({
                   <LifecycleButton onClick={onOpenCollection}>
                     <FolderOpen size={14} />
                     Open collection
+                  </LifecycleButton>
+                  <LifecycleButton onClick={onImportForeign} ariaLabel="Import PlantUML or Mermaid">
+                    <FileInput size={14} />
+                    Import PlantUML / Mermaid
                   </LifecycleButton>
                 </>
               ) : (
@@ -108,6 +115,10 @@ export default function StartupView({
                 <FolderOpen size={14} />
                 Open collection
               </LifecycleButton>
+              <LifecycleButton onClick={onImportForeign} ariaLabel="Import PlantUML or Mermaid">
+                <FileInput size={14} />
+                Import PlantUML / Mermaid
+              </LifecycleButton>
             </div>
           ) : (
             <div className="welcome-fallback">
@@ -115,6 +126,10 @@ export default function StartupView({
               <LifecycleButton variant="primary" onClick={onOpenFile}>
                 <FileText size={14} />
                 Open .dsl file
+              </LifecycleButton>
+              <LifecycleButton onClick={onImportForeign} ariaLabel="Import PlantUML or Mermaid">
+                <FileInput size={14} />
+                Import PlantUML / Mermaid
               </LifecycleButton>
             </div>
           )}

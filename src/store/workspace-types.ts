@@ -346,6 +346,9 @@ export interface WorkspaceState extends UndoState {
   setTechFilterMode: (mode: 'any' | 'all') => void
   setTeamFilterMode: (mode: 'any' | 'all') => void
   createViewDialogOpen: boolean
+  /** Import PlantUML / Mermaid dialog (TEA-255), opened from the menu or palette. */
+  importDialogOpen: boolean
+  setImportDialogOpen: (open: boolean) => void
   setCreateViewDialogOpen: (open: boolean) => void
   /** Elements the impact panel is analysing, snapshotted when it opened.
    *  Null when the panel is closed. */

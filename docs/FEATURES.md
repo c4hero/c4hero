@@ -21,6 +21,7 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 
 ## File workflows
 
+- **Import C4-PlantUML and Mermaid C4.** Paste or drop a `.puml` file or a Mermaid `C4Context` / `C4Container` / `C4Component` block; the dialog auto-detects the format, previews the counts, lists every skipped line with its number, and loads an editable canvas that saves as Structurizr DSL. Boundaries become nesting or groups; `_Ext` / `Db` / `Queue` variants map to location, tags and shapes. Styling macros, sprites, deployment nodes and dynamic steps are reported and skipped.
 - **Folder collections** (Chromium browsers): open a folder of `.dsl` files, pick a workspace, and edit. Saves write back to disk via the File System Access API.
 - **Single-file mode** (all browsers): open a `.dsl` file directly. Saves either go back to the source handle (where supported) or trigger a download.
 - **Recent collections / files** are remembered in `localStorage` and re-openable from the welcome screen.

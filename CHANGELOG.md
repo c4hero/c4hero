@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Import C4-PlantUML and Mermaid C4 files.** The largest population of
+  existing C4 diagrams lives in `.puml` files and Mermaid `C4Context` /
+  `C4Container` / `C4Component` blocks. Paste or drop one into the new
+  *Import PlantUML / Mermaid* dialog (welcome screen, app menu, or command
+  palette) and get a live, editable canvas plus clean Structurizr DSL. The
+  dialog auto-detects the format, previews what it found (people, systems,
+  containers, components, relationships) and lists every skipped line with
+  its line number, so nothing is dropped silently. People, systems,
+  containers and components map with their `_Ext`, `Db` and `Queue`
+  variants (external location, Cylinder and Pipe shapes); `System_Boundary`
+  / `Container_Boundary` become nesting; `Boundary` / `Enterprise_Boundary`
+  become groups; `Rel` in every direction variant and `BiRel` (split in two)
+  become relationships; `$named` arguments work. Every import is pushed
+  through the Structurizr DSL round trip before it loads, so what you get can
+  always be saved. Nothing is fetched: `!include` lines are reported, not
+  followed. Out of scope for now: sprites and styling macros, deployment
+  nodes, dynamic steps, exporting back. (TEA-255)
+
 ## [0.6.0] - 2026-09-10
 
 ### Added

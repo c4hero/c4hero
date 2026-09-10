@@ -8,6 +8,7 @@ vi.mock('lucide-react', () => ({
   Plus: () => null,
   ChevronRight: () => null,
   X: () => null,
+  FileInput: () => null,
   MoreHorizontal: () => null,
 }))
 
@@ -32,6 +33,7 @@ function makeCallbacks(): Callbacks {
     onOpenRecent: vi.fn(),
     onRemoveRecent: vi.fn(),
     onOpenFile: vi.fn(),
+  onImportForeign: vi.fn(),
   }
 }
 

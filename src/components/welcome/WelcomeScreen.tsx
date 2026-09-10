@@ -33,6 +33,7 @@ import StartupView from './StartupView'
 import CollectionView from './CollectionView'
 
 const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDialog'))
+const ImportDialog = lazy(() => import('@/components/dialogs/ImportDialog'))
 
 const log = createLogger('WelcomeScreen')
 
@@ -100,6 +101,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
 
   const [showScopePicker, setShowScopePicker] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [showNewCollection, setShowNewCollection] = useState(false)
   const [newCollectionName, setNewCollectionName] = useState('My Architecture')
   const [renameCollection, setRenameCollection] = useState<{ slug: string; name: string } | null>(null)
@@ -523,6 +525,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
             onOpenRecent={handleOpenRecent}
             onRemoveRecent={handleRemoveRecent}
             onOpenFile={handleOpenFile}
+            onImportForeign={() => setShowImport(true)}
             recentFolders={recentFolders}
           />
         ) : (
@@ -594,6 +597,21 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
           <ScopePickerDialog
             onConfirm={handleBlankWorkspaceFromPicker}
             onCancel={() => setShowScopePicker(false)}
+          />
+        </Suspense>
+      )}
+      {showImport && (
+        <Suspense fallback={null}>
+          <ImportDialog
+            position="center"
+            onClose={() => setShowImport(false)}
+            onImport={(result) => {
+              // Unsaved single-file flow, like a template without a folder:
+              // no filename until the user saves.
+              loadWorkspace(result.workspace)
+              useWorkspaceStore.getState().setActiveWorkspaceFilename(null)
+              if (result.initialViewKey) useWorkspaceStore.getState().setActiveView(result.initialViewKey)
+            }}
           />
         </Suspense>
       )}
