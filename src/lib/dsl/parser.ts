@@ -124,6 +124,9 @@ export interface ParseError {
 export interface ParseResult {
     workspace: Workspace
     errors: ParseError[]
+    /** The input was recognised as saved by a pre-TEA-163 c4hero and its
+     *  `\\` / `\t` escapes were decoded (TEA-167). Saving migrates it. */
+    legacyEscapes: boolean
     /** Source line (1-based) where each element / relationship / group /
      *  deployment environment id was declared. Lets a caller that flattened
      *  `!include`s map ids back to their file (TEA-325 B). */
@@ -182,6 +185,13 @@ export class ContextAwareParser {
     lastModelDeclId: string | undefined
     /** Group body currently being parsed, for directive placement. */
     currentGroupId: string | undefined
+    /** Set when a bare `status` / `owner` / `location` / `lineStyle` /
+     *  `interactionStyle` keyword was consumed in an element or relationship
+     *  body. Only the pre-TEA-163 c4hero serializer wrote those lines (real
+     *  Structurizr rejects them), so this is the sound "saved by an old
+     *  c4hero" signal — and unlike a text scan it cannot be fooled by the same
+     *  word used as a property key or inside a string (TEA-167). */
+    sawLegacyKeyword = false
 
     /** Line of the most recently consumed token — the declaration line for
      *  whatever was just parsed. */
@@ -515,7 +525,9 @@ export class ContextAwareParser {
 
     // ─── Main Parse ──────────────────────────────────────────────────
 
-    parse(): ParseResult {
+    /** The document-level decision (`legacyEscapes`) belongs to the outer
+     *  parse(), which owns the lexer; this method never sets it. */
+    parse(): Omit<ParseResult, 'legacyEscapes'> {
         const workspace = this.createEmptyWorkspace()
 
         this.skipNewlines()
@@ -661,14 +673,45 @@ export class ContextAwareParser {
 // ─── Public API ─────────────────────────────────────────────────────
 
 export function parse(input: string): ParseResult {
-    globalIdCounter = 0 // Reset per parse call to avoid growing IDs across invocations
-    const lexResult = lex(input)
-    const parser = new ContextAwareParser(lexResult.tokens)
-    const result = parser.parse()
+    // Files saved by c4hero before TEA-163 used JSON-style escapes (`\\`,
+    // `\t`). Parse with the Structurizr rule first; if the parser met one of
+    // the element-body keywords only that old serializer wrote, the file is
+    // legacy — re-lex and re-parse with the old rule. (Re-decoding tokens
+    // isn't enough: the two rules place string boundaries differently.)
+    globalIdCounter = 0
+    let lexResult = lex(input)
+    let parser = new ContextAwareParser(lexResult.tokens)
+    let result = parser.parse()
+    const legacyEscapes = parser.sawLegacyKeyword
+    if (legacyEscapes) {
+        globalIdCounter = 0 // Reset per parse call to avoid growing IDs across invocations
+        lexResult = lex(input, { legacyEscapes: true })
+        parser = new ContextAwareParser(lexResult.tokens)
+        result = parser.parse()
+    }
 
     // Combine lexer and parser errors
     const errors = [...lexResult.errors, ...result.errors]
     const warnings = result.warnings
+    // Under the modern rule a string body still containing `\\` or `\t` is
+    // the ambiguous case: legal Structurizr, but also what an old c4hero file
+    // with no keyword marker looks like. Surface it, don't guess.
+    const legacyLookingEscapes = !legacyEscapes && lexResult.tokens.some(
+        (t) => t.type === 'STRING' && /\\\\|\\t/.test(t.value),
+    )
+    if (legacyEscapes) {
+        warnings.unshift({
+            message: 'Saved by an older c4hero: \\\\ and \\t escape sequences were converted. Saving writes the file in Structurizr\'s format.',
+            line: 1,
+            column: 1,
+        })
+    } else if (legacyLookingEscapes) {
+        warnings.unshift({
+            message: 'Strings contain \\\\ or \\t, which Structurizr reads literally (two backslashes; backslash + t). If this file was saved by c4hero before v0.3, those were escapes — check the affected values.',
+            line: 1,
+            column: 1,
+        })
+    }
 
     // Implied instance relationships are NOT materialized here — the canvas
     // derives them per deployment view via deriveInstanceRelationships(), so
@@ -731,6 +774,7 @@ export function parse(input: string): ParseResult {
         workspace: ws,
         errors,
         warnings,
+        legacyEscapes,
         declarationLines: result.declarationLines,
         viewLines: result.viewLines,
         directiveLines: result.directiveLines,

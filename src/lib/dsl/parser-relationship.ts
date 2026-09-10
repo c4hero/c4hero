@@ -109,6 +109,7 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
             // 'interactionStyle' is not a reserved keyword so it arrives as IDENTIFIER
             if ((p.peekType() === 'IDENTIFIER' || p.peekType() === 'KEYWORD') &&
                 p.peekValue().toLowerCase() === 'interactionstyle') {
+                p.sawLegacyKeyword = true
                 p.advance()
                 const valTok = p.peek()
                 if (valTok.type === 'IDENTIFIER' || valTok.type === 'KEYWORD') {
@@ -143,6 +144,7 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
             // 'lineStyle' in relationship body (Curved | Straight | Orthogonal)
             if ((p.peekType() === 'IDENTIFIER' || p.peekType() === 'KEYWORD') &&
                 p.peekValue().toLowerCase() === 'linestyle') {
+                p.sawLegacyKeyword = true
                 p.advance()
                 const valTok = p.peek()
                 if (valTok.type === 'IDENTIFIER' || valTok.type === 'KEYWORD') {
