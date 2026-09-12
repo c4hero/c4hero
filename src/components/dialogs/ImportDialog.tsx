@@ -8,6 +8,20 @@ import { announce } from '@/lib/announce'
 
 const ACCEPT = '.puml,.plantuml,.iuml,.wsd,.pu,.mmd,.mermaid,.md,.txt'
 
+const PANEL_WIDTH = 'min(640px, calc(100vw - 32px))'
+
+/** DialogShell ships no default surface for centred modals — the "shade"
+ *  variant gets its background from the `.shade-panel` class, but a centred
+ *  panel renders transparent over the backdrop unless the caller supplies one.
+ *  Same tones as TagManagerDialog / SearchDialog (TEA-332). */
+const CENTER_SURFACE: React.CSSProperties = {
+  background: 'var(--color-bg-panel)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-lg)',
+  boxShadow: '0 24px 60px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.2)',
+  overflow: 'hidden',
+}
+
 interface ImportDialogProps {
   onClose: () => void
   /** Called with the normalised workspace once the user confirms. The caller
@@ -65,7 +79,12 @@ export default function ImportDialog({ onClose, onImport, position = 'center' }:
   const formatLabel = outcome?.ok ? (outcome.result.format === 'mermaid-c4' ? 'Mermaid C4' : 'C4-PlantUML') : null
 
   return (
-    <DialogShell onClose={onClose} ariaLabel="Import PlantUML or Mermaid" position={position} style={{ width: 'min(640px, calc(100vw - 32px))' }}>
+    <DialogShell
+      onClose={onClose}
+      ariaLabel="Import PlantUML or Mermaid"
+      position={position}
+      style={position === 'center' ? { width: PANEL_WIDTH, ...CENTER_SURFACE } : { width: PANEL_WIDTH }}
+    >
       <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <FileInput size={16} color="var(--color-accent)" aria-hidden="true" />
         <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>Import PlantUML / Mermaid</span>

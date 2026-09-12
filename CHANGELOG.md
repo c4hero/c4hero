@@ -73,6 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Included content is not loaded yet; the code pane says so with a
   "preserved, not resolved" note rather than pretending the model is
   complete. (TEA-325, phase A)
+- **The import dialog is readable again on the welcome screen.** Opening
+  *Import PlantUML / Mermaid* from the welcome screen drew the dialog with no
+  background of its own, so the page behind it — the heading, the recent
+  collection rows — showed straight through the panel and its own text. The
+  same dialog opened from the app menu was fine, because that variant takes
+  its surface from the slide-down panel style. The centred variant now
+  carries the same panel background, border and shadow as every other centred
+  dialog. (TEA-332)
 
 ## [0.6.0] - 2026-09-10
 
