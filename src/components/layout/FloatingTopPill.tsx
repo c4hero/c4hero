@@ -24,6 +24,7 @@ import {
   Sparkles,
   Code,
   FileInput,
+  BookOpen,
 } from 'lucide-react'
 import { useSettingsStore } from '@/store/settings'
 import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
@@ -454,6 +455,7 @@ export default function FloatingTopPill() {
             <MenuItemRow icon={Sparkles} label="AI assistant…" onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setAiPanelOpen(true) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow icon={Code} label="DSL code…" onClick={() => { setHamburgerOpen(false); useWorkspaceStore.getState().setCodePanelOpen(true) }} />
+            <MenuItemRow icon={BookOpen} label="Documentation…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(false); setWsPickerOpen(false); useWorkspaceStore.getState().setDocsDialogOpen(true) }} />
             <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
             <MenuItemRow icon={Download} label="Export…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(true); setWsPickerOpen(false); useWorkspaceStore.getState().setCommandPaletteOpen(false) }} />
             <MenuItemRow icon={FileInput} label="Import PlantUML / Mermaid…" onClick={() => { setHamburgerOpen(false); setExportDialogOpen(false); setWsPickerOpen(false); useWorkspaceStore.getState().setImportDialogOpen(true) }} />

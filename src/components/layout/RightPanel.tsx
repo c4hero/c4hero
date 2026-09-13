@@ -6,6 +6,7 @@ import type { ModelElement, Container, Component, Person, SoftwareSystem, Relati
 import { X, Plus, ArrowRight, ArrowUpRight, ArrowDownLeft, ExternalLink, Eye, EyeOff, ChevronRight, Trash2, Sparkles, Loader2, Lock, LockOpen, RefreshCw } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
+import DocsPane from '@/components/docs/DocsPane'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
 import DeploymentElementProperties from './right-panel/DeploymentElementProperties'
@@ -33,12 +34,13 @@ const LINE_STYLE_OPTIONS = [
   { value: 'Orthogonal' as const, label: 'Orthogonal', shortLabel: 'Orthogonal' },
 ]
 
-type PanelTab = 'properties' | 'relations' | 'tags'
+type PanelTab = 'properties' | 'relations' | 'tags' | 'docs'
 
 const PANEL_TABS: { id: PanelTab; label: string }[] = [
   { id: 'properties', label: 'Properties' },
   { id: 'relations', label: 'Relations' },
   { id: 'tags', label: 'Tags' },
+  { id: 'docs', label: 'Docs' },
 ]
 
 export default function RightPanel() {
@@ -542,6 +544,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
         {activeTab === 'relations' && <ElementRelationsTab elementId={element.id} />}
 
         {activeTab === 'tags' && <TagsTab tags={element.tags} onUpdate={(tags) => updateElement(element.id, { tags })} suggest={aiReady ? { run: () => suggest(['tags']), busy: busyField === 'tags' } : undefined} />}
+        {activeTab === 'docs' && workspace && <DocsPane workspace={workspace} elementId={element.id} />}
       </div>
     </div>
   )

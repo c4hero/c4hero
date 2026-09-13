@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   ZoomIn,
   Database, Circle, Hexagon, Diamond, UserRound, Bot, Folder, Globe, Smartphone,
-  AlertTriangle, Lock,
+  AlertTriangle, Lock, BookOpen,
 } from 'lucide-react'
 import type { C4NodeData } from './types'
 import StatusDot from './StatusDot'
@@ -12,6 +12,8 @@ import InlineName from './InlineName'
 import NodeHandles from './NodeHandles'
 import ZoomHoverCard from './ZoomHoverCard'
 import { useWorkspaceStore } from '@/store/workspace'
+import { useDocsStore, bundleKey } from '@/store/docs'
+import { elementDocsScope } from '@/lib/docs/bundle'
 import { useZoomLevel } from '@/hooks/useZoomLevel'
 import { pickHighlightReason } from '@/lib/highlight'
 
@@ -100,6 +102,16 @@ export default function BaseC4Node({
   // Font size from tag style (pixels)
   const resolvedFontSize = style?.fontSize
 
+  // Documentation attached through `!docs` / `!adrs` inside this element's
+  // block. Resolved from the element's own directives, so no builder plumbing.
+  const hasDocs = useDocsStore((s) => {
+    const scope = elementDocsScope(element)
+    return (['docs', 'adrs'] as const).some((kind) => {
+      const dir = scope[kind]
+      return !!dir && (s.bundles[bundleKey(kind, dir)]?.concepts.length ?? 0) > 0
+    })
+  })
+
   // Semantic zoom: show different detail levels based on viewport zoom
   const zoomLevel = useZoomLevel()
   const isCompact = zoomLevel === 'compact'
@@ -166,6 +178,16 @@ export default function BaseC4Node({
         {/* Outside .c4-node-actions on purpose — that container fades out until
             the node is hovered, and a lock nobody can see reads as Auto-arrange
             being broken. */}
+        {hasDocs && (
+          <span
+            className="c4-node-lock"
+            role="img"
+            aria-label={`${element.name} has documentation`}
+            title="Has documentation — see the Docs tab"
+          >
+            <BookOpen size={11} />
+          </span>
+        )}
         {data.locked && (
           <span
             className="c4-node-lock"

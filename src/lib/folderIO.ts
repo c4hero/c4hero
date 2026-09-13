@@ -319,6 +319,62 @@ export async function listDSLFiles(): Promise<string[]> {
   return listDSLFilesIn(currentDirHandle)
 }
 
+// ─── Arbitrary files under the open folder (docs bundles) ─────────────
+
+/** Walk `a/b` from the current directory handle. `null` when it does not
+ *  exist (or when the path escapes the folder); throws on other failures. */
+async function resolveDirHandle(relDir: string, create: boolean): Promise<FileSystemDirectoryHandle | null> {
+  if (!currentDirHandle) return null
+  const parts = relDir.split('/').filter((p) => p !== '' && p !== '.')
+  if (parts.some((p) => p === '..')) return null
+  let dir = currentDirHandle
+  try {
+    for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create })
+    return dir
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+}
+
+/** File names directly inside a folder relative to the open folder; `null`
+ *  when the folder does not exist. Subdirectories are not listed. */
+export async function listFilesAt(relDir: string): Promise<string[] | null> {
+  const dir = await resolveDirHandle(relDir, false)
+  if (!dir) return null
+  const names: string[] = []
+  for await (const [name, entry] of dir.entries()) if (entry.kind === 'file') names.push(name)
+  return names.sort()
+}
+
+/** Read a text file relative to the open folder; `null` when it does not exist. */
+export async function readTextFileAt(relPath: string): Promise<string | null> {
+  const handle = await resolveFileHandle(relPath, false)
+  if (!handle) return null
+  const file = await handle.getFile()
+  return readTextFileWithLimit(file, 'Document')
+}
+
+/** Write (create or overwrite) a text file relative to the open folder,
+ *  creating intermediate directories. Unlike the DSL writers this is not
+ *  tracked by the save coordinator — it is for files the workspace points at,
+ *  not the workspace itself. Rejects a path that escapes the folder. */
+export async function writeTextFileAt(relPath: string, content: string): Promise<boolean> {
+  const parts = relPath.split('/').filter((p) => p !== '' && p !== '.')
+  if (parts.length === 0 || parts.some((p) => p === '..')) return false
+  try {
+    const handle = await resolveFileHandle(relPath, true)
+    if (!handle) return false
+    const writable = await handle.createWritable()
+    await writable.write(content)
+    await writable.close()
+    return true
+  } catch (err) {
+    log.error('writeTextFileAt failed', { relPath, err })
+    return false
+  }
+}
+
 /** Persist a directory handle to IndexedDB keyed by folder name */
 export async function persistDirHandle(): Promise<void> {
   if (!currentDirHandle) return

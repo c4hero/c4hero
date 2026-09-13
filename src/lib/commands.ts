@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff, FileInput, FolderDown,
+  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff, FileInput, FolderDown, BookOpen,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -46,6 +46,15 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['import', 'plantuml', 'puml', 'mermaid', 'c4', 'convert'],
       when: () => !!store().workspace,
       execute: () => { store().setImportDialogOpen(true) },
+    },
+    {
+      id: 'open-docs',
+      label: 'Open documentation',
+      category: 'view',
+      icon: BookOpen,
+      keywords: ['docs', 'documentation', 'adr', 'decision', 'record', 'markdown', 'okf'],
+      when: () => !!store().workspace,
+      execute: () => { store().setDocsDialogOpen(true) },
     },
     {
       id: 'add-person',

@@ -46,6 +46,7 @@ function applyElementIdRename(s: WorkspaceState, oldId: string, newId: string): 
 export type ElementSlice = Pick<WorkspaceState,
   | 'addPerson' | 'addSoftwareSystem' | 'addContainer' | 'addComponent'
   | 'updateElement' | 'updateElementLive' | 'updateElementTechnology'
+  | 'addElementDirective' | 'addWorkspaceDirective'
   | 'updateElementId' | 'resyncElementId'
   | 'deleteElement' | 'deleteElements' | 'duplicateElements'
 >
@@ -193,6 +194,25 @@ export const createElementSlice: StateCreator<
     if (added) announce('Component created')
     return id
   },
+
+  addElementDirective: (id, raw) => set((s) => {
+    if (!s.workspace) return
+    const el = findElementHelper(s.workspace, id)
+    const line = raw.trim()
+    if (!el || !line.startsWith('!') || el.directives?.includes(line)) return
+    pushUndoSnapshot(s)
+    ;(el.directives ??= []).push(line)
+  }),
+
+  addWorkspaceDirective: (raw) => set((s) => {
+    if (!s.workspace) return
+    const line = raw.trim()
+    if (!line.startsWith('!')) return
+    const directives = (s.workspace.directives ??= [])
+    if (directives.some((d) => d.scope === 'workspace' && d.raw === line)) return
+    pushUndoSnapshot(s)
+    directives.push({ scope: 'workspace', raw: line })
+  }),
 
   updateElement: (id, patch) => set((s) => {
     if (!s.workspace) return

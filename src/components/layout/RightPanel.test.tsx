@@ -23,6 +23,13 @@ vi.mock('lucide-react', () => ({
   Settings: () => null,
   ChevronDown: () => null,
   ChevronRight: () => null,
+  ArrowUpRight: () => null,
+  ArrowDownLeft: () => null,
+  // DocsPane icons
+  BookOpen: () => null,
+  FilePlus2: () => null,
+  Scale: () => null,
+  ArrowLeft: () => null,
   // elementMeta icons
   UserRound: () => null,
   Globe: () => null,
@@ -92,6 +99,16 @@ describe('RightPanel', () => {
     // Exploratory impact stays reachable via the command palette only; the
     // inspector's delete flow surfaces the full report in its confirmation.
     expect(screen.queryByRole('button', { name: 'What breaks if this is removed' })).toBeNull()
+  })
+
+  it('offers a Docs tab that explains docs need a folder-backed workspace', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().selectElements(['alice'])
+    render(<RightPanel />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Docs' }))
+    expect(screen.getByRole('tab', { name: 'Docs' }).getAttribute('aria-selected')).toBe('true')
+    // No folder is open in tests, so the pane says how to get docs.
+    expect(screen.getByText(/Open this workspace from a folder/)).toBeTruthy()
   })
 
   it('tucks the element ID behind a collapsed Advanced section', async () => {

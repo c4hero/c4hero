@@ -53,6 +53,26 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 - **Smart edge routing**: handle slot picker spreads multiple edges across a node's side (a/b/c slots) so they don't overlap.
 - **Zoom-to-fit** that respects the floating chrome, so the diagram is centred in the visible canvas, not under the panels.
 
+## Documentation and decisions
+
+- **`!docs` and `!adrs` folders are read, not just preserved.** Point the
+  workspace (or an element block) at a folder of markdown and the inspector's
+  *Docs* tab shows it for the selected element; *Documentation…* in the menu
+  shows the workspace-level set. Elements with docs get a book badge on the
+  canvas.
+- **Reads what people already have.** Plain Structurizr markdown, adr-tools
+  ADRs (`0001-title.md` with `## Status`, supersedes / superseded-by links),
+  and [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+  concepts with frontmatter. Superseded decisions show struck through; links
+  between records navigate.
+- **Writes OKF.** *New doc* / *New decision* create a frontmatter-bearing
+  markdown file (ADRs numbered adr-tools style), update the folder's
+  `index.md`, and add the `!docs` / `!adrs` line to the DSL when missing.
+  The AI *Draft ADR* feature can save straight into the decisions folder.
+- Needs a folder-backed workspace (File System Access API); single-file mode
+  explains why. The markdown renderer is a small built-in subset and never
+  executes anything from a file.
+
 ## Export
 
 - **PNG** and **SVG** export of the current view, with optional padding control.

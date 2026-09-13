@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { Check, Copy, Download } from 'lucide-react'
+import { Check, Copy, Download, Save } from 'lucide-react'
 import { draftAdr, type AiProvider } from '@/lib/ai'
 import { downloadFile } from '@/lib/exportUtils'
+import { getCurrentDirHandle } from '@/lib/folderIO'
+import { useDocsStore } from '@/store/docs'
+import { announce } from '@/lib/announce'
 import type { Workspace } from '@/types/model'
 import { C, blurb, miniBtn } from './aiTheme'
 import { useAiRun } from './aiHelpers'
@@ -12,7 +15,24 @@ export function AdrBody({ provider, workspace }: { provider: AiProvider; workspa
   const run = useAiRun()
   const [md, setMd] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const submit = () => { if (topic.trim() && !run.loading) run.go(() => draftAdr(provider, workspace, topic), setMd) }
+  const [savedPath, setSavedPath] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const createDoc = useDocsStore((s) => s.create)
+  const submit = () => { if (topic.trim() && !run.loading) run.go(() => draftAdr(provider, workspace, topic), (m) => { setMd(m); setSavedPath(null) }) }
+
+  // Only offered when the workspace came from a folder: the record lands in
+  // its `!adrs` bundle (created, and linked from the DSL, when there is none).
+  const canSave = !!workspace && !!getCurrentDirHandle()
+  async function save() {
+    if (!md || saving) return
+    setSaving(true)
+    try {
+      const path = await createDoc('adrs', {}, { title: adrTitle(md, topic), body: md })
+      if (path) { setSavedPath(path); announce(`Saved ${path}`) } else announce('Could not save the decision record')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   function copy() { if (md) navigator.clipboard?.writeText(md).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }).catch(() => {}) }
 
@@ -29,6 +49,11 @@ export function AdrBody({ provider, workspace }: { provider: AiProvider; workspa
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="c4ai-sec" style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.text }} onClick={copy}>{copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}</button>
               <button className="c4ai-sec" style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.text }} onClick={() => downloadFile(md, adrFilename(topic), 'text/markdown')}><Download size={12} /> .md</button>
+              {canSave && (
+                <button className="c4ai-sec" style={{ ...miniBtn, border: `1px solid ${C.border}`, background: 'transparent', color: C.text }} onClick={() => void save()} disabled={saving || !!savedPath} title={savedPath ? `Saved to ${savedPath}` : 'Save into the workspace\'s decision records'}>
+                  {savedPath ? <Check size={12} /> : <Save size={12} />} {savedPath ? 'Saved' : saving ? 'Saving…' : 'Save to decisions'}
+                </button>
+              )}
             </div>
           </div>
           <pre data-scroll style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '10px 0 0', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.55, color: C.text2, maxHeight: 280, overflowY: 'auto' }}>{md}</pre>
@@ -36,6 +61,12 @@ export function AdrBody({ provider, workspace }: { provider: AiProvider; workspa
       )}
     </>
   )
+}
+
+/** The drafted record's own heading, falling back to the topic the user typed. */
+function adrTitle(md: string, topic: string): string {
+  const heading = /^\s*#\s+(.+?)\s*$/m.exec(md)?.[1]
+  return (heading ?? topic).replace(/^\d+\.\s+/, '').trim() || 'Decision'
 }
 
 function adrFilename(topic: string): string {

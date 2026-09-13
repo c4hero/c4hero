@@ -2437,3 +2437,26 @@ textarea:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* ─── Rendered documentation (Docs tab, documentation dialog) ─────────── */
+.c4-md { font-size: var(--text-sm); line-height: 1.55; color: var(--color-text-primary); overflow-wrap: anywhere; }
+.c4-md > :first-child { margin-top: 0; }
+.c4-md h1, .c4-md h2, .c4-md h3, .c4-md h4, .c4-md h5, .c4-md h6 { margin: 1.1em 0 0.4em; line-height: 1.25; font-weight: 600; }
+.c4-md h1 { font-size: 1.25em; }
+.c4-md h2 { font-size: 1.1em; }
+.c4-md h3 { font-size: 1em; }
+.c4-md h4, .c4-md h5, .c4-md h6 { font-size: 0.92em; color: var(--color-text-secondary); }
+.c4-md p, .c4-md ul, .c4-md ol, .c4-md blockquote, .c4-md pre, .c4-md .c4-md-table { margin: 0.55em 0; }
+.c4-md ul, .c4-md ol { padding-left: 1.4em; }
+.c4-md li > ul, .c4-md li > ol { margin: 0.2em 0; }
+.c4-md code { font-family: ui-monospace, monospace; font-size: 0.9em; padding: 1px 4px; border-radius: 4px; background: var(--color-surface-2); }
+.c4-md pre { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--color-bg-primary); border: 1px solid var(--color-border); overflow-x: auto; }
+.c4-md pre code { padding: 0; background: none; font-size: var(--text-xs); }
+.c4-md blockquote { margin-left: 0; padding-left: 10px; border-left: 3px solid var(--color-border); color: var(--color-text-secondary); }
+.c4-md a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
+.c4-md hr { border: 0; border-top: 1px solid var(--color-border); margin: 1em 0; }
+.c4-md .c4-md-table { overflow-x: auto; }
+.c4-md table { border-collapse: collapse; font-size: var(--text-xs); }
+.c4-md th, .c4-md td { border: 1px solid var(--color-border); padding: 4px 8px; text-align: left; vertical-align: top; }
+.c4-md th { background: var(--color-surface-2); font-weight: 600; }
+.c4-docs-row:hover { background: var(--color-surface-2) !important; border-color: var(--color-border) !important; }

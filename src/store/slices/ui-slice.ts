@@ -19,6 +19,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'canvasSettingsOpen' | 'canvasGuideOpen' | 'addElementPanelOpen' | 'highlighterOpenFacet'
   | 'viewsPanelOpen' | 'createViewDialogOpen'
   | 'importDialogOpen' | 'setImportDialogOpen'
+  | 'docsDialogOpen' | 'setDocsDialogOpen'
   | 'codePanelOpen' | 'setCodePanelOpen' | 'toggleCodePanel'
   | 'watchDisk' | 'setWatchDisk' | 'toggleWatchDisk'
   | 'diskConflict' | 'setDiskConflict' | 'diskFileMissing' | 'setDiskFileMissing'
@@ -64,6 +65,7 @@ export const createUiSlice: StateCreator<
   viewsPanelOpen: false,
   createViewDialogOpen: false,
   importDialogOpen: false,
+  docsDialogOpen: false,
   codePanelOpen: false,
   watchDisk: readString(WATCH_DISK_KEY) !== '0',
   diskConflict: null,
@@ -143,6 +145,7 @@ export const createUiSlice: StateCreator<
   }),
   setCreateViewDialogOpen: (open) => set({ createViewDialogOpen: open, commandPaletteOpen: false }),
   setImportDialogOpen: (open) => set({ importDialogOpen: open, commandPaletteOpen: false }),
+  setDocsDialogOpen: (open) => set({ docsDialogOpen: open, commandPaletteOpen: false }),
 
   setWatchDisk: (on) => {
     writeString(WATCH_DISK_KEY, on ? '1' : '0')

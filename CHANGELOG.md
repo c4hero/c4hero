@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Documentation and decision records, read and written from the DSL's
+  `!docs` and `!adrs` folders.** c4hero used to carry those Structurizr
+  directives through untouched; now it reads the folders they name. The
+  inspector gains a *Docs* tab showing the documents and architecture
+  decision records attached to the selected element, elements with docs get
+  a small book badge on the canvas, and *Documentation…* in the menu (or the
+  palette) opens the workspace-level set. Existing folders read as-is —
+  plain Structurizr markdown, adr-tools style ADRs with `## Status`,
+  supersedes and superseded-by links — and files with Open Knowledge Format
+  frontmatter carry their type, tags and status too. Superseded decisions
+  show struck through; links between records navigate. *New doc* and *New
+  decision* write an OKF-shaped markdown file (numbered adr-tools style for
+  decisions), keep the folder's `index.md` in step, and add the `!docs` /
+  `!adrs` line to the DSL when the scope had none, as an undoable edit. The
+  AI assistant's *Draft ADR* gets *Save to decisions* so a drafted record
+  lands in the workspace instead of a download. Needs a folder-backed
+  workspace; single-file mode says so. Rendering is a small built-in
+  markdown subset, and it never executes anything from a file. (TEA-336)
 - **Export the model as an OKF knowledge bundle.** The interactive HTML export
   is the architecture for humans; this is the architecture for agents and
   docs tools. *Export → OKF knowledge bundle* writes the workspace as an

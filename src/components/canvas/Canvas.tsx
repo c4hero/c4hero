@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useDocsLoader } from '@/hooks/useDocsLoader'
 import {
   ReactFlow,
   Background,
@@ -166,6 +167,7 @@ const MARKER_SVG_STYLE: React.CSSProperties = { position: 'absolute', width: 0, 
 
 
 export default function Canvas() {
+  useDocsLoader()
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const selectElements = useWorkspaceStore((s) => s.selectElements)

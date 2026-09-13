@@ -32,10 +32,12 @@ const WelcomeScreen = lazy(() => import('@/components/welcome/WelcomeScreen'))
 const AiPanel = lazy(() => import('@/components/ai/AiPanel'))
 const CodePane = lazy(() => import('@/components/code-pane/CodePane'))
 const ImpactDialog = lazy(() => import('@/components/impact/ImpactDialog'))
+const DocsDialog = lazy(() => import('@/components/docs/DocsDialog'))
 
 export default function App() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const searchOpen = useWorkspaceStore((s) => s.searchOpen)
+  const docsDialogOpen = useWorkspaceStore((s) => s.docsDialogOpen)
   const pendingDelete = useWorkspaceStore((s) => s.pendingDelete)
   const cancelDelete = useWorkspaceStore((s) => s.cancelDelete)
   const presentationMode = useWorkspaceStore((s) => s.presentationMode)
@@ -108,6 +110,7 @@ export default function App() {
         <div className="commit-hash">v{__APP_VERSION__} · {__COMMIT_HASH__}</div>
       </div>
       {searchOpen && <Suspense fallback={<LoadingDot />}><SearchDialog /></Suspense>}
+      {docsDialogOpen && <Suspense fallback={<LoadingDot />}><DocsDialog /></Suspense>}
     </ReactFlowProvider>
   ) : (
     <Suspense fallback={<LoadingDot />}>

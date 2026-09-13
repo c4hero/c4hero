@@ -12,6 +12,10 @@ import {
   readFileIn,
   listFilesIn,
   removeFilesIn,
+  setDirHandle,
+  listFilesAt,
+  readTextFileAt,
+  writeTextFileAt,
 } from './folderIO'
 
 afterEach(() => {
@@ -565,5 +569,81 @@ describe('reading, listing and removing inside a chosen folder', () => {
     await expect(readFileIn(dir, '../secrets.md')).rejects.toThrow(/outside the chosen folder/)
     await expect(removeFilesIn(dir, ['../secrets.md'])).rejects.toThrow(/outside the chosen folder/)
     expect(files.size).toBe(5)
+  })
+})
+
+// ─── Arbitrary files (docs bundles) ─────────────────────────────────
+
+describe('docs bundle file helpers', () => {
+  /** A directory tree backed by a flat map of `path -> content`. */
+  function makeTree(files: Map<string, string>, prefix = ''): FileSystemDirectoryHandle {
+    return {
+      kind: 'directory',
+      name: prefix || 'root',
+      entries: async function* () {
+        const seen = new Set<string>()
+        for (const path of files.keys()) {
+          if (!path.startsWith(prefix)) continue
+          const rest = path.slice(prefix.length)
+          const head = rest.split('/')[0]
+          if (seen.has(head)) continue
+          seen.add(head)
+          yield [head, { kind: rest.includes('/') ? 'directory' : 'file', name: head }] as [string, FileSystemHandle]
+        }
+      },
+      getDirectoryHandle: async (name: string, opts?: { create?: boolean }) => {
+        const dir = `${prefix}${name}/`
+        const exists = [...files.keys()].some((p) => p.startsWith(dir))
+        if (!exists && !opts?.create) throw new DOMException('Not found', 'NotFoundError')
+        return makeTree(files, dir)
+      },
+      getFileHandle: async (name: string, opts?: { create?: boolean }) => {
+        const path = `${prefix}${name}`
+        if (!files.has(path) && !opts?.create) throw new DOMException('Not found', 'NotFoundError')
+        return {
+          kind: 'file',
+          name,
+          getFile: async () => new File([files.get(path) ?? ''], name),
+          createWritable: async () => ({
+            write: async (d: string) => { files.set(path, d) },
+            close: async () => {},
+          }),
+        }
+      },
+      queryPermission: async () => 'granted' as PermissionState,
+    } as unknown as FileSystemDirectoryHandle
+  }
+
+  async function mount(files: Map<string, string>) {
+    vi.stubGlobal('indexedDB', { open: () => { const req = { onsuccess: null as null | (() => void), onerror: null, onupgradeneeded: null, result: { transaction: () => ({ objectStore: () => ({ put: () => {} }) }) } }; setTimeout(() => req.onsuccess?.(), 0); return req } })
+    await setDirHandle(makeTree(files))
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('lists files (not subfolders) in a nested folder, null when it is missing', async () => {
+    const files = new Map([['docs/b.md', 'B'], ['docs/a.md', 'A'], ['docs/sub/c.md', 'C'], ['root.dsl', '']])
+    await mount(files)
+    expect(await listFilesAt('docs')).toEqual(['a.md', 'b.md'])
+    expect(await listFilesAt('docs/sub')).toEqual(['c.md'])
+    expect(await listFilesAt('nope')).toBeNull()
+    expect(await listFilesAt('../escape')).toBeNull()
+  })
+
+  it('reads a text file relative to the folder, null when absent', async () => {
+    const files = new Map([['docs/a.md', '# A']])
+    await mount(files)
+    expect(await readTextFileAt('docs/a.md')).toBe('# A')
+    expect(await readTextFileAt('docs/missing.md')).toBeNull()
+  })
+
+  it('writes a file, creating intermediate folders, and refuses to escape', async () => {
+    const files = new Map<string, string>()
+    await mount(files)
+    expect(await writeTextFileAt('docs/api/new.md', 'hello')).toBe(true)
+    expect(files.get('docs/api/new.md')).toBe('hello')
+    expect(await writeTextFileAt('../x.md', 'no')).toBe(false)
+    expect(await writeTextFileAt('', 'no')).toBe(false)
+    expect(files.size).toBe(1)
   })
 })

@@ -189,6 +189,12 @@ export interface WorkspaceState extends UndoState {
   /** Same as updateElement but does NOT push an undo entry — for live typing previews */
   updateElementLive: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified', technology?: string }) => void
   updateElementTechnology: (id: string, technology: string) => void
+  /** Append a `!` directive line (`!docs docs/api`) inside an element's block.
+   *  No-op when the element already carries that exact line. Undoable. */
+  addElementDirective: (id: string, raw: string) => void
+  /** Append a workspace-scope `!` directive line (`!adrs decisions`).
+   *  No-op when present. Undoable. */
+  addWorkspaceDirective: (raw: string) => void
   /** Rename an element's ID (its DSL identifier), rewriting every reference.
    *  Pins the ID — later renames stop re-deriving it. Returns a validation
    *  error message, or null on success (a same-ID commit is a silent no-op). */
@@ -349,6 +355,9 @@ export interface WorkspaceState extends UndoState {
   /** Import PlantUML / Mermaid dialog (TEA-255), opened from the menu or palette. */
   importDialogOpen: boolean
   setImportDialogOpen: (open: boolean) => void
+  /** Workspace documentation dialog (TEA-336): the `!docs` / `!adrs` bundles. */
+  docsDialogOpen: boolean
+  setDocsDialogOpen: (open: boolean) => void
   setCreateViewDialogOpen: (open: boolean) => void
   /** Elements the impact panel is analysing, snapshotted when it opened.
    *  Null when the panel is closed. */
