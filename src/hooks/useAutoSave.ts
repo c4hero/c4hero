@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { saveToLocalStorage } from '@/lib/fileIO'
-import { writeLinkedWorkspace } from '@/lib/workspaceSave'
+import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('useAutoSave')
@@ -47,17 +47,18 @@ export function useAutoSave() {
         const state = useWorkspaceStore.getState()
         if (!state.workspace || state.workspace.name !== savedName) return
 
-        try {
-          // The same write the Save button and Ctrl+S perform; a no-op
-          // (false) when the workspace is not linked to any file.
-          void writeLinkedWorkspace(state.workspace, state.activeWorkspaceFilename)
-          useWorkspaceStore.getState().setLastSavedUndoLength(state.undoStack.length)
-        } catch (error) {
+        // The same write the Save button and Ctrl+S perform. Only a linked
+        // workspace is ever marked saved: an unlinked one must stay dirty so
+        // the disk watcher still treats local edits as unsaved.
+        if (!isWorkspaceLinked(state.activeWorkspaceFilename)) return
+        const undoLength = state.undoStack.length
+        writeLinkedWorkspace(state.workspace, state.activeWorkspaceFilename).then(
+          (ok) => { if (ok) useWorkspaceStore.getState().setLastSavedUndoLength(undoLength) },
           // Manual save/export surfaces the same actionable message. Avoid
           // turning an invalid legacy overlap into an unhandled idle-task
           // exception while still leaving the workspace marked unsaved.
-          log.warn('Automatic DSL save blocked', error)
-        }
+          (error) => log.warn('Automatic DSL save blocked', error),
+        )
       }) as unknown as number
     }, 1000)
 
