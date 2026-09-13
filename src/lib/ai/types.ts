@@ -255,6 +255,9 @@ export interface ReviewFinding {
   elementIds: string[]
   /** Human-readable suggested fix. */
   suggestion: string
+  /** Concept ids of the workspace documents this finding rests on or
+   *  contradicts (only ever ids the model was shown; see docsContext). */
+  citations?: string[]
   /** Concrete operations that fix this finding, present only when it maps to a
    *  direct model edit. Empty/absent for advisory findings. */
   operations?: EditOp[]

@@ -40,6 +40,9 @@ export interface DocConcept {
   body: string
 }
 
+/** Store / cache key for a bundle: `docs:docs/api`. */
+export const bundleKey = (kind: DocsKind, dir: string): string => `${kind}:${dir}`
+
 export interface DocsBundle {
   kind: DocsKind
   /** Directory relative to the open folder. */

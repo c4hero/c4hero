@@ -48,3 +48,4 @@ export { detectComposeMode, isQuestion } from './composeMode'
 export {
   applyEditPlan, describeOps, summarizeSkips, type EditActions, type ApplyResult,
 } from './operations'
+export { buildDocsContext, conceptTitleMap, conceptId, type DocsContext } from './docsContext'

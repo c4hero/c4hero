@@ -246,6 +246,46 @@ describe('reviewArchitecture', () => {
   })
 })
 
+describe('reviewArchitecture with documentation', () => {
+  const docs = {
+    text: 'DOCUMENTATION\n\n=== docs/shop/overview | Documentation | - | Overview\nThe shop.',
+    conceptIds: new Set(['docs/shop/overview']),
+    titles: new Map([['docs/shop/overview', 'Overview']]),
+    included: 1,
+    omitted: 0,
+  }
+
+  it('sends the documentation and asks for citations', async () => {
+    let seen: { system: string; user: string } | null = null
+    const provider: AiProvider = {
+      async complete() { return '' },
+      async completeJson<T>(req: { system: string; user: string }): Promise<T> { seen = req; return { findings: [] } as T },
+    }
+    await reviewArchitecture(provider, makeWorkspace(), null, docs)
+    expect(seen!.system).toContain('citations')
+    expect(seen!.user).toContain('=== docs/shop/overview')
+  })
+
+  it('keeps only citations that name a document the model was shown, untouched by the humanizer', async () => {
+    const provider = makeProvider({ json: { findings: [
+      // `shop` is an element id — inside the concept path it must survive humanizing.
+      { title: 'Docs say otherwise', detail: 'd', suggestion: 's', severity: 'high', category: 'other', elementIds: ['shop'], citations: ['docs/shop/overview', 'docs/invented'] },
+      { title: 'No docs', detail: 'd', suggestion: 's', severity: 'low', category: 'other', elementIds: [], citations: ['docs/invented'] },
+    ] } })
+    const { findings } = await reviewArchitecture(provider, makeWorkspace(), null, docs)
+    expect(findings[0].citations).toEqual(['docs/shop/overview'])
+    expect(findings[1].citations).toBeUndefined()
+  })
+
+  it('drops every citation when no documentation was provided', async () => {
+    const provider = makeProvider({ json: { findings: [
+      { title: 'A', detail: 'd', suggestion: 's', severity: 'low', category: 'other', elementIds: [], citations: ['docs/shop/overview'] },
+    ] } })
+    const { findings } = await reviewArchitecture(provider, makeWorkspace())
+    expect(findings[0].citations).toBeUndefined()
+  })
+})
+
 describe('reviewArchitectureStream', () => {
   // Streams a payload in small chunks (so objects close mid-chunk) via completeStream.
   function streamingProvider(payload: string, chunkSize = 7): AiProvider {

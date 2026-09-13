@@ -3,6 +3,7 @@ import type { ModelElement, Workspace } from '@/types/model'
 import {
   allDocsDirs,
   appendToIndex,
+  bundleKey,
   defaultDocsDir,
   dirTitle,
   docsDirectiveLine,
@@ -56,7 +57,7 @@ export interface DocsState {
   reset: () => void
 }
 
-export const bundleKey = (kind: DocsKind, dir: string): string => `${kind}:${dir}`
+export { bundleKey }
 
 /** Identity of the most recent load / reset; a load whose ticket is stale by
  *  the time its reads finish discards its result. */
