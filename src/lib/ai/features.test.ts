@@ -271,10 +271,13 @@ describe('reviewArchitecture with documentation', () => {
       // `shop` is an element id — inside the concept path it must survive humanizing.
       { title: 'Docs say otherwise', detail: 'd', suggestion: 's', severity: 'high', category: 'other', elementIds: ['shop'], citations: ['docs/shop/overview', 'docs/invented'] },
       { title: 'No docs', detail: 'd', suggestion: 's', severity: 'low', category: 'other', elementIds: [], citations: ['docs/invented'] },
+      { title: 'Twice', detail: 'd', suggestion: 's', severity: 'low', category: 'other', elementIds: [], citations: ['docs/shop/overview', 'docs/shop/overview'] },
     ] } })
     const { findings } = await reviewArchitecture(provider, makeWorkspace(), null, docs)
     expect(findings[0].citations).toEqual(['docs/shop/overview'])
     expect(findings[1].citations).toBeUndefined()
+    // A repeated id is shown once (the citation chips key on it).
+    expect(findings[2].citations).toEqual(['docs/shop/overview'])
   })
 
   it('drops every citation when no documentation was provided', async () => {

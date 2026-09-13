@@ -76,7 +76,8 @@ export async function reviewArchitecture(
  *  (`docs/shop/overview`) must not be rewritten to a name. */
 function keepKnownCitations(f: ReviewFinding, docs?: DocsContext | null): ReviewFinding {
   if (!f.citations) return f
-  const kept = docs ? f.citations.filter((id) => docs.conceptIds.has(id)) : []
+  // De-duplicated too: the chips key on the id.
+  const kept = docs ? [...new Set(f.citations)].filter((id) => docs.conceptIds.has(id)) : []
   return { ...f, citations: kept.length ? kept : undefined }
 }
 

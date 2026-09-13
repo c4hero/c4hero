@@ -67,11 +67,17 @@ export function InterviewBody({ provider }: { provider: AiProvider }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (run.error) setStreamingQ(null) }, [run.error])
 
+  // Documentation for the view, so the interviewer skips what is written down.
+  // Memoised: every keystroke in the answer box (and every streamed token)
+  // re-renders, and building the section walks and clips every document.
+  const docs = useMemo(
+    () => (workspace && view ? buildDocsContext(docsBundles, workspace, view) : null),
+    [docsBundles, workspace, view],
+  )
+
   if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
   const ws = workspace
   const v: View = view
-  // Documentation for the view, so the interviewer skips what is written down.
-  const docs = buildDocsContext(docsBundles, ws, v)
 
   // Accumulate streamed tokens into the transient question; commit clears it and
   // writes the final text into the persisted `question`.
