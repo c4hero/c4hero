@@ -8,6 +8,7 @@ import {
   listDSLFiles,
   restoreDirHandle,
   getCurrentDirHandle,
+  writeFilesInto,
 } from './folderIO'
 
 afterEach(() => {
@@ -426,3 +427,58 @@ function makeIDBMock(idbStore: Record<string, unknown>) {
     },
   }
 }
+
+// ─── writeFilesInto ──────────────────────────────────────────────────
+
+describe('writeFilesInto()', () => {
+  /** A directory tree that records every file written under it. */
+  function makeTree(written: Map<string, string>, prefix = ''): FileSystemDirectoryHandle {
+    const dirs = new Map<string, FileSystemDirectoryHandle>()
+    return {
+      kind: 'directory',
+      name: prefix || 'root',
+      getDirectoryHandle: async (name: string, opts?: { create?: boolean }) => {
+        if (!opts?.create) throw new DOMException('Not found', 'NotFoundError')
+        let dir = dirs.get(name)
+        if (!dir) dirs.set(name, (dir = makeTree(written, `${prefix}${name}/`)))
+        return dir
+      },
+      getFileHandle: async (name: string, opts?: { create?: boolean }) => {
+        if (!opts?.create) throw new DOMException('Not found', 'NotFoundError')
+        return {
+          kind: 'file',
+          name,
+          createWritable: async () => ({
+            write: async (d: string) => { written.set(`${prefix}${name}`, d) },
+            close: async () => {},
+          }),
+        }
+      },
+    } as unknown as FileSystemDirectoryHandle
+  }
+
+  it('creates intermediate directories and writes every file', async () => {
+    const written = new Map<string, string>()
+    await writeFilesInto(makeTree(written), [
+      { path: 'index.md', content: 'root' },
+      { path: 'systems/index.md', content: 'systems' },
+      { path: 'systems/shop.md', content: 'shop' },
+      { path: 'a/b/c.md', content: 'deep' },
+    ])
+    expect([...written.entries()]).toEqual([
+      ['index.md', 'root'],
+      ['systems/index.md', 'systems'],
+      ['systems/shop.md', 'shop'],
+      ['a/b/c.md', 'deep'],
+    ])
+  })
+
+  it('refuses paths that would escape the chosen directory', async () => {
+    const written = new Map<string, string>()
+    await expect(writeFilesInto(makeTree(written), [{ path: '../escape.md', content: 'x' }]))
+      .rejects.toThrow(/outside the chosen folder/)
+    await expect(writeFilesInto(makeTree(written), [{ path: '', content: 'x' }]))
+      .rejects.toThrow(/outside the chosen folder/)
+    expect(written.size).toBe(0)
+  })
+})

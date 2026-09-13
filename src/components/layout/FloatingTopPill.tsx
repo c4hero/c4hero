@@ -43,6 +43,7 @@ interface WsEntry {
 }
 
 const ExportDialog = lazy(() => import('@/components/dialogs/ExportDialog'))
+import type { ExportFormat } from '@/components/dialogs/ExportDialog'
 const ImportDialog = lazy(() => import('@/components/dialogs/ImportDialog'))
 const CommandPalette = lazy(() => import('@/components/command-palette/CommandPalette'))
 const CreateViewDialog = lazy(() => import('@/components/views/CreateViewDialog'))
@@ -155,7 +156,7 @@ export default function FloatingTopPill() {
 
   const wsName = workspace.name ?? 'workspace'
 
-  async function handleExport(format: 'dsl' | 'png' | 'svg' | 'html', theme: ExportTheme = 'dark') {
+  async function handleExport(format: ExportFormat, theme: ExportTheme = 'dark') {
     if (!workspace) return
     try {
       switch (format) {
@@ -182,6 +183,18 @@ export default function FloatingTopPill() {
             generator: `c4hero ${__APP_VERSION__}`,
           })
           downloadFile(html, htmlExportFilename(workspace), 'text/html')
+          break
+        }
+        case 'okf-folder':
+        case 'okf-zip': {
+          const { runOkfExport } = await import('@/lib/okfExportFlow')
+          const message = await runOkfExport(workspace, format === 'okf-folder' ? 'folder' : 'zip', `c4hero ${__APP_VERSION__}`)
+          // null = the user cancelled the folder picker; nothing to report.
+          if (message) {
+            setCopyToast(message)
+            announce(message)
+            setTimeout(() => setCopyToast(null), 2000)
+          }
           break
         }
       }

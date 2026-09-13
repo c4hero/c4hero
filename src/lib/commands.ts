@@ -4,7 +4,7 @@ import {
   MousePointer, LayoutDashboard, Maximize2, ZoomIn, ZoomOut,
   LayoutGrid, Search, Save, Settings, Monitor,
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
-  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff, FileInput,
+  Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff, FileInput, FolderDown,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -465,6 +465,26 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
           })
           downloadFile(html, htmlExportFilename(s.workspace), 'text/html')
           announce('Exported interactive HTML')
+        } catch (error) {
+          announce(error instanceof Error ? error.message : 'Export failed')
+        }
+      },
+    },
+    {
+      id: 'export-okf',
+      label: 'Export as OKF knowledge bundle',
+      category: 'export',
+      icon: FolderDown,
+      keywords: ['export', 'okf', 'knowledge', 'bundle', 'markdown', 'docs', 'agent', 'llm'],
+      when: () => !!store().workspace,
+      execute: async () => {
+        const s = store()
+        if (!s.workspace) return
+        try {
+          const { runOkfExport } = await import('@/lib/okfExportFlow')
+          // Folder where the picker exists (Chromium), zip download elsewhere.
+          const message = await runOkfExport(s.workspace, 'folder', `c4hero ${__APP_VERSION__}`)
+          if (message) announce(message)
         } catch (error) {
           announce(error instanceof Error ? error.message : 'Export failed')
         }

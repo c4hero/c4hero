@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Export the model as an OKF knowledge bundle.** The interactive HTML export
+  is the architecture for humans; this is the architecture for agents and
+  docs tools. *Export → OKF knowledge bundle* writes the workspace as an
+  [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+  bundle: a folder of markdown files with YAML frontmatter, one per person,
+  system, container, component, deployment node and view, cross-linked by
+  path. Each concept carries its description, tags, technology, owner,
+  status, URL and properties, a table of every relationship touching it, its
+  children, where it is deployed, and the views it appears in. Save it
+  straight into a folder (Chromium) or download it as a `.zip` (everywhere),
+  then point a knowledge base, a search index or an AI assistant at it. The
+  output is deterministic — no timestamps — so a re-export diffs cleanly in
+  review. The DSL stays the source of truth; the bundle is a one-way
+  projection. (TEA-335)
 - **Import C4-PlantUML and Mermaid C4 files.** The largest population of
   existing C4 diagrams lives in `.puml` files and Mermaid `C4Context` /
   `C4Container` / `C4Component` blocks. Paste or drop one into the new

@@ -50,6 +50,30 @@ describe('ExportDialog', () => {
     await waitFor(() => expect(props.onExport).toHaveBeenCalledWith('html'))
   })
 
+  it('offers the OKF bundle as a zip everywhere, and as a folder only where the directory picker exists', async () => {
+    const orig = (window as Record<string, unknown>).showDirectoryPicker
+    delete (window as Record<string, unknown>).showDirectoryPicker
+    try {
+      const props = renderDialog()
+      expect(screen.queryByRole('button', { name: 'Save OKF bundle to a folder' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Download OKF bundle as zip' }))
+      await waitFor(() => expect(props.onExport).toHaveBeenCalledWith('okf-zip'))
+    } finally {
+      if (orig !== undefined) (window as Record<string, unknown>).showDirectoryPicker = orig
+    }
+  })
+
+  it('offers the folder target when showDirectoryPicker is available', async () => {
+    vi.stubGlobal('showDirectoryPicker', vi.fn())
+    try {
+      const props = renderDialog()
+      fireEvent.click(screen.getByRole('button', { name: 'Save OKF bundle to a folder' }))
+      await waitFor(() => expect(props.onExport).toHaveBeenCalledWith('okf-folder'))
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('gives the two Download buttons distinct accessible names', () => {
     renderDialog()
     expect(screen.getByRole('button', { name: 'Download interactive HTML' })).toBeTruthy()

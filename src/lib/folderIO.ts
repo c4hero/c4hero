@@ -150,6 +150,29 @@ export async function writeDSLFileAt(relPath: string, content: string): Promise<
   }
 }
 
+/** Write a set of text files under an arbitrary directory handle, creating
+ *  intermediate directories and overwriting files that already exist. Used by
+ *  exports that produce a tree (the OKF bundle) rather than a single file;
+ *  unlike the DSL writers it takes the handle explicitly, so it never touches
+ *  the open collection. Rejects any path that would escape the directory. */
+export async function writeFilesInto(
+  dir: FileSystemDirectoryHandle,
+  files: ReadonlyArray<{ path: string; content: string }>,
+): Promise<void> {
+  for (const file of files) {
+    const parts = file.path.split('/').filter((p) => p !== '' && p !== '.')
+    if (parts.length === 0 || parts.some((p) => p === '..')) {
+      throw new Error(`Refusing to write outside the chosen folder: ${file.path}`)
+    }
+    let cur = dir
+    for (const seg of parts.slice(0, -1)) cur = await cur.getDirectoryHandle(seg, { create: true })
+    const handle = await cur.getFileHandle(parts[parts.length - 1], { create: true })
+    const writable = await handle.createWritable()
+    await writable.write(file.content)
+    await writable.close()
+  }
+}
+
 /** Read a workspace file for the disk watcher. Unlike `readDSLFile` this is
  *  silent and distinguishes "gone" (`null`) from a transient failure (throws),
  *  because it runs every couple of seconds. */

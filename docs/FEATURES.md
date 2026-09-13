@@ -64,6 +64,12 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
   same in a wiki, in a chat attachment, or from a build artifact years later.
   It also renders the first view with scripts blocked.
 - **DSL** export (Save As) writes a clean `.dsl` plus its sidecar JSON.
+- **OKF knowledge bundle** — the workspace as an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+  bundle: a folder of markdown files with YAML frontmatter, one concept per
+  person, system, container, component, deployment node and view, cross-linked
+  by bundle-relative path. Built for knowledge bases, search indexes and AI
+  assistants rather than for people. Save into a folder (File System Access
+  API) or download as a `.zip`. One-way: the DSL stays the source of truth.
 - Exports are deterministic — same workspace, same bytes — so they diff cleanly in pull requests.
 
 ## AI assistant (BYOK)
