@@ -1,4 +1,7 @@
 /** Sanitize a filename by removing path separators and dangerous characters. */
+/** Device names Windows refuses as a file stem, with or without an extension. */
+export const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
+
 export function sanitizeFilename(name: string): string {
   const illegalChars = new Set('/\\:*?"<>|')
   const safeChars = Array.from(name.trim(), (char) => {
@@ -11,7 +14,7 @@ export function sanitizeFilename(name: string): string {
     .slice(0, 180)
 
   if (!cleaned || cleaned === '_') return 'download'
-  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(cleaned)) {
+  if (WINDOWS_RESERVED_NAME.test(cleaned)) {
     return `_${cleaned}`
   }
   return cleaned

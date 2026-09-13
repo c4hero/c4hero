@@ -56,6 +56,7 @@ workspace "Big Bank plc" "Banking, but online" {
         dynamic internetBankingSystem "SignIn" "How sign in works" {
             customer -> webApplication "Submits credentials"
             webApplication -> database "Checks"
+            database -> webApplication "Returns the account"
             autoLayout lr
         }
         deployment internetBankingSystem "Live" "LiveDeployment" { include * }
@@ -265,6 +266,9 @@ describe('exportWorkspaceAsOkf — deployment and views', () => {
     const dynamic = files.get('views/SignIn.md')!
     expect(dynamic).toContain('| Step | From | To | Description |')
     expect(dynamic).toContain('| 1 | [Customer](/people/customer.md) | [Web Application](/containers/webApplication.md) | Submits credentials |')
+    // A response step travels against the model relationship; the step's own
+    // endpoints are already in travel order and must not be flipped again.
+    expect(dynamic).toContain('| 3 | [Database](/containers/database.md) | [Web Application](/containers/webApplication.md) | Returns the account |')
 
     const deployment = files.get('views/LiveDeployment.md')!
     expect(frontmatterOf(deployment)!.environment).toBe('"Live"')
@@ -295,6 +299,11 @@ describe('conceptStem', () => {
   it('replaces characters a filesystem or URL would choke on', () => {
     expect(conceptStem('view:Sign In/2', new Set())).toBe('view-Sign-In-2')
     expect(conceptStem('...', new Set())).toBe('concept')
+  })
+
+  it('sidesteps names Windows cannot create as files', () => {
+    expect(conceptStem('con', new Set())).toBe('con-concept')
+    expect(conceptStem('LPT1', new Set())).toBe('LPT1-concept')
   })
 
   it('never produces a reserved name and de-duplicates case-insensitively', () => {

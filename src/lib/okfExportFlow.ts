@@ -25,8 +25,6 @@ export async function runOkfExport(
   target: OkfExportTarget,
   generator?: string,
 ): Promise<string | null> {
-  const files = exportWorkspaceAsOkf(workspace, { generator })
-
   if (target === 'folder' && hasDirectoryAccess()) {
     let dir: FileSystemDirectoryHandle
     try {
@@ -35,11 +33,14 @@ export async function runOkfExport(
       if (isAbort(err)) return null
       throw err
     }
+    // Serialized after the picker so a cancelled dialog costs nothing.
+    const files = exportWorkspaceAsOkf(workspace, { generator })
     await writeFilesInto(dir, files)
     log.info('OKF bundle written', { files: files.length, dir: dir.name })
     return `Exported ${files.length} files to ${dir.name}/`
   }
 
+  const files = exportWorkspaceAsOkf(workspace, { generator })
   downloadBlob(zipBlob(files), `${okfBundleName(workspace)}.zip`)
   return `Exported OKF bundle (${files.length} files)`
 }

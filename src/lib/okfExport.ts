@@ -5,11 +5,14 @@ import type {
   DeploymentNode,
   InfrastructureNode,
   ModelElement,
+  Relationship,
   SoftwareSystem,
   View,
   Workspace,
 } from '@/types/model'
 import { deriveIdFromName } from '@/lib/identifier'
+import { WINDOWS_RESERVED_NAME } from '@/lib/filenames'
+import { allViewsOf } from '@/store/workspace-helpers'
 
 /**
  * Export a workspace as an Open Knowledge Format (OKF v0.1) bundle.
@@ -106,6 +109,13 @@ interface Ctx {
   inViews: Map<string, View[]>
   /** The deployment environment each node / infra node lives in. */
   environmentOf: Map<string, DeploymentEnvironment>
+  /** Bundle id per view (`view:<key>`, suffixed when keys collide). */
+  viewIds: Map<View, string>
+  /** Relationship id → relationship. */
+  relById: Map<string, Relationship>
+  /** Element id → every relationship touching it (instances resolved to
+   *  their element, a self-relationship listed once). */
+  relsOf: Map<string, Relationship[]>
 }
 
 const SECTION_DIRS = {
@@ -129,6 +139,9 @@ function buildContext(ws: Workspace): Ctx {
   const parents = new Map<string, string>()
   const inViews = new Map<string, View[]>()
   const environmentOf = new Map<string, DeploymentEnvironment>()
+  const viewIds = new Map<View, string>()
+  const relById = new Map<string, Relationship>()
+  const relsOf = new Map<string, Relationship[]>()
 
   const taken = new Map<string, Set<string>>()
   const assign = (dir: string, id: string, name: string, stemSource?: string) => {
@@ -166,11 +179,11 @@ function buildContext(ws: Workspace): Ctx {
     }
     for (const inst of node.containerInstances) {
       instanceOf.set(inst.id, inst.containerId)
-      pushTo(hostedOn, inst.containerId, node)
+      pushUnique(hostedOn, inst.containerId, node)
     }
     for (const inst of node.softwareSystemInstances) {
       instanceOf.set(inst.id, inst.softwareSystemId)
-      pushTo(hostedOn, inst.softwareSystemId, node)
+      pushUnique(hostedOn, inst.softwareSystemId, node)
     }
     for (const child of node.children) walkNode(child, env, node.id)
   }
@@ -179,8 +192,23 @@ function buildContext(ws: Workspace): Ctx {
     for (const node of env.deploymentNodes) walkNode(node, env)
   }
 
-  for (const view of allViews(ws)) {
-    assign(SECTION_DIRS.views, viewId(view), view.title ?? view.key, view.key)
+  for (const rel of ws.model.relationships) {
+    relById.set(rel.id, rel)
+    const source = instanceOf.get(rel.sourceId) ?? rel.sourceId
+    const destination = instanceOf.get(rel.destinationId) ?? rel.destinationId
+    pushTo(relsOf, source, rel)
+    if (destination !== source) pushTo(relsOf, destination, rel)
+  }
+
+  const viewIdsTaken = new Set<string>()
+  for (const view of allViewsOf(ws)) {
+    // View keys are meant to be unique but nothing upstream enforces it for
+    // explicit keys; suffix a repeat so two views never share one file.
+    let id = viewId(view)
+    for (let n = 2; viewIdsTaken.has(id); n++) id = `${viewId(view)}#${n}`
+    viewIdsTaken.add(id)
+    viewIds.set(view, id)
+    assign(SECTION_DIRS.views, id, view.title || view.key, view.key)
     const seen = new Set<string>()
     for (const el of view.elements) {
       const id = instanceOf.get(el.id) ?? el.id
@@ -190,13 +218,19 @@ function buildContext(ws: Workspace): Ctx {
     }
   }
 
-  return { ws, paths, names, instanceOf, hostedOn, parents, inViews, environmentOf }
+  return { ws, paths, names, instanceOf, hostedOn, parents, inViews, environmentOf, viewIds, relById, relsOf }
 }
 
 function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V) {
   const list = map.get(key)
   if (list) list.push(value)
   else map.set(key, [value])
+}
+
+/** `pushTo`, skipping a value the list already holds (a node hosting two
+ *  instances of the same container is still one host). */
+function pushUnique<K, V>(map: Map<K, V[]>, key: K, value: V) {
+  if (!map.get(key)?.includes(value)) pushTo(map, key, value)
 }
 
 /** Ids the DSL parser hands to elements declared without an identifier
@@ -212,18 +246,6 @@ function viewId(view: View): string {
   return `view:${view.key}`
 }
 
-function allViews(ws: Workspace): View[] {
-  const v = ws.views
-  return [
-    ...v.systemLandscapeViews,
-    ...v.systemContextViews,
-    ...v.containerViews,
-    ...v.componentViews,
-    ...v.dynamicViews,
-    ...v.deploymentViews,
-  ]
-}
-
 /** File stem for a concept: the Structurizr identifier, kept readable so the
  *  concept ID matches the DSL, with anything a filesystem or URL would choke
  *  on replaced. Unique within its section (case-insensitively, for macOS and
@@ -233,7 +255,9 @@ export function conceptStem(id: string, taken: Set<string>): string {
     .replace(/[^A-Za-z0-9_.-]+/g, '-')
     .replace(/^[.-]+|[.-]+$/g, '')
   if (!stem) stem = 'concept'
-  if (RESERVED_STEMS.has(stem.toLowerCase())) stem = `${stem}-concept`
+  // `index` / `log` are reserved by the spec; `con`, `aux`, … cannot be
+  // created as files on Windows at all.
+  if (RESERVED_STEMS.has(stem.toLowerCase()) || WINDOWS_RESERVED_NAME.test(stem)) stem = `${stem}-concept`
   let candidate = stem
   for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = `${stem}-${n}`
   taken.add(candidate.toLowerCase())
@@ -363,7 +387,7 @@ function viewsSection(ctx: Ctx): SectionOutput {
     dir: SECTION_DIRS.views,
     title: 'Views',
     blurb: 'The diagrams: each view is a focused slice of the model.',
-    concepts: allViews(ctx.ws).map((view) => viewConcept(ctx, view)),
+    concepts: allViewsOf(ctx.ws).map((view) => viewConcept(ctx, view)),
   }
 }
 
@@ -436,7 +460,7 @@ function nodeTree(ctx: Ctx, node: DeploymentNode, depth: number): string {
 }
 
 function viewConcept(ctx: Ctx, view: View): Concept {
-  const title = view.title ?? view.key
+  const title = view.title || view.key
   const scopeId = view.softwareSystemId ?? view.containerId
   const fields: FmField[] = [
     ['type', 'View'],
@@ -457,16 +481,15 @@ function viewConcept(ctx: Ctx, view: View): Concept {
     elements.push(`- ${link(ctx, id)}`)
   }
 
-  const rels = ctx.ws.model.relationships
-  const byId = new Map(rels.map((r) => [r.id, r]))
   const dynamic = view.type === 'dynamic'
   const rows: string[][] = []
   for (const riv of view.relationships) {
-    const rel = byId.get(riv.id)
+    const rel = ctx.relById.get(riv.id)
     if (!rel) continue
-    let from = riv.sourceId ?? rel.sourceId
-    let to = riv.destinationId ?? rel.destinationId
-    if (riv.response) [from, to] = [to, from]
+    // A dynamic step's own endpoints are already in travel order; only when
+    // they are absent does `response` mean "the model relationship, reversed".
+    const from = riv.sourceId ?? (riv.response ? rel.destinationId : rel.sourceId)
+    const to = riv.destinationId ?? (riv.response ? rel.sourceId : rel.destinationId)
     const description = riv.description ?? rel.description ?? ''
     const row = [endpoint(ctx, from), endpoint(ctx, to), escapeInline(description)]
     if (dynamic) row.unshift(escapeInline(riv.order ?? ''))
@@ -480,7 +503,7 @@ function viewConcept(ctx: Ctx, view: View): Concept {
     rows.length ? section('Relationships', table(headers, rows)) : '',
   ]
   return {
-    path: ctx.paths.get(viewId(view))!,
+    path: ctx.paths.get(ctx.viewIds.get(view)!)!,
     title,
     description: view.description,
     content: document(fields, `# ${title}`, body),
@@ -491,12 +514,9 @@ function viewConcept(ctx: Ctx, view: View): Concept {
 
 function relationshipTable(ctx: Ctx, elementId: string): BodySection {
   const rows: string[][] = []
-  for (const rel of ctx.ws.model.relationships) {
+  for (const rel of ctx.relsOf.get(elementId) ?? []) {
     const source = ctx.instanceOf.get(rel.sourceId) ?? rel.sourceId
-    const destination = ctx.instanceOf.get(rel.destinationId) ?? rel.destinationId
     const outgoing = source === elementId
-    const incoming = destination === elementId
-    if (!outgoing && !incoming) continue
     // A self-relationship shows once, as outgoing.
     const other = outgoing ? rel.destinationId : rel.sourceId
     rows.push([outgoing ? '->' : '<-', endpoint(ctx, other), escapeInline(rel.description ?? ''), escapeInline(rel.technology ?? '')])
@@ -543,7 +563,7 @@ function hostedOnList(ctx: Ctx, el: SoftwareSystem | Container): BodySection {
 function viewList(ctx: Ctx, elementId: string): BodySection {
   const views = ctx.inViews.get(elementId)
   if (!views || views.length === 0) return ''
-  const lines = views.map((v) => `- ${link(ctx, viewId(v))} — ${VIEW_TYPE_LABEL[v.type]} view`)
+  const lines = views.map((v) => `- ${link(ctx, ctx.viewIds.get(v)!)} — ${VIEW_TYPE_LABEL[v.type]} view`)
   return section('Appears in', lines.join('\n'))
 }
 

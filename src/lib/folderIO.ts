@@ -159,13 +159,21 @@ export async function writeFilesInto(
   dir: FileSystemDirectoryHandle,
   files: ReadonlyArray<{ path: string; content: string }>,
 ): Promise<void> {
+  // Directory handles resolved once per directory, not once per file.
+  const dirs = new Map<string, FileSystemDirectoryHandle>([['', dir]])
   for (const file of files) {
     const parts = file.path.split('/').filter((p) => p !== '' && p !== '.')
     if (parts.length === 0 || parts.some((p) => p === '..')) {
       throw new Error(`Refusing to write outside the chosen folder: ${file.path}`)
     }
     let cur = dir
-    for (const seg of parts.slice(0, -1)) cur = await cur.getDirectoryHandle(seg, { create: true })
+    let key = ''
+    for (const seg of parts.slice(0, -1)) {
+      key = `${key}${seg}/`
+      let next = dirs.get(key)
+      if (!next) dirs.set(key, (next = await cur.getDirectoryHandle(seg, { create: true })))
+      cur = next
+    }
     const handle = await cur.getFileHandle(parts[parts.length - 1], { create: true })
     const writable = await handle.createWritable()
     await writable.write(file.content)
