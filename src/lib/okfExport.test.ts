@@ -222,6 +222,15 @@ describe('exportWorkspaceAsOkf — element concepts', () => {
     expect(system).toContain('Lets customers bank \\| online')
     expect(files.get('containers/webApplication.md')).toContain('Handles \\[sign in\\]')
   })
+
+  it('escapes backslashes before the markdown escapes it adds', () => {
+    const ws = full()
+    ws.model.people[0].description = 'Path C:\\temp [x] a|b'
+    const files = byPath(exportWorkspaceAsOkf(ws))
+    // Frontmatter is JSON-quoted; the body is markdown-escaped.
+    expect(files.get('people/customer.md')).toContain('description: "Path C:\\\\temp [x] a|b"')
+    expect(files.get('people/customer.md')).toContain('Path C:\\\\temp \\[x\\] a\\|b')
+  })
 })
 
 describe('exportWorkspaceAsOkf — deployment and views', () => {

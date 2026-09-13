@@ -656,7 +656,8 @@ function table(headers: string[], rows: string[][]): string {
 /** Text that lands inside link text, list items or headings: collapse
  *  newlines and neutralise the characters that would change structure. */
 function escapeInline(text: string): string {
-  return text.replace(/\s*\n\s*/g, ' ').replace(/[[\]]/g, '\\$&').replace(/\|/g, '\\|').trim()
+  // Backslash first, so an escape we add is never itself escaped.
+  return text.replace(/\s*\n\s*/g, ' ').replace(/[\\[\]|]/g, '\\$&').trim()
 }
 
 /** Structurizr adds `Element` plus the type name (`Software System`,
