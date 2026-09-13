@@ -46,6 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Save wrote a copy instead of the file you had open.** In a folder
+  collection, the top-bar Save button and Ctrl/Cmd+S went through the
+  "save as" flow rather than the file the workspace was opened from — on
+  Android, where the browser can only download, that produced
+  `Workspace (1).dsl` next to the original. Save, Ctrl+S and autosave now
+  share one rule: a workspace linked to a file (single file, or folder plus
+  filename) is written in place; only an unlinked one asks where to go.
+  (TEA-339)
 - **A property with an empty value no longer makes the saved file invalid.**
   Structurizr rejects `"key" ""` ("A property value must be specified"), so
   an element or relationship carrying an empty property produced DSL the

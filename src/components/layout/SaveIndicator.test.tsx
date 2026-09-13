@@ -1,7 +1,7 @@
 import { render, fireEvent, act, waitFor } from '@testing-library/react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess } from '@/lib/fileIO'
-import { getCurrentDirHandle } from '@/lib/folderIO'
+import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess, writeToCurrentHandle } from '@/lib/fileIO'
+import { getCurrentDirHandle, writeDSLFile } from '@/lib/folderIO'
 import type { Workspace } from '@/types/model'
 import SaveIndicator from './SaveIndicator'
 
@@ -9,10 +9,15 @@ vi.mock('@/lib/fileIO', () => ({
   saveDSLFile: vi.fn(async () => true),
   getCurrentFileHandle: vi.fn(() => null),
   hasFileSystemAccess: vi.fn(() => false),
+  writeToCurrentHandle: vi.fn(async () => true),
+  writeSidecarToHandle: vi.fn(async () => true),
 }))
 
 vi.mock('@/lib/folderIO', () => ({
   getCurrentDirHandle: vi.fn(() => null),
+  writeDSLFile: vi.fn(async () => true),
+  writeSidecarFile: vi.fn(async () => true),
+  writeDSLFileAt: vi.fn(async () => true),
 }))
 
 function makeWs(): Workspace {
@@ -94,6 +99,19 @@ describe('SaveIndicator', () => {
     expect(indicatorButton(container).getAttribute('aria-label')).toBe('All changes saved')
   })
 
+  it('writes the collection file in place on click instead of prompting for a new one (TEA-339)', async () => {
+    vi.mocked(hasFileSystemAccess).mockReturnValue(true)
+    vi.mocked(getCurrentDirHandle).mockReturnValue({ name: 'my-architecture' } as unknown as FileSystemDirectoryHandle)
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().setActiveWorkspaceFilename('big-bank.dsl')
+    const { container } = render(<SaveIndicator />)
+    fireEvent.click(indicatorButton(container))
+    await waitFor(() => expect(writeDSLFile).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(writeDSLFile).mock.calls[0][0]).toBe('big-bank.dsl')
+    expect(saveDSLFile).not.toHaveBeenCalled()
+    await waitFor(() => expect(indicatorButton(container).getAttribute('aria-label')).toBe('Saved to file'))
+  })
+
   it('shows unsaved-changes state when linked and dirty', () => {
     vi.mocked(hasFileSystemAccess).mockReturnValue(true)
     vi.mocked(getCurrentFileHandle).mockReturnValue({} as FileSystemFileHandle)
@@ -119,10 +137,11 @@ describe('SaveIndicator', () => {
       makeDirty()
 
       fireEvent.click(indicatorButton(container))
-      await act(async () => { await Promise.resolve() })
+      await act(async () => { await Promise.resolve(); await Promise.resolve() })
 
-      expect(saveDSLFile).toHaveBeenCalledTimes(1)
-      expect(vi.mocked(saveDSLFile).mock.calls[0][1]).toBe('Test.dsl')
+      // Linked to a file handle: written in place, never through the picker.
+      expect(writeToCurrentHandle).toHaveBeenCalledTimes(1)
+      expect(saveDSLFile).not.toHaveBeenCalled()
       expect(indicatorButton(container).getAttribute('aria-label')).toBe('Saved to file')
       expect(useWorkspaceStore.getState().lastSavedUndoLength).toBe(1)
 
@@ -138,7 +157,7 @@ describe('SaveIndicator', () => {
     try {
       vi.mocked(hasFileSystemAccess).mockReturnValue(true)
       vi.mocked(getCurrentFileHandle).mockReturnValue({} as FileSystemFileHandle)
-      vi.mocked(saveDSLFile).mockResolvedValue(false)
+      vi.mocked(writeToCurrentHandle).mockResolvedValue(false)
       useWorkspaceStore.getState().loadWorkspace(makeWs())
       const { container } = render(<SaveIndicator />)
       makeDirty()

@@ -1,18 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { saveToLocalStorage, getCurrentFileHandle, writeToCurrentHandle, writeSidecarToHandle } from '@/lib/fileIO'
-import { getCurrentDirHandle, writeDSLFile, writeSidecarFile, writeDSLFileAt } from '@/lib/folderIO'
-import { serializeRoot, planIncludedWrites } from '@/lib/includeWriteback'
-import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
+import { saveToLocalStorage } from '@/lib/fileIO'
+import { writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('useAutoSave')
-
-/** Last fragment written per included path, so unchanged files aren't
- *  rewritten. Scoped to one root file: switching folder or workspace must
- *  not let a memo from another workspace suppress a needed write. */
-const lastIncludedWrites = new Map<string, string>()
-let lastIncludedWritesFor: string | null = null
 
 const scheduleIdle = typeof requestIdleCallback === 'function'
   ? requestIdleCallback
@@ -55,43 +47,16 @@ export function useAutoSave() {
         const state = useWorkspaceStore.getState()
         if (!state.workspace || state.workspace.name !== savedName) return
 
-        const hasSingleFile = !!getCurrentFileHandle()
-        const dirHandle = getCurrentDirHandle()
-        const filename = state.activeWorkspaceFilename
-
-        if (hasSingleFile || (dirHandle && filename)) {
-          try {
-            const dsl = serializeRoot(state.workspace)
-            const sidecar = extractSidecar(state.workspace)
-
-            if (hasSingleFile) {
-              writeToCurrentHandle(dsl)
-              if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
-            }
-
-            if (dirHandle && filename) {
-              writeDSLFile(filename, dsl)
-              if (sidecar) writeSidecarFile(filename, serializeSidecar(sidecar))
-              // Write-back: each writable !include'd file gets its own fragment,
-              // only when it actually changed (TEA-325).
-              const scope = `${dirHandle.name}/${filename}`
-              if (lastIncludedWritesFor !== scope) { lastIncludedWrites.clear(); lastIncludedWritesFor = scope }
-              for (const w of planIncludedWrites(state.workspace)) {
-                if (lastIncludedWrites.get(w.path) === w.content) continue
-                lastIncludedWrites.set(w.path, w.content)
-                writeDSLFileAt(w.path, w.content).then((ok) => {
-                  if (!ok) log.warn('Included file write-back failed', w.path)
-                })
-              }
-            }
-
-            useWorkspaceStore.getState().setLastSavedUndoLength(state.undoStack.length)
-          } catch (error) {
-            // Manual save/export surfaces the same actionable message. Avoid
-            // turning an invalid legacy overlap into an unhandled idle-task
-            // exception while still leaving the workspace marked unsaved.
-            log.warn('Automatic DSL save blocked', error)
-          }
+        try {
+          // The same write the Save button and Ctrl+S perform; a no-op
+          // (false) when the workspace is not linked to any file.
+          void writeLinkedWorkspace(state.workspace, state.activeWorkspaceFilename)
+          useWorkspaceStore.getState().setLastSavedUndoLength(state.undoStack.length)
+        } catch (error) {
+          // Manual save/export surfaces the same actionable message. Avoid
+          // turning an invalid legacy overlap into an unhandled idle-task
+          // exception while still leaving the workspace marked unsaved.
+          log.warn('Automatic DSL save blocked', error)
         }
       }) as unknown as number
     }, 1000)

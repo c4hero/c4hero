@@ -2,18 +2,9 @@ import { useRef, useState } from 'react'
 import { Save } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeRoot } from '@/lib/includeWriteback'
-import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess } from '@/lib/fileIO'
-import { getCurrentDirHandle } from '@/lib/folderIO'
+import { saveDSLFile, hasFileSystemAccess } from '@/lib/fileIO'
+import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { announce } from '@/lib/announce'
-
-/** The workspace is linked to a file if EITHER:
- *  - A single-file handle is open (file-picker mode), OR
- *  - A folder handle is open AND an active filename is set (collection mode). */
-function isWorkspaceLinked(activeFilename: string | null): boolean {
-  if (getCurrentFileHandle() !== null) return true
-  if (getCurrentDirHandle() !== null && activeFilename) return true
-  return false
-}
 
 export default function SaveIndicator() {
   // Note: we deliberately don't subscribe to the workspace itself — only
@@ -38,9 +29,13 @@ export default function SaveIndicator() {
     if (!workspace) return
     setSaveStatus('saving')
     try {
-      const wsName = workspace.name ?? 'workspace'
-      const dsl = serializeRoot(workspace)
-      const ok = await saveDSLFile(dsl, `${wsName}.dsl`)
+      // A linked workspace (single file, or folder collection + filename) is
+      // written in place — never "save as", which in a collection made a copy
+      // (TEA-339). Only an unlinked one needs to ask where to go.
+      const filename = useWorkspaceStore.getState().activeWorkspaceFilename
+      const ok = isWorkspaceLinked(filename)
+        ? await writeLinkedWorkspace(workspace, filename)
+        : await saveDSLFile(serializeRoot(workspace), `${workspace.name ?? 'workspace'}.dsl`)
       if (!ok) throw new Error('Save failed')
       const n = useWorkspaceStore.getState().undoStack.length
       setSavedUndoLength(n)

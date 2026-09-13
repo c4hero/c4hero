@@ -5,6 +5,7 @@ import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
@@ -87,10 +88,16 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   'mod+s': (store) => {
     if (store.workspace) {
       try {
-        const dsl = serializeRoot(store.workspace)
-        saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)
-        const sidecar = extractSidecar(store.workspace)
-        if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+        // Same rule as the Save button: write a linked workspace in place;
+        // only an unlinked one goes through the picker / download (TEA-339).
+        if (isWorkspaceLinked(store.activeWorkspaceFilename)) {
+          void writeLinkedWorkspace(store.workspace, store.activeWorkspaceFilename)
+        } else {
+          const dsl = serializeRoot(store.workspace)
+          void saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)
+          const sidecar = extractSidecar(store.workspace)
+          if (sidecar) void writeSidecarToHandle(serializeSidecar(sidecar))
+        }
       } catch (error) {
         announce(error instanceof Error ? error.message : 'Save failed')
       }
