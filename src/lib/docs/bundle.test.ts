@@ -175,6 +175,8 @@ describe('writing', () => {
   it('appends to a section index, creating it without frontmatter when absent', () => {
     expect(appendToIndex(null, 'Docs', 'overview.md', 'Overview', 'One\nline')).toBe('# Docs\n\n- [Overview](overview.md) - One line\n')
     expect(appendToIndex('# Docs\n\n- [A](a.md)\n\n', 'Docs', 'b.md', 'B [x]')).toBe('# Docs\n\n- [A](a.md)\n- [B \\[x\\]](b.md)\n')
+    // A backslash in the title is escaped first, so it cannot cancel the escapes added after it.
+    expect(appendToIndex(null, 'Docs', 'c.md', 'C:\\ [x]')).toBe('# Docs\n\n- [C:\\\\ \\[x\\]](c.md)\n')
   })
 
   it('derives default folders, titles and directive lines', () => {
@@ -184,5 +186,6 @@ describe('writing', () => {
     expect(dirTitle('adrs', 'x')).toBe('Architecture decision records')
     expect(docsDirectiveLine('docs', 'docs/shop')).toBe('!docs docs/shop')
     expect(docsDirectiveLine('adrs', 'my decisions')).toBe('!adrs "my decisions"')
+    expect(docsDirectiveLine('docs', 'a\\b "c"')).toBe('!docs "a\\\\b \\"c\\""')
   })
 })

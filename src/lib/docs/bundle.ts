@@ -317,7 +317,9 @@ export function renderNewAdr(input: NewDocInput & { status?: string; number: num
 /** Append a concept line to a section `index.md`, creating the file when the
  *  bundle has none. Index files carry no frontmatter (OKF reserves them). */
 export function appendToIndex(existing: string | null, dirTitle: string, file: string, title: string, description?: string): string {
-  const line = `- [${title.replace(/[[\]]/g, '\\$&')}](${file})${description ? ` - ${description.replace(/\s*\n\s*/g, ' ')}` : ''}`
+  // Backslash first, so an escape we add is never itself escaped.
+  const safeTitle = title.replace(/[\\[\]]/g, '\\$&')
+  const line = `- [${safeTitle}](${file})${description ? ` - ${description.replace(/\s*\n\s*/g, ' ')}` : ''}`
   if (existing === null || existing.trim() === '') return `# ${dirTitle}\n\n${line}\n`
   const trimmed = existing.replace(/\s+$/, '')
   return `${trimmed}\n${line}\n`
@@ -340,5 +342,5 @@ export function defaultDocsDir(kind: DocsKind, elementId?: string): string {
 
 /** The DSL line that declares a bundle folder. */
 export function docsDirectiveLine(kind: DocsKind, dir: string): string {
-  return /[\s"]/.test(dir) ? `!${kind} "${dir.replace(/"/g, '\\"')}"` : `!${kind} ${dir}`
+  return /[\s"\\]/.test(dir) ? `!${kind} "${dir.replace(/[\\"]/g, '\\$&')}"` : `!${kind} ${dir}`
 }
