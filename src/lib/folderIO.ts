@@ -110,13 +110,32 @@ export async function readDSLFile(filename: string): Promise<{ content: string; 
 /** Walk `a/b/c.dsl` from the current directory handle. `create` makes
  *  intermediate directories; the file itself is created only by the writer. */
 async function resolveFileHandle(relPath: string, create: boolean): Promise<FileSystemFileHandle | null> {
-  if (!currentDirHandle) return null
-  const parts = relPath.split('/').filter((p) => p !== '' && p !== '.')
+  const parts = splitRelPath(relPath)
   if (parts.length === 0 || parts.some((p) => p === '..')) return null
+  const dir = await resolveDirHandle(parts.slice(0, -1).join('/'), create)
+  if (!dir) return null
+  try {
+    return await dir.getFileHandle(parts[parts.length - 1], { create })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+}
+
+function splitRelPath(rel: string): string[] {
+  return rel.split('/').filter((p) => p !== '' && p !== '.')
+}
+
+/** Walk `a/b` from the current directory handle. `null` when it does not
+ *  exist (or when the path escapes the folder); throws on other failures. */
+async function resolveDirHandle(relDir: string, create: boolean): Promise<FileSystemDirectoryHandle | null> {
+  if (!currentDirHandle) return null
+  const parts = splitRelPath(relDir)
+  if (parts.some((p) => p === '..')) return null
   let dir = currentDirHandle
   try {
-    for (const seg of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(seg, { create })
-    return await dir.getFileHandle(parts[parts.length - 1], { create })
+    for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create })
+    return dir
   } catch (err) {
     if (err instanceof DOMException && err.name === 'NotFoundError') return null
     throw err
@@ -321,22 +340,6 @@ export async function listDSLFiles(): Promise<string[]> {
 
 // ─── Arbitrary files under the open folder (docs bundles) ─────────────
 
-/** Walk `a/b` from the current directory handle. `null` when it does not
- *  exist (or when the path escapes the folder); throws on other failures. */
-async function resolveDirHandle(relDir: string, create: boolean): Promise<FileSystemDirectoryHandle | null> {
-  if (!currentDirHandle) return null
-  const parts = relDir.split('/').filter((p) => p !== '' && p !== '.')
-  if (parts.some((p) => p === '..')) return null
-  let dir = currentDirHandle
-  try {
-    for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create })
-    return dir
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'NotFoundError') return null
-    throw err
-  }
-}
-
 /** File names directly inside a folder relative to the open folder; `null`
  *  when the folder does not exist. Subdirectories are not listed. */
 export async function listFilesAt(relDir: string): Promise<string[] | null> {
@@ -360,8 +363,6 @@ export async function readTextFileAt(relPath: string): Promise<string | null> {
  *  tracked by the save coordinator — it is for files the workspace points at,
  *  not the workspace itself. Rejects a path that escapes the folder. */
 export async function writeTextFileAt(relPath: string, content: string): Promise<boolean> {
-  const parts = relPath.split('/').filter((p) => p !== '' && p !== '.')
-  if (parts.length === 0 || parts.some((p) => p === '..')) return false
   try {
     const handle = await resolveFileHandle(relPath, true)
     if (!handle) return false

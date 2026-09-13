@@ -10,6 +10,13 @@ describe('Markdown', () => {
     expect([...container.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['em', 'em2'])
   })
 
+  it('leaves intraword underscores alone', () => {
+    const { container } = render(<Markdown text={'Call snake_case_name or my__var__name, but _this_ is emphasis.'} />)
+    expect([...container.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['this'])
+    expect(container.querySelector('strong')).toBeNull()
+    expect(container.textContent).toContain('snake_case_name or my__var__name')
+  })
+
   it('never injects markup: text is rendered as text', () => {
     const { container } = render(<Markdown text={'<img src=x onerror=alert(1)> **<b>bold</b>**'} />)
     expect(container.querySelector('img')).toBeNull()

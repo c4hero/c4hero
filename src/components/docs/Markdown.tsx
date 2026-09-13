@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useMemo, type ReactNode } from 'react'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { parseBlocks, type Block } from '@/lib/docs/markdown'
 
@@ -23,7 +23,7 @@ export interface MarkdownProps {
 }
 
 export default function Markdown({ text, onRelativeLink }: MarkdownProps) {
-  const blocks = parseBlocks(text.split(/\r?\n/))
+  const blocks = useMemo(() => parseBlocks(text.split(/\r?\n/)), [text])
   return <div className="c4-md">{blocks.map((b, i) => <Fragment key={i}>{renderBlock(b, onRelativeLink)}</Fragment>)}</div>
 }
 
@@ -73,7 +73,9 @@ function renderBlock(block: Block, onRelativeLink?: MarkdownProps['onRelativeLin
 
 // ─── Inline ──────────────────────────────────────────────────────────
 
-const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|!\[([^\]]*)\]\(([^)]*)\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*\s][^*]*?)\*|_([^_\s][^_]*?)_|<(https?:\/\/[^>\s]+)>/g
+// Underscore emphasis only at word boundaries, as in CommonMark: prose about
+// `snake_case_names` or `my__var__name` must not sprout <em>s mid-word.
+const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|!\[([^\]]*)\]\(([^)]*)\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\*\*([^*]+)\*\*|(?<![A-Za-z0-9_])__([^_]+)__(?![A-Za-z0-9_])|\*([^*\s][^*]*?)\*|(?<![A-Za-z0-9_])_([^_\s][^_]*?)_(?![A-Za-z0-9_])|<(https?:\/\/[^>\s]+)>/g
 
 function renderInline(text: string, onRelativeLink?: MarkdownProps['onRelativeLink']): ReactNode[] {
   const out: ReactNode[] = []

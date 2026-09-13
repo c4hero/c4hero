@@ -15,6 +15,7 @@ export type Block =
   | { kind: 'hr' }
 
 const FENCE = /^\s*(```+|~~~+)\s*([\w-]*)\s*$/
+const FENCE_CLOSE = { '`': /^\s*`{3,}\s*$/, '~': /^\s*~{3,}\s*$/ } as const
 const HEADING = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/
 const HR = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/
 const LIST_ITEM = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/
@@ -29,10 +30,10 @@ export function parseBlocks(lines: string[]): Block[] {
 
     const fence = FENCE.exec(line)
     if (fence) {
-      const close = fence[1][0]
+      const close = FENCE_CLOSE[fence[1][0] as '`' | '~']
       const buf: string[] = []
       i++
-      while (i < lines.length && !new RegExp(`^\\s*${close === '`' ? '`{3,}' : '~{3,}'}\\s*$`).test(lines[i])) buf.push(lines[i++])
+      while (i < lines.length && !close.test(lines[i])) buf.push(lines[i++])
       i++ // closing fence (or EOF)
       blocks.push({ kind: 'code', text: buf.join('\n'), lang: fence[2] || undefined })
       continue

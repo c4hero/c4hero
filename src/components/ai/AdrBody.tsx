@@ -4,6 +4,7 @@ import { draftAdr, type AiProvider } from '@/lib/ai'
 import { downloadFile } from '@/lib/exportUtils'
 import { getCurrentDirHandle } from '@/lib/folderIO'
 import { useDocsStore } from '@/store/docs'
+import { firstHeading } from '@/lib/docs/bundle'
 import { announce } from '@/lib/announce'
 import type { Workspace } from '@/types/model'
 import { C, blurb, miniBtn } from './aiTheme'
@@ -65,8 +66,7 @@ export function AdrBody({ provider, workspace }: { provider: AiProvider; workspa
 
 /** The drafted record's own heading, falling back to the topic the user typed. */
 function adrTitle(md: string, topic: string): string {
-  const heading = /^\s*#\s+(.+?)\s*$/m.exec(md)?.[1]
-  return (heading ?? topic).replace(/^\d+\.\s+/, '').trim() || 'Decision'
+  return firstHeading(md) || topic.trim() || 'Decision'
 }
 
 function adrFilename(topic: string): string {

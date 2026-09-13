@@ -3,19 +3,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // An in-memory folder standing in for the File System Access API.
 const fs = new Map<string, string>()
 let folderOpen = true
+/** When set, directory listings wait on it — lets a test hold a load in flight. */
+let gate: Promise<void> | null = null
+let failReads = false
 
 vi.mock('@/lib/folderIO', () => ({
   getCurrentDirHandle: () => (folderOpen ? { name: 'shop' } : null),
   listFilesAt: async (dir: string) => {
+    if (gate) await gate
     const prefix = `${dir}/`
     const names = [...fs.keys()].filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes('/')).map((p) => p.slice(prefix.length))
     return names.length ? names.sort() : null
   },
-  readTextFileAt: async (path: string) => fs.get(path) ?? null,
+  readTextFileAt: async (path: string) => {
+    if (failReads) throw new Error('Document too large')
+    return fs.get(path) ?? null
+  },
   writeTextFileAt: async (path: string, content: string) => { fs.set(path, content); return true },
 }))
 
-import { useDocsStore, bundleKey, selectElementDocs, selectElementsWithDocs, selectWorkspaceDocs } from './docs'
+import { useDocsStore, bundleKey, selectElementDocs, selectElementHasDocs, selectWorkspaceDocs } from './docs'
 import { useWorkspaceStore } from '@/store/workspace'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 
@@ -42,6 +49,8 @@ function loadWs() {
 beforeEach(() => {
   fs.clear()
   folderOpen = true
+  gate = null
+  failReads = false
   useDocsStore.getState().reset()
   vi.useFakeTimers({ now: new Date('2026-09-13T12:00:00Z') })
 })
@@ -63,7 +72,30 @@ describe('useDocsStore.load', () => {
 
     expect(selectWorkspaceDocs(bundles, ws).docs.map((c) => c.title)).toEqual(['Overview'])
     expect(selectElementDocs(bundles, ws, 'shop')).toMatchObject({ adrs: [], missing: [{ kind: 'adrs', dir: 'decisions/shop' }] })
-    expect(selectElementsWithDocs(bundles, ws).size).toBe(0)
+    expect(selectElementHasDocs(bundles, ws.model.softwareSystems[0])).toBe(false)
+  })
+
+  it('drops a load that is still in flight when the store is reset or reloaded', async () => {
+    fs.set('docs/overview.md', '# Overview')
+    const ws = loadWs()
+    let release!: () => void
+    gate = new Promise<void>((resolve) => { release = resolve })
+    const stale = useDocsStore.getState().load(ws)
+    useDocsStore.getState().reset()
+    release()
+    await stale
+    expect(useDocsStore.getState().bundles).toEqual({})
+    expect(useDocsStore.getState().loaded).toBe(false)
+
+    // A newer load wins over an older one that finishes later.
+    gate = new Promise<void>((resolve) => { release = resolve })
+    const older = useDocsStore.getState().load(ws)
+    gate = null
+    fs.set('docs/second.md', '# Second')
+    await useDocsStore.getState().load(ws)
+    release()
+    await older
+    expect(selectWorkspaceDocs(useDocsStore.getState().bundles, ws).docs.map((c) => c.title)).toEqual(['Overview', 'Second'])
   })
 
   it('is empty without an open folder', async () => {
@@ -76,6 +108,13 @@ describe('useDocsStore.load', () => {
 })
 
 describe('useDocsStore.create', () => {
+  it('resolves null instead of throwing when a read fails mid-way', async () => {
+    const ws = loadWs()
+    await useDocsStore.getState().load(ws)
+    failReads = true
+    await expect(useDocsStore.getState().create('docs', {}, { title: 'Overview' })).resolves.toBeNull()
+  })
+
   it('writes an ADR into an element bundle, numbers it, updates the index, and reloads', async () => {
     fs.set('decisions/shop/0001-first.md', '# 1. First\n\n## Status\n\nAccepted')
     const ws = loadWs()
@@ -90,7 +129,7 @@ describe('useDocsStore.create', () => {
 
     const { bundles } = useDocsStore.getState()
     expect(selectElementDocs(bundles, useWorkspaceStore.getState().workspace!, 'shop').adrs.map((c) => c.title)).toEqual(['First', 'Use Postgres'])
-    expect(selectElementsWithDocs(bundles, useWorkspaceStore.getState().workspace!)).toEqual(new Set(['shop']))
+    expect(selectElementHasDocs(bundles, useWorkspaceStore.getState().workspace!.model.softwareSystems[0])).toBe(true)
     // No new directive: the element already declared the folder.
     expect(serializeDSL(useWorkspaceStore.getState().workspace!)).not.toContain('!adrs adrs/shop')
   })

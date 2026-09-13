@@ -4,6 +4,7 @@ import type { Workspace } from '@/types/model'
 import type { DocConcept, DocsKind } from '@/lib/docs/bundle'
 import { selectElementDocs, selectWorkspaceDocs, useDocsStore, type ScopedDocs } from '@/store/docs'
 import { getCurrentDirHandle } from '@/lib/folderIO'
+import { findElementHelper } from '@/store/workspace-helpers'
 import { announce } from '@/lib/announce'
 import Markdown from './Markdown'
 
@@ -48,6 +49,10 @@ export default function DocsPane({ workspace, elementId }: DocsPaneProps) {
 
   const folderOpen = !!getCurrentDirHandle()
   const all = useMemo(() => [...scoped.docs, ...scoped.adrs], [scoped])
+  // Structurizr accepts `!docs` / `!adrs` in workspace, softwareSystem,
+  // container and component blocks — not in a person's — so never offer to
+  // write a line there that would make the DSL unloadable elsewhere.
+  const canCreate = !elementId || findElementHelper(workspace, elementId)?.type !== 'person'
   const open = openPath ? all.find((c) => c.path === openPath) : undefined
 
   if (!folderOpen) {
@@ -101,21 +106,25 @@ export default function DocsPane({ workspace, elementId }: DocsPaneProps) {
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
           {scoped.scope.docs || scoped.scope.adrs
             ? 'No documents in the linked folders yet.'
-            : elementId
-              ? 'No documentation is attached to this element. Add a doc or a decision record and c4hero links the folder from the DSL with a !docs / !adrs line.'
-              : 'No documentation is attached to this workspace. Add a doc or a decision record and c4hero links the folder from the DSL.'}
+            : !canCreate
+              ? 'Structurizr keeps documentation on systems, containers and components, not people. Attach it to the system this person uses, or to the workspace.'
+              : elementId
+                ? 'No documentation is attached to this element. Add a doc or a decision record and c4hero links the folder from the DSL with a !docs / !adrs line.'
+                : 'No documentation is attached to this workspace. Add a doc or a decision record and c4hero links the folder from the DSL.'}
         </p>
       )}
       <ConceptList heading="Documentation" icon={BookOpen} concepts={scoped.docs} onOpen={(c) => setOpenPath(c.path)} />
       <ConceptList heading="Decisions" icon={Scale} concepts={scoped.adrs} onOpen={(c) => setOpenPath(c.path)} />
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button type="button" className="hover-subtle" onClick={() => setCreating('docs')} style={BTN}>
-          <FilePlus2 size={12} /> New doc
-        </button>
-        <button type="button" className="hover-subtle" onClick={() => setCreating('adrs')} style={BTN}>
-          <Scale size={12} /> New decision
-        </button>
-      </div>
+      {canCreate && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button type="button" className="hover-subtle" onClick={() => setCreating('docs')} style={BTN}>
+            <FilePlus2 size={12} /> New doc
+          </button>
+          <button type="button" className="hover-subtle" onClick={() => setCreating('adrs')} style={BTN}>
+            <Scale size={12} /> New decision
+          </button>
+        </div>
+      )}
     </div>
   )
 }

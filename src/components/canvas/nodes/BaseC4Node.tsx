@@ -12,8 +12,7 @@ import InlineName from './InlineName'
 import NodeHandles from './NodeHandles'
 import ZoomHoverCard from './ZoomHoverCard'
 import { useWorkspaceStore } from '@/store/workspace'
-import { useDocsStore, bundleKey } from '@/store/docs'
-import { elementDocsScope } from '@/lib/docs/bundle'
+import { useDocsStore, selectElementHasDocs } from '@/store/docs'
 import { useZoomLevel } from '@/hooks/useZoomLevel'
 import { pickHighlightReason } from '@/lib/highlight'
 
@@ -104,13 +103,7 @@ export default function BaseC4Node({
 
   // Documentation attached through `!docs` / `!adrs` inside this element's
   // block. Resolved from the element's own directives, so no builder plumbing.
-  const hasDocs = useDocsStore((s) => {
-    const scope = elementDocsScope(element)
-    return (['docs', 'adrs'] as const).some((kind) => {
-      const dir = scope[kind]
-      return !!dir && (s.bundles[bundleKey(kind, dir)]?.concepts.length ?? 0) > 0
-    })
-  })
+  const hasDocs = useDocsStore((s) => selectElementHasDocs(s.bundles, element))
 
   // Semantic zoom: show different detail levels based on viewport zoom
   const zoomLevel = useZoomLevel()

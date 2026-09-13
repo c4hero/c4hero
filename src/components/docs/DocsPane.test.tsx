@@ -16,6 +16,7 @@ const DSL = `
 workspace "Shop" {
     !docs docs
     model {
+        cust = person "Customer"
         shop = softwareSystem "Shop" {
             !adrs decisions
         }
@@ -39,7 +40,6 @@ beforeEach(() => {
       ]),
     },
     loaded: true,
-    loading: false,
   })
 })
 
@@ -53,6 +53,13 @@ describe('DocsPane', () => {
     render(<DocsPane workspace={ws()} />)
     expect(screen.getByText(/Open this workspace from a folder/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /New doc/ })).toBeNull()
+  })
+
+  it('never offers to write docs into a person block, which Structurizr rejects', () => {
+    render(<DocsPane workspace={ws()} elementId="cust" />)
+    expect(screen.getByText(/not people/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /New doc/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /New decision/ })).toBeNull()
   })
 
   it('lists the workspace bundle and opens a document', () => {

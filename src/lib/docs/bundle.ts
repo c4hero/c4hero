@@ -173,7 +173,8 @@ export function parseConcept(kind: DocsKind, dir: string, file: RawFile): DocCon
   return concept
 }
 
-function firstHeading(body: string): string | undefined {
+/** The document's first `#` heading, minus any adr-tools number. */
+export function firstHeading(body: string): string | undefined {
   const m = /^\s*#\s+(.+?)\s*#*\s*$/m.exec(body)
   return m ? stripAdrNumber(m[1].trim()) : undefined
 }
@@ -198,7 +199,7 @@ function basename(path: string): string {
  *  decisions it supersedes or was superseded by. */
 export function parseStatusSection(body: string): { status?: string; supersedes: string[]; supersededBy: string[] } {
   const lines = body.split(/\r?\n/)
-  const start = lines.findIndex((l) => /^\s*(#{1,6}\s*status\s*#*|\*\*status\*\*.*)\s*$/i.test(l) || /^\s*\*\*status\*\*/i.test(l))
+  const start = lines.findIndex((l) => /^\s*#{1,6}\s*status\s*#*\s*$/i.test(l) || /^\s*\*\*status\*\*/i.test(l))
   if (start === -1) return { supersedes: [], supersededBy: [] }
 
   const section: string[] = []

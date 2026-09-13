@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Workspace } from '@/types/model'
+import type { ModelElement, Workspace } from '@/types/model'
 import {
   allDocsDirs,
   appendToIndex,
@@ -41,13 +41,12 @@ export interface DocsState {
   /** Loaded bundles keyed by `kind:dir`. A key maps to `null` while its
    *  folder does not exist on disk. */
   bundles: Record<string, DocsBundle | null>
-  loading: boolean
   /** True once a load has run for the current directive set. */
   loaded: boolean
-  /** Bumped by every write so consumers re-read. */
-  version: number
   /** Re-read every bundle the workspace references. Safe to call often:
-   *  no-op without an open folder. */
+   *  no-op without an open folder. Only the latest call lands: a slower,
+   *  earlier read (or one still in flight when the store is reset) is
+   *  dropped rather than overwriting newer state. */
   load: (ws: Workspace) => Promise<void>
   /** Write a new doc or ADR into the scope's bundle, creating the folder,
    *  the index and — when the scope has no directive yet — the `!docs` /
@@ -59,19 +58,21 @@ export interface DocsState {
 
 export const bundleKey = (kind: DocsKind, dir: string): string => `${kind}:${dir}`
 
+/** Identity of the most recent load / reset; a load whose ticket is stale by
+ *  the time its reads finish discards its result. */
+let loadTicket = 0
+
 export const useDocsStore = create<DocsState>((set, get) => ({
   bundles: {},
-  loading: false,
   loaded: false,
-  version: 0,
 
   load: async (ws) => {
+    const ticket = ++loadTicket
     const refs = allDocsDirs(ws)
     if (!getCurrentDirHandle() || refs.length === 0) {
-      set({ bundles: {}, loaded: true, loading: false })
+      set({ bundles: {}, loaded: true })
       return
     }
-    set({ loading: true })
     const bundles: Record<string, DocsBundle | null> = {}
     await Promise.all(refs.map(async ({ kind, dir }) => {
       try {
@@ -94,7 +95,8 @@ export const useDocsStore = create<DocsState>((set, get) => ({
         bundles[bundleKey(kind, dir)] = null
       }
     }))
-    set({ bundles, loading: false, loaded: true })
+    if (ticket !== loadTicket) return
+    set({ bundles, loaded: true })
   },
 
   create: async (kind, scope, input) => {
@@ -108,22 +110,31 @@ export const useDocsStore = create<DocsState>((set, get) => ({
     const needsDirective = dir === undefined
     if (dir === undefined) dir = defaultDocsDir(kind, scope.elementId)
 
-    const existing = (await listFilesAt(dir)) ?? []
-    const file = kind === 'adrs'
-      ? nextAdrFilename(existing, input.title)
-      : uniqueDocFilename(existing, slugify(input.title))
-    const number = kind === 'adrs' ? Number(file.slice(0, 4)) : 0
-    const content = kind === 'adrs'
-      ? renderNewAdr({ ...input, number, elementId: scope.elementId })
-      : renderNewDoc({ ...input, elementId: scope.elementId })
+    // Reads can throw (permission revoked, an oversized index.md); the
+    // callers only branch on the path, so a failure is a `null` like any
+    // other failed write.
+    let path: string
+    try {
+      const existing = (await listFilesAt(dir)) ?? []
+      const file = kind === 'adrs'
+        ? nextAdrFilename(existing, input.title)
+        : uniqueDocFilename(existing, slugify(input.title))
+      const number = kind === 'adrs' ? Number(file.slice(0, 4)) : 0
+      const content = kind === 'adrs'
+        ? renderNewAdr({ ...input, number, elementId: scope.elementId })
+        : renderNewDoc({ ...input, elementId: scope.elementId })
 
-    const path = `${dir}/${file}`
-    if (!(await writeTextFileAt(path, content))) return null
+      path = `${dir}/${file}`
+      if (!(await writeTextFileAt(path, content))) return null
 
-    // Keep the bundle's section index in step, as an OKF consumer expects.
-    const indexPath = `${dir}/index.md`
-    const index = appendToIndex(await readTextFileAt(indexPath), dirTitle(kind, dir), file, input.title, input.description)
-    await writeTextFileAt(indexPath, index)
+      // Keep the bundle's section index in step, as an OKF consumer expects.
+      const indexPath = `${dir}/index.md`
+      const index = appendToIndex(await readTextFileAt(indexPath), dirTitle(kind, dir), file, input.title, input.description)
+      await writeTextFileAt(indexPath, index)
+    } catch (err) {
+      log.error('docs create failed', { kind, dir, err })
+      return null
+    }
 
     if (needsDirective) {
       const line = docsDirectiveLine(kind, dir)
@@ -133,11 +144,10 @@ export const useDocsStore = create<DocsState>((set, get) => ({
 
     const current = useWorkspaceStore.getState().workspace
     if (current) await get().load(current)
-    set((s) => ({ version: s.version + 1 }))
     return path
   },
 
-  reset: () => set({ bundles: {}, loading: false, loaded: false }),
+  reset: () => { loadTicket++; set({ bundles: {}, loaded: false }) },
 }))
 
 // ─── Selectors ───────────────────────────────────────────────────────
@@ -171,24 +181,12 @@ export function selectElementDocs(bundles: DocsState['bundles'], ws: Workspace, 
   return collect(bundles, element ? elementDocsScope(element) : {})
 }
 
-/** Ids of every element whose own bundle holds at least one concept — the
- *  set the canvas badges. */
-export function selectElementsWithDocs(bundles: DocsState['bundles'], ws: Workspace): Set<string> {
-  const out = new Set<string>()
-  const visit = (el: { id: string; directives?: string[] }) => {
-    const scope = elementDocsScope(el)
-    for (const kind of ['docs', 'adrs'] as const) {
-      const dir = scope[kind]
-      if (dir && (bundles[bundleKey(kind, dir)]?.concepts.length ?? 0) > 0) out.add(el.id)
-    }
-  }
-  for (const p of ws.model.people) visit(p)
-  for (const s of ws.model.softwareSystems) {
-    visit(s)
-    for (const c of s.containers) {
-      visit(c)
-      for (const comp of c.components) visit(comp)
-    }
-  }
-  return out
+/** Whether one element's own bundles hold at least one concept — what the
+ *  canvas badges. A primitive, so nodes can subscribe to it directly. */
+export function selectElementHasDocs(bundles: DocsState['bundles'], element: Pick<ModelElement, 'directives'>): boolean {
+  const scope = elementDocsScope(element)
+  return (['docs', 'adrs'] as const).some((kind) => {
+    const dir = scope[kind]
+    return !!dir && (bundles[bundleKey(kind, dir)]?.concepts.length ?? 0) > 0
+  })
 }
