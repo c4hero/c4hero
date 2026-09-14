@@ -35,6 +35,16 @@ export function validateElementId(id: string, isTaken: (id: string) => boolean):
   return null
 }
 
+/** The identifier form an ID takes once it has been through the DSL: the
+ *  serializer writes IDs as variable names, and a variable name is
+ *  `[A-Za-z0-9_]` with no leading digit, so anything else is rewritten on the
+ *  way out and comes back changed. Anywhere an ID is shown as "the identifier
+ *  in the DSL" (an export, a citation), this is the form to show — otherwise
+ *  the next save→reload silently changes it. */
+export function dslIdentifierForm(id: string): string {
+  return id.replace(/[^A-Za-z0-9_]/g, '_').replace(/^([0-9])/, 'e$1')
+}
+
 /** Derive a camelCase identifier from a display name:
  *  "Payment Service" → paymentService, "API Gateway 2" → apiGateway2.
  *  Diacritics are stripped, everything else non-alphanumeric splits words. */

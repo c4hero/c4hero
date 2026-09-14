@@ -156,8 +156,11 @@ export default function FloatingTopPill() {
 
   const wsName = workspace.name ?? 'workspace'
 
-  async function handleExport(format: ExportFormat, theme: ExportTheme = 'dark') {
-    if (!workspace) return
+  /** Resolves `false` when nothing was exported — a cancelled picker or a
+   *  failure the toast already reported — so the dialog does not show the
+   *  success check for an export that did not happen. */
+  async function handleExport(format: ExportFormat, theme: ExportTheme = 'dark'): Promise<boolean> {
+    if (!workspace) return false
     try {
       switch (format) {
         case 'dsl':
@@ -190,19 +193,20 @@ export default function FloatingTopPill() {
           const { runOkfExport } = await import('@/lib/okfExportFlow')
           const message = await runOkfExport(workspace, format === 'okf-folder' ? 'folder' : 'zip', `c4hero ${__APP_VERSION__}`)
           // null = the user cancelled the folder picker; nothing to report.
-          if (message) {
-            setCopyToast(message)
-            announce(message)
-            setTimeout(() => setCopyToast(null), 2000)
-          }
+          if (!message) return false
+          setCopyToast(message)
+          announce(message)
+          setTimeout(() => setCopyToast(null), 2000)
           break
         }
       }
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Export failed'
       setCopyToast(message)
       announce(message)
       setTimeout(() => setCopyToast(null), 4000)
+      return false
     }
   }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { conceptStem, exportWorkspaceAsOkf, okfBundleName, type OkfFile } from './okfExport'
 import { createBigBankSample } from './templates'
-import { parseDSL } from './dsl'
+import { parseDSL, serializeDSL } from './dsl'
 import type { Workspace } from '@/types/model'
 
 // A workspace that exercises every section: people, systems, containers,
@@ -219,17 +219,28 @@ describe('exportWorkspaceAsOkf — element concepts', () => {
     const files = byPath(exportWorkspaceAsOkf(full()))
     const system = files.get('systems/internetBankingSystem.md')!
     expect(system).toContain('description: "Lets customers bank | online"')
-    expect(system).toContain('Lets customers bank \\| online')
+    // A description quoted inside a list item is escaped where it lands.
     expect(files.get('containers/webApplication.md')).toContain('Handles \\[sign in\\]')
   })
 
-  it('escapes backslashes before the markdown escapes it adds', () => {
+  it('leaves a description as written where it stands on its own', () => {
     const ws = full()
-    ws.model.people[0].description = 'Path C:\\temp [x] a|b'
+    ws.model.people[0].description = 'Path C:\\temp [x] a|b\n\nSee [the docs](/readme.md).'
     const files = byPath(exportWorkspaceAsOkf(ws))
-    // Frontmatter is JSON-quoted; the body is markdown-escaped.
-    expect(files.get('people/customer.md')).toContain('description: "Path C:\\\\temp [x] a|b"')
-    expect(files.get('people/customer.md')).toContain('Path C:\\\\temp \\[x\\] a\\|b')
+    const customer = files.get('people/customer.md')!
+    // Frontmatter is JSON-quoted, so only the backslash is escaped there.
+    expect(customer).toContain('description: "Path C:\\\\temp [x] a|b\\n\\nSee [the docs](/readme.md)."')
+    // The body is the author's markdown: paragraphs kept, nothing escaped.
+    expect(customer).toContain('# Customer\n\nPath C:\\temp [x] a|b\n\nSee [the docs](/readme.md).\n')
+  })
+
+  it('normalises line endings so the same model exports byte-identically', () => {
+    const crlf = full()
+    crlf.model.people[0].description = 'One\r\n\r\nTwo'
+    const lf = full()
+    lf.model.people[0].description = 'One\n\nTwo'
+    expect(byPath(exportWorkspaceAsOkf(crlf)).get('people/customer.md'))
+      .toBe(byPath(exportWorkspaceAsOkf(lf)).get('people/customer.md'))
   })
 })
 
@@ -244,6 +255,34 @@ describe('exportWorkspaceAsOkf — deployment and views', () => {
     expect(frontmatterOf(env)).toEqual({ type: '"DeploymentEnvironment"', title: '"Live"' })
     // A node the user *did* name keeps its identifier.
     expect(frontmatterOf(files.get('deployment/lb.md')!)!.structurizr_id).toBe('"lb"')
+  })
+
+  it('names ids in the form the DSL will hold them, so a re-export stays put', () => {
+    // Ids minted in the app, not by the parser: nanoid's alphabet includes
+    // `-`, which is not a legal DSL identifier and gets rewritten on save.
+    const ws = full()
+    ws.model.softwareSystems[0].id = 'kXf2-b9Q'
+    const files = byPath(exportWorkspaceAsOkf(ws))
+    expect(files.has('systems/kXf2_b9Q.md')).toBe(true)
+    expect(frontmatterOf(files.get('systems/kXf2_b9Q.md')!)!.structurizr_id).toBe('"kXf2_b9Q"')
+
+    // The whole point: saving and reloading must not move the file.
+    const reloaded = parseDSL(serializeDSL(ws)).workspace!
+    expect(byPath(exportWorkspaceAsOkf(reloaded)).has('systems/kXf2_b9Q.md')).toBe(true)
+  })
+
+  it('keys a deployment environment by name, which is all the DSL carries', () => {
+    // An environment id is internal — the DSL identifies environments by name
+    // — so it is a different id every time the workspace is parsed.
+    const ws = full()
+    ws.model.deploymentEnvironments[0].id = 'aB7_x2Qz'
+    const files = byPath(exportWorkspaceAsOkf(ws))
+    expect(files.has('deployment/live.md')).toBe(true)
+    expect(files.has('deployment/aB7_x2Qz.md')).toBe(false)
+    expect(frontmatterOf(files.get('deployment/live.md')!)).toEqual({
+      type: '"DeploymentEnvironment"',
+      title: '"Live"',
+    })
   })
 
   it('renders the environment as a node tree with instances and infrastructure', () => {

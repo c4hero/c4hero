@@ -74,6 +74,29 @@ describe('ExportDialog', () => {
     }
   })
 
+  it('marks an export that went through, and one that was cancelled', async () => {
+    vi.stubGlobal('showDirectoryPicker', vi.fn())
+    try {
+      // A folder export the user cancelled resolves false: nothing was
+      // written, so the row must not claim success.
+      const cancelled = vi.fn().mockResolvedValue(false)
+      const { unmount } = render(<ExportDialog onExport={cancelled} onCopy={vi.fn()} onClose={vi.fn()} />)
+      const button = screen.getByRole('button', { name: 'Save OKF bundle to a folder' })
+      fireEvent.click(button)
+      await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+      expect(button.getAttribute('style')).not.toContain('tint-success')
+      unmount()
+
+      const exported = vi.fn().mockResolvedValue(undefined)
+      render(<ExportDialog onExport={exported} onCopy={vi.fn()} onClose={vi.fn()} />)
+      const second = screen.getByRole('button', { name: 'Save OKF bundle to a folder' })
+      fireEvent.click(second)
+      await waitFor(() => expect(second.getAttribute('style')).toContain('tint-success'))
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('gives the two Download buttons distinct accessible names', () => {
     renderDialog()
     expect(screen.getByRole('button', { name: 'Download interactive HTML' })).toBeTruthy()

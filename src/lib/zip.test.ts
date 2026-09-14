@@ -76,6 +76,13 @@ describe('buildZip', () => {
     expect(buildZip(files)).toEqual(buildZip(files))
   })
 
+  it('refuses more entries than the format can count', () => {
+    const many = Array.from({ length: 0x10000 }, (_, i) => ({ path: `f${i}.md`, content: '' }))
+    // 65535 is fine; one more would wrap the 16-bit count into a corrupt archive.
+    expect(() => buildZip(many.slice(0, 0xffff))).not.toThrow()
+    expect(() => buildZip(many)).toThrow(/Too many files/)
+  })
+
   it('wraps the bytes in a zip Blob', () => {
     const blob = zipBlob([{ path: 'a.md', content: 'A' }])
     expect(blob.type).toBe('application/zip')

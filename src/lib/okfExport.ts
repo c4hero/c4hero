@@ -10,7 +10,7 @@ import type {
   View,
   Workspace,
 } from '@/types/model'
-import { deriveIdFromName } from '@/lib/identifier'
+import { deriveIdFromName, dslIdentifierForm } from '@/lib/identifier'
 import { WINDOWS_RESERVED_NAME } from '@/lib/filenames'
 import { allViewsOf } from '@/store/workspace-helpers'
 
@@ -127,6 +127,18 @@ const SECTION_DIRS = {
   views: 'views',
 } as const
 
+/** The directories a bundle owns. A re-export into a folder only ever writes
+ *  or removes files here and the root `index.md`; anything else in the folder
+ *  the user picked is none of the exporter's business. */
+export const OKF_SECTION_DIRS: readonly string[] = Object.values(SECTION_DIRS)
+
+/** Whether a root `index.md` was written by this exporter. Re-exporting into
+ *  a folder prunes the concepts that are gone from the model, so it has to be
+ *  sure the folder is a bundle and not, say, someone's Documents. */
+export function isOkfBundleIndex(content: string): boolean {
+  return /^---\s*\r?\nokf_version:/.test(content)
+}
+
 /** Names the spec reserves for index and log files. A concept stem is never
  *  allowed to shadow them. */
 const RESERVED_STEMS = new Set(['index', 'log'])
@@ -149,8 +161,11 @@ function buildContext(ws: Workspace): Ctx {
     if (!set) taken.set(dir, (set = new Set()))
     // A parser-synthesised id (an element declared without `x = …`) is
     // positional, so the stem comes from the name instead — that keeps the
-    // path stable when a line is added above the element.
-    const stem = stemSource ?? (isSyntheticId(id) ? deriveIdFromName(name) : id)
+    // path stable when a line is added above the element. Everything else
+    // goes through the DSL's identifier form: the serializer rewrites an id
+    // the DSL cannot spell (`kXf2-b9Q` → `kXf2_b9Q`), and a path that used
+    // the raw id would move the first time the workspace was saved.
+    const stem = stemSource ?? (isSyntheticId(id) ? deriveIdFromName(name) : dslIdentifierForm(id))
     paths.set(id, `${dir}/${conceptStem(stem, set)}.md`)
     names.set(id, name)
   }
@@ -188,7 +203,10 @@ function buildContext(ws: Workspace): Ctx {
     for (const child of node.children) walkNode(child, env, node.id)
   }
   for (const env of ws.model.deploymentEnvironments) {
-    assign(SECTION_DIRS.deployment, env.id, env.name)
+    // An environment's id is internal: the DSL identifies environments by
+    // name only (`deploymentEnvironment "Live" {`), so the id is a fresh
+    // one every time the workspace is parsed. The name is what is stable.
+    assign(SECTION_DIRS.deployment, env.id, env.name, deriveIdFromName(env.name))
     for (const node of env.deploymentNodes) walkNode(node, env)
   }
 
@@ -238,6 +256,14 @@ function pushUnique<K, V>(map: Map<K, V[]>, key: K, value: V) {
  *  across edits, so the bundle never exposes them. */
 function isSyntheticId(id: string): boolean {
   return /^p\d+$/.test(id)
+}
+
+/** The identifier to publish for an element, or `undefined` when the DSL
+ *  carries none. Ids minted in the app are as machine-made as the parser's,
+ *  but they do reach the DSL as variable names, so they are worth naming —
+ *  in the form the DSL will hold them. */
+function structurizrId(id: string): string | undefined {
+  return isSyntheticId(id) ? undefined : dslIdentifierForm(id)
 }
 
 /** Views share an id space with elements only by accident; prefix so a view
@@ -413,7 +439,7 @@ function elementConcept(
     ['description', el.description || undefined],
     ['tags', userTags(el.tags, type)],
     ['resource', el.url],
-    ['structurizr_id', isSyntheticId(el.id) ? undefined : el.id],
+    ['structurizr_id', structurizrId(el.id)],
     ...extra,
     ['status', el.status],
     ['owner', el.owner],
@@ -421,7 +447,7 @@ function elementConcept(
     ['properties', el.properties],
   ]
   const body = [
-    el.description ? escapeInline(el.description) : '',
+    el.description ? blockText(el.description) : '',
     relationshipTable(ctx, el.id),
     ...sections,
     viewList(ctx, el.id),
@@ -438,7 +464,6 @@ function environmentConcept(ctx: Ctx, env: DeploymentEnvironment): Concept {
   const fields: FmField[] = [
     ['type', 'DeploymentEnvironment'],
     ['title', env.name],
-    ['structurizr_id', isSyntheticId(env.id) ? undefined : env.id],
   ]
   const tree = env.deploymentNodes.map((n) => nodeTree(ctx, n, 0)).join('\n')
   const body = [tree ? section('Deployment nodes', tree) : '']
@@ -498,7 +523,7 @@ function viewConcept(ctx: Ctx, view: View): Concept {
   const headers = dynamic ? ['Step', 'From', 'To', 'Description'] : ['From', 'To', 'Description']
 
   const body = [
-    view.description ? escapeInline(view.description) : '',
+    view.description ? blockText(view.description) : '',
     elements.length ? section('Elements', elements.join('\n')) : '',
     rows.length ? section('Relationships', table(headers, rows)) : '',
   ]
@@ -588,7 +613,7 @@ function rootIndex(ws: Workspace, sections: SectionOutput[], generator?: string)
     `# ${title}`,
     '',
   ]
-  if (ws.description) lines.push(escapeInline(ws.description), '')
+  if (ws.description) lines.push(blockText(ws.description), '')
   lines.push(
     `A C4 architecture model exported from Structurizr DSL by ${escapeInline(generator ?? 'c4hero')}.`,
     'The DSL is the source of truth; this bundle is a read-only projection of it.',
@@ -660,6 +685,21 @@ function escapeInline(text: string): string {
   return text.replace(/\s*\n\s*/g, ' ').replace(/[\\[\]|]/g, '\\$&').trim()
 }
 
+/** A description standing on its own as body text. Unlike `escapeInline` this
+ *  keeps the author's paragraphs and markdown intact — the frontmatter beside
+ *  it carries the same text verbatim, so escaping only the body would make it
+ *  the lossier of the two. */
+function blockText(text: string): string {
+  return normalizeNewlines(text).trim()
+}
+
+/** CR and CRLF both become LF, so a workspace that picked up Windows line
+ *  endings exports byte-identically to the same workspace without them —
+ *  applied wherever text reaches the bundle, body and frontmatter alike. */
+function normalizeNewlines(text: string): string {
+  return text.replace(/\r\n?/g, '\n')
+}
+
 /** Structurizr adds `Element` plus the type name (`Software System`,
  *  `Deployment Node`, …) to every element's tags. The `type` field already
  *  carries that, so only the user's own tags are exported. */
@@ -701,5 +741,5 @@ function frontmatter(fields: FmField[]): string {
  *  double-quoted style, so this escapes quotes, backslashes and control
  *  characters correctly and never needs a block scalar. */
 function yaml(value: string): string {
-  return JSON.stringify(value)
+  return JSON.stringify(normalizeNewlines(value))
 }

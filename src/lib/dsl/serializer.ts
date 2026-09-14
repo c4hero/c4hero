@@ -20,6 +20,7 @@ import type {
     DeploymentNode,
     InfrastructureNode,
 } from '@/types/model'
+import { dslIdentifierForm } from '@/lib/identifier'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
@@ -360,12 +361,10 @@ class SerializerContext {
         this.allElementIds.add(id)
         // Use the element's own ID as the DSL variable name so that IDs
         // survive a serialize → parse roundtrip (critical for sidecar data).
-        // Sanitize to make it a valid identifier:
-        //   - replace hyphens and other invalid chars with underscores
-        //   - prepend 'e' if the first character is a digit
-        const sanitized = id
-            .replace(/[^a-zA-Z0-9_]/g, '_')
-            .replace(/^([0-9])/, 'e$1')
+        // Sanitize to make it a valid identifier: hyphens and other invalid
+        // chars become underscores, a leading digit gets an 'e'. Shared with
+        // the OKF export, which has to name the same post-roundtrip form.
+        const sanitized = dslIdentifierForm(id)
         // Ensure uniqueness (rare: two distinct IDs with the same sanitized form)
         let varName = sanitized || 'element'
         if (this.usedVarNames.has(varName)) {

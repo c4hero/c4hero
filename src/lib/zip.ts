@@ -16,6 +16,13 @@ export interface ZipEntry {
 }
 
 export function buildZip(entries: ReadonlyArray<ZipEntry>): Uint8Array<ArrayBuffer> {
+  // The end-of-central-directory record counts entries in 16 bits. Past that
+  // the count wraps and the archive is silently unreadable, so refuse rather
+  // than hand back something corrupt. (ZIP64 lifts the limit; a bundle of
+  // markdown files has no business getting near it.)
+  if (entries.length > MAX_ENTRIES) {
+    throw new Error(`Too many files for one archive: ${entries.length} (the ZIP format allows ${MAX_ENTRIES})`)
+  }
   const encoder = new TextEncoder()
   const locals: Uint8Array[] = []
   const centrals: Uint8Array[] = []
@@ -93,6 +100,8 @@ export function zipBlob(entries: ReadonlyArray<ZipEntry>): Blob {
   return new Blob([buildZip(entries)], { type: 'application/zip' })
 }
 
+/** Entries addressable by the 16-bit counts in the end-of-central-directory. */
+const MAX_ENTRIES = 0xffff
 const LOCAL_SIG = 0x04034b50
 const CENTRAL_SIG = 0x02014b50
 const END_SIG = 0x06054b50
