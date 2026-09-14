@@ -110,6 +110,7 @@ export const createLifecycleSlice: StateCreator<
       createViewDefaults: null,
       impactTargetIds: null,
       importDialogOpen: false,
+      docsDialogOpen: false,
       diskConflict: null,
       diskFileMissing: false,
       undoStack: [],

@@ -21,13 +21,14 @@ export interface ParsedDocument {
   body: string
 }
 
-const BLOCK = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/
+// The block may be empty (`---\n---`), and a BOM must not hide it.
+const BLOCK = /^\uFEFF?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/
 
 export function parseFrontmatter(text: string): ParsedDocument {
   const match = BLOCK.exec(text)
   if (!match) return { frontmatter: {}, hasFrontmatter: false, body: text }
   const frontmatter: Frontmatter = {}
-  for (const line of match[1].split(/\r?\n/)) {
+  for (const line of (match[1] ?? '').split(/\r?\n/)) {
     // Block content (indented) belongs to the previous key; we don't model it.
     if (/^\s/.test(line) || line.trim() === '' || line.trimStart().startsWith('#')) continue
     const colon = line.indexOf(':')

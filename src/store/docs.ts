@@ -119,7 +119,8 @@ export const useDocsStore = create<DocsState>((set, get) => ({
       const file = kind === 'adrs'
         ? nextAdrFilename(existing, input.title)
         : uniqueDocFilename(existing, slugify(input.title))
-      const number = kind === 'adrs' ? Number(file.slice(0, 4)) : 0
+      // The file's leading number, however many digits adr-tools reached.
+      const number = kind === 'adrs' ? parseInt(file, 10) : 0
       const content = kind === 'adrs'
         ? renderNewAdr({ ...input, number, elementId: scope.elementId })
         : renderNewDoc({ ...input, elementId: scope.elementId })

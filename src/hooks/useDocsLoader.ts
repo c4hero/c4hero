@@ -19,4 +19,8 @@ export function useDocsLoader(): void {
     if (ws && key !== null) void load(ws)
     else reset()
   }, [key, load, reset])
+
+  // The canvas unmounts when the workspace closes, so clear here too: the next
+  // folder must not briefly show this one's bundles under a matching key.
+  useEffect(() => reset, [reset])
 }

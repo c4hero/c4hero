@@ -60,6 +60,11 @@ describe('parseFrontmatter', () => {
     expect(doc.body).toBe('body\r\n')
   })
 
+  it('accepts an empty block and a leading BOM', () => {
+    expect(parseFrontmatter('---\n---\nbody\n')).toEqual({ frontmatter: {}, hasFrontmatter: true, body: 'body\n' })
+    expect(parseFrontmatter('\uFEFF---\ntype: X\n---\nbody')).toMatchObject({ frontmatter: { type: 'X' }, body: 'body' })
+  })
+
   it('does not treat a --- further down as frontmatter', () => {
     const doc = parseFrontmatter('intro\n---\ntype: X\n---\n')
     expect(doc.hasFrontmatter).toBe(false)

@@ -102,12 +102,13 @@ function renderLink(label: string, href: string, onRelativeLink?: MarkdownProps[
   if (external) {
     return <a href={external} target="_blank" rel="noopener noreferrer">{renderInline(label)}</a>
   }
-  // Relative link into the bundle: let the host navigate, else plain text.
+  // Relative link into the bundle: let the host navigate. The browser never
+  // follows it — an unhandled target would leave the app for a bogus route.
   if (!/^[a-z]+:/i.test(href) && onRelativeLink) {
     return (
       <a
         href={href}
-        onClick={(e) => { if (onRelativeLink(href)) e.preventDefault() }}
+        onClick={(e) => { e.preventDefault(); onRelativeLink(href) }}
       >
         {renderInline(label)}
       </a>
