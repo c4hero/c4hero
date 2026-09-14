@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePersistentState, clearAiSession } from './sessionCache'
 import { Loader2, Sparkles, ArrowRight, MessagesSquare, HelpCircle, CornerDownRight, ChevronRight, Layers, X } from 'lucide-react'
+import { useDocsStore } from '@/store/docs'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import {
-  interviewAskStream, interviewKickoffMessage, interviewBuildPlan,
+  interviewAskStream, interviewKickoffMessage, interviewBuildPlan, buildDocsContext,
   describeOps, flattenElements, viewLabel, classifyPlanScopes, escapeRegExp,
   type AiProvider, type EditPlan, type AiChatTurn, type PlanScope,
 } from '@/lib/ai'
@@ -18,6 +19,7 @@ const INTERVIEW_TARGET = 5
 
 export function InterviewBody({ provider }: { provider: AiProvider }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
+  const docsBundles = useDocsStore((s) => s.bundles)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
 
   // Conversation state persists across close→reopen so a long interview resumes.
@@ -65,6 +67,14 @@ export function InterviewBody({ provider }: { provider: AiProvider }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (run.error) setStreamingQ(null) }, [run.error])
 
+  // Documentation for the view, so the interviewer skips what is written down.
+  // Memoised: every keystroke in the answer box (and every streamed token)
+  // re-renders, and building the section walks and clips every document.
+  const docs = useMemo(
+    () => (workspace && view ? buildDocsContext(docsBundles, workspace, view) : null),
+    [docsBundles, workspace, view],
+  )
+
   if (!workspace || !view) return <Empty>Open a view to start an interview.</Empty>
   const ws = workspace
   const v: View = view
@@ -80,7 +90,7 @@ export function InterviewBody({ provider }: { provider: AiProvider }) {
     setStreamingQ('')
     run.go(async (signal) => {
       const kickoff = interviewKickoffMessage(v)
-      const q = await interviewAskStream(provider, ws, v, [], kickoff, streamQ, signal)
+      const q = await interviewAskStream(provider, ws, v, [], kickoff, streamQ, signal, docs)
       setHistory([{ role: 'user', content: kickoff }, { role: 'assistant', content: q }])
       return q
     }, commitQuestion)
@@ -95,7 +105,7 @@ export function InterviewBody({ provider }: { provider: AiProvider }) {
     // Always fetch the next question so the transcript ends on a question
     // (keeps history alternating, and the next one is ready if they continue).
     run.go(async (signal) => {
-      const q = await interviewAskStream(provider, ws, v, history, a, streamQ, signal)
+      const q = await interviewAskStream(provider, ws, v, history, a, streamQ, signal, docs)
       setHistory([...history, { role: 'user', content: a }, { role: 'assistant', content: q }])
       return q
     }, commitQuestion)
@@ -106,7 +116,7 @@ export function InterviewBody({ provider }: { provider: AiProvider }) {
     setAnswer('')
     setStreamingQ('')
     run.go(async (signal) => {
-      const q = await interviewAskStream(provider, ws, v, history, msg, streamQ, signal)
+      const q = await interviewAskStream(provider, ws, v, history, msg, streamQ, signal, docs)
       setHistory([...history, { role: 'user', content: msg }, { role: 'assistant', content: q }])
       return q
     }, commitQuestion)

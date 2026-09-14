@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Check, CheckCircle2, MessagesSquare, SendHorizontal, Wand2, X, AlertCircle, Loader2 } from 'lucide-react'
+import { useDocsStore } from '@/store/docs'
 import { useWorkspaceStore } from '@/store/workspace'
 import { parseDSL } from '@/lib/dsl'
 import {
-  answerQuestionStream, planEdit, generateDiagramStream,
+  answerQuestionStream, buildDocsContext, planEdit, generateDiagramStream,
   detectComposeMode, isQuestion, describeOps, flattenElements,
   type AiProvider, type EditPlan, type EditOp, type AiChatTurn,
 } from '@/lib/ai'
@@ -155,7 +156,7 @@ export function ChatBody({ provider, workspace, scopeIds, onClose }: {
       run.go(
         async (signal) => {
           try {
-            return await answerQuestionStream(provider, ws, null, text, history, (d) => patch(i, (msg) => ({ ...msg, text: (msg as { text: string }).text + d } as ChatMsg)), signal)
+            return await answerQuestionStream(provider, ws, null, text, history, (d) => patch(i, (msg) => ({ ...msg, text: (msg as { text: string }).text + d } as ChatMsg)), signal, buildDocsContext(useDocsStore.getState().bundles, ws, null))
           } finally {
             // A Stop (or error) still settles the bubble — no stuck caret.
             patch(i, { done: true })

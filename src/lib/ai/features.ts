@@ -1,5 +1,6 @@
 import type { Workspace, View } from '@/types/model'
 import type { AiProvider, DescribeResult, EditPlan, ReviewResult, ReviewFinding, AiChatTurn } from './types'
+import type { DocsContext } from './docsContext'
 import {
   generateSystem, generateUser, reviewSystem, reviewUser,
   describeSystem, describeUser, editSystem, editUser, adrSystem, adrUser,
@@ -49,11 +50,11 @@ export async function generateDiagramStream(
  *  carries the operations that fix it). Pass `view` to scope the review to the
  *  current screen; omit/null to review the whole model. */
 export async function reviewArchitecture(
-  provider: AiProvider, ws: Workspace, view?: View | null,
+  provider: AiProvider, ws: Workspace, view?: View | null, docs?: DocsContext | null,
 ): Promise<ReviewResult> {
   const raw = await provider.completeJson({
-    system: reviewSystem(),
-    user: reviewUser(ws, view),
+    system: reviewSystem(!!docs),
+    user: reviewUser(ws, view, docs),
     schema: reviewSchema,
     validate: isRecord,
     maxTokens: 6000,
@@ -64,9 +65,20 @@ export async function reviewArchitecture(
   const internal = view ? viewScopeInternalIds(ws, view) : new Set<string>()
   const humanize = makeHumanizer(ws) // compile the id→name map once for the whole review
   const findings = toReviewResult(raw).findings
-    .map((f) => humanizeFinding(f, humanize))
+    .map((f) => keepKnownCitations(humanizeFinding(f, humanize), docs))
     .filter((f) => !isExternalMisplacement(f, internal))
   return { findings }
+}
+
+/** Keep only citations that name a document the model was actually shown, so
+ *  a citation in the UI always resolves. Citations are ids, never prose, so
+ *  they bypass the humanizer on purpose — an element id inside a concept path
+ *  (`docs/shop/overview`) must not be rewritten to a name. */
+function keepKnownCitations(f: ReviewFinding, docs?: DocsContext | null): ReviewFinding {
+  if (!f.citations) return f
+  // De-duplicated too: the chips key on the id.
+  const kept = docs ? [...new Set(f.citations)].filter((id) => docs.conceptIds.has(id)) : []
+  return { ...f, citations: kept.length ? kept : undefined }
 }
 
 /** Apply the id→name humanizer to a finding's prose fields (title, detail,
@@ -96,10 +108,10 @@ function isExternalMisplacement(f: ReviewFinding, internalIds: Set<string>): boo
 /** Humanize + scope-filter one raw finding, exactly as `reviewArchitecture` does
  *  in bulk — returns the finished finding, or null if it's malformed or a
  *  suppressed external-misplacement. */
-function finishFinding(raw: unknown, humanize: (s: string) => string, internal: Set<string>): ReviewFinding | null {
+function finishFinding(raw: unknown, humanize: (s: string) => string, internal: Set<string>, docs?: DocsContext | null): ReviewFinding | null {
   const f = toReviewFinding(raw)
   if (!f) return null
-  const h = humanizeFinding(f, humanize)
+  const h = keepKnownCitations(humanizeFinding(f, humanize), docs)
   return isExternalMisplacement(h, internal) ? null : h
 }
 
@@ -116,10 +128,11 @@ export async function reviewArchitectureStream(
   view: View | null | undefined,
   onFinding: (finding: ReviewFinding) => void,
   signal?: AbortSignal,
+  docs?: DocsContext | null,
 ): Promise<ReviewResult> {
   // Non-streaming providers: run the normal review, then replay its findings.
   if (!provider.completeStream) {
-    const result = await reviewArchitecture(provider, ws, view)
+    const result = await reviewArchitecture(provider, ws, view, docs)
     result.findings.forEach(onFinding)
     return result
   }
@@ -128,7 +141,7 @@ export async function reviewArchitectureStream(
   const humanize = makeHumanizer(ws)
   const collected: ReviewFinding[] = []
   const process = (raw: unknown): void => {
-    const f = finishFinding(raw, humanize, internal)
+    const f = finishFinding(raw, humanize, internal, docs)
     if (f) { collected.push(f); onFinding(f) }
   }
 
@@ -138,8 +151,8 @@ export async function reviewArchitectureStream(
   const parse = createArrayStreamParser('findings')
   let acc = ''
   const text = await provider.completeStream({
-    system: `${reviewSystem()}\n\nReturn ONLY a JSON object of the form {"findings": [ ... ]} that conforms to this JSON Schema — no prose, no code fence:\n${JSON.stringify(reviewSchema)}`,
-    user: reviewUser(ws, view),
+    system: `${reviewSystem(!!docs)}\n\nReturn ONLY a JSON object of the form {"findings": [ ... ]} that conforms to this JSON Schema — no prose, no code fence:\n${JSON.stringify(reviewSchema)}`,
+    user: reviewUser(ws, view, docs),
     maxTokens: 6000,
     onText: (delta) => { acc += delta; for (const raw of parse(acc)) process(raw) },
     signal,
@@ -280,10 +293,10 @@ export async function planEdit(provider: AiProvider, ws: Workspace, instruction:
 }
 
 /** Draft an ADR → returns markdown. `ws` may be null (decision without a model). */
-export async function draftAdr(provider: AiProvider, ws: Workspace | null, topic: string): Promise<string> {
+export async function draftAdr(provider: AiProvider, ws: Workspace | null, topic: string, docs?: DocsContext | null): Promise<string> {
   return provider.complete({
     system: adrSystem(),
-    user: adrUser(ws, topic),
+    user: adrUser(ws, topic, docs),
     maxTokens: 4000,
   })
 }
@@ -295,9 +308,9 @@ export async function draftAdr(provider: AiProvider, ws: Workspace | null, topic
  *  `complete` when the provider has no SSE. Pass `signal` to cancel. */
 export async function answerQuestionStream(
   provider: AiProvider, ws: Workspace, view: View | null, question: string,
-  history: AiChatTurn[], onText: (delta: string) => void, signal?: AbortSignal,
+  history: AiChatTurn[], onText: (delta: string) => void, signal?: AbortSignal, docs?: DocsContext | null,
 ): Promise<string> {
-  const req = { system: qaSystem(), history, user: qaUser(ws, view, question), maxTokens: 2000 }
+  const req = { system: qaSystem(), history, user: qaUser(ws, view, question, docs), maxTokens: 2000 }
   if (!provider.completeStream) {
     const text = await provider.complete(req)
     onText(text)
@@ -312,9 +325,9 @@ export async function answerQuestionStream(
  *  support. Pass `signal` to cancel. */
 export async function interviewAskStream(
   provider: AiProvider, ws: Workspace, view: View, history: AiChatTurn[], userMessage: string,
-  onText: (delta: string) => void, signal?: AbortSignal,
+  onText: (delta: string) => void, signal?: AbortSignal, docs?: DocsContext | null,
 ): Promise<string> {
-  const req = { system: interviewSystem(ws, view), history, user: userMessage, maxTokens: 2500, cacheSystem: true }
+  const req = { system: interviewSystem(ws, view, docs), history, user: userMessage, maxTokens: 2500, cacheSystem: true }
   if (!provider.completeStream) {
     const text = await provider.complete(req)
     onText(text)

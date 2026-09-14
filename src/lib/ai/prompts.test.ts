@@ -6,7 +6,7 @@ import { isEditOp } from './schema'
 import { interviewBuildPlan } from './features'
 import {
   generateSystem, generateUser, reviewSystem, reviewUser, describeSystem, describeUser,
-  editSystem, editUser, adrSystem, adrUser, interviewSystem, interviewKickoff,
+  editSystem, editUser, adrSystem, adrUser, interviewSystem, interviewKickoff, qaSystem, qaUser,
   interviewPlanSystem, interviewPlanUser,
 } from './prompts'
 
@@ -66,6 +66,36 @@ describe('prompt builders', () => {
       expect(interviewKickoff({ type, key: 'k', elements: [], relationships: [] })).toBeTruthy()
     }
     expect(interviewKickoff(titled)).toContain('Orders')
+  })
+})
+
+describe('documentation grounding', () => {
+  const docs = {
+    text: 'DOCUMENTATION (1 of 1 documents)\n\n=== decisions/0002-services | Decision | Accepted | Services\nSplit it.',
+    conceptIds: new Set(['decisions/0002-services']),
+    titles: new Map([['decisions/0002-services', 'Services']]),
+    included: 1,
+    omitted: 0,
+  }
+
+  it('the review asks for citations only when documentation is attached', () => {
+    expect(reviewSystem()).not.toContain('citations')
+    expect(reviewSystem(true)).toContain('citations')
+    expect(reviewUser(ws, null, docs)).toContain('=== decisions/0002-services')
+    expect(reviewUser(ws, view, docs)).toContain('=== decisions/0002-services')
+    expect(reviewUser(ws, view)).not.toContain('DOCUMENTATION')
+  })
+
+  it('Q&A, the interview and the ADR drafter carry the documentation when given', () => {
+    expect(qaUser(ws, null, 'why?', docs)).toContain('=== decisions/0002-services')
+    expect(qaUser(ws, null, 'why?', docs).endsWith('Question: why?')).toBe(true)
+    expect(qaSystem()).toContain('DOCUMENTATION')
+    expect(interviewSystem(ws, view, docs)).toContain('=== decisions/0002-services')
+    expect(interviewSystem(ws, view, docs)).toContain('disagree')
+    expect(interviewSystem(ws, view)).not.toContain('DOCUMENTATION')
+    expect(adrUser(ws, 'pick a datastore', docs)).toContain('=== decisions/0002-services')
+    expect(adrUser(ws, 'pick a datastore', docs)).toContain('accepted decision')
+    expect(adrUser(null, 'x', docs)).toContain('=== decisions/0002-services')
   })
 })
 

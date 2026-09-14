@@ -1,5 +1,6 @@
 import type { Workspace, View } from '@/types/model'
 import { serializeContext, serializeViewContext, viewLabel } from './context'
+import type { DocsContext } from './docsContext'
 
 // System/user prompt builders. Pure string assembly — kept out of the provider
 // and feature orchestration so prompt wording is reviewable and testable.
@@ -46,7 +47,7 @@ export function generateUser(description: string): string {
 
 // ─── Review ─────────────────────────────────────────────────────────
 
-export function reviewSystem(): string {
+export function reviewSystem(hasDocs = false): string {
   return [
     'You are a senior software architect reviewing a C4 architecture model. Return a structured',
     'list of findings — not prose. For each issue, provide:',
@@ -72,6 +73,14 @@ export function reviewSystem(): string {
     'When a finding is about categorisation, lifecycle or ownership (e.g. datastores that should be',
     'tagged, deprecated elements, unassigned ownership), make it actionable with an updateElement',
     'op that sets tags / status / owner accordingly.',
+    ...(hasDocs ? [
+      '- citations: a DOCUMENTATION section lists the workspace\'s own documents and decision',
+      '  records. When a finding rests on, or contradicts, one of them, put that document\'s',
+      '  concept id — exactly as written after "===" — in `citations`. Prefer findings the',
+      '  documentation supports: a model that no longer honours an accepted decision, or a',
+      '  documented component or dependency missing from the model, is a high-severity finding.',
+      '  Never cite an id you were not shown; omit `citations` otherwise.',
+    ] : []),
     '',
     'Operation format (used only inside a finding\'s `operations`):',
     editSystem(),
@@ -80,9 +89,9 @@ export function reviewSystem(): string {
 
 /** Build the review user message. When `view` is provided, the review is scoped
  *  to what's on that screen; otherwise it covers the whole model. */
-export function reviewUser(ws: Workspace, view?: View | null): string {
-  if (view) {
-    return [
+export function reviewUser(ws: Workspace, view?: View | null, docs?: DocsContext | null): string {
+  const body = view
+    ? [
       `Review only the ${viewLabel(view)} — the elements and relationships shown on this screen.`,
       'Findings and operations should concern this view; do not critique unrelated parts of the model.',
       'Elements marked EXTERNAL belong to another system/container and are shown only as context;',
@@ -90,8 +99,13 @@ export function reviewUser(ws: Workspace, view?: View | null): string {
       '',
       serializeViewContext(ws, view),
     ].join('\n')
-  }
-  return `Review this entire architecture model:\n\n${serializeContext(ws)}`
+    : `Review this entire architecture model:\n\n${serializeContext(ws)}`
+  return withDocs(body, docs)
+}
+
+/** Append the documentation section to a user message, when there is one. */
+function withDocs(body: string, docs?: DocsContext | null): string {
+  return docs ? `${body}\n\n${docs.text}` : body
 }
 
 // ─── Grounded Q&A ───────────────────────────────────────────────────
@@ -104,14 +118,16 @@ export function qaSystem(): string {
     'relationships in the model rather than guessing. If the model does not contain enough',
     'information to answer, say so plainly instead of inventing elements or relationships that',
     'are not there. Answer in prose — short paragraphs or bullet points — never JSON or DSL.',
+    'When a DOCUMENTATION section is provided, draw on it as well, and name the document by',
+    'title when an answer rests on it.',
   ].join('\n')
 }
 
 /** Build the Q&A user message. Grounds on `view` (the current screen) when given,
  *  otherwise the whole model. */
-export function qaUser(ws: Workspace, view: View | null, question: string): string {
+export function qaUser(ws: Workspace, view: View | null, question: string, docs?: DocsContext | null): string {
   const context = view ? serializeViewContext(ws, view) : serializeContext(ws)
-  return [context, '', `Question: ${question}`].join('\n')
+  return [withDocs(context, docs), '', `Question: ${question}`].join('\n')
 }
 
 // ─── Auto-describe ──────────────────────────────────────────────────
@@ -195,11 +211,17 @@ export function adrSystem(): string {
   ].join('\n')
 }
 
-export function adrUser(ws: Workspace | null, topic: string): string {
+export function adrUser(ws: Workspace | null, topic: string, docs?: DocsContext | null): string {
   const parts: string[] = []
   if (ws) {
     parts.push('Current architecture model for grounding:')
     parts.push(serializeContext(ws))
+    parts.push('')
+  }
+  if (docs) {
+    parts.push('Existing documentation and decision records. Do not contradict an accepted decision')
+    parts.push('without saying so explicitly; reference related decisions by title.')
+    parts.push(docs.text)
     parts.push('')
   }
   parts.push(`Draft an ADR for the following decision: ${topic.trim()}`)
@@ -208,7 +230,7 @@ export function adrUser(ws: Workspace | null, topic: string): string {
 
 // ─── Interview ──────────────────────────────────────────────────────
 
-export function interviewSystem(ws: Workspace, view: View): string {
+export function interviewSystem(ws: Workspace, view: View, docs?: DocsContext | null): string {
   return [
     'You are interviewing a software architect about the diagram they are currently looking at,',
     'to fill gaps and improve the model. Ask ONE focused, specific question per turn —',
@@ -218,8 +240,13 @@ export function interviewSystem(ws: Workspace, view: View): string {
     'question to one or two sentences. Do not answer for the user, do not summarize, and do not',
     'emit any operations — just ask the next question. If the model already seems complete, ask',
     'a question that would still add useful detail.',
+    ...(docs ? [
+      'A DOCUMENTATION section follows the diagram. Do not ask about what it already answers;',
+      'do ask where the diagram and the documentation disagree, and about decisions the diagram',
+      'does not yet reflect.',
+    ] : []),
     '',
-    serializeViewContext(ws, view),
+    withDocs(serializeViewContext(ws, view), docs),
   ].join('\n')
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Check, Copy, Download, Save } from 'lucide-react'
-import { draftAdr, type AiProvider } from '@/lib/ai'
+import { draftAdr, buildDocsContext, type AiProvider } from '@/lib/ai'
 import { downloadFile } from '@/lib/exportUtils'
 import { getCurrentDirHandle } from '@/lib/folderIO'
 import { useDocsStore } from '@/store/docs'
@@ -19,7 +19,7 @@ export function AdrBody({ provider, workspace }: { provider: AiProvider; workspa
   const [savedPath, setSavedPath] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const createDoc = useDocsStore((s) => s.create)
-  const submit = () => { if (topic.trim() && !run.loading) run.go(() => draftAdr(provider, workspace, topic), (m) => { setMd(m); setSavedPath(null) }) }
+  const submit = () => { if (topic.trim() && !run.loading) run.go(() => draftAdr(provider, workspace, topic, workspace ? buildDocsContext(useDocsStore.getState().bundles, workspace) : null), (m) => { setMd(m); setSavedPath(null) }) }
 
   // Only offered when the workspace came from a folder: the record lands in
   // its `!adrs` bundle (created, and linked from the DSL, when there is none).

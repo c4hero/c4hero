@@ -6,6 +6,17 @@ import {
 } from './schema'
 import type { EditOp } from './types'
 
+describe('review findings carry citations', () => {
+  it('keeps a non-empty string array and drops anything else', () => {
+    const { findings } = toReviewResult({ findings: [
+      { title: 'A', detail: 'd', suggestion: 's', severity: 'low', category: 'other', elementIds: [], citations: ['docs/a', 'decisions/0001-b'] },
+      { title: 'B', detail: 'd', suggestion: 's', severity: 'low', category: 'other', elementIds: [], citations: [] },
+      { title: 'C', detail: 'd', suggestion: 's', severity: 'low', category: 'other', elementIds: [], citations: 'docs/a' },
+    ] })
+    expect(findings.map((f) => f.citations)).toEqual([['docs/a', 'decisions/0001-b'], undefined, undefined])
+  })
+})
+
 describe('tolerant sanitizers', () => {
   it('toEditPlan keeps valid operations and drops malformed ones', () => {
     const plan = toEditPlan({ operations: [

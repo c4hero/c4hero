@@ -181,6 +181,8 @@ const findingSchema = {
     severity: { type: 'string', enum: ['high', 'medium', 'low'] },
     elementIds: { type: 'array', items: { type: 'string' } },
     suggestion: { type: 'string' },
+    // Concept ids from the DOCUMENTATION section, when one was provided.
+    citations: { type: 'array', items: { type: 'string' } },
     // Present only when the finding maps to a concrete model edit.
     operations: { type: 'array', items: opSchema },
     // A few distinct candidate fixes the user can choose between.
@@ -329,6 +331,7 @@ export function toReviewFinding(value: unknown): ReviewFinding | null {
     severity,
     elementIds: isStringArray(value.elementIds) ? value.elementIds : [],
     suggestion: value.suggestion,
+    citations: isStringArray(value.citations) && value.citations.length ? value.citations : undefined,
     operations: ops.length ? ops : undefined,
     options: options.length ? options : undefined,
   }

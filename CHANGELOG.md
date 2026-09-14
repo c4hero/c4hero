@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The AI assistant reads your documentation.** When a workspace has
+  `!docs` / `!adrs` folders, the deep review, the Q&A chat, the interview
+  and the ADR drafter all see them — ranked by closeness to the current
+  view and clipped to a budget, so a large bundle never crowds out the
+  model. Review findings that rest on, or contradict, a document carry it
+  as a citation chip (a model that no longer honours an accepted decision
+  is now a high-severity finding), the interviewer stops asking what is
+  already written down and probes where the diagram and the docs disagree,
+  and a drafted ADR references the decisions it builds on. Citations only
+  ever name documents the assistant was actually shown. Still BYOK, still
+  local: nothing new is fetched. (TEA-337)
 - **Documentation and decision records, read and written from the DSL's
   `!docs` and `!adrs` folders.** c4hero used to carry those Structurizr
   directives through untouched; now it reads the folders they name. The

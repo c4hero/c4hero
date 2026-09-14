@@ -4,12 +4,13 @@ import {
   X, Sparkles, ArrowLeft, Settings, MessagesSquare, Stethoscope,
 } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
+import { useDocsStore } from '@/store/docs'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { useAiProvider } from '@/store/ai-settings'
 import type { Workspace } from '@/types/model'
 import {
   aiErrorMessage,
-  planEdit, autoDescribe, reviewArchitectureStream,
+  planEdit, autoDescribe, reviewArchitectureStream, buildDocsContext,
   applyEditPlan, summarizeSkips,
   missingInfoGaps, healthFieldCounts, gapToOp,
   type MissingGap, type ReviewFixOption,
@@ -278,10 +279,12 @@ function AppView({
     try {
       // Findings surface as each one parses — the user can triage the first
       // while the rest are still generating (the model emits high-severity first).
-      await reviewArchitectureStream(provider, ws, runScope === 'view' ? (activeView ?? null) : null, (finding) => {
+      const scopedView = runScope === 'view' ? (activeView ?? null) : null
+      await reviewArchitectureStream(provider, ws, scopedView, (finding) => {
         streamed++
         setFindings((f) => [...f, { key: `f:${findingKeyRef.current++}`, scope: runScope, viewKey: runViewKey, finding }])
-      }, ac.signal)
+      // The workspace's !docs / !adrs bundles, so findings can cite them.
+      }, ac.signal, buildDocsContext(useDocsStore.getState().bundles, ws, scopedView))
       setReviewRan((r) => ({ ...r, [runRanKey]: true }))
     } catch (err) {
       // A user Stop surfaces as an AbortError — keep what streamed, no error.

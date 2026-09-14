@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowRight, Box, Check, CheckCircle2, ChevronDown, Layers, Link2, Loader2,
+  ArrowRight, BookOpen, Box, Check, CheckCircle2, ChevronDown, Layers, Link2, Loader2,
   Stethoscope, TriangleAlert, Type, Unlink, Wand2, X, type LucideIcon,
 } from 'lucide-react'
-import { flattenElements, elementNameMap, findingOptions, type MissingGap, type ReviewFixOption } from '@/lib/ai'
+import { flattenElements, elementNameMap, findingOptions, conceptTitleMap, type MissingGap, type ReviewFixOption } from '@/lib/ai'
+import { useDocsStore } from '@/store/docs'
 import type { Workspace } from '@/types/model'
 import { C } from './aiTheme'
 import { plural } from './aiHelpers'
@@ -93,6 +94,9 @@ export function ReviewBody({
   skipNotice: string | null
   error: string | null
 }) {
+  // Titles for the documents a finding cites (ids are bundle paths).
+  const docBundles = useDocsStore((s) => s.bundles)
+  const docTitles = useMemo(() => conceptTitleMap(docBundles), [docBundles])
   const allClear = thingsCount === 0 && !reviewLoading
   const ringCirc = 2 * Math.PI * 23
   // Name the count by what's actually pending — "3 quick wins to fix" reads
@@ -157,7 +161,7 @@ export function ReviewBody({
         )}
         {findings.map((it) => (
           <FindingRow key={it.key} item={it} open={openId === it.key} onToggle={() => onToggleRow(it.key)}
-            onApply={(opt) => onApplyFinding(it, opt)} onSkip={() => onSkip(it.key)} />
+            onApply={(opt) => onApplyFinding(it, opt)} onSkip={() => onSkip(it.key)} docTitles={docTitles} />
         ))}
         {reviewLoading ? (
           <ReviewScanning workspace={workspace} scopeIds={scopeIds}
@@ -407,9 +411,10 @@ function QuickWinRow({ gap, draft, draftsLoading, open, onToggle, onApply, onSki
   )
 }
 
-function FindingRow({ item, open, onToggle, onApply, onSkip }: {
+function FindingRow({ item, open, onToggle, onApply, onSkip, docTitles }: {
   item: FindingItem; open: boolean; onToggle: () => void
   onApply: (opt: ReviewFixOption | null) => void; onSkip: () => void
+  docTitles: Map<string, string>
 }) {
   const f = item.finding
   const sev = SEV[f.severity]
@@ -428,6 +433,16 @@ function FindingRow({ item, open, onToggle, onApply, onSkip }: {
       {open && (
         <div style={{ padding: '0 16px 13px 34px' }}>
           <div style={{ fontSize: 12.5, lineHeight: 1.55, color: '#a9b3bd', wordBreak: 'break-word' }}><MdInline text={f.detail} /></div>
+          {f.citations && f.citations.length > 0 && (
+            <div aria-label="Grounded in" style={{ marginTop: 7, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {f.citations.map((id) => (
+                <span key={id} title={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, padding: '2px 7px', borderRadius: 999, border: `1px solid ${C.border}`, color: C.muted2, maxWidth: '100%' }}>
+                  <BookOpen size={10} style={{ flex: 'none' }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{docTitles.get(id) ?? id}</span>
+                </span>
+              ))}
+            </div>
+          )}
           {opts.length === 1 && (
             <div style={{ marginTop: 9, borderLeft: '2px solid rgba(88,166,255,0.4)', padding: '2px 0 2px 11px', fontSize: 12.5, lineHeight: 1.55, color: C.text2 }}><MdInline text={opts[0].label} /></div>
           )}

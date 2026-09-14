@@ -69,6 +69,10 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
   markdown file (ADRs numbered adr-tools style), update the folder's
   `index.md`, and add the `!docs` / `!adrs` line to the DSL when missing.
   The AI *Draft ADR* feature can save straight into the decisions folder.
+- **The assistant is grounded in them.** The deep review, Q&A, interview
+  and ADR drafter receive the workspace's documents (ranked by relevance to
+  the current view, budgeted), and review findings cite the documents they
+  rest on or contradict.
 - Needs a folder-backed workspace (File System Access API); single-file mode
   explains why. The markdown renderer is a small built-in subset and never
   executes anything from a file.
