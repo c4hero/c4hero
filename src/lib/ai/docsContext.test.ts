@@ -76,13 +76,63 @@ describe('buildDocsContext', () => {
   it('puts documents on elements in the current view first and other elements\' documents last', () => {
     const w = ws()
     const view = w.views.containerViews[0]
-    // The container view of Shop shows Shop's containers (and Shop itself, plus context).
+    // The container view shows Shop's containers; Shop is the scope boundary.
     expect(view.elements.some((e) => e.id === 'web')).toBe(true)
     const ctx = buildDocsContext(bundles(), w, view)!
     const order = ids(ctx.text)
     expect(order.indexOf('docs/web/ui')).toBeLessThan(order.indexOf('decisions/0002-services'))
     expect(order.indexOf('decisions/0002-services')).toBeLessThan(order.indexOf('docs/billing/invoices'))
     expect(order[order.length - 1]).toBe('decisions/0001-monolith')
+  })
+
+  it.each(['container', 'component'] as const)('prioritizes the %s view scope even when it is not a view element', (type) => {
+    const w = parseDSL(`workspace "Shop" {
+      !docs docs
+      model {
+        shop = softwareSystem "Shop" {
+          !adrs decisions/shop
+          web = container "Web" {
+            !adrs decisions/web
+            ui = component "UI"
+          }
+        }
+      }
+      views {
+        container shop "Containers" { include * }
+        component web "Components" { include * }
+      }
+    }`).workspace
+    const view = type === 'container' ? w.views.containerViews[0] : w.views.componentViews[0]
+    const scopeId = type === 'container' ? 'shop' : 'web'
+    expect(view.elements.some((e) => e.id === scopeId)).toBe(false)
+    const b = {
+      [bundleKey('docs', 'docs')]: parseDocsBundle('docs', 'docs', Array.from({ length: 6 }, (_, i) => ({
+        name: `${i}.md`, text: `# General ${i}\n\n${'General guidance.\n'.repeat(140)}`,
+      }))),
+      [bundleKey('adrs', `decisions/${scopeId}`)]: parseDocsBundle('adrs', `decisions/${scopeId}`, [{
+        name: '0001-postgres.md', text: '# Use Postgres\n\n## Status\n\nAccepted\n\n## Decision\n\nUse Postgres.',
+      }]),
+    }
+    const ctx = buildDocsContext(b, w, view)!
+    expect(ctx.omitted).toBeGreaterThan(0)
+    expect(ids(ctx.text)[0]).toBe(`decisions/${scopeId}/0001-postgres`)
+    expect(ctx.conceptIds.has(`decisions/${scopeId}/0001-postgres`)).toBe(true)
+  })
+
+  it('renders frontmatter supersession as history with replacement references', () => {
+    const b = {
+      [bundleKey('adrs', 'decisions')]: parseDocsBundle('adrs', 'decisions', [
+        { name: '0001-old.md', text: '---\ntitle: Old storage\nstatus: Accepted\nsuperseded_by: [0002-new.md]\n---\n\nUse MySQL.' },
+        { name: '0002-new.md', text: '---\ntitle: New storage\nstatus: Accepted\nsupersedes: [0001-old.md]\n---\n\nUse Postgres.' },
+      ]),
+    }
+    const ctx = buildDocsContext(b, ws())!
+    expect(ids(ctx.text)).toEqual(['decisions/0002-new', 'decisions/0001-old'])
+    expect(ctx.text).toContain('=== decisions/0001-old | Decision | Superseded | Old storage')
+    expect(ctx.text).toContain('=== decisions/0002-new | Decision | Accepted | New storage')
+    expect(ctx.text).toContain('Superseded by (files in this bundle): 0002-new.md')
+    expect(ctx.text).toContain('Supersedes (files in this bundle): 0001-old.md')
+    expect(b[bundleKey('adrs', 'decisions')].concepts[0].status).toBe('Accepted')
   })
 
   it('respects the character budget and reports what it left out', () => {

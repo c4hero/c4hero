@@ -103,12 +103,16 @@ function rankCandidates(bundles: Record<string, DocsBundle | null>, ws: Workspac
       if (seen.has(concept.path)) continue
       seen.add(concept.path)
       // A superseded decision is history, not guidance: last, whatever its scope.
-      const superseded = kind === 'adrs' && (concept.supersededBy.length > 0 || /^superseded/i.test(concept.status ?? ''))
+      const superseded = isSuperseded(concept, kind)
       out.push({ concept, kind, tier: superseded ? 9 : tier, about })
     }
   }
 
   const inView = view ? new Set(view.elements.map((e) => e.id)) : null
+  // Container/component views draw their scope as a boundary, not an element.
+  // Its decisions still govern the view and must survive before workspace docs.
+  if (view?.softwareSystemId) inView?.add(view.softwareSystemId)
+  if (view?.containerId) inView?.add(view.containerId)
   const elements = allElements(ws)
   // Tier 0: documents on the elements the user is looking at (every element
   // for a whole-model run). Tier 1/2: workspace decisions, then docs. Tier 3:
@@ -146,12 +150,21 @@ function allElements(ws: Workspace): ModelElement[] {
   return out
 }
 
+function isSuperseded(concept: DocConcept, kind: DocsKind): boolean {
+  return kind === 'adrs' && (concept.supersededBy.length > 0 || /^superseded/i.test(concept.status ?? ''))
+}
+
 function renderCandidate(c: Candidate, maxDocChars: number): string {
   const { concept } = c
-  const head = [conceptId(concept), concept.type, concept.status ?? '-', concept.title].join(' | ')
+  const status = isSuperseded(concept, c.kind) ? 'Superseded' : concept.status ?? '-'
+  const head = [conceptId(concept), concept.type, status, concept.title].join(' | ')
   const about = c.about ? ` | about: ${c.about}` : ''
+  // Frontmatter is absent from the body, so retain its decision links explicitly.
+  const links: string[] = []
+  if (concept.supersedes.length) links.push(`Supersedes (files in this bundle): ${concept.supersedes.join(', ')}`)
+  if (concept.supersededBy.length) links.push(`Superseded by (files in this bundle): ${concept.supersededBy.join(', ')}`)
   const body = clip(concept.body.trim(), maxDocChars)
-  return `=== ${head}${about}\n${body}`
+  return [`=== ${head}${about}`, ...links, body].join('\n')
 }
 
 function clip(text: string, max: number): string {
