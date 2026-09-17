@@ -23,6 +23,7 @@ export function AdrBody({ provider, workspace, seed }: {
   // handoff worse than copy/paste.
   const [topic, setTopic] = usePersistentState('adr.topic', '')
   const [background, setBackground] = usePersistentState<string | null>('adr.background', null)
+  const [citations, setCitations] = usePersistentState<string[]>('adr.citations', [])
   const [md, setMd] = usePersistentState<string | null>('adr.md', null)
   const [savedPath, setSavedPath] = usePersistentState<string | null>('adr.savedPath', null)
   /** The seed already drafted for — so re-entering the tab doesn't re-spend. */
@@ -33,16 +34,19 @@ export function AdrBody({ provider, workspace, seed }: {
   const createDoc = useDocsStore((s) => s.create)
 
   /** Draft for `t`, grounded in `bg` when this came from a finding. */
-  const draft = (t: string, bg: string | null) => {
+  const draft = (t: string, bg: string | null, citedIds: string[]) => {
     if (!t.trim() || run.loading) return
     run.go(
-      () => draftAdr(provider, workspace, t, workspace ? buildDocsContext(useDocsStore.getState().bundles, workspace) : null, bg),
+      () => draftAdr(provider, workspace, t, workspace ? buildDocsContext(
+        useDocsStore.getState().bundles, workspace, null,
+        { preferredConceptIds: bg ? citedIds : [] },
+      ) : null, bg),
       (m) => { setMd(m); setSavedPath(null) },
     )
   }
   // Typing a topic by hand replaces whatever finding seeded the field — the
   // background belongs to the finding, not to the field.
-  const submit = () => draft(topic, background)
+  const submit = () => draft(topic, background, citations)
 
   // A finding handed over: fill the field and draft it, once. `run.go` is
   // stable across renders but `draft` is not, so the effect keys on the seed.
@@ -59,9 +63,10 @@ export function AdrBody({ provider, workspace, seed }: {
     setSeededKey(seed.sourceKey)
     setTopic(seed.topic)
     setBackground(seed.background)
+    setCitations(seed.citations ?? [])
     setMd(null)
     setSavedPath(null)
-    draftRef.current(seed.topic, seed.background)
+    draftRef.current(seed.topic, seed.background, seed.citations ?? [])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed])
 
@@ -84,7 +89,7 @@ export function AdrBody({ provider, workspace, seed }: {
   return (
     <>
       <p style={blurb}>Capture an architecture decision as a Markdown record, grounded in the current model.</p>
-      <Field value={topic} onChange={(v) => { setTopic(v); setBackground(null) }} grow={!md} onSubmit={submit}
+      <Field value={topic} onChange={(v) => { setTopic(v); setBackground(null); setCitations([]) }} grow={!md} onSubmit={submit}
         placeholder="e.g. Adopt event-driven messaging between the Orders and Payments services" />
       {background && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 7, fontSize: 11.5, lineHeight: 1.45, color: C.muted2 }}>

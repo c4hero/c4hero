@@ -9,6 +9,10 @@
 import { render, screen, fireEvent, act, waitFor, cleanup } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { adrSeedFromFinding, type AdrSeed, type AiProvider, type ReviewFinding } from '@/lib/ai'
+import { parseDSL } from '@/lib/dsl'
+import { bundleKey, parseDocsBundle } from '@/lib/docs/bundle'
+import { buildDocsContext } from '@/lib/ai/docsContext'
+import { useDocsStore } from '@/store/docs'
 import type { Workspace } from '@/types/model'
 import { ReviewBody } from './ReviewBody'
 import { AdrBody } from './AdrBody'
@@ -80,6 +84,7 @@ function reviewProps(over: Record<string, unknown> = {}) {
 afterEach(() => {
   cleanup()
   clearAiSession()
+  useDocsStore.setState({ bundles: {}, loaded: false })
 })
 
 describe('adrSeedFromFinding', () => {
@@ -207,6 +212,56 @@ describe('the drafter picking the finding up', () => {
     fireEvent.click(screen.getByRole('button', { name: /draft adr/i }))
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(2))
     expect(complete.mock.calls[1][0].user).not.toContain('raised by a review')
+  })
+
+  it('retains a view review’s cited evidence across drafting and revisits, until the topic is edited', async () => {
+    const workspace = parseDSL(`workspace "T" {
+      model {
+        unrelated = softwareSystem "Unrelated" {
+          !docs docs/unrelated
+        }
+        target = softwareSystem "Target" {
+          !adrs adrs/target
+        }
+      }
+      views {
+        systemContext target "Target" { include * }
+      }
+    }`).workspace
+    const evidence = 'Storage constraint: retain audit records for seven years.'
+    const bundles = {
+      [bundleKey('docs', 'docs/unrelated')]: parseDocsBundle('docs', 'docs/unrelated', Array.from({ length: 6 }, (_, i) => ({
+        name: `${i}.md`, text: `# General ${i}\n\n${'General guidance.\n'.repeat(140)}`,
+      }))),
+      [bundleKey('adrs', 'adrs/target')]: parseDocsBundle('adrs', 'adrs/target', [{
+        name: 'storage.md', text: `# Storage\n\n## Status\n\nAccepted\n\n## Decision\n\n${evidence}`,
+      }]),
+    }
+    const citedId = 'adrs/target/storage'
+    // The review saw this document, but whole-model retrieval crowds it out.
+    expect(buildDocsContext(bundles, workspace, workspace.views.systemContextViews[0])!.conceptIds.has(citedId)).toBe(true)
+    expect(buildDocsContext(bundles, workspace)!.conceptIds.has(citedId)).toBe(false)
+    useDocsStore.setState({ bundles, loaded: true })
+    const citedSeed = adrSeedFromFinding('cited', finding({ citations: [citedId] }))
+    const first = render(<AdrBody provider={provider} workspace={workspace} seed={citedSeed} />)
+    await screen.findByText(/Decision/)
+    expect(complete.mock.calls[0][0].user).toContain(evidence)
+    first.unmount()
+
+    // Citation priority survives with the draft's persisted background, even
+    // when the handoff prop is no longer present on the next visit.
+    render(<AdrBody provider={provider} workspace={workspace} />)
+    expect(complete).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: /draft adr/i }))
+    await waitFor(() => expect(complete).toHaveBeenCalledTimes(2))
+    expect(complete.mock.calls[1][0].user).toContain(evidence)
+    await waitFor(() => expect((screen.getByRole('button', { name: /draft adr/i }) as HTMLButtonElement).disabled).toBe(false))
+
+    fireEvent.change(screen.getByDisplayValue(citedSeed.topic), { target: { value: 'An unrelated decision' } })
+    fireEvent.click(screen.getByRole('button', { name: /draft adr/i }))
+    await waitFor(() => expect(complete).toHaveBeenCalledTimes(3))
+    expect(complete.mock.calls[2][0].user).not.toContain(evidence)
+    expect(complete.mock.calls[2][0].user).not.toContain('raised by a review')
   })
 
   it('leaves a hand-typed draft alone when there is no seed', async () => {

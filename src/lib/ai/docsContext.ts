@@ -32,9 +32,11 @@ export interface DocsContextOptions {
   maxChars?: number
   /** Per-document body cap; longer bodies are clipped at a line break. */
   maxDocChars?: number
+  /** Retrieve cited evidence first, within the same budget; ignore unknown ids. */
+  preferredConceptIds?: readonly string[]
 }
 
-const DEFAULTS: Required<DocsContextOptions> = { maxChars: 12000, maxDocChars: 2000 }
+const DEFAULTS: Required<DocsContextOptions> = { maxChars: 12000, maxDocChars: 2000, preferredConceptIds: [] }
 
 export function conceptId(concept: Pick<DocConcept, 'path'>): string {
   return concept.path.replace(/\.md$/i, '')
@@ -65,8 +67,12 @@ export function buildDocsContext(
   view?: View | null,
   options: DocsContextOptions = {},
 ): DocsContext | null {
-  const { maxChars, maxDocChars } = { ...DEFAULTS, ...options }
-  const candidates = rankCandidates(bundles, ws, view)
+  const { maxChars, maxDocChars, preferredConceptIds } = { ...DEFAULTS, ...options }
+  const preferred = new Set(preferredConceptIds)
+  // Stable sort preserves normal scope/status ranking within each group.
+  // Superseded citations remain labelled as history by renderCandidate.
+  const candidates = rankCandidates(bundles, ws, view).sort((a, b) =>
+    Number(preferred.has(conceptId(b.concept))) - Number(preferred.has(conceptId(a.concept))))
   if (candidates.length === 0) return null
 
   const lines: string[] = []

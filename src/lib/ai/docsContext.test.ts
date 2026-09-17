@@ -145,6 +145,26 @@ describe('buildDocsContext', () => {
     expect(buildDocsContext(bundles(), ws(), null, { maxChars: 1 })!.included).toBe(1)
   })
 
+  it('prioritizes cited documents within the existing budget and ignores unknown ids', () => {
+    const options = { maxChars: 260 }
+    expect(buildDocsContext(bundles(), ws(), null, options)!.conceptIds.has('docs/billing/invoices')).toBe(false)
+    const ctx = buildDocsContext(bundles(), ws(), null, {
+      ...options, preferredConceptIds: ['missing/doc', 'docs/billing/invoices'],
+    })!
+    expect(ids(ctx.text)[0]).toBe('docs/billing/invoices')
+    expect(ctx.text).toContain('Monthly.')
+    expect(ctx.conceptIds.has('missing/doc')).toBe(false)
+    expect(ctx.omitted).toBeGreaterThan(0)
+  })
+
+  it('keeps a preferred superseded citation labelled as history', () => {
+    const ctx = buildDocsContext(bundles(), ws(), null, {
+      maxChars: 1, preferredConceptIds: ['decisions/0001-monolith'],
+    })!
+    expect(ids(ctx.text)).toEqual(['decisions/0001-monolith'])
+    expect(ctx.text).toContain('Decision | Superseded | Monolith')
+  })
+
   it('clips long bodies at a line break and marks the cut', () => {
     const long = Array.from({ length: 200 }, (_, i) => `line ${i}`).join('\n')
     const b = { [bundleKey('docs', 'docs')]: parseDocsBundle('docs', 'docs', [{ name: 'big.md', text: `# Big\n\n${long}` }]) }
