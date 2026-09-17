@@ -7,7 +7,9 @@
 
 import type { Workspace, View, ViewType, AutoLayout, LayoutDirection, Model, Relationship } from '@/types/model'
 import type { ContextAwareParser } from './parser'
+import type { Token } from './lexer'
 import { parseStylesBody } from './parser-styles'
+import { isConformantViewKey, sanitizeViewKey } from './viewKey'
 
 interface ViewsContainer {
     systemLandscapeViews: View[]
@@ -18,12 +20,19 @@ interface ViewsContainer {
     deploymentViews: View[]
 }
 
-/** Generate a stable, unique view key when the DSL doesn't provide one.
- *  Mirrors the Structurizr default-key convention (Type-ScopeRef) and falls
- *  back to a numeric suffix on collision. Empty/missing keys break navigation
- *  in the workspace store, so we always assign one. */
-function ensureViewKey(view: View, viewsContainer: ViewsContainer, elementRef: string | undefined): void {
-    if (view.key) return
+/** One parsed view waiting for its key, with what a derived key would be
+ *  built from and where a warning about it should point. */
+interface PendingViewKey {
+    view: View
+    /** The element the view is scoped to, if any — the `-<ref>` of a derived key. */
+    elementRef: string | undefined
+    /** The view's opening keyword, so a warning points at the view's own line
+     *  rather than at whatever token follows its closing brace. */
+    at: Token
+}
+
+/** The Structurizr default-key convention, `Type-ScopeRef`. */
+function derivedKeyBase(view: View, elementRef: string | undefined): string {
     const typeKey =
         view.type === 'systemLandscape' ? 'SystemLandscape'
         : view.type === 'systemContext' ? 'SystemContext'
@@ -31,25 +40,86 @@ function ensureViewKey(view: View, viewsContainer: ViewsContainer, elementRef: s
         : view.type === 'component' ? 'Components'
         : view.type === 'dynamic' ? 'Dynamic'
         : 'Deployment'
-    const base = elementRef ? `${typeKey}-${elementRef}` : typeKey
-    const existing = [
-        ...viewsContainer.systemLandscapeViews,
-        ...viewsContainer.systemContextViews,
-        ...viewsContainer.containerViews,
-        ...viewsContainer.componentViews,
-        ...viewsContainer.dynamicViews,
-        ...viewsContainer.deploymentViews,
-    ]
-    let candidate = base
-    let suffix = 2
-    while (existing.some(v => v.key === candidate)) {
-        candidate = `${base}-${suffix++}`
+    // The base of a derived key is sanitized too — an element ref carrying a
+    // dot or a space must not be able to originate a bad key either.
+    const ref = elementRef ? sanitizeViewKey(elementRef) : ''
+    return ref ? `${typeKey}-${ref}` : typeKey
+}
+
+/** Settle every parsed view's key in one pass: keep a conformant one exactly
+ *  as written, normalize a non-conformant one (warning the user), and derive a
+ *  stable key for a view the DSL gave none.
+ *
+ *  Deliberately a *post*-parse pass rather than a per-view decision. A key we
+ *  mint — normalized or derived — must not collide with an authored key that
+ *  appears further down the file, and nothing in a single forward pass can see
+ *  those yet. Reserving every authored key up front is what makes the settled
+ *  set collision-free in both directions.
+ *
+ *  Duplicate *authored* keys are left alone: that is the source file's own
+ *  pre-existing error (Structurizr says "A view with the key X already
+ *  exists"), reported by `validateForStructurizr` rather than papered over by
+ *  renaming the user's view.
+ *
+ *  This is the single place every parsed view's key passes through, which is
+ *  what makes "the model never holds a key Structurizr rejects" (TEA-166) a
+ *  property of the parser rather than a rule six call sites have to remember. */
+function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsContainer: ViewsContainer): void {
+    // Keys already spoken for: every authored-and-conformant key in this
+    // block, plus anything a previous `views { }` block already settled.
+    const taken = new Set<string>()
+    for (const v of allViewsOf(viewsContainer)) if (v.key && isConformantViewKey(v.key)) taken.add(v.key)
+
+    /** First of `base`, `base-2`, `base-3`, … that nothing has claimed. */
+    const claim = (base: string): string => {
+        let candidate = base
+        let suffix = 2
+        while (taken.has(candidate)) candidate = `${base}-${suffix++}`
+        taken.add(candidate)
+        return candidate
     }
-    view.key = candidate
-    view.autoKey = true
+
+    for (const { view, elementRef, at } of pending) {
+        const authored = view.key
+        if (authored && isConformantViewKey(authored)) continue // already reserved above
+
+        if (authored) {
+            const normalized = sanitizeViewKey(authored)
+            if (normalized) {
+                view.key = claim(normalized)
+                p.addWarning(
+                    `View key "${authored}" contains characters Structurizr rejects (only a-zA-Z0-9_- are allowed) — using "${view.key}"`,
+                    at,
+                )
+                continue
+            }
+            // Nothing legal survived (e.g. a key of only spaces): fall through
+            // to a derived key, and say so rather than silently dropping it.
+            p.addWarning(
+                `View key "${authored}" contains no characters Structurizr allows (only a-zA-Z0-9_-) — using a generated key`,
+                at,
+            )
+        }
+
+        view.key = claim(derivedKeyBase(view, elementRef))
+        view.autoKey = true
+    }
+}
+
+function allViewsOf(c: ViewsContainer): View[] {
+    return [
+        ...c.systemLandscapeViews,
+        ...c.systemContextViews,
+        ...c.containerViews,
+        ...c.componentViews,
+        ...c.dynamicViews,
+        ...c.deploymentViews,
+    ]
 }
 
 export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'], model: Model): void {
+    // Keys are settled after the block, not per view — see settleViewKeys.
+    const pendingKeys: PendingViewKey[] = []
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
         p.skipNewlines()
         if (p.check('RBRACE') || p.peekType() === 'EOF') break
@@ -64,7 +134,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'systemlandscape') {
                 const view = parseSystemLandscapeView(p, model)
                 if (view) {
-                    ensureViewKey(view, views, undefined)
+                    pendingKeys.push({ view, elementRef: undefined, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.systemLandscapeViews.push(view)
                 }
@@ -73,7 +143,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'systemcontext') {
                 const view = parseElementView(p, 'systemContext', model)
                 if (view) {
-                    ensureViewKey(view, views, view.softwareSystemId)
+                    pendingKeys.push({ view, elementRef: view.softwareSystemId, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.systemContextViews.push(view)
                 }
@@ -82,7 +152,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'container') {
                 const view = parseElementView(p, 'container', model)
                 if (view) {
-                    ensureViewKey(view, views, view.softwareSystemId)
+                    pendingKeys.push({ view, elementRef: view.softwareSystemId, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.containerViews.push(view)
                 }
@@ -91,7 +161,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'component') {
                 const view = parseElementView(p, 'component', model)
                 if (view) {
-                    ensureViewKey(view, views, view.containerId)
+                    pendingKeys.push({ view, elementRef: view.containerId, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.componentViews.push(view)
                 }
@@ -127,7 +197,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'dynamic') {
                 const view = parseDynamicView(p, model)
                 if (view) {
-                    ensureViewKey(view, views, view.softwareSystemId ?? view.containerId)
+                    pendingKeys.push({ view, elementRef: view.softwareSystemId ?? view.containerId, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.dynamicViews.push(view)
                 }
@@ -136,7 +206,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'deployment') {
                 const view = parseDeploymentView(p, model)
                 if (view) {
-                    ensureViewKey(view, views, view.softwareSystemId ?? view.environment)
+                    pendingKeys.push({ view, elementRef: view.softwareSystemId ?? view.environment, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.deploymentViews.push(view)
                 }
@@ -168,6 +238,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
 
         p.advance()
     }
+    settleViewKeys(p, pendingKeys, views)
 }
 
 function parseSystemLandscapeView(p: ContextAwareParser, model: Model): View | null {
@@ -266,15 +337,6 @@ function parseAutoLayoutInto(p: ContextAwareParser, view: View): void {
  *  (Structurizr semantics); the view stores the relationship id plus the
  *  step's order label and optional description override. View elements are
  *  derived from the step endpoints. */
-/** Structurizr restricts view keys to [a-zA-Z0-9_-]; foreign DSL can carry
- *  keys the upstream parser would reject (e.g. quoted keys with spaces).
- *  Normalize at parse so every downstream consumer — sidecar, serializer,
- *  key dedup — works with a key that survives re-serialization. An all-
- *  illegal key normalizes to '' and takes the auto-key path. */
-function sanitizeViewKey(raw: string): string {
-    return raw.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
-}
-
 /** The element plus every descendant in the C4 tree (system -> containers ->
  *  components). People and components have no descendants. */
 function subtreeIds(model: Model, rootId: string): Set<string> {
@@ -309,7 +371,7 @@ function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
         scopeRef = p.readQualifiedRef()?.ref
     }
 
-    const key = sanitizeViewKey(p.readOptionalStringOrIdentifier() ?? '')
+    const key = p.readOptionalStringOrIdentifier() ?? ''
     const positionalDescription = p.readOptionalString()
 
     const view: View = {
@@ -503,7 +565,7 @@ function parseDeploymentView(p: ContextAwareParser, model: Model): View | null {
         }
     }
 
-    const key = sanitizeViewKey(p.readOptionalStringOrIdentifier() ?? '')
+    const key = p.readOptionalStringOrIdentifier() ?? ''
     const positionalDescription = p.readOptionalString()
 
     const view: View = {

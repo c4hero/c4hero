@@ -34,7 +34,9 @@ import { createMicroservicesTemplate } from '@/lib/templates/microservices'
 import { createMonolithTemplate } from '@/lib/templates/monolith'
 import { createEventDrivenTemplate } from '@/lib/templates/eventDriven'
 import type { Workspace } from '@/types/model'
-import { generateWorkspace, representable } from './fuzz/generateWorkspace'
+import { generateWorkspace, type RelaxOptions } from './fuzz/generateWorkspace'
+import { representable } from './encoding'
+import { validateForStructurizr } from '@/lib/structurizrValidation'
 
 const CLI = process.env.STRUCTURIZR_CLI ?? join(process.cwd(), '.structurizr-cli', 'structurizr.sh')
 const CLI_AVAILABLE = existsSync(CLI)
@@ -197,24 +199,21 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
     }
 
     it('the IcePanel landscape model re-serializes to DSL Structurizr accepts', () => {
-        const ws = icePanelWorkspace()
-        // The source file's own systemContext/container view keys contain
-        //    spaces ("Label 602"), which Structurizr rejects at line 814 of
-        //    the fixture itself — before c4hero touches it. Reproducing an
-        //    invalid key faithfully is not this ticket's bug.
-        ws.views.systemLandscapeViews = []
-        ws.views.systemContextViews = []
-        ws.views.containerViews = []
-        ws.views.componentViews = []
-        expect(validate(serializeDSL(ws))).toBeNull()
+        // Views included. The source file's own systemContext view key
+        // contains a space ("Label 602"), which Structurizr rejects at line
+        // 814 of the fixture itself — c4hero normalizes it on the way in
+        // (TEA-166), so the round-trip is valid where the source was not.
+        expect(validate(serializeDSL(icePanelWorkspace()))).toBeNull()
     })
 
-    it('does not make the IcePanel fixture any less valid than it already was', () => {
-        // The source is non-conformant on its own (invalid view keys). The
-        // property that matters is that a c4hero round-trip does not introduce
-        // a *new* class of error — it should still fail on the same thing.
+    it('fixes the IcePanel fixture\'s invalid view key rather than reproducing it', () => {
+        // The source is non-conformant on its own; the round-trip is not.
         const source = readFileSync(join(process.cwd(), 'src/lib/dsl/__fixtures__/hierarchical-landscape.dsl'), 'utf8')
         expect(validate(source)).toContain('View keys can only contain')
+
+        const ws = icePanelWorkspace()
+        expect(ws.views.systemContextViews.map(v => v.key)).toContain('Label-602')
+        expect(validateForStructurizr(ws)).toEqual([])
     })
 
     // Deployment + dynamic views: the grammar shapes that broke the first
@@ -622,6 +621,51 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance: generated corpus', () 
         const wantRels = ws.model.relationships.map(r => representable(r.description ?? '')).sort()
         const gotRels = authoredRelationships(model).map(r => r.description ?? '').sort()
         expect(gotRels, `seed ${seed} relationship descriptions`).toEqual(wantRels)
+    })
+})
+
+// ─── Validation pass vs. the real parser (TEA-331) ────────────────────
+//
+// `validateForStructurizr` encodes rules read off the Structurizr CLI. Reading
+// them off once proves nothing durable: the way to keep them honest is to
+// generate workspaces that deliberately break each rule and check that the
+// validator and the real parser agree about every one.
+//
+// The contract asserted here is two-way, and the directions are not equally
+// important:
+//
+//   - No false negatives (the one that matters): if the CLI rejects the DSL,
+//     the validator must have said something. A silent export the user can't
+//     load anywhere else is the whole bug.
+//   - No false positives: if the CLI accepts the DSL, the validator must be
+//     silent. A warning nobody can act on is noise in the code pane.
+describe.skipIf(!CLI_AVAILABLE)('validateForStructurizr agrees with the real parser', () => {
+    const RELAXATIONS: { name: string; relax: RelaxOptions }[] = [
+        { name: 'empty names', relax: { emptyNames: true } },
+        { name: 'invalid urls', relax: { invalidUrls: true } },
+        { name: 'duplicate sibling names', relax: { duplicateSiblingNames: true } },
+        { name: 'ancestor relationships', relax: { ancestorRelationships: true } },
+        { name: 'implied duplicate relationships', relax: { impliedDuplicates: true } },
+        { name: 'non-conformant view keys', relax: { badViewKeys: true } },
+    ]
+    const seeds = Array.from({ length: Number(process.env.CONFORMANCE_RELAX_SEEDS ?? 6) }, (_, i) => i + 1)
+
+    const cases = RELAXATIONS.flatMap(({ name, relax }) => seeds.map(seed => ({ name, relax, seed })))
+
+    it.each(cases)('$name, seed $seed', ({ relax, seed }) => {
+        const ws = generateWorkspace(seed, { relax })
+        const dsl = serializeDSL(ws)
+        const complaint = validate(dsl)
+        const warnings = validateForStructurizr(ws)
+        const detail = `seed ${seed}\nCLI said: ${complaint ?? '(accepted)'}\nvalidator said: ${JSON.stringify(warnings, null, 2)}\n${dsl}`
+        expect(warnings.length > 0, detail).toBe(complaint !== null)
+    })
+
+    it('the unrelaxed generator produces nothing for either to complain about', () => {
+        for (const seed of seeds) {
+            const ws = generateWorkspace(seed)
+            expect(validateForStructurizr(ws), `seed ${seed}`).toEqual([])
+        }
     })
 })
 

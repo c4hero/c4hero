@@ -10,7 +10,8 @@
  */
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
-import { generateWorkspace, representable, representableTag } from './fuzz/generateWorkspace'
+import { generateWorkspace } from './fuzz/generateWorkspace'
+import { representable, representableTag } from './encoding'
 import type { Workspace } from '@/types/model'
 
 const SEEDS = Number(process.env.ROUNDTRIP_SEEDS ?? 200)

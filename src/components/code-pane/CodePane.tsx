@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Copy, Check, TriangleAlert, Minus, Maximize2, Minimize2, Undo2, Redo2, ChevronUp, Search } from 'lucide-react'
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view'
@@ -14,6 +14,7 @@ import type { ParseError } from '@/lib/dsl'
 import { readJSON, writeJSON, readString, writeString } from '@/lib/safeStorage'
 import { structurizrLanguage } from './structurizrLanguage'
 import { createDslSyncEngine, type DslSyncStatus } from './dslSyncEngine'
+import { validateForStructurizr } from '@/lib/structurizrValidation'
 
 /** Marks programmatic (store-to-editor) transactions so the update listener
  *  doesn't mistake them for user keystrokes and start an apply cycle. */
@@ -177,6 +178,13 @@ export default function CodePane() {
   const setCodePanelOpen = useWorkspaceStore((s) => s.setCodePanelOpen)
   const activeWorkspaceFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
   const workspaceName = useWorkspaceStore((s) => s.workspace?.name)
+  // Interoperability warnings for the *current* workspace, not for the last
+  // text applied: these are states c4hero is happy with and Structurizr is
+  // not, so they can arrive from the canvas, an import or an AI edit just as
+  // easily as from this editor (TEA-331). Recomputed only when the store hands
+  // out a new workspace reference.
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const conformance = useMemo(() => (workspace ? validateForStructurizr(workspace) : []), [workspace])
   const hostElRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const [status, setStatus] = useState<DslSyncStatus>({ errors: [], warnings: [], serializeError: null, pendingApply: false })
@@ -583,20 +591,34 @@ export default function CodePane() {
               Editable — changes here update the canvas as you type
             </span>
           )}
-          {!status.pendingApply && errorCount === 0 && status.warnings.length > 0 && (
-            <span
-              data-code-pane-warnings
-              title={status.warnings.map((w) => `${w.line}:${w.column} ${w.message}`).join('\n')}
-              style={{ marginLeft: 'auto', whiteSpace: 'nowrap', opacity: 0.8 }}
-            >
-              {status.warnings.length} {status.warnings.length === 1 ? 'directive' : 'directives'} preserved, not resolved
-            </span>
-          )}
-          {status.pendingApply && (
-            <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap', opacity: 0.8 }}>
-              Mod+Enter applies now
-            </span>
-          )}
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            {!status.pendingApply && errorCount === 0 && status.warnings.length > 0 && (
+              <span
+                data-code-pane-warnings
+                title={status.warnings.map((w) => `${w.line}:${w.column} ${w.message}`).join('\n')}
+                style={{ whiteSpace: 'nowrap', opacity: 0.8 }}
+              >
+                {status.warnings.length} {status.warnings.length === 1 ? 'note' : 'notes'} about this file
+              </span>
+            )}
+            {/* Not gated on pendingApply: a model Structurizr would reject is a
+                fact about the workspace, and stays true while the user types. */}
+            {conformance.length > 0 && (
+              <span
+                data-code-pane-conformance
+                title={`Structurizr would reject this workspace:\n${conformance.map((w) => `- ${w.message}`).join('\n')}`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', color: 'var(--color-warning, #d29922)' }}
+              >
+                <TriangleAlert size={10} />
+                {conformance.length} {conformance.length === 1 ? 'Structurizr issue' : 'Structurizr issues'}
+              </span>
+            )}
+            {status.pendingApply && (
+              <span style={{ whiteSpace: 'nowrap', opacity: 0.8 }}>
+                Mod+Enter applies now
+              </span>
+            )}
+          </span>
         </div>
       )}
 

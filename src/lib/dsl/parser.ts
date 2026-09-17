@@ -295,6 +295,13 @@ export class ContextAwareParser {
         this.errors.push({ message, line: token.line, column: token.column })
     }
 
+    /** A non-fatal note about the parse — the file still loads, but something
+     *  about it was preserved-but-unresolved or normalized on the way in. The
+     *  code pane surfaces these below the editor. */
+    addWarning(message: string, token: Token): void {
+        this.warnings.push({ message, line: token.line, column: token.column })
+    }
+
     skipBraceBlock(): void {
         if (!this.match('LBRACE')) return
         let depth = 1
@@ -423,12 +430,10 @@ export class ContextAwareParser {
         this.directives.push(directive)
         this.directiveLines.push((token ?? this.peek()).line)
         if (/^!include\b/.test(raw)) {
-            const t = token ?? this.peek()
-            this.warnings.push({
-                message: `${raw} is preserved but not resolved — included content is not shown`,
-                line: t.line,
-                column: t.column,
-            })
+            this.addWarning(
+                `${raw} is preserved but not resolved — included content is not shown`,
+                token ?? this.peek(),
+            )
         }
     }
 

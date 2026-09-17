@@ -21,6 +21,7 @@ import type {
     InfrastructureNode,
 } from '@/types/model'
 import { dslIdentifierForm } from '@/lib/identifier'
+import { representable } from './encoding'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
@@ -1368,9 +1369,7 @@ class SerializerContext {
      * The drop is silent for now; surfacing a save-time warning is TEA-169.
      */
     private escapeString(s: string): string {
-        return s
-            .replace(/\\+(?=n)/g, '')
-            .replace(/\\+$/, '')
+        return representable(s)
             .replace(/"/g, '\\"')
             .replace(/\r\n|\r|\n/g, '\\n')
     }
