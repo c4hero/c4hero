@@ -8,11 +8,11 @@
 export type {
   AiProvider, AiProviderConfig, AiTextRequest, AiJsonRequest, AiStreamRequest, AiChatTurn,
   EditOp, EditPlan, DescribeResult, DescribePatch, AiErrorKind, AiFeatureId,
-  ReviewResult, ReviewFinding, ReviewFixOption, ReviewSeverity,
+  ReviewResult, ReviewFinding, ReviewFixOption, ReviewSeverity, AdrSeed,
 } from './types'
 export { AiError, aiErrorMessage } from './types'
 
-export { isActionable, findingOptions } from './review'
+export { isActionable, findingOptions, adrSeedFromFinding } from './review'
 export { classifyPlanScopes, type PlanScope } from './planScope'
 export {
   missingInfoGaps, healthFieldCounts, gapToOp,

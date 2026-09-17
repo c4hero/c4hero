@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowRight, BookOpen, Box, Check, CheckCircle2, ChevronDown, Layers, Link2, Loader2,
+  ArrowRight, BookOpen, Box, Check, CheckCircle2, ChevronDown, FileText, Layers, Link2, Loader2,
   Stethoscope, TriangleAlert, Type, Unlink, Wand2, X, type LucideIcon,
 } from 'lucide-react'
 import { flattenElements, elementNameMap, findingOptions, conceptTitleMap, type MissingGap, type ReviewFixOption } from '@/lib/ai'
@@ -55,7 +55,7 @@ export function ReviewBody({
   gaps, drafts, draftsLoading,
   findings, reviewRan, reviewLoading, reviewError, onRunReview, onStopReview,
   openId, onToggleRow,
-  onApplyGap, onApplyFinding, onSkip,
+  onApplyGap, onApplyFinding, onSkip, onDraftAdr,
   applyAllCount, onApplyAll,
   appliedCount, canUndoLast, undoStale, onUndoLast,
   skipNotice, error,
@@ -83,6 +83,9 @@ export function ReviewBody({
   onApplyGap: (gap: MissingGap) => void
   onApplyFinding: (item: FindingItem, opt: ReviewFixOption | null) => void
   onSkip: (key: string) => void
+  /** Open the ADR drafter on an advisory finding — the "apply" for a finding
+   *  whose next step is a decision rather than a model edit (TEA-43). */
+  onDraftAdr: (item: FindingItem) => void
   applyAllCount: number
   onApplyAll: () => void
   appliedCount: number
@@ -161,7 +164,8 @@ export function ReviewBody({
         )}
         {findings.map((it) => (
           <FindingRow key={it.key} item={it} open={openId === it.key} onToggle={() => onToggleRow(it.key)}
-            onApply={(opt) => onApplyFinding(it, opt)} onSkip={() => onSkip(it.key)} docTitles={docTitles} />
+            onApply={(opt) => onApplyFinding(it, opt)} onSkip={() => onSkip(it.key)}
+            onDraftAdr={() => onDraftAdr(it)} docTitles={docTitles} />
         ))}
         {reviewLoading ? (
           <ReviewScanning workspace={workspace} scopeIds={scopeIds}
@@ -411,9 +415,10 @@ function QuickWinRow({ gap, draft, draftsLoading, open, onToggle, onApply, onSki
   )
 }
 
-function FindingRow({ item, open, onToggle, onApply, onSkip, docTitles }: {
+function FindingRow({ item, open, onToggle, onApply, onSkip, onDraftAdr, docTitles }: {
   item: FindingItem; open: boolean; onToggle: () => void
   onApply: (opt: ReviewFixOption | null) => void; onSkip: () => void
+  onDraftAdr: () => void
   docTitles: Map<string, string>
 }) {
   const f = item.finding
@@ -462,11 +467,19 @@ function FindingRow({ item, open, onToggle, onApply, onSkip, docTitles }: {
           {opts.length === 0 && f.suggestion && (
             <div style={{ marginTop: 9, fontSize: 12, lineHeight: 1.5, color: C.muted2 }}><MdInline text={f.suggestion} /></div>
           )}
-          <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             {opts.length > 0 ? (
               <button onClick={() => onApply(chosen)} className="c4ai-pri" style={APPLY_PILL}><Check size={13} /> Apply</button>
             ) : (
-              <button onClick={() => onApply(null)} className="c4ai-link" style={{ ...TEXT_LINK, fontWeight: 700, color: C.accent }}>Mark done</button>
+              // Advisory: there is nothing to apply, so the useful next step is
+              // usually to decide something. Lead with that rather than with
+              // "Mark done", which only clears the row (TEA-43).
+              <>
+                <button onClick={onDraftAdr} className="c4ai-pri" style={APPLY_PILL}>
+                  <FileText size={13} /> Draft an ADR about this
+                </button>
+                <button onClick={() => onApply(null)} className="c4ai-link" style={{ ...TEXT_LINK, fontWeight: 700, color: C.accent }}>Mark done</button>
+              </>
             )}
             <button onClick={onSkip} className="c4ai-chip" style={{ ...TEXT_LINK, color: C.muted }}>Dismiss</button>
           </div>

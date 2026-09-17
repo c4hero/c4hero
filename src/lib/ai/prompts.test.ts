@@ -61,6 +61,23 @@ describe('prompt builders', () => {
     expect(interviewPlanUser()).toBeTruthy()
   })
 
+  // TEA-43: the Review tab can hand an advisory finding to the ADR drafter.
+  it('frames a review finding as the problem to decide on, not as the decision', () => {
+    const background = 'A review of the architecture model raised this: **No contract**'
+    const prompt = adrUser(ws, 'No contract', null, background)
+    expect(prompt).toContain('raised by a review of the model')
+    expect(prompt).toContain('problem to decide on, not as the decision')
+    // An ADR that only restates the finding has not recorded a decision.
+    expect(prompt).toContain('accept the current design as it stands')
+    expect(prompt).toContain(background)
+  })
+
+  it('leaves a hand-typed ADR topic exactly as it was', () => {
+    for (const bg of [undefined, null, '', '   ']) {
+      expect(adrUser(ws, 'pick a datastore', null, bg)).not.toContain('raised by a review')
+    }
+  })
+
   it('labels each view type, with and without a title', () => {
     for (const type of ['systemLandscape', 'systemContext', 'container', 'component'] as ViewType[]) {
       expect(interviewKickoff({ type, key: 'k', elements: [], relationships: [] })).toBeTruthy()

@@ -293,10 +293,15 @@ export async function planEdit(provider: AiProvider, ws: Workspace, instruction:
 }
 
 /** Draft an ADR → returns markdown. `ws` may be null (decision without a model). */
-export async function draftAdr(provider: AiProvider, ws: Workspace | null, topic: string, docs?: DocsContext | null): Promise<string> {
+export async function draftAdr(
+  provider: AiProvider, ws: Workspace | null, topic: string,
+  docs?: DocsContext | null,
+  /** The review finding this draft was opened from, when it came from one. */
+  background?: string | null,
+): Promise<string> {
   return provider.complete({
     system: adrSystem(),
-    user: adrUser(ws, topic, docs),
+    user: adrUser(ws, topic, docs, background),
     maxTokens: 4000,
   })
 }

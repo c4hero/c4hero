@@ -12,8 +12,8 @@ import {
   aiErrorMessage,
   planEdit, autoDescribe, reviewArchitectureStream, buildDocsContext,
   applyEditPlan, summarizeSkips,
-  missingInfoGaps, healthFieldCounts, gapToOp,
-  type MissingGap, type ReviewFixOption,
+  missingInfoGaps, healthFieldCounts, gapToOp, adrSeedFromFinding,
+  type AdrSeed, type MissingGap, type ReviewFixOption,
   type AiProvider, type AiFeatureId,
 } from '@/lib/ai'
 import { C, STYLE, headerRow, iconBtn } from './aiTheme'
@@ -152,6 +152,14 @@ function AppView({
   // Which scopes a deep review has run for — turns the run CTA into "Re-run".
   const [reviewRan, setReviewRan] = usePersistentState<Record<string, boolean>>('review.ran', {})
   const [openId, setOpenId] = usePersistentState<string | null>('review.open', null)
+  // A finding handed to the ADR drafter (TEA-43). Persisted with the rest of
+  // the review state so the handoff survives close→reopen, and keyed by the
+  // finding so returning to the ADR tab doesn't re-draft what's already there.
+  const [adrSeed, setAdrSeed] = usePersistentState<AdrSeed | null>('adr.seed', null)
+  // Where the untabbed ADR screen's back arrow returns to: the worklist when a
+  // finding opened it, Chat when the palette did. Without this, handing a
+  // finding over is a one-way trip out of the review.
+  const [adrBack, setAdrBack] = usePersistentState<AiView | null>('adr.back', null)
   // Transient (in-flight) flags — not worth persisting.
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [reviewLoading, setReviewLoading] = useState(false)
@@ -395,6 +403,16 @@ function AppView({
       setLedger(next)
     }
   }
+  /** Advisory findings have no operations to apply; the next step is a
+   *  decision. Open the drafter with the finding already in hand. */
+  function draftAdrFor(item: FindingItem) {
+    // A fresh key per click. Re-mounting the ADR tab must not re-draft (same
+    // seed object, same key), but clicking the row again must: the first
+    // attempt may have failed, or been abandoned mid-flight by leaving the tab.
+    setAdrSeed(adrSeedFromFinding(`${item.key}#${Date.now()}`, item.finding))
+    setAdrBack('review')
+    setView('adr')
+  }
   function toggleScope() {
     setScope((s) => (s === 'view' ? 'model' : 'view'))
     setOpenId(null)
@@ -407,6 +425,7 @@ function AppView({
   useEffect(() => {
     if (!feature) return
     setView(FEATURE_TO_VIEW[feature])
+    setAdrBack(null)
     // Only auto-start a (paid) review when this scope+view hasn't been reviewed
     // yet — re-invoking the palette command to reopen an existing worklist must
     // not wipe the streamed findings and re-spend tokens.
@@ -434,7 +453,7 @@ function AppView({
             <Sparkles size={17} color={C.accent} style={{ flex: 'none' }} /> AI assistant
           </span>
         ) : (
-          <button onClick={() => setView('chat')} className="c4ai-ghost" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto', height: 30, padding: '0 10px 0 7px', borderRadius: 9, border: 'none', background: 'transparent', color: C.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', overflow: 'hidden' }}>
+          <button onClick={() => setView(view === 'adr' && adrBack ? adrBack : 'chat')} className="c4ai-ghost" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto', height: 30, padding: '0 10px 0 7px', borderRadius: 9, border: 'none', background: 'transparent', color: C.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', overflow: 'hidden' }}>
             <ArrowLeft size={16} color={C.muted} style={{ flex: 'none' }} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{VIEW_TITLE[view] ?? 'Back'}</span>
           </button>
@@ -479,7 +498,7 @@ function AppView({
               findings={activeFindings} reviewRan={!!reviewRan[ranKey]} reviewLoading={reviewLoading}
               reviewError={reviewError} onRunReview={() => void runReview()} onStopReview={stopReview}
               openId={openId} onToggleRow={(key) => setOpenId((id) => (id === key ? null : key))}
-              onApplyGap={applyGap} onApplyFinding={applyFinding} onSkip={skipItem}
+              onApplyGap={applyGap} onApplyFinding={applyFinding} onSkip={skipItem} onDraftAdr={draftAdrFor}
               applyAllCount={applyAllCount} onApplyAll={applyAll}
               appliedCount={ledger.length} canUndoLast={undoStack.length > 0} undoStale={undoStale} onUndoLast={undoLast}
               skipNotice={skipNotice} error={error}
@@ -493,7 +512,7 @@ function AppView({
         <div key={view} data-scroll style={{ padding: '20px 20px 24px', overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column', animation: 'c4ai-screen .32s cubic-bezier(0.16,1,0.3,1) both' }}>
             {view === 'interview' && (workspace ? <InterviewBody provider={provider} /> : <Empty>Open or create a workspace to start an interview.</Empty>)}
-            {view === 'adr' && <AdrBody provider={provider} workspace={workspace} />}
+            {view === 'adr' && <AdrBody provider={provider} workspace={workspace} seed={adrSeed} />}
           </div>
         </div>
       )}

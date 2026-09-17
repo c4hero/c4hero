@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Turn a review finding into a decision record.** A deep-review finding that
+  carries no model edit — a boundary question, a missing contract, a
+  scalability concern — used to offer only *Mark done*, which cleared the row
+  without recording anything. It now leads with **Draft an ADR about this**:
+  the ADR drafter opens with the finding's title as the topic and the finding's
+  own detail, suggestion, affected elements and severity handed to the model as
+  the problem to decide on — explicitly as a question to weigh, not a verdict
+  to write up. The draft goes through the existing *Save to decisions* flow
+  into the workspace's `!adrs` folder. Editing the topic yourself drops the
+  finding's context, and a draft now survives switching tabs. (TEA-43)
 - **The AI assistant reads your documentation.** When a workspace has
   `!docs` / `!adrs` folders, the deep review, the Q&A chat, the interview
   and the ADR drafter all see them — ranked by closeness to the current

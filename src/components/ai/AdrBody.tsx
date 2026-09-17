@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Check, Copy, Download, Save } from 'lucide-react'
-import { draftAdr, buildDocsContext, type AiProvider } from '@/lib/ai'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Copy, Download, Save, Stethoscope } from 'lucide-react'
+import { draftAdr, buildDocsContext, type AdrSeed, type AiProvider } from '@/lib/ai'
 import { downloadFile } from '@/lib/exportUtils'
 import { getCurrentDirHandle } from '@/lib/folderIO'
 import { useDocsStore } from '@/store/docs'
@@ -9,17 +9,61 @@ import { announce } from '@/lib/announce'
 import type { Workspace } from '@/types/model'
 import { C, blurb, miniBtn } from './aiTheme'
 import { useAiRun } from './aiHelpers'
+import { usePersistentState } from './sessionCache'
 import { Field, RunButton, ErrorLine, Card } from './aiPrimitives'
 
-export function AdrBody({ provider, workspace }: { provider: AiProvider; workspace: Workspace | null }) {
-  const [topic, setTopic] = useState('')
+export function AdrBody({ provider, workspace, seed }: {
+  provider: AiProvider
+  workspace: Workspace | null
+  /** Set when the Review tab handed a finding over (TEA-43). */
+  seed?: AdrSeed | null
+}) {
+  // Persisted across tab switches: arriving from a finding means leaving the
+  // Review tab, and a draft that evaporates on the way back would make the
+  // handoff worse than copy/paste.
+  const [topic, setTopic] = usePersistentState('adr.topic', '')
+  const [background, setBackground] = usePersistentState<string | null>('adr.background', null)
+  const [md, setMd] = usePersistentState<string | null>('adr.md', null)
+  const [savedPath, setSavedPath] = usePersistentState<string | null>('adr.savedPath', null)
+  /** The seed already drafted for — so re-entering the tab doesn't re-spend. */
+  const [seededKey, setSeededKey] = usePersistentState<string | null>('adr.seededKey', null)
   const run = useAiRun()
-  const [md, setMd] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [savedPath, setSavedPath] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const createDoc = useDocsStore((s) => s.create)
-  const submit = () => { if (topic.trim() && !run.loading) run.go(() => draftAdr(provider, workspace, topic, workspace ? buildDocsContext(useDocsStore.getState().bundles, workspace) : null), (m) => { setMd(m); setSavedPath(null) }) }
+
+  /** Draft for `t`, grounded in `bg` when this came from a finding. */
+  const draft = (t: string, bg: string | null) => {
+    if (!t.trim() || run.loading) return
+    run.go(
+      () => draftAdr(provider, workspace, t, workspace ? buildDocsContext(useDocsStore.getState().bundles, workspace) : null, bg),
+      (m) => { setMd(m); setSavedPath(null) },
+    )
+  }
+  // Typing a topic by hand replaces whatever finding seeded the field — the
+  // background belongs to the finding, not to the field.
+  const submit = () => draft(topic, background)
+
+  // A finding handed over: fill the field and draft it, once. `run.go` is
+  // stable across renders but `draft` is not, so the effect keys on the seed.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  // Guarded by a ref as well as the persisted key: React re-runs a mount effect
+  // under StrictMode with the same closure, and state set inside it isn't
+  // visible to that second run — without the ref the hand-off drafts twice.
+  // The ref seeds from the persisted key, so a re-mount still doesn't re-spend.
+  const seededRef = useRef(seededKey)
+  useEffect(() => {
+    if (!seed || seed.sourceKey === seededRef.current) return
+    seededRef.current = seed.sourceKey
+    setSeededKey(seed.sourceKey)
+    setTopic(seed.topic)
+    setBackground(seed.background)
+    setMd(null)
+    setSavedPath(null)
+    draftRef.current(seed.topic, seed.background)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed])
 
   // Only offered when the workspace came from a folder: the record lands in
   // its `!adrs` bundle (created, and linked from the DSL, when there is none).
@@ -40,7 +84,14 @@ export function AdrBody({ provider, workspace }: { provider: AiProvider; workspa
   return (
     <>
       <p style={blurb}>Capture an architecture decision as a Markdown record, grounded in the current model.</p>
-      <Field value={topic} onChange={setTopic} grow={!md} onSubmit={submit} placeholder="e.g. Adopt event-driven messaging between the Orders and Payments services" />
+      <Field value={topic} onChange={(v) => { setTopic(v); setBackground(null) }} grow={!md} onSubmit={submit}
+        placeholder="e.g. Adopt event-driven messaging between the Orders and Payments services" />
+      {background && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 7, fontSize: 11.5, lineHeight: 1.45, color: C.muted2 }}>
+          <Stethoscope size={12} style={{ flex: 'none', marginTop: 1 }} />
+          <span>Grounded in the review finding this came from. Editing the topic drops that context.</span>
+        </div>
+      )}
       <RunButton label="Draft ADR" loading={run.loading} disabled={!topic.trim()} onClick={submit} />
       <ErrorLine error={run.error} />
       {md && (

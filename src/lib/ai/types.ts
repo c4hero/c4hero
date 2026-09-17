@@ -269,3 +269,21 @@ export interface ReviewFinding {
 export interface ReviewResult {
   findings: ReviewFinding[]
 }
+
+/** A finding handed to the ADR drafter. An advisory finding has no operations
+ *  to apply — the useful next step is usually to decide something, so the
+ *  Review tab offers to open the drafter with the finding already in hand
+ *  (TEA-43). `background` is prose for the model, not for display. */
+export interface AdrSeed {
+  /** Id of this hand-off — the finding's row key plus the moment it was handed
+   *  over — so the drafter can tell a fresh hand-off (draft it) from a re-mount
+   *  of one it already ran (leave the draft alone). */
+  sourceKey: string
+  /** What goes in the topic field — the decision to be made, in the user's view. */
+  topic: string
+  /** The finding's own context, as the Markdown the ADR prompt is given. */
+  background: string
+  /** Concept ids of workspace documents the finding cited, carried through so
+   *  the draft can reference the same ones. */
+  citations?: string[]
+}

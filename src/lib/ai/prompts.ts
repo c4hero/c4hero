@@ -211,7 +211,7 @@ export function adrSystem(): string {
   ].join('\n')
 }
 
-export function adrUser(ws: Workspace | null, topic: string, docs?: DocsContext | null): string {
+export function adrUser(ws: Workspace | null, topic: string, docs?: DocsContext | null, background?: string | null): string {
   const parts: string[] = []
   if (ws) {
     parts.push('Current architecture model for grounding:')
@@ -222,6 +222,16 @@ export function adrUser(ws: Workspace | null, topic: string, docs?: DocsContext 
     parts.push('Existing documentation and decision records. Do not contradict an accepted decision')
     parts.push('without saying so explicitly; reference related decisions by title.')
     parts.push(docs.text)
+    parts.push('')
+  }
+  if (background?.trim()) {
+    // A review finding is an observation, not a verdict. Say so, or the draft
+    // comes back with Context and Decision both restating the finding and no
+    // decision actually made.
+    parts.push('This decision was raised by a review of the model. Treat the following as the')
+    parts.push('problem to decide on, not as the decision — weigh it, and say so if the right')
+    parts.push('call is to accept the current design as it stands.')
+    parts.push(background.trim())
     parts.push('')
   }
   parts.push(`Draft an ADR for the following decision: ${topic.trim()}`)
