@@ -640,6 +640,33 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance: generated corpus', () 
 //   - No false positives: if the CLI accepts the DSL, the validator must be
 //     silent. A warning nobody can act on is noise in the code pane.
 describe.skipIf(!CLI_AVAILABLE)('validateForStructurizr agrees with the real parser', () => {
+    it.each([
+        { workspaceDirective: '!impliedRelationships false', modelDirective: '', elementDirective: '', viewsDirective: '', rejected: false },
+        { workspaceDirective: '', modelDirective: '!impliedRelationships false', elementDirective: '', viewsDirective: '', rejected: false },
+        { workspaceDirective: '', modelDirective: '', elementDirective: '!impliedRelationships false', viewsDirective: '', rejected: false },
+        { workspaceDirective: '!impliedRelationships false', modelDirective: '!impliedRelationships true', elementDirective: '', viewsDirective: '', rejected: true },
+        { workspaceDirective: '', modelDirective: '', elementDirective: '', viewsDirective: '!impliedRelationships false', rejected: true },
+    ])('respects the emitted implication strategy: %j', ({ workspaceDirective, modelDirective, elementDirective, viewsDirective, rejected }) => {
+        const { workspace } = parseDSL(`workspace {
+            ${workspaceDirective}
+            model {
+                ${modelDirective}
+                s = softwareSystem "S" {
+                    ${elementDirective}
+                    c = container "C"
+                }
+                t = softwareSystem "T"
+                c -> t "uses"
+                s -> t "uses"
+            }
+            views {
+                ${viewsDirective}
+            }
+        }`)
+        expect(validate(serializeDSL(workspace)) !== null).toBe(rejected)
+        expect(validateForStructurizr(workspace).some(w => w.code === 'implied-duplicate-relationship')).toBe(rejected)
+    })
+
     const RELAXATIONS: { name: string; relax: RelaxOptions }[] = [
         { name: 'empty names', relax: { emptyNames: true } },
         { name: 'invalid urls', relax: { invalidUrls: true } },

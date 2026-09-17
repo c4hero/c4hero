@@ -32,6 +32,8 @@
 
 import type { DeploymentNode, ModelElement, Relationship, View, Workspace } from '@/types/model'
 import { representable } from './dsl/encoding'
+import { serialize } from './dsl/serializer'
+import { lex } from './dsl/lexer'
 import { isConformantViewKey } from './dsl/viewKey'
 
 export type StructurizrWarningCode =
@@ -308,6 +310,34 @@ function ancestorsOf(id: string, parentOf: Map<string, string>): string[] {
   return out
 }
 
+/** All explicit relationships are emitted after the model declarations. Read
+ * the effective strategy in emitted order: group/element anchors can reorder
+ * directives, and a views-scope directive comes too late to affect the model.
+ * Only serialize when a strategy override is present. */
+function usesDefaultImpliedRelationships(ws: Workspace): boolean {
+  const isOverride = (raw: string) => /^!impliedRelationships\b/i.test(raw.trim())
+  const hasOverride = ws.directives?.some(d => isOverride(d.raw))
+    || placedElements(ws).some(({ element }) =>
+      'directives' in element && element.directives?.some(isOverride))
+  if (!hasOverride) return true
+
+  // This checker must remain non-throwing even when another export constraint
+  // (such as overlapping groups) prevents serialization. In that case avoid
+  // claiming an implied collision whose strategy we cannot establish.
+  try {
+    let enabled = true
+    for (const token of lex(serialize(ws)).tokens) {
+      if (token.type === 'ARROW') break
+      if (token.type !== 'KEYWORD' || !isOverride(token.value)) continue
+      const value = token.value.trim().split(/\s+/)[1]?.replace(/^"|"$/g, '')
+      enabled = value?.toLowerCase() === 'true'
+    }
+    return enabled
+  } catch {
+    return false
+  }
+}
+
 /**
  * Relationship checks 4 and 5.
  *
@@ -328,6 +358,7 @@ function ancestorsOf(id: string, parentOf: Map<string, string>): string[] {
 function checkRelationships(ws: Workspace, parentOf: Map<string, string>): StructurizrWarning[] {
   const warnings: StructurizrWarning[] = []
   const relationships: Relationship[] = ws.model?.relationships ?? []
+  const implyRelationships = usesDefaultImpliedRelationships(ws)
 
   /** Pairs that hold any relationship — suppresses further implied ones. */
   const anyBetween = new Set<string>()
@@ -372,6 +403,8 @@ function checkRelationships(ws: Workspace, parentOf: Map<string, string>): Struc
     }
     exact.set(key, 'explicit')
     anyBetween.add(pair)
+
+    if (!implyRelationships) continue
 
     // Mirror the default strategy (create the implied relationship unless any
     // relationship already exists between that pair) over the ancestor lattice.

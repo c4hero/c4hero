@@ -84,6 +84,7 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
         if (authored && isConformantViewKey(authored)) continue // already reserved above
 
         if (authored) {
+            view.originalKey = authored
             const normalized = sanitizeViewKey(authored)
             if (normalized) {
                 view.key = claim(normalized)

@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { isConformantViewKey, sanitizeViewKey } from './viewKey'
+import { applySidecar, extractSidecar } from '@/lib/sidecar'
 import { generateDefaultViews } from './auto-views'
 import { validateForStructurizr } from '@/lib/structurizrValidation'
 import type { Workspace } from '@/types/model'
@@ -248,5 +249,43 @@ describe('a minted key never collides with one authored later in the file', () =
             include *
         }`)
         expect(allKeys(workspace)).toEqual(['SystemContext-sys1-2', 'SystemContext-sys1'])
+    })
+})
+
+describe('layout migration for normalized view keys', () => {
+    it.each(['Billing Context', '東京'])('retains layout and locks through save/reload for %s', key => {
+        const { workspace } = parseViews(`systemContext sys1 "${key}" {
+ include *
+}`)
+        const saved = { locked: true, elements: { sys1: { pinned: true, locked: true, x: 420, y: 200 } } }
+        applySidecar(workspace, { version: 1, views: { [key]: saved } })
+        const view = workspace.views.systemContextViews[0]
+        expect(view.locked).toBe(true)
+        expect(view.elements.find(el => el.id === 'sys1')).toMatchObject(saved.elements.sys1)
+        const migrated = extractSidecar(workspace)!
+        expect(migrated.views?.[key]).toBeUndefined()
+        expect(migrated.views?.[view.key]).toEqual(saved)
+        const reloaded = parseDSL(serializeDSL(workspace)).workspace
+        applySidecar(reloaded, migrated)
+        expect(reloaded.views.systemContextViews[0].locked).toBe(true)
+        expect(reloaded.views.systemContextViews[0].elements.find(el => el.id === 'sys1')).toMatchObject(saved.elements.sys1)
+    })
+
+    it('keeps colliding authored views separate and prefers migrated data', () => {
+        const { workspace } = parseViews(`systemContext sys1 "Billing Context" {
+ include *
+}
+            systemContext sys1 "Billing-Context" {
+ include *
+}`)
+        const old = { elements: { sys1: { pinned: true, x: 100, y: 200 } } }
+        const other = { elements: { sys1: { pinned: true, x: 300, y: 400 } } }
+        applySidecar(workspace, { version: 1, views: { 'Billing Context': old, 'Billing-Context': other } })
+        const [renamed, authored] = workspace.views.systemContextViews
+        expect(renamed.key).toBe('Billing-Context-2')
+        expect(renamed.elements.find(el => el.id === 'sys1')?.x).toBe(100)
+        expect(authored.elements.find(el => el.id === 'sys1')?.x).toBe(300)
+        applySidecar(workspace, { version: 1, views: { 'Billing Context': old, [renamed.key]: other } })
+        expect(renamed.elements.find(el => el.id === 'sys1')?.x).toBe(300)
     })
 })

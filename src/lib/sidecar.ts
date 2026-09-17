@@ -176,6 +176,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   if (sidecar.views) {
     for (const view of allViewsOf(workspace)) {
       const viewData = sidecar.views[view.key]
+        ?? (view.originalKey ? sidecar.views[view.originalKey] : undefined)
       if (!viewData) continue
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue

@@ -197,6 +197,8 @@ export interface AutoLayout {
 export interface View {
   type: ViewType
   key: string
+  /** Import-only alias for layout saved before the parser normalized the key. */
+  originalKey?: string
   /** See BaseElement.sourcePath. */
   sourcePath?: string
   /** True when `key` was synthesised by the parser because the DSL omitted one.

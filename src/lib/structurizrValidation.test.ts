@@ -219,6 +219,18 @@ describe('validateForStructurizr', () => {
       expect(codes(w)).toEqual([])
     })
 
+    it('honors disabled implication without disabling explicit or ancestor checks', () => {
+      const w = nested()
+      w.directives = [{ scope: 'workspace', raw: '!impliedRelationships false' }]
+      w.model.relationships = [
+        rel('r1', 'c1', 's2', { description: 'uses' }),
+        rel('r2', 's1', 's2', { description: 'uses' }),
+        rel('r3', 's1', 's2', { description: 'uses' }),
+        rel('r4', 'c1', 's1', { description: 'uses' }),
+      ]
+      expect(codes(w)).toEqual(['duplicate-relationship', 'ancestor-relationship'])
+    })
+
     it('flags an explicit relationship that duplicates an implied one', () => {
       const w = nested()
       w.model.relationships = [
