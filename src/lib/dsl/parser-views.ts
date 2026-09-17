@@ -87,14 +87,24 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
             const normalized = sanitizeViewKey(authored)
             if (normalized) {
                 view.key = claim(normalized)
+                // The authored key was doing double duty as the view's label:
+                // c4hero shows `title ?? key`, and a key written as
+                // `"Billing Context"` is a human-readable string precisely
+                // because someone meant it to be read. Rewriting the key would
+                // silently rename the view on screen, so the original text is
+                // promoted to the field that actually holds labels. Nothing is
+                // lost — it round-trips as `title "Billing Context"` — and a
+                // view that already has a title keeps it.
+                if (!view.title) view.title = authored
                 p.addWarning(
-                    `View key "${authored}" contains characters Structurizr rejects (only a-zA-Z0-9_- are allowed) — using "${view.key}"`,
+                    `View key "${authored}" contains characters Structurizr rejects (only a-zA-Z0-9_- are allowed) — using "${view.key}", and keeping "${authored}" as the view's title`,
                     at,
                 )
                 continue
             }
             // Nothing legal survived (e.g. a key of only spaces): fall through
             // to a derived key, and say so rather than silently dropping it.
+            if (!view.title) view.title = authored
             p.addWarning(
                 `View key "${authored}" contains no characters Structurizr allows (only a-zA-Z0-9_-) — using a generated key`,
                 at,

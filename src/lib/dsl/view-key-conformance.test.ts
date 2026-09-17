@@ -75,6 +75,36 @@ describe('parsing a non-conformant view key', () => {
         expect(warnings[0].message).toContain('Label-602')
     })
 
+    it('keeps the authored key as the view\'s label, so nothing is renamed on screen', () => {
+        // c4hero shows `title ?? key`. A key written as "Label 602" was being
+        // read by a human, so rewriting it alone would silently rename the
+        // view — the regression the e2e gauntlet caught.
+        const { workspace } = parseViews(`        systemContext sys1 "Label 602" {
+            include *
+        }`)
+        const view = workspace.views.systemContextViews[0]
+        expect(view.key).toBe('Label-602')
+        expect(view.title).toBe('Label 602')
+        // And it survives the round trip as a real title.
+        expect(serializeDSL(workspace)).toContain('title "Label 602"')
+    })
+
+    it('leaves a view that already has a title alone', () => {
+        const { workspace } = parseViews(`        systemContext sys1 "Label 602" "The billing context" {
+            include *
+        }`)
+        expect(workspace.views.systemContextViews[0].title).toBe('The billing context')
+    })
+
+    it('keeps the label even when nothing legal survives in the key', () => {
+        const { workspace } = parseViews(`        systemContext sys1 "日本語" {
+            include *
+        }`)
+        const view = workspace.views.systemContextViews[0]
+        expect(view.key).toBe('SystemContext-sys1')
+        expect(view.title).toBe('日本語')
+    })
+
     it('does not drop or corrupt the view itself', () => {
         const { workspace } = parseViews(`        systemContext sys1 "Label 602" {
             include *

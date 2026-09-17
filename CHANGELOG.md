@@ -108,8 +108,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   other Structurizr tool would load. Keys are now normalised as the file is
   read, so what c4hero stores and what it writes back stay identical and the
   export loads anywhere; the code pane says which key was rewritten and to
-  what, rather than doing it silently. Keys c4hero generates itself were
-  already safe and now stay that way by construction. (TEA-166)
+  what, rather than doing it silently. A key written to be read — `"Billing
+  Context"` — was also the view's label, so the original text is kept as the
+  view's title and nothing is renamed on screen. Keys c4hero generates itself
+  were already safe and now stay that way by construction. (TEA-166)
 - **Save wrote a copy instead of the file you had open.** In a folder
   collection, the top-bar Save button and Ctrl/Cmd+S went through the
   "save as" flow rather than the file the workspace was opened from — on
