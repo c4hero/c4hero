@@ -21,3 +21,17 @@ export function representable(s: string): string {
 export function representableTag(t: string): string {
   return representable(t.replace(/,/g, ''))
 }
+
+/** The value a string comes back as after a full save/load round trip: the
+ *  unrepresentable backslashes above are gone, and every carriage return has
+ *  become a plain newline. The DSL has no `\r` escape, so `escapeString`
+ *  writes CR, LF and CRLF alike as `\n`, which the parser reads back as a
+ *  bare newline. */
+export function roundTripped(s: string): string {
+  return representable(s).replace(/\r\n|\r/g, '\n')
+}
+
+/** A tag after a full round trip: commas go first, then the rules above. */
+export function roundTrippedTag(t: string): string {
+  return roundTripped(t.replace(/,/g, ''))
+}

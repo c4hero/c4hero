@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to write up. The draft goes through the existing *Save to decisions* flow
   into the workspace's `!adrs` folder. Editing the topic yourself drops the
   finding's context, and a draft now survives switching tabs. (TEA-43)
+- **The code pane says when saving will change one of your values.** Structurizr
+  DSL cannot represent a backslash before `n` or at the end of a value, a comma
+  inside a tag, or a carriage return, so c4hero drops them rather than writing
+  something the parser would misread — `Shared Folder X:\` became
+  `Shared Folder X:` and the tag `v1,beta` became `v1beta`, silently. Those
+  changes are now listed before they happen, including the ones that lose data
+  outright: two tags that collapse into the same name, two property keys that
+  encode to the same key, and a style selector that stops matching the tag it
+  was written for. Nothing is blocked and the drop policy is unchanged — the
+  alternative is corrupting the value — you just find out first. (TEA-169)
 - **The code pane warns when a model other Structurizr tools would reject.**
   c4hero happily holds states the real Structurizr parser refuses to load — an
   element whose name encodes to nothing, a `url` field that isn't a URL, two
