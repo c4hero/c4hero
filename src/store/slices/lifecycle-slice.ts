@@ -32,6 +32,7 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
   const nextNames = elementNamesById(next)
   for (const view of allViewsOf(next)) {
     const old = prevViews.get(view.key)
+      ?? (view.originalKey ? prevViews.get(view.originalKey) : undefined)
     if (!old) continue
     if (old.locked) view.locked = true
     const oldById = new Map(old.elements.map((el) => [el.id, el]))

@@ -21,6 +21,7 @@ import type {
     InfrastructureNode,
 } from '@/types/model'
 import { dslIdentifierForm } from '@/lib/identifier'
+import { representable } from './encoding'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
@@ -1368,11 +1369,16 @@ class SerializerContext {
      * The drop is silent for now; surfacing a save-time warning is TEA-169.
      */
     private escapeString(s: string): string {
-        return s
-            .replace(/\\+(?=n)/g, '')
-            .replace(/\\+$/, '')
-            .replace(/"/g, '\\"')
-            .replace(/\r\n|\r|\n/g, '\\n')
+        // One pass, so nothing can re-process its own output — and note what is
+        // deliberately NOT here: backslashes are not escaped. `\` is only
+        // meaningful to Structurizr's lexer before `"` or `n`; anywhere else it
+        // is a literal that must survive byte-for-byte (`C:\Program Files`).
+        // That also makes the interesting case right: the value `a\"` emits
+        // `a\\"`, which the lexer reads as a literal `\` followed by the escape
+        // `\"`. Escaping backslashes would corrupt every Windows path in a
+        // model. Proved against the real parser by "stores backslash-before-
+        // quote byte-exactly" in structurizr-conformance.test.ts.
+        return representable(s).replace(/\r\n|[\r\n"]/g, m => (m === '"' ? '\\"' : '\\n'))
     }
 
     /**

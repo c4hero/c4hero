@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to write up. The draft goes through the existing *Save to decisions* flow
   into the workspace's `!adrs` folder. Editing the topic yourself drops the
   finding's context, and a draft now survives switching tabs. (TEA-43)
+- **The code pane warns when a model other Structurizr tools would reject.**
+  c4hero happily holds states the real Structurizr parser refuses to load — an
+  element whose name encodes to nothing, a `url` field that isn't a URL, two
+  containers of one system (or two deployment nodes of one environment) sharing
+  a name, two views sharing a key, a relationship between an element and its
+  own parent, or one that duplicates a relationship Structurizr already derives
+  from its children. Each one is fine on the canvas and then fails at the point
+  the file reaches a colleague. A new validation pass checks all of them
+  against the rules of the real parser and reports a count in the code pane's
+  footer, with the details on hover. They are warnings only: nothing is
+  blocked, nothing is rewritten. (TEA-331)
 - **The AI assistant reads your documentation.** When a workspace has
   `!docs` / `!adrs` folders, the deep review, the Q&A chat, the interview
   and the ADR drafter all see them — ranked by closeness to the current
@@ -101,6 +112,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **View keys from an imported file no longer break the export.** Structurizr
+  allows only letters, digits, `_` and `-` in a view key, and a file carrying
+  one with a space in it — as IcePanel's exporter writes — produced DSL no
+  other Structurizr tool would load. Keys are now normalised as the file is
+  read, so what c4hero stores and what it writes back stay identical and the
+  export loads anywhere; the code pane says which key was rewritten and to
+  what, rather than doing it silently. A key written to be read — `"Billing
+  Context"` — was also the view's label, so the original text is kept as the
+  view's title and nothing is renamed on screen. Keys c4hero generates itself
+  were already safe and now stay that way by construction. (TEA-166)
 - **Save wrote a copy instead of the file you had open.** In a folder
   collection, the top-bar Save button and Ctrl/Cmd+S went through the
   "save as" flow rather than the file the workspace was opened from — on

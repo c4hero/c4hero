@@ -85,6 +85,22 @@ describe('replaceWorkspaceFromDSL', () => {
     expect(land.locked).toBe(true)
   })
 
+  it('carries layout from a legacy key when applying DSL normalizes it', () => {
+    const legacyDsl = BASE_DSL.replace('"Main"', '"Billing Context"')
+    const legacy = parseDSL(legacyDsl).workspace
+    const view = legacy.views.systemContextViews[0]
+    view.key = 'Billing Context' // a workspace loaded before key normalization
+    delete view.originalKey
+    view.locked = true
+    Object.assign(view.elements.find(el => el.id === 'u')!, { x: 123, y: 456, pinned: true, locked: true })
+    store().loadWorkspace(legacy)
+    expect(store().replaceWorkspaceFromDSL(legacyDsl).ok).toBe(true)
+    const updated = store().workspace!.views.systemContextViews[0]
+    expect(updated.key).toBe('Billing-Context')
+    expect(updated.locked).toBe(true)
+    expect(updated.elements.find(el => el.id === 'u')).toMatchObject({ x: 123, y: 456, pinned: true, locked: true })
+  })
+
   it('falls back to the first view when the active view was deleted by the edit', () => {
     store().setActiveView('Land')
     expect(store().activeViewKey).toBe('Land')

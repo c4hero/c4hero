@@ -6,16 +6,23 @@
 // newlines, tabs, commas (tag separators), comment openers, braces, arrows,
 // keywords used as names, empty and whitespace-only values, unicode.
 //
-// The generator stays inside what Structurizr accepts structurally (no
-// self-relationships, disjoint groups, unique ids, view keys limited to the
-// characters Structurizr allows — TEA-166 tracks keys that aren't). What it
-// pushes on is the *content*: the shapes c4hero's own round-trip tests never
-// think to write.
+// By default the generator stays inside what Structurizr accepts structurally
+// (no self-relationships, disjoint groups, unique ids, conformant view keys).
+// What it pushes on is the *content*: the shapes c4hero's own round-trip tests
+// never think to write.
+//
+// Each of those structural constraints exists because c4hero's store accepts a
+// state that serializes to DSL the real parser rejects (TEA-331). `relax` lifts
+// them one at a time, which is how `validateForStructurizr` is proved against
+// the real parser rather than against our reading of its source: generate a
+// workspace that deliberately breaks one rule, and assert the validator and the
+// Structurizr CLI agree about it (see structurizr-conformance.test.ts).
 
 import type {
   Workspace, Person, SoftwareSystem, Container, Component, Relationship, Group, View,
   ElementStyle, RelationshipStyle, ElementStatus, Location, InteractionStyle, LineStyle,
 } from '@/types/model'
+import { representable } from '../encoding'
 
 /** mulberry32 — small, fast, good enough for test data. */
 export function rng(seed: number): () => number {
@@ -58,11 +65,32 @@ const HOSTILE = [
 const TECH = ['Go', 'Spring Boot', 'Node.js', 'Postgres 16', 'C++/CLI', 'F#', 'Kafka 3.x', 'HTTP/2']
 const TAGS = ['critical', 'legacy', 'team-a', 'PCI', 'has,comma', 'has"quote', 'spaced tag', 'Tag\\Back']
 const OWNERS = ['Platform Team', 'Team "Blue"', 'ops\\infra', '']
-// Structurizr validates urls (java.net.URL), so only well-formed ones here.
-// c4hero accepting any string in the url field is a product gap (TEA-169).
+// Structurizr validates urls with java.net.URL, so only well-formed ones here.
+// c4hero accepting any string in the url field is the product gap TEA-331
+// covers; `relax.invalidUrls` mixes in BAD_URLS to exercise it.
 const URLS = ['https://example.com/x', 'https://example.com/a?b=c&d=%22e%22', 'https://例え.jp/path']
+// Every one of these is rejected by `new java.net.URL(...)`: no scheme, a
+// scheme the JDK has no handler for, or an authority whose port isn't numeric.
+const BAD_URLS = ['example.com', 'not a url', 'file://C:\\share', 'urn:isbn:1', 'data:text/plain,hi', 'https://host:port/x']
 const COLOURS = ['#ff0000', '#08427b', '#999999', '#1168bd']
 const SHAPES = ['Box', 'RoundedBox', 'Cylinder', 'Person', 'Hexagon']
+
+/** Structural rules the generator normally respects, each liftable on its own
+ *  so the corpus can prove the matching `validateForStructurizr` check. */
+export interface RelaxOptions {
+  /** Allow a name that encodes to nothing ("A container name must be provided"). */
+  emptyNames?: boolean
+  /** Allow urls java.net.URL rejects ("<url> is not a valid URL"). */
+  invalidUrls?: boolean
+  /** Allow two siblings to share a name ("A container named 'X' already exists"). */
+  duplicateSiblingNames?: boolean
+  /** Allow a relationship to an ancestor ("Relationships cannot be added between parents and children"). */
+  ancestorRelationships?: boolean
+  /** Allow an explicit relationship that duplicates an implied one ("already exists"). */
+  impliedDuplicates?: boolean
+  /** Allow view keys outside a-zA-Z0-9_- ("View keys can only contain..."). */
+  badViewKeys?: boolean
+}
 
 export interface GenerateOptions {
   /** Include hostile strings (default true). */
@@ -72,6 +100,8 @@ export interface GenerateOptions {
   maxSystems?: number
   maxContainers?: number
   maxComponents?: number
+  /** Structural rules to stop respecting (default: respect all of them). */
+  relax?: RelaxOptions
 }
 
 export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Workspace {
@@ -80,12 +110,16 @@ export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Wor
   const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(r() * xs.length)]
   const chance = (p: number) => r() < p
   const hostile = opts.hostile ?? true
+  const relax = opts.relax ?? {}
   const str = (plainOnly = false) => (!plainOnly && hostile && chance(0.4) ? pick(HOSTILE) : pick(PLAIN))
   // Structurizr requires a non-empty element name, so names avoid strings
-  // that encode to nothing (a lone or trailing backslash). What c4hero should
-  // do with such a name in the inspector is TEA-169's territory.
+  // that encode to nothing (a lone or trailing backslash) unless asked to.
   const NAMEABLE = HOSTILE.filter((h) => representable(h).length > 0)
-  const nameStr = () => (hostile && chance(0.4) ? pick(NAMEABLE) : pick(PLAIN))
+  const UNNAMEABLE = ['\\', 'Shared Folder X:\\', '', '   ']
+  const nameStr = () => {
+    if (relax.emptyNames && chance(0.25)) return pick(UNNAMEABLE)
+    return hostile && chance(0.4) ? pick(NAMEABLE) : pick(PLAIN)
+  }
   const maybe = <T,>(p: number, v: () => T): T | undefined => (chance(p) ? v() : undefined)
   const tags = (defaults: string[]) => {
     const extra = new Set<string>()
@@ -105,6 +139,8 @@ export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Wor
   // top level, containers within a system, components within a container).
   const uniqueName = (taken: Set<string>) => {
     let name = nameStr()
+    // Reusing a sibling's name is the whole point when the rule is relaxed.
+    if (relax.duplicateSiblingNames && taken.size > 0 && chance(0.3)) return [...taken][0]
     let n = 2
     while (taken.has(name)) name = `${nameStr()} ${n++}`
     taken.add(name)
@@ -118,7 +154,7 @@ export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Wor
     description: maybe(0.7, () => str()),
     tags: tags(defaults),
     properties: props(),
-    url: maybe(0.2, () => pick(URLS)),
+    url: maybe(0.2, () => (relax.invalidUrls && chance(0.5) ? pick(BAD_URLS) : pick(URLS))),
     status: maybe(0.3, () => pick(['Live', 'Planned', 'Deprecated', 'Removed'] as ElementStatus[])),
     owner: maybe(0.3, () => pick(OWNERS)),
   })
@@ -176,15 +212,17 @@ export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Wor
       while (cur) { out.add(cur); cur = all.find((x) => x.id === cur)?.parent }
       return out
     }
-    if (ancestors(a).has(b.id) || ancestors(b).has(a.id)) continue
+    if (!relax.ancestorRelationships && (ancestors(a).has(b.id) || ancestors(b).has(a.id))) continue
     // Structurizr (impliedRelationships on by default) derives a relationship
     // between every ancestor pair of a relationship's ends, and then rejects
     // an explicit duplicate of one ("already exists"). Reserve the whole
     // ancestor lattice of each pair so no later pick collides with an
     // implied one.
     const key = `${a.id}->${b.id}`
-    if (seenPairs.has(key)) continue
-    for (const A of [a.id, ...ancestors(a)]) for (const B of [b.id, ...ancestors(b)]) seenPairs.add(`${A}->${B}`)
+    if (!relax.impliedDuplicates) {
+      if (seenPairs.has(key)) continue
+      for (const A of [a.id, ...ancestors(a)]) for (const B of [b.id, ...ancestors(b)]) seenPairs.add(`${A}->${B}`)
+    }
     relationships.push({
       id: id('rel'),
       sourceId: a.id,
@@ -195,8 +233,59 @@ export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Wor
       properties: props(),
       interactionStyle: maybe(0.3, () => pick(['Synchronous', 'Asynchronous'] as InteractionStyle[])),
       lineStyle: maybe(0.3, () => pick(['Curved', 'Straight', 'Orthogonal'] as LineStyle[])),
-      url: maybe(0.15, () => pick(URLS)),
+      url: maybe(0.15, () => (relax.invalidUrls && chance(0.5) ? pick(BAD_URLS) : pick(URLS))),
     })
+  }
+
+  // A random pick lands on an ancestor pair rarely (most elements are
+  // top-level), so when the rule is relaxed, mint the shape directly.
+  if (relax.ancestorRelationships) {
+    for (const e of all) {
+      if (!e.parent || !chance(0.3)) continue
+      relationships.push({
+        id: id('rel'),
+        sourceId: e.id,
+        destinationId: e.parent,
+        description: maybe(0.8, () => str()),
+        tags: ['Relationship'],
+        properties: {},
+      })
+    }
+  }
+
+  // An implied duplicate only bites when the explicit relationship matches the
+  // implied one on source, destination AND description, and is declared after
+  // it — so a random pick almost never produces one. Mint them deliberately:
+  // for a relationship whose ends have ancestors, add the ancestor-pair
+  // relationship with the same description, which Structurizr has by then
+  // already derived.
+  if (relax.impliedDuplicates) {
+    const parentOf = new Map(all.filter((e) => e.parent).map((e) => [e.id, e.parent!]))
+    const ancestorsOf = (id: string) => {
+      const out = new Set<string>()
+      let cur = parentOf.get(id)
+      while (cur && !out.has(cur)) { out.add(cur); cur = parentOf.get(cur) }
+      return out
+    }
+    for (const rel of [...relationships]) {
+      if (!chance(0.5)) continue
+      const src = parentOf.get(rel.sourceId)
+      const dst = parentOf.get(rel.destinationId) ?? rel.destinationId
+      if (!src || src === dst) continue
+      // The ancestor pair has to be a *legal* relationship in its own right:
+      // for `comp(c1/s1) -> c2(s1)` the pair is `c1 -> s1`, which Structurizr
+      // rejects as a parent/child relationship, so the seed would prove
+      // nothing about implied duplicates.
+      if (ancestorsOf(src).has(dst) || ancestorsOf(dst).has(src)) continue
+      relationships.push({
+        id: id('rel'),
+        sourceId: src,
+        destinationId: dst,
+        description: rel.description,
+        tags: ['Relationship'],
+        properties: {},
+      })
+    }
   }
 
   // Disjoint top-level groups over people + systems.
@@ -213,14 +302,17 @@ export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Wor
 
   // Views: landscape always; context + container per system (sometimes);
   // component per container (sometimes). Keys stay within Structurizr's
-  // allowed characters.
+  // allowed characters unless `relax.badViewKeys` says otherwise.
   const views: Workspace['views'] = {
     systemLandscapeViews: [], systemContextViews: [], containerViews: [], componentViews: [],
     dynamicViews: [], deploymentViews: [],
     configuration: { styles: { elements: [], relationships: [] } },
   }
+  // Structurizr allows only a-zA-Z0-9_- in a view key; `relax.badViewKeys`
+  // borrows from the hostile pool so the corpus can exercise TEA-166.
+  const viewKey = (key: string) => (relax.badViewKeys && chance(0.4) ? `${key} ${pick(HOSTILE)}` : key)
   const viewCommon = (key: string): Pick<View, 'key' | 'title' | 'description' | 'autoLayout' | 'relationships'> => ({
-    key,
+    key: viewKey(key),
     title: maybe(0.5, () => str()),
     description: maybe(0.3, () => str()),
     autoLayout: maybe(0.5, () => ({ direction: pick(['TB', 'BT', 'LR', 'RL'] as const) })),
@@ -280,16 +372,4 @@ export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Wor
     model: { people, softwareSystems: systems, relationships, groups, deploymentEnvironments: [] },
     views,
   }
-}
-
-/** What a string becomes after the serializer's unrepresentable-backslash
- *  rules: a backslash before `n` or at the end of the value is dropped. Every
- *  other character survives Structurizr byte-for-byte. */
-export function representable(s: string): string {
-  return s.replace(/\\+(?=n)/g, '').replace(/\\+$/, '')
-}
-
-/** A tag after the serializer's comma stripping and backslash rules. */
-export function representableTag(t: string): string {
-  return representable(t.replace(/,/g, ''))
 }

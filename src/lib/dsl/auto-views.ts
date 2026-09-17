@@ -1,4 +1,5 @@
 import type { Workspace, ElementInView, ModelElement } from '@/types/model'
+import { sanitizeViewKey } from './viewKey'
 
 /** Generate sensible default views for a workspace that has none.
  *
@@ -24,10 +25,15 @@ export function generateDefaultViews(ws: Workspace): void {
     const findElement = (id: string): ModelElement | undefined => allElements.get(id)
 
     const usedKeys = new Set<string>()
+    /** Reserve a unique key derived from `base`. The base is sanitized because
+     *  it embeds an element id, and a key Structurizr rejects must never
+     *  originate here (TEA-166) — element ids are conformant today, and this
+     *  keeps that from being a rule the id rules have to keep honouring. */
     const claim = (base: string): string => {
-        let candidate = base
+        let candidate = sanitizeViewKey(base) || 'View'
+        const root = candidate
         let suffix = 2
-        while (usedKeys.has(candidate)) candidate = `${base}-${suffix++}`
+        while (usedKeys.has(candidate)) candidate = `${root}-${suffix++}`
         usedKeys.add(candidate)
         return candidate
     }
