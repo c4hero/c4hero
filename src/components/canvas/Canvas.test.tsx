@@ -11,6 +11,8 @@ import { useWorkspaceStore } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import { loadViewport, saveViewport } from '@/lib/viewportStorage'
 import type { Workspace } from '@/types/model'
+import type { ParseError } from '@/lib/dsl'
+import dagre from '@dagrejs/dagre'
 import Canvas from './Canvas'
 
 // ─── jsdom stubs required by React Flow (official testing recipe) ─────
@@ -734,5 +736,127 @@ describe('Canvas rubber-band selection', () => {
     await waitFor(() => {
       expect([...useWorkspaceStore.getState().selectedElementIds].sort()).toEqual(['c1', 'c2'])
     })
+  })
+})
+
+// ─── Layout recompute budget (TEA-80) ──────────────────────────────────
+//
+// A full dagre run is the most expensive thing the canvas does, and the layout
+// memo depends on the whole `workspace` object — which, under immer, is a new
+// reference after ANY mutation. What keeps a rename or a drag from re-laying
+// out the diagram is a single early return in `applyAutoLayout`: every element
+// whose position is already saved is "frozen", and a call where nothing is
+// unfrozen returns the nodes untouched without building a graph.
+//
+// Nothing enforces that. Removing the early return, or changing
+// `carryForwardMeasurements` so nodes arrive without their saved positions,
+// would put a dagre run back on every keystroke with no visible symptom in any
+// other test — the extra layout is computed and then discarded, so the rendered
+// output is identical and only the frame budget suffers.
+//
+// These count calls into dagre itself rather than calls into applyAutoLayout.
+// Counting the wrapper, or inferring "would it have run" from its arguments,
+// passes happily with the early return deleted — which is the one regression
+// worth catching here.
+describe('Canvas layout recompute budget', () => {
+  /** Mount, let the first layout settle and its positions be written back,
+   *  then hand back a spy watching only what happens next. */
+  async function mountThenWatchDagre() {
+    seed('cont')
+    await renderCanvas()
+    await screen.findByText('C1')
+    await wait(60)
+    return vi.spyOn(dagre, 'layout')
+  }
+
+  /** c1 as the store currently holds it, for the "did the edit land?" guards:
+   *  a negative assertion alone passes just as happily when the action was a
+   *  no-op and nothing ever reached the canvas. */
+  const containerC1 = () =>
+    useWorkspaceStore.getState().workspace!.model.softwareSystems[0].containers.find(c => c.id === 'c1')!
+  const viewElementC1 = () =>
+    useWorkspaceStore.getState().workspace!.views.containerViews
+      .find(v => v.key === 'cont')!.elements.find(e => e.id === 'c1')!
+
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('does not re-layout when an element is renamed', async () => {
+    const spy = await mountThenWatchDagre()
+    await act(async () => { useWorkspaceStore.getState().updateElement('c1', { name: 'C1 renamed' }) })
+    await wait(60)
+    expect(spy).not.toHaveBeenCalled()
+    // The rename still reaches the canvas — this must not pass because
+    // nothing happened at all.
+    await screen.findByText('C1 renamed')
+  })
+
+  it('does not re-layout when a description changes', async () => {
+    const spy = await mountThenWatchDagre()
+    await act(async () => { useWorkspaceStore.getState().updateElement('c1', { description: 'Now documented' }) })
+    await wait(60)
+    expect(spy).not.toHaveBeenCalled()
+    expect(containerC1().description).toBe('Now documented')
+  })
+
+  it('does not re-layout when a node is dragged', async () => {
+    const spy = await mountThenWatchDagre()
+    await act(async () => { useWorkspaceStore.getState().updateNodePosition('c1', 640, 480) })
+    await wait(60)
+    expect(spy).not.toHaveBeenCalled()
+    expect([viewElementC1().x, viewElementC1().y]).toEqual([640, 480])
+  })
+
+  it('does not re-layout when the workspace is rebuilt from edited DSL', async () => {
+    // Every keystroke in the code pane re-parses and replaces the whole
+    // workspace. Positions live in the sidecar rather than the DSL, so this is
+    // the path most likely to lose them and silently reintroduce the cost.
+    const spy = await mountThenWatchDagre()
+    const dsl = (n: number) => `workspace "T" {
+  model {
+    alice = person "Alice"
+    sys = softwareSystem "Sys" {
+      c1 = container "C1"
+      c2 = container "C2"
+    }
+    c1 -> c2 "Sends data ${n}"
+    alice -> sys "Uses"
+  }
+  views {
+    container sys "cont" {
+      include *
+    }
+  }
+}`
+    for (let i = 0; i < 3; i++) {
+      // replaceWorkspaceFromDSL returns { ok: false } and leaves the store
+      // completely untouched on a parse error or an integrity violation. Assert
+      // it, or a fixture that stops parsing turns this into a green no-op test.
+      let ok = false
+      let errors: ParseError[] = []
+      await act(async () => {
+        ({ ok, errors } = useWorkspaceStore.getState().replaceWorkspaceFromDSL(dsl(i)))
+      })
+      expect(errors).toEqual([])
+      expect(ok).toBe(true)
+      await wait(40)
+    }
+    expect(spy).not.toHaveBeenCalled()
+    // ...and the last edit really is what the canvas is now showing.
+    expect(useWorkspaceStore.getState().workspace!.model.relationships
+      .map(r => r.description)).toContain('Sends data 2')
+  })
+
+  it('does re-layout when an element is added', async () => {
+    const spy = await mountThenWatchDagre()
+    await act(async () => { useWorkspaceStore.getState().addContainer('sys', 'C3') })
+    await wait(60)
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('does re-layout on reset & relayout', async () => {
+    const spy = await mountThenWatchDagre()
+    await act(async () => { useWorkspaceStore.getState().resetAndRelayout('cont') })
+    await wait(60)
+    expect(spy).toHaveBeenCalled()
   })
 })
