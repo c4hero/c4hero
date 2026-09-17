@@ -1369,21 +1369,16 @@ class SerializerContext {
      * The drop is silent for now; surfacing a save-time warning is TEA-169.
      */
     private escapeString(s: string): string {
-        // Backslashes are deliberately NOT escaped, and this is not a
-        // sanitizer. `\` is only meaningful to Structurizr's lexer when it
-        // precedes `"` or `n`; anywhere else it is a literal character that
-        // must survive byte-for-byte (`C:\Program Files`). That also makes the
-        // interesting case correct: `a\"` emits `a\\"`, which the lexer reads
-        // as a literal `\` followed by the escape `\"` — the original value.
-        // Escaping backslashes here would corrupt every Windows path in a
-        // model. The rules are pinned against the real parser by the generated
-        // conformance corpus (structurizr-conformance.test.ts), which asserts
-        // the values Structurizr actually stored, not just that it accepted
-        // the file.
-        // codeql[js/incomplete-sanitization]
-        return representable(s)
-            .replace(/"/g, '\\"')
-            .replace(/\r\n|\r|\n/g, '\\n')
+        // One pass, so nothing can re-process its own output — and note what is
+        // deliberately NOT here: backslashes are not escaped. `\` is only
+        // meaningful to Structurizr's lexer before `"` or `n`; anywhere else it
+        // is a literal that must survive byte-for-byte (`C:\Program Files`).
+        // That also makes the interesting case right: the value `a\"` emits
+        // `a\\"`, which the lexer reads as a literal `\` followed by the escape
+        // `\"`. Escaping backslashes would corrupt every Windows path in a
+        // model. Proved against the real parser by "stores backslash-before-
+        // quote byte-exactly" in structurizr-conformance.test.ts.
+        return representable(s).replace(/\r\n|[\r\n"]/g, m => (m === '"' ? '\\"' : '\\n'))
     }
 
     /**
