@@ -748,11 +748,19 @@ describe('Canvas rubber-band selection', () => {
 // whose position is already saved is "frozen", and a call where nothing is
 // unfrozen returns the nodes untouched without building a graph.
 //
-// Nothing enforces that. Removing the early return, or changing
-// `carryForwardMeasurements` so nodes arrive without their saved positions,
-// would put a dagre run back on every keystroke with no visible symptom in any
-// other test — the extra layout is computed and then discarded, so the rendered
-// output is identical and only the frame budget suffers.
+// Nothing enforces that. Removing the early return would put a dagre run back
+// on every keystroke with no visible symptom in any other test — the extra
+// layout is computed and then discarded, so the rendered output is identical
+// and only the frame budget suffers.
+//
+// Skipping the layout is only half the story: the nodes handed back untouched
+// also have to still carry their saved positions. On most edits that is free —
+// the sync effect merges only data/className/draggable into the mounted nodes
+// and never replaces positions. The exception is an element-id change, which
+// remounts wholesale from the memo's nodes (Canvas.tsx: "return initialNodes");
+// that is the one path where losing positions in the memo — by breaking
+// `carryForwardMeasurements`, say — collapses the diagram onto the origin with
+// every recompute-count assertion here still green, so it gets its own test.
 //
 // These count calls into dagre itself rather than calls into applyAutoLayout.
 // Counting the wrapper, or inferring "would it have run" from its arguments,
@@ -790,20 +798,67 @@ describe('Canvas layout recompute budget', () => {
     await screen.findByText('C1 renamed')
   })
 
+  it('keeps the laid-out positions when an element id change remounts the nodes', async () => {
+    // An id edit is the one edit that replaces the mounted nodes with the
+    // memo's, so it is the only place a memo that lost its positions shows up.
+    // Without it, zeroing every position in `carryForwardMeasurements` leaves
+    // all the recompute-count assertions above green.
+    const spy = await mountThenWatchDagre()
+    const before = { ...rf!.getNode('c1')!.position }
+    expect(before).not.toEqual({ x: 0, y: 0 })
+    await act(async () => { useWorkspaceStore.getState().updateElementId('c1', 'c1renamed') })
+    await wait(60)
+    expect(spy).not.toHaveBeenCalled()
+    const moved = rf!.getNode('c1renamed')
+    expect(moved).toBeDefined()
+    expect(moved!.position).toEqual(before)
+  })
+
   it('does not re-layout when a description changes', async () => {
     const spy = await mountThenWatchDagre()
     await act(async () => { useWorkspaceStore.getState().updateElement('c1', { description: 'Now documented' }) })
     await wait(60)
     expect(spy).not.toHaveBeenCalled()
     expect(containerC1().description).toBe('Now documented')
+    // ...and the view still resolves, so the quiet spy means "skipped", not
+    // "there was nothing on the canvas to lay out".
+    expect(screen.getByText('C1')).toBeTruthy()
   })
 
-  it('does not re-layout when a node is dragged', async () => {
+  it('does not re-layout when a node drag commits', async () => {
     const spy = await mountThenWatchDagre()
-    await act(async () => { useWorkspaceStore.getState().updateNodePosition('c1', 640, 480) })
+    // Drive the real commit path rather than calling the store action: the
+    // budget argument rests on positions landing once, on drag stop.
+    const st = rfStore!.getState()
+    const node = rf!.getNode('c1')! as Node
+    const start = { ...node.position }
+    const moved = { ...node, position: { x: start.x + 60, y: start.y + 45 } } as Node
+    act(() => { st.onNodeDragStart!(mouseEvent('mousedown'), node, [node]) })
+    act(() => { st.onNodeDrag!(mouseEvent('mousemove'), moved, [moved]) })
+    act(() => { st.onNodeDragStop!(mouseEvent('mouseup'), moved, [moved]) })
     await wait(60)
     expect(spy).not.toHaveBeenCalled()
-    expect([viewElementC1().x, viewElementC1().y]).toEqual([640, 480])
+    expect(viewElementC1().x).toBeCloseTo(start.x + 60)
+    expect(viewElementC1().y).toBeCloseTo(start.y + 45)
+    expect(screen.getByText('C1')).toBeTruthy()
+  })
+
+  it('does not re-layout when a multi-element drag commits', async () => {
+    // The plural commit path (`updateNodePositions`) runs for group and
+    // boundary drags and writes every member in one mutation — a different
+    // write than the single-node case, and just as able to drop x/y.
+    const spy = await mountThenWatchDagre()
+    const st = rfStore!.getState()
+    const group = rf!.getNode('group-g1')! as Node
+    const c1Start = { ...rf!.getNode('c1')!.position }
+    const moved = { ...group, position: { x: group.position.x + 35, y: group.position.y + 15 } } as Node
+    act(() => { st.onNodeDragStart!(mouseEvent('mousedown'), group, [group]) })
+    act(() => { st.onNodeDrag!(mouseEvent('mousemove'), moved, [moved]) })
+    act(() => { st.onNodeDragStop!(mouseEvent('mouseup'), moved, [moved]) })
+    await wait(60)
+    expect(spy).not.toHaveBeenCalled()
+    expect(viewElementC1().x).toBeCloseTo(c1Start.x + 35)
+    expect(viewElementC1().y).toBeCloseTo(c1Start.y + 15)
   })
 
   it('does not re-layout when the workspace is rebuilt from edited DSL', async () => {
@@ -841,9 +896,12 @@ describe('Canvas layout recompute budget', () => {
       await wait(40)
     }
     expect(spy).not.toHaveBeenCalled()
-    // ...and the last edit really is what the canvas is now showing.
+    // ...and the last edit really is what the canvas is now showing. This is
+    // the one path that reassigns activeViewKey, so pin that the view still
+    // resolves: an unresolved view renders no nodes and never calls dagre.
     expect(useWorkspaceStore.getState().workspace!.model.relationships
       .map(r => r.description)).toContain('Sends data 2')
+    expect(rf!.getNodes().some(n => n.id === 'c1')).toBe(true)
   })
 
   it('does re-layout when an element is added', async () => {
