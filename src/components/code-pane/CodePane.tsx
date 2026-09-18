@@ -15,6 +15,7 @@ import { readJSON, writeJSON, readString, writeString } from '@/lib/safeStorage'
 import { structurizrLanguage } from './structurizrLanguage'
 import { createDslSyncEngine, type DslSyncStatus } from './dslSyncEngine'
 import { validateForStructurizr } from '@/lib/structurizrValidation'
+import { findSerializationLoss } from '@/lib/serializationLoss'
 
 /** Marks programmatic (store-to-editor) transactions so the update listener
  *  doesn't mistake them for user keystrokes and start an apply cycle. */
@@ -185,6 +186,16 @@ export default function CodePane() {
   // out a new workspace reference.
   const workspace = useWorkspaceStore((s) => s.workspace)
   const conformance = useMemo(() => (workspace ? validateForStructurizr(workspace) : []), [workspace])
+  // Values the DSL cannot represent, which c4hero changes on the way out
+  // (TEA-169). A different promise from the one above — everything here saves
+  // and loads fine, it just isn't quite what was typed — so the two are
+  // counted together but listed under their own headings.
+  const loss = useMemo(() => (workspace ? findSerializationLoss(workspace) : []), [workspace])
+  const modelNotices = conformance.length + loss.length
+  const modelNoticeTitle = [
+    conformance.length > 0 ? `Structurizr would reject this workspace:\n${conformance.map((w) => `- ${w.message}`).join('\n')}` : '',
+    loss.length > 0 ? `Saving changes these values:\n${loss.map((l) => `- ${l.message}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n')
   const hostElRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const [status, setStatus] = useState<DslSyncStatus>({ errors: [], warnings: [], serializeError: null, pendingApply: false })
@@ -601,16 +612,20 @@ export default function CodePane() {
                 {status.warnings.length} {status.warnings.length === 1 ? 'note' : 'notes'} about this file
               </span>
             )}
-            {/* Not gated on pendingApply: a model Structurizr would reject is a
-                fact about the workspace, and stays true while the user types. */}
-            {conformance.length > 0 && (
+            {/* Not gated on pendingApply: what the model is, and what saving
+                will do to it, are facts about the workspace — they stay true
+                while the user types. One badge rather than two, because from
+                the user's side both answer "is what I see what I'll get?". */}
+            {modelNotices > 0 && (
               <span
                 data-code-pane-conformance
-                title={`Structurizr would reject this workspace:\n${conformance.map((w) => `- ${w.message}`).join('\n')}`}
+                data-conformance-count={conformance.length}
+                data-loss-count={loss.length}
+                title={modelNoticeTitle}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', color: 'var(--color-warning, #d29922)' }}
               >
                 <TriangleAlert size={10} />
-                {conformance.length} {conformance.length === 1 ? 'Structurizr issue' : 'Structurizr issues'}
+                {modelNotices} {modelNotices === 1 ? 'model issue' : 'model issues'}
               </span>
             )}
             {status.pendingApply && (
