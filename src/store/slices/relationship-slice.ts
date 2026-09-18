@@ -77,7 +77,7 @@ export const createRelationshipSlice: StateCreator<
       for (const view of allViewsOf(ws)) {
         if (view.type === 'dynamic' || view.type === 'deployment') continue
         const viewElIds = new Set(view.elements.map(e => e.id))
-        if (viewElIds.has(sourceId) && viewElIds.has(destinationId)) {
+        if (viewElIds.has(sourceId) && viewElIds.has(destinationId) && !view.excludedRelationshipIds?.includes(id)) {
           if (!view.relationships.some(r => r.id === id)) {
             view.relationships.push({ id })
           }
@@ -158,7 +158,7 @@ export const createRelationshipSlice: StateCreator<
       const bothPresent = elIds.has(newSourceId) && elIds.has(newTargetId)
       if (hasRel && !bothPresent) {
         v.relationships = v.relationships.filter(r => r.id !== id)
-      } else if (!hasRel && bothPresent) {
+      } else if (!hasRel && bothPresent && !v.excludedRelationshipIds?.includes(id)) {
         v.relationships.push({ id })
       }
     })
@@ -178,6 +178,10 @@ export const createRelationshipSlice: StateCreator<
         return
       }
       v.relationships = v.relationships.filter(r => r.id !== id)
+      if (v.excludedRelationshipIds?.includes(id)) {
+        v.excludedRelationshipIds = v.excludedRelationshipIds.filter((excludedId) => excludedId !== id)
+        if (v.excludedRelationshipIds.length === 0) delete v.excludedRelationshipIds
+      }
     })
     if (s.selectedRelationshipId === id) s.selectedRelationshipId = null
   }),

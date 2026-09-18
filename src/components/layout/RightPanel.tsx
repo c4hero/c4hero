@@ -608,7 +608,10 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
   const workspace = useWorkspaceStore((s) => s.workspace)
   const updateRelationship = useWorkspaceStore((s) => s.updateRelationship)
   const deleteRelationship = useWorkspaceStore((s) => s.deleteRelationship)
+  const removeRelationshipFromView = useWorkspaceStore((s) => s.removeRelationshipFromView)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
+  const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
   const source = elementMap.get(relationship.sourceId)
@@ -628,6 +631,17 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
           <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Relationship</div>
         </div>
         <div className="flex items-center gap-1">
+          {activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment' && (
+            <button
+              onClick={() => removeRelationshipFromView(activeViewKey, relationship.id)}
+              className="btn-icon !min-h-7 !min-w-7 !p-1"
+              aria-label="Remove relationship from view"
+              title="Remove from this view (model unchanged)"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              <EyeOff size={14} />
+            </button>
+          )}
           <button
             onClick={() => confirmDelete('Delete this relationship?', () => deleteRelationship(relationship.id))}
             className="btn-icon !min-h-7 !min-w-7 !p-1"
