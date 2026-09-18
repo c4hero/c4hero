@@ -31,10 +31,19 @@ export function roundTripped(s: string): string {
   return representable(s).replace(/\r\n|\r/g, '\n')
 }
 
-/** A tag after a full round trip: commas go first, then the rules above, and
- *  finally the trim. Structurizr splits a tag string on commas and trims each
- *  piece (`Parser.buildTags`), so ` beta ` is read back as `beta` and a tag of
+/** A *style tag selector* after a full round trip: commas go first, then the
+ *  rules above — and no trim. A selector is a plain quoted string that the
+ *  parser reads back verbatim, which is exactly why a padded selector stops
+ *  matching the tag it was written for: the tag is trimmed on the way in and
+ *  the selector is not. */
+export function roundTrippedSelector(t: string): string {
+  return roundTripped(t.replace(/,/g, ''))
+}
+
+/** A tag after a full round trip: the selector rules above, then the trim.
+ *  Structurizr splits a tag string on commas and trims each piece
+ *  (`Parser.buildTags`), so ` beta ` is read back as `beta` and a tag of
  *  nothing but whitespace is read back as no tag at all. */
 export function roundTrippedTag(t: string): string {
-  return roundTripped(t.replace(/,/g, '')).trim()
+  return roundTrippedSelector(t).trim()
 }

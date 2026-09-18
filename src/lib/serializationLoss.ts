@@ -29,7 +29,7 @@
 // keeping a second copy of it.
 
 import type { DeploymentNode, Relationship, View, Workspace } from '@/types/model'
-import { representable, representableTag, roundTripped, roundTrippedTag } from './dsl/encoding'
+import { representable, representableTag, roundTripped, roundTrippedSelector, roundTrippedTag } from './dsl/encoding'
 
 export type SerializationLossCode =
   /** A backslash with no representation was removed. */
@@ -119,13 +119,35 @@ class LossCollector {
     this.field(carrier, field, value)
   }
 
-  /** The tag set: commas are stripped, and two tags can collapse into one. */
-  tags(carrier: Carrier, tags: string[] | undefined): void {
+  /**
+   * A field the serializer never writes for this kind of element, so whatever
+   * it holds is lost outright. Deployment and infrastructure nodes take this
+   * path for `owner` and `status`: the DSL has no keyword for either, and
+   * unlike people, systems, containers and components they are serialized
+   * straight from `properties` rather than through `elementProperties`, which
+   * is what folds those two fields into the block.
+   */
+  alwaysDropped(carrier: Carrier, field: string, value: string | undefined): void {
+    if (!value) return
+    this.push(carrier, 'dropped-property', field, `${carrier.label} — ${field}: ${LOSS_SENTENCE['dropped-property']}.`)
+  }
+
+  /**
+   * The tag set: commas are stripped, and two tags can collapse into one.
+   *
+   * `trimsOnRead` is what separates a tag from a *style tag selector*. A tag
+   * is read back through `buildTags`, which splits on commas and trims each
+   * piece; a selector is a plain quoted string the parser hands back verbatim.
+   * Trimming a selector's prediction would claim a change that never happens —
+   * and would call a whitespace-only selector dropped when it round-trips
+   * exactly.
+   */
+  tags(carrier: Carrier, tags: string[] | undefined, trimsOnRead = true): void {
     if (!Array.isArray(tags)) return
     const emittedBy = new Map<string, string>()
     for (const tag of tags) {
       if (typeof tag !== 'string' || tag === '') continue
-      const emitted = roundTrippedTag(tag)
+      const emitted = trimsOnRead ? roundTrippedTag(tag) : roundTrippedSelector(tag)
       const field = `tag "${tag}"`
       if (emitted === '') {
         this.push(carrier, 'dropped-property', field,
@@ -177,14 +199,18 @@ class LossCollector {
         continue
       }
       const claimedBy = emittedBy.get(emittedKey)
-      if (claimedBy !== undefined && claimedBy !== key) {
-        // Both entries are written; the parser keeps the last `"key" "value"`
-        // it reads, so the one that loses is whichever claimed the key first.
+      // Claim the key either way: the parser keeps the last `"key" "value"` it
+      // reads, so with three colliding keys the second loses to the third just
+      // as the first lost to the second. Leaving the map on the first would
+      // name it as the loser every time and never mention the ones between.
+      emittedBy.set(emittedKey, key)
+      if (claimedBy !== undefined) {
+        // Both entries are written; the one that loses is whichever claimed
+        // the key first.
         this.push(carrier, 'dropped-property', `property "${claimedBy}"`,
           `${carrier.label} — the properties "${claimedBy}" and "${key}" both encode to "${emittedKey}", so only one of them is read back — "${claimedBy}" is lost.`)
         continue
       }
-      emittedBy.set(emittedKey, key)
       if (emittedKey !== key) {
         this.push(carrier, 'renamed-property-key', field,
           `${carrier.label} — the property "${key}" is saved as "${emittedKey}": ${LOSS_SENTENCE['renamed-property-key']}.`)
@@ -218,28 +244,47 @@ export function findSerializationLoss(ws: Workspace): SerializationLoss[] {
   const elementCarrier = (kind: string, e: { id?: string; name?: string }): Carrier =>
     ({ label: describe(kind, e.name, e.id), elementId: e.id })
 
-  /** name / description / technology / url / owner, plus tags and properties. */
+  /** name / description / technology / url / owner, plus tags and properties.
+   *
+   *  `writesOwner` is false for deployment and infrastructure nodes, whose
+   *  serializer emits `properties` directly instead of going through
+   *  `elementProperties` — so their `owner` and `status` never reach the file
+   *  at all, however representable the value is. */
   function common(
     carrier: Carrier,
-    e: { description?: string; technology?: string; url?: string; owner?: string; tags?: string[]; properties?: Record<string, string>; name?: string },
+    e: { description?: string; technology?: string; url?: string; owner?: string; status?: string; tags?: string[]; properties?: Record<string, string>; name?: string },
+    writesOwner = true,
   ): void {
     c.field(carrier, 'name', e.name)
     c.field(carrier, 'description', e.description)
     c.field(carrier, 'technology', e.technology)
     c.field(carrier, 'url', e.url)
-    // `owner` is not a DSL keyword: it rides out inside the properties block,
-    // where an entry with an empty value is skipped entirely.
-    c.propertyField(carrier, 'owner', e.owner)
+    if (writesOwner) {
+      // `owner` is not a DSL keyword: it rides out inside the properties
+      // block, where an entry with an empty value is skipped entirely.
+      c.propertyField(carrier, 'owner', e.owner)
+    } else {
+      c.alwaysDropped(carrier, 'owner', e.owner)
+      c.alwaysDropped(carrier, 'status', e.status)
+    }
     c.tags(carrier, e.tags)
     c.properties(carrier, e.properties)
   }
 
-  for (const p of model?.people ?? []) common(elementCarrier('Person', p), p)
+  for (const p of model?.people ?? []) {
+    if (!p || typeof p !== 'object') continue
+    common(elementCarrier('Person', p), p)
+  }
   for (const s of model?.softwareSystems ?? []) {
+    if (!s || typeof s !== 'object') continue
     common(elementCarrier('Software system', s), s)
     for (const ct of s.containers ?? []) {
+      if (!ct || typeof ct !== 'object') continue
       common(elementCarrier('Container', ct), ct)
-      for (const cp of ct.components ?? []) common(elementCarrier('Component', cp), cp)
+      for (const cp of ct.components ?? []) {
+        if (!cp || typeof cp !== 'object') continue
+        common(elementCarrier('Component', cp), cp)
+      }
     }
   }
 
@@ -261,18 +306,23 @@ export function findSerializationLoss(ws: Workspace): SerializationLoss[] {
 
   const walkNodes = (nodes: DeploymentNode[] | undefined) => {
     for (const node of nodes ?? []) {
-      common(elementCarrier('Deployment node', node), node)
-      c.field(elementCarrier('Deployment node', node), 'instances', node.instances)
+      if (!node || typeof node !== 'object') continue
+      const nodeCarrier = elementCarrier('Deployment node', node)
+      common(nodeCarrier, node, false)
+      c.field(nodeCarrier, 'instances', node.instances)
       for (const infra of node.infrastructureNodes ?? []) {
-        common(elementCarrier('Infrastructure node', infra), infra)
+        if (!infra || typeof infra !== 'object') continue
+        common(elementCarrier('Infrastructure node', infra), infra, false)
       }
       for (const i of node.containerInstances ?? []) {
+        if (!i || typeof i !== 'object') continue
         const carrier: Carrier = { label: `Container instance ${i.id}`, elementId: i.id }
         c.field(carrier, 'url', i.url)
         c.tags(carrier, i.tags)
         c.properties(carrier, i.properties)
       }
       for (const i of node.softwareSystemInstances ?? []) {
+        if (!i || typeof i !== 'object') continue
         const carrier: Carrier = { label: `Software system instance ${i.id}`, elementId: i.id }
         c.field(carrier, 'url', i.url)
         c.tags(carrier, i.tags)
@@ -282,6 +332,7 @@ export function findSerializationLoss(ws: Workspace): SerializationLoss[] {
     }
   }
   for (const env of model?.deploymentEnvironments ?? []) {
+    if (!env || typeof env !== 'object') continue
     c.field({ label: describe('Deployment environment', env.name, env.id) }, 'name', env.name)
     walkNodes(env.deploymentNodes)
   }
@@ -315,20 +366,22 @@ export function findSerializationLoss(ws: Workspace): SerializationLoss[] {
   }
 
   // Style tag selectors go through the same comma + backslash rules as the
-  // tags they point at; a selector that no longer matches is a style silently
-  // dropped from the diagram.
+  // tags they point at, but *not* the trim — the parser hands a selector back
+  // verbatim (`trimsOnRead: false`). A selector the rules do change no longer
+  // matches its tag, which is a style silently dropped from the diagram.
   for (const style of views?.configuration?.styles?.elements ?? []) {
     if (!style || typeof style.tag !== 'string') continue
     const carrier: Carrier = { label: `Element style for "${style.tag}"` }
-    c.tags(carrier, [style.tag])
+    c.tags(carrier, [style.tag], false)
     c.field(carrier, 'icon', style.icon)
   }
   for (const style of views?.configuration?.styles?.relationships ?? []) {
     if (!style || typeof style.tag !== 'string') continue
-    c.tags({ label: `Relationship style for "${style.tag}"` }, [style.tag])
+    c.tags({ label: `Relationship style for "${style.tag}"` }, [style.tag], false)
   }
 
   for (const theme of views?.configuration?.themes ?? []) {
+    if (typeof theme !== 'string') continue
     c.field({ label: 'Themes' }, `theme "${theme}"`, theme)
   }
 

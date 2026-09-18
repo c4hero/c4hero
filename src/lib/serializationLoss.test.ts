@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { findSerializationLoss } from './serializationLoss'
 import { serializeDSL, parseDSL } from '@/lib/dsl'
-import type { Workspace, SoftwareSystem, Container, Person, Relationship } from '@/types/model'
+import type { Workspace, SoftwareSystem, Container, Person, Relationship, DeploymentNode } from '@/types/model'
 
 function person(id: string, name: string, over: Partial<Person> = {}): Person {
   return { id, type: 'person', name, tags: ['Element', 'Person'], properties: {}, ...over }
@@ -120,11 +120,27 @@ describe('findSerializationLoss', () => {
       expect(codes(w)).toEqual(['merged-tags'])
     })
 
-    it('flags a style selector whose padding leaves it matching nothing', () => {
+    it('names the element tag, not the selector, when padding breaks the match', () => {
       const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['Element', 'beta '] })] } })
       w.views.configuration.styles.elements = [{ tag: 'beta ' }]
-      // Both the element's tag and the selector that points at it are named.
-      expect(codes(w)).toEqual(['trimmed-tag', 'trimmed-tag'])
+      // The element's tag is trimmed on the way back in; the selector is a
+      // plain quoted string the parser hands back verbatim, so it does not
+      // change and must not be reported as if it did.
+      expect(codes(w)).toEqual(['trimmed-tag'])
+      expect(findSerializationLoss(w)[0].field).toBe('tag "beta "')
+      expect(findSerializationLoss(w)[0].message).toContain('Person "Ops"')
+    })
+
+    it('says nothing about a whitespace-only selector, which round-trips exactly', () => {
+      const w = ws()
+      w.views.configuration.styles.elements = [{ tag: '  ', background: '#ff0000' }]
+      expect(codes(w)).toEqual([])
+    })
+
+    it('calls a carriage return in a selector a newline, not a dropped style', () => {
+      const w = ws()
+      w.views.configuration.styles.elements = [{ tag: 'a\rb', background: '#ff0000' }]
+      expect(codes(w)).toEqual(['normalized-newline'])
     })
 
     it('flags a carriage return in a tag, which comes back as a newline', () => {
@@ -175,6 +191,43 @@ describe('findSerializationLoss', () => {
       const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { owner: '\\' })] } })
       expect(codes(w)).toEqual(['dropped-property'])
     })
+
+    it('names each loser once when three keys collide, not the first one twice', () => {
+      const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { properties: { an: 'x', 'a\\n': 'y', 'a\\\\n': 'z' } })] } })
+      const fields = findSerializationLoss(w).filter(l => l.code === 'dropped-property').map(l => l.field)
+      expect(fields).toEqual(['property "an"', 'property "a\\n"'])
+    })
+  })
+
+  describe('fields a deployment node never writes', () => {
+    function envWith(node: Partial<DeploymentNode>): Workspace {
+      const w = ws()
+      w.model.deploymentEnvironments = [{
+        id: 'e1', name: 'Prod', deploymentNodes: [{
+          id: 'n1', type: 'deploymentNode', name: 'Box', tags: [], properties: {},
+          children: [], infrastructureNodes: [], containerInstances: [], softwareSystemInstances: [],
+          ...node,
+        }],
+      }]
+      return w
+    }
+
+    it('flags a deployment node owner, which no DSL keyword can carry', () => {
+      const w = envWith({ owner: 'Team A' })
+      expect(codes(w)).toEqual(['dropped-property'])
+      expect(findSerializationLoss(w)[0].field).toBe('owner')
+    })
+
+    it('flags a deployment node status too', () => {
+      expect(codes(envWith({ status: 'Planned' }))).toEqual(['dropped-property'])
+    })
+
+    it('flags an infrastructure node owner', () => {
+      const w = envWith({
+        infrastructureNodes: [{ id: 'i1', type: 'infrastructureNode', name: 'LB', tags: [], properties: {}, owner: 'Net' }],
+      })
+      expect(codes(w)).toEqual(['dropped-property'])
+    })
   })
 
   it('flags a dynamic view step description, which the view writes itself', () => {
@@ -194,7 +247,10 @@ describe('findSerializationLoss', () => {
   })
 
   it('never throws on a partially-built workspace', () => {
-    for (const broken of [{ name: 'x' }, { name: 'x', model: {}, views: {} }, { name: 'x', model: { people: [{}] } }]) {
+    for (const broken of [
+      { name: 'x' }, { name: 'x', model: {}, views: {} }, { name: 'x', model: { people: [{}] } },
+      { name: 'x', model: { people: [null], softwareSystems: [null], deploymentEnvironments: [null] } },
+    ]) {
       expect(() => findSerializationLoss(broken as unknown as Workspace)).not.toThrow()
     }
   })
@@ -308,6 +364,25 @@ describe('the prediction matches what the serializer really does', () => {
     const props = roundTrip(w).model.people[0].properties
     expect(props['a\rb']).toBeUndefined()
     expect(props['a\nb']).toBe('x')
+  })
+
+  it('a whitespace-only style selector really does survive untouched', () => {
+    const w = ws()
+    w.views.configuration.styles.elements = [{ tag: '  ', background: '#ff0000' }]
+    expect(findSerializationLoss(w)).toEqual([])
+    expect(roundTrip(w).views.configuration.styles.elements[0].tag).toBe('  ')
+  })
+
+  it("a deployment node's owner really is gone after a save", () => {
+    const w = ws()
+    w.model.deploymentEnvironments = [{
+      id: 'e1', name: 'Prod', deploymentNodes: [{
+        id: 'n1', type: 'deploymentNode', name: 'Box', tags: [], properties: {}, owner: 'Team A',
+        children: [], infrastructureNodes: [], containerInstances: [], softwareSystemInstances: [],
+      }],
+    }]
+    expect(findSerializationLoss(w).map(l => l.code)).toEqual(['dropped-property'])
+    expect(roundTrip(w).model.deploymentEnvironments[0].deploymentNodes[0].owner).toBeUndefined()
   })
 
   it('an owner that encodes to nothing really is gone after a save', () => {
