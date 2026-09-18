@@ -28,16 +28,24 @@ export interface WhatsNewRelease {
 }
 
 export const WHATS_NEW: WhatsNewRelease | null = {
-  id: '2026-09-watch-mode-live-models',
+  id: '2026-09-docs-and-interop',
   date: 'September 2026',
   items: [
     {
-      title: 'The canvas follows the file on disk',
-      body: 'Edit the .dsl in another editor or check out a different git branch and the diagram reloads within a couple of seconds, keeping your view and selection. Unsaved local edits are never discarded: you choose Reload or Keep mine.',
+      title: 'Documentation and decision records live in the model',
+      body: 'c4hero now reads and writes the !docs and !adrs folders a Structurizr workspace points at. The inspector gains a Docs tab, elements with documentation get a badge on the canvas, and New doc / New decision write adr-tools-style markdown that other tools can read.',
     },
     {
-      title: 'AI model picker lists what your key can use',
-      body: 'With a key set, settings ask the provider for its current models and show them, so new releases appear without waiting for a c4hero update. Cached for a day, with the curated list as a fallback.',
+      title: 'The AI assistant reads them too',
+      body: 'Deep review, chat, the interview and the ADR drafter all see your docs and decisions. A model that no longer honours an accepted decision is a high-severity finding, and the interviewer stops asking what you have already written down. Still BYOK, still local.',
+    },
+    {
+      title: 'Import from C4-PlantUML and Mermaid',
+      body: 'Bring an existing diagram in from the two most common C4-as-code formats instead of retyping it. Multi-file workspaces work too: open a folder and !include is resolved across files, and saving no longer strips the directives.',
+    },
+    {
+      title: 'Find out before the file leaves your machine',
+      body: 'The code pane now says when saving will change one of your values, and when a model would be rejected by other Structurizr tools — a name that encodes to nothing, two views sharing a key, a tag that will be split in half. Warnings only: nothing is blocked or rewritten.',
     },
   ],
   link: { label: 'Full release notes', url: 'https://c4hero.com/changelog' },

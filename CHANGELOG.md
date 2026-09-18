@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-18
+
 ### Added
 
 - **Turn a review finding into a decision record.** A deep-review finding that
@@ -27,8 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changes are now listed before they happen, including the ones that lose data
   outright: two tags that collapse into the same name, two property keys that
   encode to the same key, and a style selector that stops matching the tag it
-  was written for. Nothing is blocked and the drop policy is unchanged — the
-  alternative is corrupting the value — you just find out first. (TEA-169)
+  was written for. It also covers the one case that was never lossy-only: a
+  deployment or infrastructure node's *owner* and *status* have no DSL keyword
+  and no properties block to fall back on, so they were dropped on every save,
+  not just an awkward one. Nothing is blocked and the drop policy is unchanged
+  — the alternative is corrupting the value — you just find out first.
+  (TEA-169)
 - **The code pane warns when a model other Structurizr tools would reject.**
   c4hero happily holds states the real Structurizr parser refuses to load — an
   element whose name encodes to nothing, a `url` field that isn't a URL, two
@@ -435,6 +441,9 @@ Initial public release. c4hero is a local-first browser-based visual editor for 
 - Canvas interactions no longer trigger browser-back navigation on Backspace in non-text contexts.
 - Boundary-node E2E selectors now match the per-scope ID format.
 
+[0.7.0]: https://github.com/c4hero/c4hero/releases/tag/v0.7.0
+[0.6.0]: https://github.com/c4hero/c4hero/releases/tag/v0.6.0
+[0.5.0]: https://github.com/c4hero/c4hero/releases/tag/v0.5.0
 [0.4.0]: https://github.com/c4hero/c4hero/releases/tag/v0.4.0
 [0.3.0]: https://github.com/c4hero/c4hero/releases/tag/v0.3.0
 [0.2.2]: https://github.com/c4hero/c4hero/releases/tag/v0.2.2
