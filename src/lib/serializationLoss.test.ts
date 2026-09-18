@@ -104,6 +104,29 @@ describe('findSerializationLoss', () => {
       expect(codes(w)).toEqual(['dropped-property'])
     })
 
+    it('flags padding, which Structurizr trims off every tag it reads', () => {
+      const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['Element', 'Person', 'beta '] })] } })
+      expect(codes(w)).toEqual(['trimmed-tag'])
+      expect(findSerializationLoss(w)[0].message).toContain('"beta"')
+    })
+
+    it('flags a tag of nothing but whitespace, which is trimmed away to nothing', () => {
+      const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['Element', '  '] })] } })
+      expect(codes(w)).toEqual(['dropped-property'])
+    })
+
+    it('flags two tags that differ only by padding, which lose one outright', () => {
+      const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['beta', ' beta'] })] } })
+      expect(codes(w)).toEqual(['merged-tags'])
+    })
+
+    it('flags a style selector whose padding leaves it matching nothing', () => {
+      const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['Element', 'beta '] })] } })
+      w.views.configuration.styles.elements = [{ tag: 'beta ' }]
+      // Both the element's tag and the selector that points at it are named.
+      expect(codes(w)).toEqual(['trimmed-tag', 'trimmed-tag'])
+    })
+
     it('flags a carriage return in a tag, which comes back as a newline', () => {
       const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['Element', 'a\rb'] })] } })
       expect(codes(w)).toEqual(['normalized-newline'])
@@ -246,6 +269,31 @@ describe('the prediction matches what the serializer really does', () => {
     const props = roundTrip(w).model.people[0].properties
     expect(props['a\\n']).toBeUndefined()
     expect(props.an).toBe('x')
+  })
+
+  it('a padded tag really does come back trimmed', () => {
+    const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['Element', 'Person', 'beta '] })] } })
+    expect(findSerializationLoss(w).map(l => l.code)).toEqual(['trimmed-tag'])
+    const after = roundTrip(w).model.people[0].tags
+    expect(after).toContain('beta')
+    expect(after).not.toContain('beta ')
+  })
+
+  it('two tags that differ only by padding really do come back as one', () => {
+    const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['beta', ' beta'] })] } })
+    expect(findSerializationLoss(w).map(l => l.code)).toEqual(['merged-tags'])
+    expect(roundTrip(w).model.people[0].tags.filter(t => t === 'beta')).toHaveLength(1)
+  })
+
+  it('a padded style selector really does stop matching its element', () => {
+    const w = ws({ model: { ...ws().model, people: [person('p1', 'Ops', { tags: ['Element', 'beta '] })] } })
+    w.views.configuration.styles.elements = [{ tag: 'beta ' }]
+    expect(findSerializationLoss(w)).not.toEqual([])
+    const after = roundTrip(w)
+    // The element's tag is trimmed on the way back in; the selector, a plain
+    // quoted string, is not — so the style is left pointing at nothing.
+    expect(after.model.people[0].tags).toContain('beta')
+    expect(after.views.configuration.styles.elements[0].tag).toBe('beta ')
   })
 
   it('a carriage return in a tag really does come back as a newline', () => {

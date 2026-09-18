@@ -8,7 +8,8 @@
 //     would decode as a newline escape, the second would escape the closing
 //     quote
 //   - a comma inside a tag: Structurizr splits tag strings on commas, so one
-//     tag would become two
+//     tag would become two — and each piece it splits out is trimmed, so a
+//     tag's surrounding whitespace goes with it
 //   - a carriage return: `\r` has no representation, so CR and CRLF both land
 //     as `\n`
 //
@@ -37,6 +38,8 @@ export type SerializationLossCode =
   | 'normalized-newline'
   /** A comma was removed from a tag. */
   | 'stripped-tag-comma'
+  /** Whitespace around a tag was trimmed off. */
+  | 'trimmed-tag'
   /** Two tags became the same string, so one of them is lost. */
   | 'merged-tags'
   /** A property key changed, so the property is read back under a new name. */
@@ -71,7 +74,8 @@ const LOSS_SENTENCE: Record<SerializationLossCode, string> = {
   'dropped-backslash': 'a backslash that the DSL cannot represent will be removed',
   'normalized-newline': 'a carriage return will be saved as a plain line break',
   'stripped-tag-comma': 'the comma will be removed — Structurizr splits tags on commas',
-  'merged-tags': 'two tags become the same name once commas and backslashes are removed, so one of them is lost',
+  'trimmed-tag': 'the whitespace around it will be removed — Structurizr trims every tag it reads',
+  'merged-tags': 'two tags collapse into one, so one of them is lost',
   'renamed-property-key': 'the key contains a character the DSL cannot represent, so the property is read back under a different name',
   'dropped-property': 'it is not written to the file at all',
 }
@@ -134,7 +138,7 @@ class LossCollector {
         // own change was already reported on the first sighting.
         if (claimedBy !== tag) {
           this.push(carrier, 'merged-tags', field,
-            `${carrier.label} — the tags "${claimedBy}" and "${tag}" ${LOSS_SENTENCE['merged-tags']}.`)
+            `${carrier.label} — the tags "${claimedBy}" and "${tag}" both become "${emitted}": ${LOSS_SENTENCE['merged-tags']}.`)
         }
         continue
       }
@@ -144,7 +148,9 @@ class LossCollector {
           ? 'stripped-tag-comma'
           : representableTag(tag) !== tag
             ? 'dropped-backslash'
-            : 'normalized-newline'
+            : tag.includes('\r')
+              ? 'normalized-newline'
+              : 'trimmed-tag'
         this.push(carrier, code, field,
           `${carrier.label} — the tag "${tag}" becomes "${emitted}": ${LOSS_SENTENCE[code]}.`)
       }
@@ -172,8 +178,10 @@ class LossCollector {
       }
       const claimedBy = emittedBy.get(emittedKey)
       if (claimedBy !== undefined && claimedBy !== key) {
-        this.push(carrier, 'dropped-property', field,
-          `${carrier.label} — the properties "${claimedBy}" and "${key}" both encode to "${emittedKey}", so one of them ${LOSS_SENTENCE['dropped-property']}.`)
+        // Both entries are written; the parser keeps the last `"key" "value"`
+        // it reads, so the one that loses is whichever claimed the key first.
+        this.push(carrier, 'dropped-property', `property "${claimedBy}"`,
+          `${carrier.label} — the properties "${claimedBy}" and "${key}" both encode to "${emittedKey}", so only one of them is read back — "${claimedBy}" is lost.`)
         continue
       }
       emittedBy.set(emittedKey, key)
