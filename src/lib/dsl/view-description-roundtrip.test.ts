@@ -176,4 +176,62 @@ workspace {
     expect(view.description).toBe('Context view for API')
     expect(view.title).toBe('Context view for API')
   })
+
+  it('roundtrips a relationship excluded from one static view', () => {
+    const dsl = `
+workspace {
+  model {
+    user = person "User"
+    api = softwareSystem "API"
+    user -> api "Uses"
+  }
+  views {
+    systemLandscape "land" {
+      include user
+      include api
+      exclude "user -> api"
+    }
+  }
+}
+`
+    const first = parseDSL(dsl)
+    expect(first.errors).toEqual([])
+    expect(first.workspace.views.systemLandscapeViews[0].relationships).toEqual([])
+
+    const output = serialize(first.workspace)
+    expect(output).toContain('exclude "user -> api"')
+    const second = parseDSL(output)
+    expect(second.errors).toEqual([])
+    expect(second.workspace.views.systemLandscapeViews[0].relationships).toEqual([])
+  })
+
+  it('roundtrips all parallel relationships covered by a directed-pair exclusion', () => {
+    const dsl = `
+workspace {
+  model {
+    user = person "User"
+    api = softwareSystem "API"
+    user -> api "Reads"
+    user -> api "Writes"
+  }
+  views {
+    systemLandscape "land" {
+      include *
+      exclude "user -> api"
+    }
+  }
+}
+`
+    const first = parseDSL(dsl)
+    expect(first.errors).toEqual([])
+    const view = first.workspace.views.systemLandscapeViews[0]
+    expect(view.relationships).toEqual([])
+    expect(view.excludedRelationshipIds).toHaveLength(2)
+
+    const output = serialize(first.workspace)
+    expect(output.match(/exclude "user -> api"/g)).toHaveLength(1)
+    const second = parseDSL(output)
+    expect(second.errors).toEqual([])
+    expect(second.workspace.views.systemLandscapeViews[0].relationships).toEqual([])
+  })
 })

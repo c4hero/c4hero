@@ -1109,6 +1109,18 @@ class SerializerContext {
             }
         }
 
+        // Structurizr relationship expressions are the portable way to retain
+        // a per-view hidden edge without removing either endpoint.
+        const excludedPairs = new Set<string>()
+        for (const id of view.excludedRelationshipIds ?? []) {
+            const rel = this.workspace.model.relationships.find(r => r.id === id)
+            if (!rel) continue
+            const source = this.idToVar.get(rel.sourceId) ?? rel.sourceId
+            const destination = this.idToVar.get(rel.destinationId) ?? rel.destinationId
+            excludedPairs.add(`${source} -> ${destination}`)
+        }
+        for (const pair of excludedPairs) this.emit(`exclude "${pair}"`)
+
         // Auto layout
         if (view.autoLayout) {
             this.serializeAutoLayout(view.autoLayout)

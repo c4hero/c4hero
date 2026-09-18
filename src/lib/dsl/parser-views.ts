@@ -652,6 +652,24 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
                 const excluded = p.viewExcludedIds.get(view) ?? new Set<string>()
                 while (p.check('STAR') || p.check('IDENTIFIER') || p.check('STRING') || p.check('KEYWORD')) {
                     if (p.check('STAR')) { excluded.add(p.advance().value); continue }
+                    if (p.check('STRING') && p.peek().value.includes('->')) {
+                        const expression = p.advance().value
+                        const [sourceRef, destinationRef, ...rest] = expression.split('->').map(s => s.trim())
+                        if (sourceRef && destinationRef && rest.length === 0) {
+                            const sourceId = p.resolveRef(sourceRef) ?? sourceRef
+                            const destinationId = p.resolveRef(destinationRef) ?? destinationRef
+                            const ids = model.relationships
+                                .filter(r => (sourceRef === '*' || r.sourceId === sourceId) && (destinationRef === '*' || r.destinationId === destinationId))
+                                .map(r => r.id)
+                            if (ids.length > 0) {
+                                const excludedRelationships = (view.excludedRelationshipIds ??= [])
+                                for (const id of ids) {
+                                    if (!excludedRelationships.includes(id)) excludedRelationships.push(id)
+                                }
+                            }
+                            continue
+                        }
+                    }
                     const ref = p.readQualifiedRef({ allowString: true })
                     if (!ref) { p.advance(); continue }
                     const resolvedId = p.resolveRef(ref.ref)
