@@ -35,10 +35,33 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
   // view's layout — or nothing at all. Both sides are real views here, so the
   // fallback can insist the candidate shows the same thing (TEA-342).
   const nextViews = allViewsOf(next)
-  const resolved = resolveViewLayouts(nextViews, prevViews,
+  const { byView, unclaimed } = resolveViewLayouts(nextViews, prevViews,
     (_key, candidate, view) => viewSignature(candidate) === viewSignature(view))
+
+  // A view that did not survive the re-parse takes its positions with it, and
+  // the next save would write a sidecar without them. Carry them instead —
+  // along with anything already being carried — so a view that comes back
+  // (a generated one, an `!include` that failed to read) finds its layout
+  // waiting (TEA-342).
+  next.unmatchedLayout = { ...prev.unmatchedLayout }
+  for (const key of unclaimed) {
+    const lost = prevViews.get(key)
+    if (!lost) continue
+    const elements: Record<string, { pinned?: boolean; locked?: boolean; x?: number; y?: number }> = {}
+    for (const el of lost.elements) {
+      if (!el.pinned && !el.locked) continue
+      elements[el.id] = { ...(el.pinned && { pinned: true }), ...(el.locked && { locked: true }), x: el.x, y: el.y }
+    }
+    if (Object.keys(elements).length > 0 || lost.locked) {
+      next.unmatchedLayout[key] = { ...(lost.locked && { locked: true }), ...(Object.keys(elements).length > 0 && { elements }) }
+    }
+  }
+  // A key a surviving view owns is not stale, whatever an older pass carried.
+  for (const view of nextViews) delete next.unmatchedLayout[view.key]
+  if (Object.keys(next.unmatchedLayout).length === 0) next.unmatchedLayout = undefined
+
   for (const view of nextViews) {
-    const old = resolved.get(view)
+    const old = byView.get(view)
     if (!old) continue
     if (old.locked) view.locked = true
     const oldById = new Map(old.elements.map((el) => [el.id, el]))

@@ -90,7 +90,12 @@ function isSidecarData(value: unknown): value is SidecarData {
 
 export function extractSidecar(workspace: Workspace): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
-  let hasData = false
+  // Start from layout whose view is not here right now. This projection is
+  // the whole file — anything missing from it is deleted from disk — and a
+  // view can go absent for reasons that are none of the user's doing, so
+  // their positions are carried rather than dropped (TEA-342).
+  const views: Record<string, SidecarView> = { ...(workspace.unmatchedLayout ?? {}) }
+  let hasData = Object.keys(views).length > 0
 
   // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
@@ -99,8 +104,10 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // Views: hand-placed and locked elements, plus the view-level layout lock.
   // A lock is worth persisting on its own — it survives a re-layout, so it
   // has to survive a reload.
-  const views: Record<string, SidecarView> = {}
   for (const view of allViewsOf(workspace)) {
+    // A view that is present speaks for its own key, so it replaces anything
+    // carried under it — including clearing it when its layout is gone.
+    delete views[view.key]
     const viewElements: Record<string, SidecarViewElement> = {}
     for (const el of view.elements) {
       if (el.pinned || el.locked) {
@@ -180,9 +187,18 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     // when exactly one unclaimed entry has it (TEA-342).
     const entries = new Map(Object.entries(sidecar.views))
     const views = allViewsOf(workspace)
-    const resolved = resolveViewLayouts(views, entries)
+    const { byView, unclaimed } = resolveViewLayouts(views, entries)
+    // Anything no view took is kept verbatim so the next save cannot delete
+    // it. This is what makes declining an ambiguous match safe rather than
+    // destructive.
+    if (unclaimed.length > 0) {
+      workspace.unmatchedLayout = {
+        ...workspace.unmatchedLayout,
+        ...Object.fromEntries(unclaimed.map((key) => [key, entries.get(key)!])),
+      }
+    }
     for (const view of views) {
-      const viewData = resolved.get(view)
+      const viewData = byView.get(view)
       if (!viewData) continue
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue

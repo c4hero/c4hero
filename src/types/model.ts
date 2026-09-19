@@ -309,6 +309,13 @@ export interface IncludedFile {
   text?: string
 }
 
+/** One view's hand-placed layout, as the `.c4hero.json` sidecar stores it. */
+export interface StoredViewLayout {
+  /** View-level layout lock. */
+  locked?: boolean
+  elements?: Record<string, { pinned?: boolean; locked?: boolean; x?: number; y?: number }>
+}
+
 export interface Workspace {
   name?: string
   description?: string
@@ -329,4 +336,20 @@ export interface Workspace {
     deploymentViews: View[]
     configuration: ViewConfiguration
   }
+  /**
+   * Layout belonging to views that are not in this workspace right now, kept
+   * so that saving cannot destroy it (TEA-342).
+   *
+   * The sidecar is written by projecting the current workspace, so anything
+   * absent from memory at save time is deleted from the file. Views go absent
+   * for ordinary reasons — a generated view stops being generated, a derived
+   * key is renumbered, an `!include` is temporarily unreadable — and the
+   * layout behind them is not the user's to lose over it. Entries land here
+   * instead of being dropped, and are written back out untouched until a view
+   * claims them again.
+   *
+   * In-memory only; it *is* the sidecar's own content, so it is never part of
+   * the DSL.
+   */
+  unmatchedLayout?: Record<string, StoredViewLayout>
 }

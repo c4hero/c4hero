@@ -3,7 +3,7 @@ import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, materializeViewIdentity } from '../workspace-helpers'
+import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 
 /** View management: create / delete / rename / duplicate views, plus the
@@ -141,7 +141,6 @@ export const createViewSlice: StateCreator<
       el.x = x
       el.y = y
       el.pinned = true
-      materializeViewIdentity(s.workspace, view)
       return
     }
     // Don't push undo for every drag position — too noisy
@@ -154,7 +153,6 @@ export const createViewSlice: StateCreator<
       const view = (s.workspace.views[key] ?? []).find(v => v.key === s.activeViewKey)
       if (!view) continue
       if (view.locked) return
-      let placed = false
       for (const el of view.elements) {
         if (el.locked) continue
         const u = updateMap.get(el.id)
@@ -162,9 +160,7 @@ export const createViewSlice: StateCreator<
         el.x = u.x
         el.y = u.y
         el.pinned = true
-        placed = true
       }
-      if (placed) materializeViewIdentity(s.workspace, view)
       return
     }
   }),
@@ -281,7 +277,6 @@ export const createViewSlice: StateCreator<
     )
     if (changed.length === 0) return
     pushUndoSnapshot(s)
-    let persisted = false
     for (const el of changed) {
       el.locked = locked || undefined
       // Adopt the current position as hand-authored. Without this, a
@@ -289,13 +284,7 @@ export const createViewSlice: StateCreator<
       // unlocking it later would silently drop the position it had been
       // holding across re-layouts and reloads.
       if (el.x !== undefined && el.y !== undefined) el.pinned = true
-      if (locked || el.pinned) persisted = true
     }
-    // Only give the view a durable identity once it actually has something
-    // durable to hold. Unlocking nodes that were never positioned leaves
-    // nothing in the sidecar, so writing the view into the DSL for it would
-    // be rewriting the user's file for no reason.
-    if (persisted) materializeViewIdentity(s.workspace, view)
   }),
 
   setViewLocked: (viewKey, locked) => set((s) => {
@@ -305,9 +294,6 @@ export const createViewSlice: StateCreator<
     if ((view.locked ?? false) === locked) return
     pushUndoSnapshot(s)
     view.locked = locked || undefined
-    // A lock is persisted per view key too, so it needs a durable key just as
-    // much as a hand-placed position does.
-    if (locked) materializeViewIdentity(s.workspace, view)
   }),
 
   unlockAllInView: (viewKey) => set((s) => {

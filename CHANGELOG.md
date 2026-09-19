@@ -9,17 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Hand-placed layout no longer disappears when views change.** Adding,
-  deleting or reordering a view could wipe whole sections of the
-  `.c4hero.json` layout file — people were restoring their diagrams from git.
-  Layout is stored per view key, but a view the DSL doesn't name has no stable
-  key: c4hero derives one from what the view shows and numbers duplicates by
-  the order they appear, so a view coming or going shifted the keys out from
-  under the saved positions. The layout file is rewritten in full on every
-  save, so one bad save deleted it for good. Now a view you have arranged by
-  hand is written into the DSL with its own key, which nothing can renumber,
-  and layout saved by earlier versions is still found under the key it used to
-  have. Views you have never touched are left exactly as they were.
+- **Hand-placed layout no longer disappears when views change.** Adding or
+  deleting a view could wipe whole sections of the `.c4hero.json` layout file
+  — people were restoring their diagrams from git. The layout file was
+  rewritten in full from whatever was on screen at the time, so a view that
+  was briefly absent — a generated view that stopped being generated, a key
+  renumbered by a sibling coming or going — had its positions deleted for
+  good. c4hero now keeps layout it cannot currently place instead of dropping
+  it, and re-finds layout whose derived key has shifted, so the positions come
+  back when the view does. Your `.dsl` is not touched and no migration is
+  needed. One case remains: two views of the same type over the same system
+  with no key in the DSL are indistinguishable once parsed, so reordering them
+  swaps their layout — give either one a key to pin it down.
   (TEA-342, [#201](https://github.com/c4hero/c4hero/issues/201))
 
 ## [0.7.0] - 2026-09-18
