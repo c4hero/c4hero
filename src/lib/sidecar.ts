@@ -212,7 +212,12 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     }
 
     const { byView, unclaimed } = resolveViewLayouts(views, entries, {
-      exactVeto: (_key, _entry, view) => contested.has(view),
+      // Contested is not on its own enough to refuse: a single entry orphaned
+      // years ago would otherwise unseat every healthy view sharing its base,
+      // and they would all fall to the fallback and decline each other. Refuse
+      // only the exact hit that *also* fails to pin anything this view holds —
+      // which is precisely the shape of inheriting a deleted view's entry.
+      exactVeto: (_key, entry, view) => contested.has(view) && !pinsAnyOf(entry, view),
       isMatch: (_key, entry, view) => !contested.has(view) || pinsAnyOf(entry, view),
     })
     // Anything no view took is kept verbatim so the next save cannot delete

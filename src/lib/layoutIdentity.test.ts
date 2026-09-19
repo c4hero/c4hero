@@ -664,6 +664,28 @@ describe('a cold open cannot trust an exact key match either', () => {
     const api = survivor.elements.find(e => e.id === 'api')!
     expect(api.x, 'survivor inherited the deleted view\'s position').toBe(50)
   })
+ 
+  it('does not unseat healthy views over one orphaned entry', () => {
+    // The veto has to be narrow. Both views here are fine and own their
+    // entries exactly; a third entry orphaned by a deletion long ago shares
+    // their base. Refusing on the contest alone sent all three to the fallback
+    // where they declined each other, and two correct diagrams lost their
+    // layout to one piece of junk.
+    const { workspace } = parseDSL(TWO_KEYLESS_VIEWS)
+    applySidecar(workspace, parseSidecar(JSON.stringify({
+      version: 1,
+      views: {
+        'Containers-payments': { elements: { api: { pinned: true, x: 11, y: 11 }, db: { pinned: true, x: 12, y: 12 } } },
+        'Containers-payments-2': { elements: { api: { pinned: true, x: 22, y: 22 } } },
+        'Containers-payments-3': { elements: { api: { pinned: true, x: 33, y: 33 } } },
+      },
+    }))!)
+    const at = (i: number) => workspace.views.containerViews[i].elements.find(e => e.id === 'api')?.x
+    expect(at(0), 'first view lost its own layout').toBe(11)
+    expect(at(1), 'second view lost its own layout').toBe(22)
+    // The orphan is kept, not applied and not deleted.
+    expect(workspace.unmatchedLayout?.['Containers-payments-3']).toBeDefined()
+  })
 })
 
 describe('deleting a view retires parked layout under its key', () => {

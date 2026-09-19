@@ -65,7 +65,10 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
   }
 
   const { byView, unclaimed } = resolveViewLayouts(nextViews, candidates, {
-    exactVeto: (_key, _source, view) => contested.has(view),
+    // Contested alone is not enough to refuse an exact hit — see the same
+    // guard in applySidecar. One orphaned entry must not unseat every healthy
+    // view that shares its base.
+    exactVeto: (_key, source, view) => contested.has(view) && !pinsAnyOf(source, view),
     // A parked entry has no view left to compare, so it can only be claimed on
     // its key. For a live candidate the fallback can insist it shows the same
     // thing, and that its own key was derived too — a key someone typed as
