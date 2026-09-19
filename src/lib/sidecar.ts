@@ -1,5 +1,5 @@
 import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
-import { allViewsOf } from '@/store/workspace-helpers'
+import { allViewsOf, resolveViewLayouts } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
@@ -174,9 +174,15 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
 
   // Views: the view-level layout lock, plus hand-placed and locked elements
   if (sidecar.views) {
-    for (const view of allViewsOf(workspace)) {
-      const viewData = sidecar.views[view.key]
-        ?? (view.originalKey ? sidecar.views[view.originalKey] : undefined)
+    // A derived view key is renumbered when a sibling with the same base comes
+    // or goes, so a sidecar written before that shift stores this view's layout
+    // under a key nothing matches any more. Fall back to the base, but only
+    // when exactly one unclaimed entry has it (TEA-342).
+    const entries = new Map(Object.entries(sidecar.views))
+    const views = allViewsOf(workspace)
+    const resolved = resolveViewLayouts(views, entries)
+    for (const view of views) {
+      const viewData = resolved.get(view)
       if (!viewData) continue
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue

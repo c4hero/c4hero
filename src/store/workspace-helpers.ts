@@ -6,6 +6,7 @@ import type {
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
+import { derivedViewKeyBase } from '@/lib/dsl/viewKey'
 export type { CascadeImpact } from './workspace-types'
 
 /** Deep-clone an object that may be an Immer draft. structuredClone'ing a
@@ -46,6 +47,145 @@ export function allViewsOf(ws: Workspace): View[] {
 /** Find a view by key inside a workspace */
 export function findViewHelper(ws: Workspace, key: string): View | undefined {
   return allViewsOf(ws).find(v => v.key === key)
+}
+
+// ─── View identity, for keeping layout attached (TEA-342) ───────────
+//
+// Layout is stored per view key — in the sidecar file and when carrying
+// positions across a code-pane re-parse. That only works while the key is
+// stable, and for a view the DSL does not name it is not: the parser derives
+// it from the scope (`Containers-<id>`) and disambiguates collisions
+// positionally (`-2`). Delete or reorder such a view and every surviving key
+// can shift, silently orphaning the layout stored under the old one.
+//
+// Two defences. `materializeViewIdentity` stops the problem at the source by
+// giving a view an explicit, authored key the moment someone invests layout in
+// it. The matchers below are the migration path for every file written before
+// that, where the keys are still implicit.
+
+/**
+ * A view someone has hand-placed elements in is a real view.
+ *
+ * Until that moment a view can be two kinds of provisional: `autoView` (the
+ * DSL declared no views at all, so c4hero generated this one) and `autoKey`
+ * (the DSL declared the view but gave it no key, so the parser derived one).
+ * Neither is written to the file, which is what makes its identity — and
+ * therefore its layout — positional and fragile:
+ *
+ *   - a generated view stops being generated the moment any real view exists,
+ *     taking its layout with it
+ *   - a derived key is renumbered when a sibling with the same base is added
+ *     or removed, orphaning the layout stored under the old one
+ *
+ * Writing the view and its key out ends both. This is a deliberate, visible
+ * change to the user's DSL, and it only ever happens to a view they have
+ * already invested layout in — the alternative is the layout quietly not
+ * surviving the next edit (TEA-342, GH #201).
+ */
+export function materializeViewIdentity(ws: Workspace, view: View): void {
+  // Generated views are all-or-nothing: `generateDefaultViews` only runs when
+  // the DSL declares no views at all, so writing one of them out stops every
+  // other one from ever being regenerated. Materialise the whole set together
+  // or arranging one diagram silently deletes the rest (TEA-342).
+  if (view.autoView) {
+    for (const v of allViewsOf(ws)) {
+      if (!v.autoView) continue
+      v.autoView = undefined
+      v.autoKey = undefined
+    }
+    return
+  }
+  view.autoView = undefined
+  view.autoKey = undefined
+}
+
+/** What a view *shows*, independent of what it is called. Two views with the
+ *  same signature are indistinguishable from the DSL alone, which is exactly
+ *  when a derived key is ambiguous. */
+export function viewSignature(v: View): string {
+  return [v.type, v.softwareSystemId ?? '', v.containerId ?? '', v.environment ?? ''].join('\u0000')
+}
+
+/** Is `key` this view's derived key, with or without a collision suffix?
+ *
+ *  The suffix is assigned by declaration order, so it is the part that moves
+ *  and the part a stale sidecar entry may still carry. The base is *computed*
+ *  from the view's own scope rather than found by stripping a trailing
+ *  `-<digits>` off the key — a scope genuinely called `svc-2` derives
+ *  `Containers-svc-2`, and stripping would hand its layout to `svc`. */
+export function isDerivedKeyFor(key: string, view: View): boolean {
+  const base = derivedViewKeyBase(view)
+  if (key === base) return true
+  return key.startsWith(`${base}-`) && /^\d+$/.test(key.slice(base.length + 1))
+}
+
+/**
+ * Re-find the layout belonging to each of `views` among `candidates`, keyed by
+ * view key. Returns the entry matched for each view that matched one.
+ *
+ * Resolution runs in rounds over *all* the views rather than view by view, and
+ * the rounds get progressively less certain:
+ *
+ *   1. exact key — the normal path, and it stays authoritative
+ *   2. `originalKey`, for a key the parser normalised on import (TEA-166)
+ *   3. the fallback: a single unclaimed candidate whose key shares this view's
+ *      base, for a derived key that has since been renumbered
+ *
+ * Doing it in rounds is what keeps the fallback from stealing: resolving view
+ * by view lets the first view guess its way onto an entry that the *next*
+ * view matches exactly (layout saved only in `Containers-payments-2` landing
+ * on `Containers-payments`, and the view it belongs to left with nothing).
+ *
+ * The fallback only applies to a view whose key the parser derived. An
+ * authored key is stable by construction, so a key of `Overview-2` sharing a
+ * base with a stale `Overview-1` entry is a coincidence, not a renumbering.
+ *
+ * `isMatch` lets the caller add its own test (the carry-over pass has real
+ * View objects on both sides, so it can compare signatures; the sidecar has
+ * only keys).
+ */
+export function resolveViewLayouts<T>(
+  views: readonly View[],
+  candidates: ReadonlyMap<string, T>,
+  isMatch?: (key: string, value: T, view: View) => boolean,
+): Map<View, T> {
+  const resolved = new Map<View, T>()
+  const claimed = new Set<string>()
+
+  const claim = (view: View, key: string): void => {
+    claimed.add(key)
+    resolved.set(view, candidates.get(key)!)
+  }
+
+  /** One round: every still-unresolved view gets a shot at the key `pick`
+   *  gives it, before the next, looser round starts. */
+  const round = (pending: View[], pick: (view: View) => string | undefined): View[] => {
+    const rest: View[] = []
+    for (const view of pending) {
+      const key = pick(view)
+      if (!key || claimed.has(key) || !candidates.has(key)) rest.push(view)
+      else claim(view, key)
+    }
+    return rest
+  }
+
+  let pending = round([...views], (view) => view.key)
+  pending = round(pending, (view) => view.originalKey)
+
+  for (const view of pending) {
+    // An authored key is stable: a trailing `-2` someone typed is part of the
+    // name, not a renumbering, so it gets no fallback.
+    if (!view.autoKey) continue
+    const fallback = [...candidates].filter(([key, value]) =>
+      !claimed.has(key) && isDerivedKeyFor(key, view) && (!isMatch || isMatch(key, value, view)))
+    // Ambiguous is worse than absent: guessing between two candidates would
+    // move someone's layout onto the wrong diagram, which is harder to notice
+    // than losing it.
+    if (fallback.length !== 1) continue
+    claim(view, fallback[0][0])
+  }
+
+  return resolved
 }
 
 /** Iterate every element in the model tree. Return true from callback to stop early. */

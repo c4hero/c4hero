@@ -9,7 +9,7 @@ import type { Workspace, View, ViewType, AutoLayout, LayoutDirection, Model, Rel
 import type { ContextAwareParser } from './parser'
 import type { Token } from './lexer'
 import { parseStylesBody } from './parser-styles'
-import { isConformantViewKey, sanitizeViewKey } from './viewKey'
+import { derivedViewKeyBase, isConformantViewKey, sanitizeViewKey } from './viewKey'
 
 interface ViewsContainer {
     systemLandscapeViews: View[]
@@ -24,27 +24,11 @@ interface ViewsContainer {
  *  built from and where a warning about it should point. */
 interface PendingViewKey {
     view: View
-    /** The element the view is scoped to, if any — the `-<ref>` of a derived key. */
-    elementRef: string | undefined
     /** The view's opening keyword, so a warning points at the view's own line
      *  rather than at whatever token follows its closing brace. */
     at: Token
 }
 
-/** The Structurizr default-key convention, `Type-ScopeRef`. */
-function derivedKeyBase(view: View, elementRef: string | undefined): string {
-    const typeKey =
-        view.type === 'systemLandscape' ? 'SystemLandscape'
-        : view.type === 'systemContext' ? 'SystemContext'
-        : view.type === 'container' ? 'Containers'
-        : view.type === 'component' ? 'Components'
-        : view.type === 'dynamic' ? 'Dynamic'
-        : 'Deployment'
-    // The base of a derived key is sanitized too — an element ref carrying a
-    // dot or a space must not be able to originate a bad key either.
-    const ref = elementRef ? sanitizeViewKey(elementRef) : ''
-    return ref ? `${typeKey}-${ref}` : typeKey
-}
 
 /** Settle every parsed view's key in one pass: keep a conformant one exactly
  *  as written, normalize a non-conformant one (warning the user), and derive a
@@ -79,7 +63,7 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
         return candidate
     }
 
-    for (const { view, elementRef, at } of pending) {
+    for (const { view, at } of pending) {
         const authored = view.key
         if (authored && isConformantViewKey(authored)) continue // already reserved above
 
@@ -112,7 +96,7 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
             )
         }
 
-        view.key = claim(derivedKeyBase(view, elementRef))
+        view.key = claim(derivedViewKeyBase(view))
         view.autoKey = true
     }
 }
@@ -145,7 +129,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'systemlandscape') {
                 const view = parseSystemLandscapeView(p, model)
                 if (view) {
-                    pendingKeys.push({ view, elementRef: undefined, at: token })
+                    pendingKeys.push({ view, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.systemLandscapeViews.push(view)
                 }
@@ -154,7 +138,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'systemcontext') {
                 const view = parseElementView(p, 'systemContext', model)
                 if (view) {
-                    pendingKeys.push({ view, elementRef: view.softwareSystemId, at: token })
+                    pendingKeys.push({ view, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.systemContextViews.push(view)
                 }
@@ -163,7 +147,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'container') {
                 const view = parseElementView(p, 'container', model)
                 if (view) {
-                    pendingKeys.push({ view, elementRef: view.softwareSystemId, at: token })
+                    pendingKeys.push({ view, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.containerViews.push(view)
                 }
@@ -172,7 +156,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'component') {
                 const view = parseElementView(p, 'component', model)
                 if (view) {
-                    pendingKeys.push({ view, elementRef: view.containerId, at: token })
+                    pendingKeys.push({ view, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.componentViews.push(view)
                 }
@@ -208,7 +192,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'dynamic') {
                 const view = parseDynamicView(p, model)
                 if (view) {
-                    pendingKeys.push({ view, elementRef: view.softwareSystemId ?? view.containerId, at: token })
+                    pendingKeys.push({ view, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.dynamicViews.push(view)
                 }
@@ -217,7 +201,7 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
             if (kw === 'deployment') {
                 const view = parseDeploymentView(p, model)
                 if (view) {
-                    pendingKeys.push({ view, elementRef: view.softwareSystemId ?? view.environment, at: token })
+                    pendingKeys.push({ view, at: token })
                     p.viewLines.set(view, p.lastLine())
                     views.deploymentViews.push(view)
                 }

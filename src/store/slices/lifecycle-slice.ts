@@ -5,7 +5,7 @@ import { validateScope } from '@/lib/scopeValidation'
 import { parseDSL } from '@/lib/dsl'
 import { checkModelIntegrity } from '@/lib/modelIntegrity'
 import { pushUndoSnapshot } from '../internals'
-import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft } from '../workspace-helpers'
+import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft, resolveViewLayouts, viewSignature } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 import { hasIncludedFiles } from '@/lib/includeWriteback'
 import { restitchWorkspaceDocument } from '@/lib/workspaceDocument'
@@ -30,9 +30,15 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
   const prevViews = new Map(allViewsOf(prev).map((v) => [v.key, v]))
   const prevNames = elementNamesById(prev)
   const nextNames = elementNamesById(next)
-  for (const view of allViewsOf(next)) {
-    const old = prevViews.get(view.key)
-      ?? (view.originalKey ? prevViews.get(view.originalKey) : undefined)
+  // Deleting or reordering a keyless view renumbers the derived keys of its
+  // siblings, so matching on the key alone hands the survivor the deleted
+  // view's layout — or nothing at all. Both sides are real views here, so the
+  // fallback can insist the candidate shows the same thing (TEA-342).
+  const nextViews = allViewsOf(next)
+  const resolved = resolveViewLayouts(nextViews, prevViews,
+    (_key, candidate, view) => viewSignature(candidate) === viewSignature(view))
+  for (const view of nextViews) {
+    const old = resolved.get(view)
     if (!old) continue
     if (old.locked) view.locked = true
     const oldById = new Map(old.elements.map((el) => [el.id, el]))
