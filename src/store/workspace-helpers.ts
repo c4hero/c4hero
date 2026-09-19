@@ -2,7 +2,7 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
-  ViewType, ElementInView, DeploymentNode, StoredViewLayout,
+  ViewType, ElementInView, DeploymentNode, StoredViewLayout, StoredViewIdentity,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
@@ -65,17 +65,11 @@ export function findViewHelper(ws: Workspace, key: string): View | undefined {
 // to match costs a diagram its saved positions for one session rather than
 // for good.
 
-/** What a view *shows*, independent of what it is called. Two views with the
- *  same signature are indistinguishable from the DSL alone, which is exactly
- *  when a derived key is ambiguous. */
-export function viewSignature(v: View): string {
-  return [v.type, v.softwareSystemId ?? '', v.containerId ?? '', v.environment ?? ''].join('\u0000')
-}
-
 /** Is `key` this view's derived key, with or without a collision suffix?
  *
- *  The suffix is assigned by declaration order, so it is the part that moves
- *  and the part a stale entry may still carry. The base is *computed* from the
+ *  Only used for entries written before they carried their own identity. The
+ *  suffix is assigned by declaration order, so it is the part that moves and
+ *  the part a stale entry may still carry. The base is *computed* from the
  *  view's own scope rather than found by stripping a trailing `-<digits>` off
  *  the key — a scope genuinely called `svc-2` derives `Containers-svc-2`, and
  *  stripping would hand its layout to `svc`. */
@@ -85,32 +79,43 @@ export function isDerivedKeyFor(key: string, view: View): boolean {
   return key.startsWith(`${base}-`) && /^\d+$/.test(key.slice(base.length + 1))
 }
 
-/** The views whose derived key cannot be trusted against `candidateKeys`,
- *  because more entries share their base than there are views to own them —
- *  so at least one entry outlived its view and the keys have shifted
- *  underneath the rest. Only keyless views are at risk: an authored key is
- *  stable, so it never renumbers (TEA-342). */
-export function contestedDerivedViews(views: readonly View[], candidateKeys: Iterable<string>): Set<View> {
-  const keys = [...candidateKeys]
-  const groups = new Map<string, View[]>()
-  for (const view of views) {
-    if (!view.autoKey) continue
-    const base = derivedViewKeyBase(view)
-    const group = groups.get(base)
-    if (group) group.push(view)
-    else groups.set(base, [view])
+/** The identity to store alongside a view's layout, so the entry never has to
+ *  be re-identified from its key. */
+export function viewIdentityOf(v: View): StoredViewIdentity {
+  return {
+    ...(!v.autoKey && { key: v.key }),
+    type: v.type,
+    ...(v.softwareSystemId !== undefined && { softwareSystemId: v.softwareSystemId }),
+    ...(v.containerId !== undefined && { containerId: v.containerId }),
+    ...(v.environment !== undefined && { environment: v.environment }),
   }
-  const contested = new Set<View>()
-  for (const group of groups.values()) {
-    const withBase = keys.filter((key) => isDerivedKeyFor(key, group[0]))
-    if (withBase.length > group.length) for (const view of group) contested.add(view)
-  }
-  return contested
 }
 
-/** A view's layout as it is stored: the view-level lock plus every element
- *  the user has pinned or locked. The one projection, so the sidecar writer
- *  and the re-parse carry-over cannot drift apart on what "layout" means. */
+/** A stored identity reduced to one comparable string. `viewIdentitySignature`
+ *  computes the same thing for a live view, so the two cannot drift. */
+export function storedIdentitySignature(d: StoredViewIdentity): string {
+  return [d.key ?? '', d.type, d.softwareSystemId ?? '', d.containerId ?? '', d.environment ?? ''].join('\u0000')
+}
+
+/** The same signature computed from a live view. A view the DSL named is only
+ *  ever the same view as one with that name; a keyless view is identified by
+ *  what it shows, because that is all the DSL says about it. */
+export function viewIdentitySignature(v: View): string {
+  return storedIdentitySignature(viewIdentityOf(v))
+}
+
+/** The identity this view had before the parser normalised its key on import
+ *  (TEA-166), if that happened. An entry written under the old name is the
+ *  same view's layout, not a stranger's. */
+function priorIdentitySignature(v: View): string | undefined {
+  if (v.autoKey || !v.originalKey || v.originalKey === v.key) return undefined
+  return storedIdentitySignature({ ...viewIdentityOf(v), key: v.originalKey })
+}
+
+/** A view's layout as it is stored: what it belongs to, the view-level lock,
+ *  and every element the user has pinned or locked. The one projection, so the
+ *  sidecar writer and the re-parse carry-over cannot drift apart on what
+ *  "layout" means. */
 export function viewLayoutOf(view: View): StoredViewLayout | undefined {
   const elements: NonNullable<StoredViewLayout['elements']> = {}
   for (const el of view.elements) {
@@ -124,91 +129,224 @@ export function viewLayoutOf(view: View): StoredViewLayout | undefined {
   }
   const hasElements = Object.keys(elements).length > 0
   if (!hasElements && !view.locked) return undefined
-  return { ...(view.locked && { locked: true }), ...(hasElements && { elements }) }
+  return { view: viewIdentityOf(view), ...(view.locked && { locked: true }), ...(hasElements && { elements }) }
+}
+
+/** One piece of layout looking for its view. `signature` is absent only for an
+ *  entry written before entries carried their identity. */
+export interface LayoutCandidate<T> {
+  key: string
+  signature?: string
+  elementIds: readonly string[]
+  value: T
 }
 
 export interface ViewLayoutMatch<T> {
   /** Layout found for each view. Several views may share one entry when they
    *  genuinely share a key — c4hero tolerates duplicate authored keys. */
   byView: Map<View, T>
-  /** Candidate keys nothing claimed. The caller must preserve these rather
-   *  than let them fall off the next save. */
-  unclaimed: string[]
-}
-
-export interface ViewLayoutOptions<T> {
-  /** Extra condition the fallback round must satisfy before pairing a view
-   *  with a candidate whose derived key has shifted. */
-  isMatch?: (key: string, value: T, view: View) => boolean
-  /** Refuse an exact-key hit and send the view to the fallback round instead.
-   *  An exact hit is normally conclusive, but a renumbering that happened
-   *  while nobody was looking leaves a *stale* entry sitting on a key a live
-   *  view now derives — the match is exact and still wrong. The caller vetoes
-   *  when it can see that contest, and the fallback's two-sided ambiguity
-   *  rule then either finds a defensible answer or declines. */
-  exactVeto?: (key: string, value: T, view: View) => boolean
+  /** Candidates nothing claimed. The caller must preserve these rather than
+   *  let them fall off the next save. */
+  unclaimed: LayoutCandidate<T>[]
 }
 
 /**
- * Match each view to its layout among `candidates`, keyed by view key.
+ * Pair the views of one identity group with the entries that belong to it.
  *
- * Exact key first, and non-exclusively: two views that really do share a key
- * both get that layout, which is what the old plain lookup did and what
- * duplicate authored keys need. Then `originalKey`, for a key the parser
- * normalised on import (TEA-166). Only then the fallback, for a derived key
- * that has been renumbered.
+ * Within a group the entries are interchangeable as far as the DSL is
+ * concerned, so the only honest evidence is which elements each one holds
+ * layout for. Element ids written with an explicit DSL identifier survive a
+ * reopen; ids the parser generated do not, which is why no overlap has to mean
+ * "no evidence" rather than "not a match".
  *
- * The fallback pairs a view with a candidate only when the choice is
- * unambiguous **from both sides** — one candidate for that view, and that
- * view the only taker for the candidate. Two views sharing a base and one
- * stale entry is a coin flip, and landing someone's layout on the wrong
- * diagram is harder to notice than leaving it unapplied. Leaving it unapplied
- * is safe here precisely because unclaimed entries are preserved, not dropped.
+ * Best overlap first. Then, when `allowPositional`, whatever is left pairs off
+ * in declaration order if the counts are equal — the reorder case, where order
+ * is genuinely all there is — and declines if they are not, because a leftover
+ * entry with nothing tying it to a leftover view is exactly the stale entry a
+ * renumbering leaves behind.
+ *
+ * `allowPositional` is false for a group assembled from key shape rather than
+ * identity: there the grouping is itself a guess, so `Containers-svc-2` would
+ * pair off against the sole view of a system called `svc` on no evidence at
+ * all, when it is just as likely to be the view of a system called `svc-2`.
+ * Declining is safe precisely because unclaimed entries are preserved.
+ */
+function pairWithinGroup<T>(
+  views: readonly View[],
+  candidates: readonly LayoutCandidate<T>[],
+  take: (view: View, candidate: LayoutCandidate<T>) => void,
+  allowPositional: boolean,
+): void {
+  const freeViews = new Set(views)
+  const freeCandidates = new Set(candidates)
+
+  // "How much of what this entry is about does the view actually hold?" —
+  // a fraction, not a count, because the two sides are not the same kind of
+  // set: a stored entry lists only pinned elements while a live view lists
+  // all of them, so a raw intersection would let a small view outscore the
+  // large one an entry really belongs to. Absolute overlap breaks ties.
+  // Third component: the entry is filed under this view's own key. Weakest
+  // evidence there is — a derived key moves — but when two entries fit a view
+  // identically it is the only thing left, and preferring the one already
+  // filed under its key beats declining both.
+  const score = (view: View, c: LayoutCandidate<T>): [number, number, number] => {
+    if (c.elementIds.length === 0) return [0, 0, 0]
+    const held = new Set(view.elements.map((el) => el.id))
+    let n = 0
+    for (const id of c.elementIds) if (held.has(id)) n++
+    return [n / c.elementIds.length, n, c.key === view.key ? 1 : 0]
+  }
+
+  const cmp = (a: readonly number[], b: readonly number[]) =>
+    a.findIndex((v, i) => v !== b[i]) === -1 ? 0 : (a[a.findIndex((v, i) => v !== b[i])] > b[a.findIndex((v, i) => v !== b[i])] ? 1 : -1)
+  const better = (a: [number, number, number], b: [number, number, number]) => cmp(a, b) > 0
+  const same = (a: [number, number, number], b: [number, number, number]) => cmp(a, b) === 0
+
+  // Assign only where the evidence points one way **from both sides** — this
+  // view's single best entry, and that entry's single best view. Two entries
+  // that fit a view equally well is a coin flip, and landing someone's layout
+  // on the wrong diagram is harder to notice than leaving it unapplied.
+  for (;;) {
+    /** The candidates tied for best on this view, when any score at all. */
+    const bestFor = (view: View): LayoutCandidate<T>[] => {
+      let top: [number, number, number] = [0, 0, 0]
+      let winners: LayoutCandidate<T>[] = []
+      for (const c of freeCandidates) {
+        const s = score(view, c)
+        if (s[1] === 0) continue
+        if (better(s, top)) { top = s; winners = [c] }
+        else if (same(s, top)) winners.push(c)
+      }
+      return winners
+    }
+    /** The views tied for best on this candidate. */
+    const bestOf = (candidate: LayoutCandidate<T>): View[] => {
+      let top: [number, number, number] = [0, 0, 0]
+      let winners: View[] = []
+      for (const v of freeViews) {
+        const s = score(v, candidate)
+        if (s[1] === 0) continue
+        if (better(s, top)) { top = s; winners = [v] }
+        else if (same(s, top)) winners.push(v)
+      }
+      return winners
+    }
+
+    let paired: { view: View; candidate: LayoutCandidate<T> } | undefined
+    for (const view of freeViews) {
+      const winners = bestFor(view)
+      if (winners.length !== 1) continue
+      const candidate = winners[0]
+      const takers = bestOf(candidate)
+      if (takers.length !== 1 || takers[0] !== view) continue
+      paired = { view, candidate }
+      break
+    }
+    if (!paired) break
+    take(paired.view, paired.candidate)
+    freeViews.delete(paired.view)
+    freeCandidates.delete(paired.candidate)
+  }
+
+  if (!allowPositional) return
+  if (freeViews.size === 0 || freeViews.size !== freeCandidates.size) return
+  const remainingViews = views.filter((v) => freeViews.has(v))
+  const remainingCandidates = candidates.filter((c) => freeCandidates.has(c))
+  remainingViews.forEach((view, i) => take(view, remainingCandidates[i]))
+}
+
+/**
+ * Match each view to its layout.
+ *
+ * Entries that carry their own identity are matched on it: group by what the
+ * entry says it is for, pair within the group on the elements it holds. The
+ * key is not consulted at all, so renumbering it cannot move layout.
+ *
+ * Entries written before that — the migration path — are matched by key, and a
+ * keyless view considers its whole derived-key family at once rather than
+ * taking an exact hit on trust, since an exact hit on a renumbered key is
+ * precisely the wrong answer. One save rewrites them with identities and the
+ * question never arises again.
  */
 export function resolveViewLayouts<T>(
   views: readonly View[],
-  candidates: ReadonlyMap<string, T>,
-  opts: ViewLayoutOptions<T> = {},
+  candidates: readonly LayoutCandidate<T>[],
 ): ViewLayoutMatch<T> {
-  const { isMatch, exactVeto } = opts
   const byView = new Map<View, T>()
-  const used = new Set<string>()
+  const used = new Set<LayoutCandidate<T>>()
+  const take = (view: View, candidate: LayoutCandidate<T>) => {
+    byView.set(view, candidate.value)
+    used.add(candidate)
+  }
+  const claimed = (view: View) => byView.has(view)
 
-  const exact = (view: View, key: string | undefined): boolean => {
-    if (!key || !candidates.has(key)) return false
-    const value = candidates.get(key)!
-    if (exactVeto?.(key, value, view)) return false
-    byView.set(view, value)
-    used.add(key)
-    return true
+  // ── Identity ──
+  const identified = candidates.filter((c) => c.signature !== undefined)
+  if (identified.length > 0) {
+    const bySignature = new Map<string, LayoutCandidate<T>[]>()
+    for (const c of identified) {
+      const group = bySignature.get(c.signature!)
+      if (group) group.push(c)
+      else bySignature.set(c.signature!, [c])
+    }
+    // Current identity first; only then the pre-normalisation one, so a view
+    // that still answers to its own name is never outbid by an old alias.
+    for (const signatureOf of [viewIdentitySignature, priorIdentitySignature]) {
+      for (const [signature, group] of bySignature) {
+        const free = group.filter((c) => !used.has(c))
+        if (free.length === 0) continue
+        const takers = views.filter((v) => !claimed(v) && signatureOf(v) === signature)
+        if (takers.length === 0) continue
+        pairWithinGroup(takers, free, take, true)
+      }
+    }
   }
 
-  let pending = views.filter((view) => !exact(view, view.key))
-  pending = pending.filter((view) => !exact(view, view.originalKey))
+  // ── Key, for entries that predate identities ──
+  const legacy = candidates.filter((c) => c.signature === undefined && !used.has(c))
+  if (legacy.length === 0) return { byView, unclaimed: candidates.filter((c) => !used.has(c)) }
 
-  // An authored key is stable: a trailing `-2` someone typed is part of the
-  // name, not a renumbering, so it gets no fallback.
-  const eligible = pending.filter((view) => view.autoKey)
-  const options = new Map<View, string[]>()
-  for (const view of eligible) {
-    options.set(view, [...candidates.keys()].filter((key) =>
-      !used.has(key) && isDerivedKeyFor(key, view)
-      && (!isMatch || isMatch(key, candidates.get(key)!, view))))
+  // A key some live view answers to exactly is owned, not orphaned, so it is
+  // not part of any other view's renumbering family.
+  const ownedKeys = new Set(views.map((v) => v.key))
+  const familyHandled = new Set<LayoutCandidate<T>>()
+  const baseGroups = new Map<string, View[]>()
+  for (const view of views) {
+    if (claimed(view) || !view.autoKey) continue
+    const base = derivedViewKeyBase(view)
+    const group = baseGroups.get(base)
+    if (group) group.push(view)
+    else baseGroups.set(base, [view])
   }
-  /** How many views would take each candidate. */
-  const takers = new Map<string, number>()
-  for (const keys of options.values()) {
-    for (const key of keys) takers.set(key, (takers.get(key) ?? 0) + 1)
-  }
-  for (const [view, keys] of options) {
-    if (keys.length !== 1) continue
-    const key = keys[0]
-    if (takers.get(key) !== 1) continue
-    byView.set(view, candidates.get(key)!)
-    used.add(key)
+  for (const group of baseGroups.values()) {
+    const inGroup = new Set(group.map((v) => v.key))
+    const family = legacy.filter((c) =>
+      !used.has(c) && isDerivedKeyFor(c.key, group[0])
+      && (!ownedKeys.has(c.key) || inGroup.has(c.key)))
+    if (family.length === 0) continue
+    // More entries than views to own them means one outlived its view, so the
+    // family is genuinely contested: whatever evidence does not resolve is
+    // declined deliberately, and must not then be picked up by the exact-key
+    // round below. An uncontested family that simply offered no evidence is a
+    // different thing — it falls through, and an exact key still counts.
+    if (family.length > group.length) for (const c of family) familyHandled.add(c)
+    pairWithinGroup(group, family, take, false)
   }
 
-  return { byView, unclaimed: [...candidates.keys()].filter((key) => !used.has(key)) }
+  // Exact key, and non-exclusively: two views that really do share a key both
+  // get that layout, which is what duplicate authored keys need. Then
+  // `originalKey`, for a key the parser normalised on import (TEA-166).
+  for (const wanted of ['key', 'originalKey'] as const) {
+    for (const view of views) {
+      if (claimed(view)) continue
+      const key = view[wanted]
+      if (!key) continue
+      const hit = legacy.find((c) => c.key === key && !familyHandled.has(c))
+      if (hit) take(view, hit)
+    }
+  }
+
+  return { byView, unclaimed: candidates.filter((c) => !used.has(c)) }
 }
 
 /** Iterate every element in the model tree. Return true from callback to stop early. */

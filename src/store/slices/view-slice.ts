@@ -55,24 +55,28 @@ export const createViewSlice: StateCreator<
   deleteView: (key) => set((s) => {
     if (!s.workspace) return
     const ws = s.workspace
-    let found = false
+    let deleted: View | undefined
     for (const arrKey of VIEW_ARRAY_KEYS) {
       const idx = (ws.views[arrKey] ?? []).findIndex(v => v.key === key)
       if (idx !== -1) {
         pushUndoSnapshot(s)
+        deleted = ws.views[arrKey][idx]
         ws.views[arrKey].splice(idx, 1)
-        found = true
         break
       }
     }
-    if (!found) return
+    if (!deleted) return
     // Deleting a view is the one moment the intent is unambiguous. Parked
     // layout exists to outlive an *accidental* absence — a generated view that
     // stopped being generated, an `!include` that failed to read — so without
     // this the sidecar can only ever grow, and a later view that happens to
     // derive the same key inherits a deleted diagram's positions (TEA-342).
+    // Both keys it could be held under: a key the parser normalised on import
+    // leaves the layout parked under the original, and that entry outlives the
+    // view just as readily.
     if (ws.unmatchedLayout) {
       delete ws.unmatchedLayout[key]
+      if (deleted.originalKey) delete ws.unmatchedLayout[deleted.originalKey]
       if (Object.keys(ws.unmatchedLayout).length === 0) ws.unmatchedLayout = undefined
     }
     const switchingViews = s.activeViewKey === key
@@ -125,25 +129,6 @@ export const createViewSlice: StateCreator<
           originalKey: undefined,
         }
         ws.views[arrKey].push(copy)
-        // Generated views are all-or-nothing: `generateDefaultViews` runs only
-        // when the DSL declares no views at all. Emitting the copy on its own
-        // would give the file a `views` block and suppress generation entirely
-        // on the next open, taking every other generated view with it. So the
-        // duplicate materialises the whole generated set — the user asked for
-        // a view they can keep, and keeping it costs the others their
-        // provisional status (TEA-342).
-        // Their keys are written out too: a materialised view keeps the key it
-        // was generated under, and an explicit key cannot renumber when a
-        // sibling is later deleted. The emitted key is the one the parser
-        // would have derived anyway, so this pins the mapping rather than
-        // changing it.
-        for (const other of VIEW_ARRAY_KEYS) {
-          for (const v of ws.views[other] ?? []) {
-            if (!v.autoView) continue
-            v.autoView = undefined
-            v.autoKey = undefined
-          }
-        }
         s.activeViewKey = newKey
         s.selectedElementIds = []
         s.selectedRelationshipId = null

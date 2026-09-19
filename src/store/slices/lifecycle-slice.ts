@@ -1,11 +1,12 @@
 import type { StateCreator } from 'zustand'
 import type { Workspace, ElementInView, View, StoredViewLayout } from '@/types/model'
 import type { WorkspaceState } from '../workspace-types'
+import type { LayoutCandidate } from '../workspace-helpers'
 import { validateScope } from '@/lib/scopeValidation'
 import { parseDSL } from '@/lib/dsl'
 import { checkModelIntegrity } from '@/lib/modelIntegrity'
 import { pushUndoSnapshot } from '../internals'
-import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft, resolveViewLayouts, viewSignature, contestedDerivedViews, viewLayoutOf } from '../workspace-helpers'
+import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft, resolveViewLayouts, viewIdentitySignature, viewLayoutOf, storedIdentitySignature } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 import { hasIncludedFiles } from '@/lib/includeWriteback'
 import { restitchWorkspaceDocument } from '@/lib/workspaceDocument'
@@ -45,53 +46,40 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
   // Parking them and never handing them back is how a view that comes back
   // (a generated one, an `!include` that briefly failed to read) still lost
   // its layout for good (TEA-342).
-  const candidates = new Map<string, LayoutSource>()
+  //
+  // Both sides carry their identity, so nothing here depends on the key: a
+  // live view knows what it shows, and a parked entry was written with what it
+  // was for. Renumbering a derived key cannot move layout any more.
+  const candidates: LayoutCandidate<LayoutSource>[] = []
+  for (const view of allViewsOf(prev)) {
+    candidates.push({
+      key: view.key,
+      signature: viewIdentitySignature(view),
+      // Every element, not just the pinned ones: this candidate carries the
+      // whole previous view, including positions auto-layout computed.
+      elementIds: view.elements.map((el) => el.id),
+      value: { kind: 'view', view },
+    })
+  }
   for (const [key, layout] of Object.entries(prev.unmatchedLayout ?? {})) {
-    candidates.set(key, { kind: 'parked', layout })
-  }
-  for (const view of allViewsOf(prev)) candidates.set(view.key, { kind: 'view', view })
-
-  // Deleting or reordering a keyless view renumbers the derived keys of its
-  // siblings, so matching on the key alone hands the survivor the deleted
-  // view's layout — or nothing at all. When more entries share a base than
-  // there are views to own it, even an exact hit is suspect: make the
-  // fallback re-earn it on what the entry pins.
-  const contested = contestedDerivedViews(nextViews, candidates.keys())
-  const pinsAnyOf = (source: LayoutSource, view: View): boolean => {
-    const ids = source.kind === 'view'
-      ? source.view.elements.filter((el) => el.pinned || el.locked).map((el) => el.id)
-      : Object.keys(source.layout.elements ?? {})
-    return ids.some((id) => view.elements.some((el) => el.id === id))
+    candidates.push({
+      key,
+      signature: layout.view ? storedIdentitySignature(layout.view) : undefined,
+      elementIds: Object.keys(layout.elements ?? {}),
+      value: { kind: 'parked', layout },
+    })
   }
 
-  const { byView, unclaimed } = resolveViewLayouts(nextViews, candidates, {
-    // Contested alone is not enough to refuse an exact hit — see the same
-    // guard in applySidecar. One orphaned entry must not unseat every healthy
-    // view that shares its base.
-    exactVeto: (_key, source, view) => contested.has(view) && !pinsAnyOf(source, view),
-    // A parked entry has no view left to compare, so it can only be claimed on
-    // its key. For a live candidate the fallback can insist it shows the same
-    // thing, and that its own key was derived too — a key someone typed as
-    // `Containers-payments-2` is part of the name, not a renumbering, so its
-    // layout is not a keyless sibling's to inherit.
-    isMatch: (_key, source, view) => {
-      if (contested.has(view)) return pinsAnyOf(source, view)
-      return source.kind === 'view'
-        && !!source.view.autoKey
-        && viewSignature(source.view) === viewSignature(view)
-    },
-  })
+  const { byView, unclaimed } = resolveViewLayouts(nextViews, candidates)
 
   // Whatever nothing claimed is parked — rebuilt from scratch each re-parse,
   // so it holds exactly the entries this pass declined to hand out and never
   // accumulates. A key a live view owns can legitimately appear here: it means
-  // the match was contested and declining beat guessing.
+  // the pairing was declined and that beat guessing.
   const parked: Record<string, StoredViewLayout> = {}
-  for (const key of unclaimed) {
-    const source = candidates.get(key)
-    if (!source) continue
-    const layout = source.kind === 'parked' ? source.layout : viewLayoutOf(source.view)
-    if (layout) parked[key] = layout
+  for (const c of unclaimed) {
+    const layout = c.value.kind === 'parked' ? c.value.layout : viewLayoutOf(c.value.view)
+    if (layout) parked[c.key] = layout
   }
   next.unmatchedLayout = Object.keys(parked).length > 0 ? parked : undefined
 

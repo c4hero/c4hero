@@ -116,6 +116,10 @@ describe('generated views keep their layout (issue #201, mode 1)', () => {
     st().addView('container', 'payments', 'My Containers')
     saveAndReopen()
 
+    // The views themselves have to survive, not just their entries in the
+    // JSON: layout for a view that can never come back is not a fix.
+    const keys = allViews().map(v => v.key)
+    for (const key of Object.keys(before)) expect(keys, `view "${key}" was lost`).toContain(key)
     const after = sidecarViews()
     for (const [key, elements] of Object.entries(before)) {
       expect(after[key], `layout for "${key}" was lost`).toEqual(elements)
@@ -425,6 +429,45 @@ describe('the derived-key fallback is precise', () => {
     })
     expect(el.x).toBe(42)
   })
+
+  it('does not read another scope\'s key as its own renumbering', () => {
+    // The mirror image of the case above, and the one the fallback got wrong:
+    // here the live view is `svc`, and the entry belongs to the *system*
+    // called `svc-2`. `Containers-svc-2` reads equally as "svc's second view,
+    // renumbered", so the key alone cannot decide it — and the entry pins
+    // nothing this view holds. Claiming it applied a foreign view lock and,
+    // worse, marked the entry claimed, so the next save deleted it outright.
+    const workspace: Workspace = {
+      name: 'Acme',
+      model: {
+        people: [],
+        softwareSystems: [{
+          id: 'svc', type: 'softwareSystem', name: 'Svc',
+          tags: ['Element', 'Software System'], properties: {},
+          containers: [{ id: 'a', type: 'container', name: 'A', tags: ['Element', 'Container'], properties: {}, components: [] }],
+        }],
+        relationships: [], groups: [], deploymentEnvironments: [],
+      },
+      views: {
+        systemLandscapeViews: [], systemContextViews: [],
+        containerViews: [{
+          type: 'container', key: 'Containers-svc', autoKey: true,
+          softwareSystemId: 'svc', elements: [{ id: 'a' }], relationships: [],
+        }],
+        componentViews: [], dynamicViews: [], deploymentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+
+    applySidecar(workspace, {
+      version: 1,
+      views: { 'Containers-svc-2': { locked: true, elements: { b: { pinned: true, x: 7, y: 7 } } } },
+    })
+    expect(workspace.views.containerViews[0].locked, 'took a foreign view lock').toBeUndefined()
+    // Declined, so it is parked — and still on disk after the next save.
+    expect(extractSidecar(workspace)?.views?.['Containers-svc-2'])
+      .toEqual({ locked: true, elements: { b: { pinned: true, x: 7, y: 7 } } })
+  })
 })
 
 describe('nothing is deleted just because it could not be matched', () => {
@@ -538,7 +581,9 @@ describe('nothing is deleted just because it could not be matched', () => {
     const { workspace, errors } = parseDSL(dsl)
     expect(errors).toEqual([])
     applySidecar(workspace, { version: 1, views: { Dup: { elements: { api: { pinned: true, x: 1, y: 2 } } } } })
-    expect(extractSidecar(workspace)?.views?.Dup).toEqual({ elements: { api: { pinned: true, x: 1, y: 2 } } })
+    // (The entry now also carries the identity it belongs to; the layout is
+    // what this test is about.)
+    expect(extractSidecar(workspace)?.views?.Dup).toMatchObject({ elements: { api: { pinned: true, x: 1, y: 2 } } })
   })
 
   it('writes no sidecar at all when there is no layout to write', () => {
@@ -558,6 +603,20 @@ describe('nothing is deleted just because it could not be matched', () => {
     workspace.unmatchedLayout = { 'Containers-payments': { elements: { api: { pinned: true, x: 1, y: 2 } } } }
     expect(extractSidecar(workspace)?.views?.['Containers-payments'])
       .toEqual({ elements: { api: { pinned: true, x: 1, y: 2 } } })
+  })
+
+  it('keeps that carried entry across a code-pane apply too', () => {
+    // A live view's key shadows the parked entry as a *candidate* for the
+    // re-parse matcher, so nothing was ever offered it — and without an
+    // explicit restore one no-op apply silently dropped exactly the entry the
+    // previous test proves must survive a save.
+    const { workspace } = parseDSL(TWO_KEYLESS_VIEWS)
+    workspace.unmatchedLayout = { 'Containers-payments': { locked: true } }
+    st().loadWorkspace(workspace)
+
+    expect(st().replaceWorkspaceFromDSL(serializeDSL(st().workspace!)).ok).toBe(true)
+    expect(st().workspace!.unmatchedLayout?.['Containers-payments']).toEqual({ locked: true })
+    expect(extractSidecar(st().workspace!)?.views?.['Containers-payments']).toEqual({ locked: true })
   })
 })
 
@@ -710,5 +769,76 @@ describe('deleting a view retires parked layout under its key', () => {
     st().deleteView('Containers-payments')
     expect(st().workspace!.unmatchedLayout?.['Containers-payments']).toBeUndefined()
     expect(sidecarViews()['Containers-payments']).toBeUndefined()
+  })
+})
+
+
+// ─── Identity, not the key, is what layout is filed against ──────────
+
+describe('layout follows what a view is, not what it is called', () => {
+  it('survives its derived key renumbering under it', () => {
+    load(TWO_KEYLESS_VIEWS)
+    expect(allViews().map(v => v.key)).toEqual(['Containers-payments', 'Containers-payments-2'])
+    st().setActiveView('Containers-payments-2')
+    st().updateNodePositions([{ id: 'api', x: 77, y: 88 }])
+
+    // Delete the *first* view in the code pane. The survivor is re-keyed to
+    // `Containers-payments` — the deleted view's key — but it is the same
+    // diagram, and the entry says so.
+    const oneLeft = TWO_KEYLESS_VIEWS.replace(/ {4}container payments \{\n {6}include \*\n {4}\}\n/, '')
+    expect(st().replaceWorkspaceFromDSL(oneLeft).errors).toEqual([])
+
+    const survivor = allViews()[0]
+    expect(survivor.key).toBe('Containers-payments')
+    expect(survivor.elements.find(e => e.id === 'api')!.x, 'lost its own layout to a renumbering').toBe(77)
+  })
+
+  it('survives a reopen once the entry carries its identity', () => {
+    load(TWO_KEYLESS_VIEWS)
+    handPlaceEverything()
+    const before = sidecarViews()
+    saveAndReopen()
+    expect(sidecarViews()).toEqual(before)
+
+    // Every entry now says what it belongs to, so the key it is filed under
+    // has stopped being load-bearing.
+    const entries = extractSidecar(st().workspace!)!.views!
+    for (const entry of Object.values(entries)) {
+      expect(entry.view).toMatchObject({ type: 'container', softwareSystemId: 'payments' })
+    }
+  })
+
+  it('does not hand a keyless view the layout of a deleted view someone had named', () => {
+    // A key the user typed is part of what the view *is*, so an unnamed view
+    // showing the same thing is a different view — not that one, renumbered.
+    load(TWO_KEYLESS_VIEWS.replace('    container payments {\n      include *\n    }\n', ''))
+    const only = allViews()[0]
+    expect(only.autoKey).toBe(true)
+    st().updateNodePositions([{ id: 'api', x: 5, y: 6 }])
+    const mine = extractSidecar(st().workspace!)!.views!['Containers-payments']
+    expect(mine.view?.key).toBeUndefined()
+  })
+})
+
+describe('generated views are written as a set or not at all', () => {
+  it('keeps them when a view is added', () => {
+    load(NO_VIEWS_BLOCK)
+    handPlaceEverything()
+    const generated = allViews().map(v => v.key)
+    expect(generated).toHaveLength(3)
+
+    st().addView('container', 'payments', 'My Containers')
+    saveAndReopen()
+
+    const keys = allViews().map(v => v.key)
+    for (const key of generated) expect(keys, `view "${key}" was lost`).toContain(key)
+    expect(allViews()).toHaveLength(4)
+  })
+
+  it('leaves a purely generated workspace alone', () => {
+    // Nothing authored exists, so the file stays exactly as the user wrote it.
+    load(NO_VIEWS_BLOCK)
+    handPlaceEverything()
+    expect(serializeDSL(st().workspace!)).not.toContain('SystemLandscape')
   })
 })

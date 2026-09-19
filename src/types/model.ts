@@ -310,7 +310,35 @@ export interface IncludedFile {
 }
 
 /** One view's hand-placed layout, as the `.c4hero.json` sidecar stores it. */
+/**
+ * What a stored layout entry is *for*, written alongside it so the entry does
+ * not have to be re-identified from the key it happens to be filed under.
+ *
+ * A view key is not a view's identity: for a view the DSL does not name it is
+ * derived from the scope and numbered by declaration order, so it moves when a
+ * sibling comes or goes. Every attempt to reconstruct identity from the key
+ * alone is a guess, and a wrong guess puts someone's layout on the wrong
+ * diagram. The scope fields are stored discretely rather than flattened into
+ * one `scope`, because a dynamic view's scope can come from either
+ * `softwareSystemId` or `containerId` (TEA-342).
+ *
+ * Optional: entries written before this existed have none, and are matched by
+ * key as a migration path.
+ */
+export interface StoredViewIdentity {
+  /** The key, only when the DSL author wrote it. A name someone chose is part
+   *  of what the view *is*; a key the parser derived is not, since it moves
+   *  when a sibling comes or goes. */
+  key?: string
+  type: ViewType
+  softwareSystemId?: string
+  containerId?: string
+  environment?: string
+}
+
 export interface StoredViewLayout {
+  /** What this layout belongs to. Absent in files written before TEA-342. */
+  view?: StoredViewIdentity
   /** View-level layout lock. */
   locked?: boolean
   elements?: Record<string, { pinned?: boolean; locked?: boolean; x?: number; y?: number }>
