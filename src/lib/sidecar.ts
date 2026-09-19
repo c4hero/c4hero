@@ -1,5 +1,6 @@
-import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
-import { allViewsOf, resolveViewLayouts } from '@/store/workspace-helpers'
+import type { Workspace, ElementStatus, LineStyle, View } from '@/types/model'
+import { allViewsOf, resolveViewLayouts, isDerivedKeyFor, viewLayoutOf } from '@/store/workspace-helpers'
+import { derivedViewKeyBase } from '@/lib/dsl/viewKey'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
@@ -95,7 +96,6 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // view can go absent for reasons that are none of the user's doing, so
   // their positions are carried rather than dropped (TEA-342).
   const views: Record<string, SidecarView> = { ...(workspace.unmatchedLayout ?? {}) }
-  let hasData = Object.keys(views).length > 0
 
   // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
@@ -104,33 +104,24 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // Views: hand-placed and locked elements, plus the view-level layout lock.
   // A lock is worth persisting on its own — it survives a re-layout, so it
   // has to survive a reload.
+  //
+  // A present view with layout overwrites whatever is carried under its key.
+  // One *without* layout leaves the carried entry alone: `unmatchedLayout` is
+  // rebuilt from scratch on every parse and holds only entries a matcher
+  // deliberately declined to hand out, so a live view's key appearing there
+  // means the pairing was contested — not that the entry is stale. Clearing
+  // it here would delete the layout that declining was supposed to protect.
   for (const view of allViewsOf(workspace)) {
-    // A view that is present speaks for its own key, so it replaces anything
-    // carried under it — including clearing it when its layout is gone.
-    delete views[view.key]
-    const viewElements: Record<string, SidecarViewElement> = {}
-    for (const el of view.elements) {
-      if (el.pinned || el.locked) {
-        const entry: SidecarViewElement = {}
-        if (el.pinned) entry.pinned = true
-        if (el.locked) entry.locked = true
-        if (el.x !== undefined) entry.x = el.x
-        if (el.y !== undefined) entry.y = el.y
-        viewElements[el.id] = entry
-        hasData = true
-      }
-    }
-    const entry: SidecarView = {}
-    if (view.locked) {
-      entry.locked = true
-      hasData = true
-    }
-    if (Object.keys(viewElements).length > 0) entry.elements = viewElements
-    if (entry.locked || entry.elements) views[view.key] = entry
+    const layout = viewLayoutOf(view)
+    if (layout) views[view.key] = layout
   }
-  if (Object.keys(views).length > 0) sidecar.views = views
-
-  return hasData ? sidecar : null
+  // Layout is the only thing this projection writes, so "is there anything to
+  // save?" is exactly "did any view survive the pass above". Deciding it up
+  // front from the carried entries would claim a sidecar is worth writing
+  // after a present view cleared the last of them.
+  if (Object.keys(views).length === 0) return null
+  sidecar.views = views
+  return sidecar
 }
 
 // ─── Apply sidecar to workspace ─────────────────────────────────────
@@ -187,7 +178,43 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     // when exactly one unclaimed entry has it (TEA-342).
     const entries = new Map(Object.entries(sidecar.views))
     const views = allViewsOf(workspace)
-    const { byView, unclaimed } = resolveViewLayouts(views, entries)
+
+    // An exact key hit is normally conclusive, but on a cold open it is not:
+    // the renumbering may have happened in someone else's commit, an external
+    // editor or a `git pull`, with no previous workspace to compare against.
+    // Two entries sharing a base where only one keyless view now claims it
+    // means one of them outlived its view — and the survivor exact-matching
+    // `Containers-payments` may well be inheriting the deleted view's
+    // positions. Treat that base as contested: refuse the exact hit and make
+    // the fallback earn the match on what the entry actually pins (TEA-342).
+    const groups = new Map<string, View[]>()
+    for (const view of views) {
+      if (!view.autoKey) continue // an authored key is stable; it cannot renumber
+      const base = derivedViewKeyBase(view)
+      const group = groups.get(base)
+      if (group) group.push(view)
+      else groups.set(base, [view])
+    }
+    const contested = new Set<View>()
+    for (const group of groups.values()) {
+      const withBase = [...entries.keys()].filter((key) => isDerivedKeyFor(key, group[0]))
+      if (withBase.length > group.length) for (const view of group) contested.add(view)
+    }
+
+    // Elements written with an explicit DSL identifier keep their id across
+    // reopens, so an entry's pinned ids are the one piece of evidence tying it
+    // to a diagram when its key cannot be trusted. No overlap (or an entry
+    // that pins nothing) leaves the match unproven, and the fallback's
+    // two-sided rule then declines it — the layout is parked, not misapplied.
+    const pinsAnyOf = (entry: SidecarView, view: View): boolean => {
+      if (!entry.elements) return false
+      return view.elements.some((el) => entry.elements![el.id] !== undefined)
+    }
+
+    const { byView, unclaimed } = resolveViewLayouts(views, entries, {
+      exactVeto: (_key, _entry, view) => contested.has(view),
+      isMatch: (_key, entry, view) => !contested.has(view) || pinsAnyOf(entry, view),
+    })
     // Anything no view took is kept verbatim so the next save cannot delete
     // it. This is what makes declining an ambiguous match safe rather than
     // destructive.

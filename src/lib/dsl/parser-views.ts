@@ -29,7 +29,6 @@ interface PendingViewKey {
     at: Token
 }
 
-
 /** Settle every parsed view's key in one pass: keep a conformant one exactly
  *  as written, normalize a non-conformant one (warning the user), and derive a
  *  stable key for a view the DSL gave none.

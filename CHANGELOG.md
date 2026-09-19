@@ -17,10 +17,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renumbered by a sibling coming or going — had its positions deleted for
   good. c4hero now keeps layout it cannot currently place instead of dropping
   it, and re-finds layout whose derived key has shifted, so the positions come
-  back when the view does. Your `.dsl` is not touched and no migration is
-  needed. One case remains: two views of the same type over the same system
-  with no key in the DSL are indistinguishable once parsed, so reordering them
-  swaps their layout — give either one a key to pin it down.
+  back when the view does. An exact key match is no longer taken on trust
+  either: when more saved entries share a key's base than there are views to
+  own them, one of them has outlived its view, and c4hero works out which
+  belongs where from the elements it pins rather than handing the survivor a
+  deleted diagram's positions. No migration is needed.
+
+  Two things to know. Duplicating a *generated* view now writes the whole
+  generated set into your `.dsl` — generated views are all-or-nothing, so
+  emitting the copy on its own would have suppressed the rest on the next
+  open. Nothing else touches your `.dsl`. And one case remains unfixable: two
+  views of the same type over the same system with no key in the DSL are
+  indistinguishable once parsed, so reordering them swaps their layout — give
+  either one a key to pin it down.
   (TEA-342, [#201](https://github.com/c4hero/c4hero/issues/201))
 
 ## [0.7.0] - 2026-09-18

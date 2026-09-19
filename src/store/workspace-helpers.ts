@@ -2,7 +2,7 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
-  ViewType, ElementInView, DeploymentNode,
+  ViewType, ElementInView, DeploymentNode, StoredViewLayout,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
@@ -85,6 +85,48 @@ export function isDerivedKeyFor(key: string, view: View): boolean {
   return key.startsWith(`${base}-`) && /^\d+$/.test(key.slice(base.length + 1))
 }
 
+/** The views whose derived key cannot be trusted against `candidateKeys`,
+ *  because more entries share their base than there are views to own them —
+ *  so at least one entry outlived its view and the keys have shifted
+ *  underneath the rest. Only keyless views are at risk: an authored key is
+ *  stable, so it never renumbers (TEA-342). */
+export function contestedDerivedViews(views: readonly View[], candidateKeys: Iterable<string>): Set<View> {
+  const keys = [...candidateKeys]
+  const groups = new Map<string, View[]>()
+  for (const view of views) {
+    if (!view.autoKey) continue
+    const base = derivedViewKeyBase(view)
+    const group = groups.get(base)
+    if (group) group.push(view)
+    else groups.set(base, [view])
+  }
+  const contested = new Set<View>()
+  for (const group of groups.values()) {
+    const withBase = keys.filter((key) => isDerivedKeyFor(key, group[0]))
+    if (withBase.length > group.length) for (const view of group) contested.add(view)
+  }
+  return contested
+}
+
+/** A view's layout as it is stored: the view-level lock plus every element
+ *  the user has pinned or locked. The one projection, so the sidecar writer
+ *  and the re-parse carry-over cannot drift apart on what "layout" means. */
+export function viewLayoutOf(view: View): StoredViewLayout | undefined {
+  const elements: NonNullable<StoredViewLayout['elements']> = {}
+  for (const el of view.elements) {
+    if (!el.pinned && !el.locked) continue
+    const entry: NonNullable<StoredViewLayout['elements']>[string] = {}
+    if (el.pinned) entry.pinned = true
+    if (el.locked) entry.locked = true
+    if (el.x !== undefined) entry.x = el.x
+    if (el.y !== undefined) entry.y = el.y
+    elements[el.id] = entry
+  }
+  const hasElements = Object.keys(elements).length > 0
+  if (!hasElements && !view.locked) return undefined
+  return { ...(view.locked && { locked: true }), ...(hasElements && { elements }) }
+}
+
 export interface ViewLayoutMatch<T> {
   /** Layout found for each view. Several views may share one entry when they
    *  genuinely share a key — c4hero tolerates duplicate authored keys. */
@@ -92,6 +134,19 @@ export interface ViewLayoutMatch<T> {
   /** Candidate keys nothing claimed. The caller must preserve these rather
    *  than let them fall off the next save. */
   unclaimed: string[]
+}
+
+export interface ViewLayoutOptions<T> {
+  /** Extra condition the fallback round must satisfy before pairing a view
+   *  with a candidate whose derived key has shifted. */
+  isMatch?: (key: string, value: T, view: View) => boolean
+  /** Refuse an exact-key hit and send the view to the fallback round instead.
+   *  An exact hit is normally conclusive, but a renumbering that happened
+   *  while nobody was looking leaves a *stale* entry sitting on a key a live
+   *  view now derives — the match is exact and still wrong. The caller vetoes
+   *  when it can see that contest, and the fallback's two-sided ambiguity
+   *  rule then either finds a defensible answer or declines. */
+  exactVeto?: (key: string, value: T, view: View) => boolean
 }
 
 /**
@@ -113,14 +168,17 @@ export interface ViewLayoutMatch<T> {
 export function resolveViewLayouts<T>(
   views: readonly View[],
   candidates: ReadonlyMap<string, T>,
-  isMatch?: (key: string, value: T, view: View) => boolean,
+  opts: ViewLayoutOptions<T> = {},
 ): ViewLayoutMatch<T> {
+  const { isMatch, exactVeto } = opts
   const byView = new Map<View, T>()
   const used = new Set<string>()
 
   const exact = (view: View, key: string | undefined): boolean => {
     if (!key || !candidates.has(key)) return false
-    byView.set(view, candidates.get(key)!)
+    const value = candidates.get(key)!
+    if (exactVeto?.(key, value, view)) return false
+    byView.set(view, value)
     used.add(key)
     return true
   }

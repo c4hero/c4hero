@@ -1,15 +1,23 @@
 import type { StateCreator } from 'zustand'
-import type { Workspace, ElementInView } from '@/types/model'
+import type { Workspace, ElementInView, View, StoredViewLayout } from '@/types/model'
 import type { WorkspaceState } from '../workspace-types'
 import { validateScope } from '@/lib/scopeValidation'
 import { parseDSL } from '@/lib/dsl'
 import { checkModelIntegrity } from '@/lib/modelIntegrity'
 import { pushUndoSnapshot } from '../internals'
-import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft, resolveViewLayouts, viewSignature } from '../workspace-helpers'
+import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft, resolveViewLayouts, viewSignature, contestedDerivedViews, viewLayoutOf } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 import { hasIncludedFiles } from '@/lib/includeWriteback'
 import { restitchWorkspaceDocument } from '@/lib/workspaceDocument'
 
+
+/** Where a candidate layout is coming from: a view that survived the previous
+ *  parse and still carries its positions, or an entry parked while its view
+ *  was absent. Both are offered to the same matcher; only the shape of
+ *  reading them back differs. */
+type LayoutSource =
+  | { kind: 'view'; view: View }
+  | { kind: 'parked'; layout: StoredViewLayout }
 
 /** Map element id -> element name for every element in the model tree. */
 function elementNamesById(ws: Workspace): Map<string, string> {
@@ -27,42 +35,82 @@ function elementNamesById(ws: Workspace): Map<string, string> {
  *  parser-generated id on every re-parse, so an unmatched id falls back to
  *  matching by element name (skipped when the name is ambiguous in that view). */
 function carryOverViewLayout(prev: Workspace, next: Workspace): void {
-  const prevViews = new Map(allViewsOf(prev).map((v) => [v.key, v]))
   const prevNames = elementNamesById(prev)
   const nextNames = elementNamesById(next)
+  const nextViews = allViewsOf(next)
+
+  // Layout can be waiting in two places, and both have to be offered to the
+  // same matcher. A view that survived the last re-parse still holds its
+  // positions; one that went absent had them parked in `unmatchedLayout`.
+  // Parking them and never handing them back is how a view that comes back
+  // (a generated one, an `!include` that briefly failed to read) still lost
+  // its layout for good (TEA-342).
+  const candidates = new Map<string, LayoutSource>()
+  for (const [key, layout] of Object.entries(prev.unmatchedLayout ?? {})) {
+    candidates.set(key, { kind: 'parked', layout })
+  }
+  for (const view of allViewsOf(prev)) candidates.set(view.key, { kind: 'view', view })
+
   // Deleting or reordering a keyless view renumbers the derived keys of its
   // siblings, so matching on the key alone hands the survivor the deleted
-  // view's layout — or nothing at all. Both sides are real views here, so the
-  // fallback can insist the candidate shows the same thing (TEA-342).
-  const nextViews = allViewsOf(next)
-  const { byView, unclaimed } = resolveViewLayouts(nextViews, prevViews,
-    (_key, candidate, view) => viewSignature(candidate) === viewSignature(view))
-
-  // A view that did not survive the re-parse takes its positions with it, and
-  // the next save would write a sidecar without them. Carry them instead —
-  // along with anything already being carried — so a view that comes back
-  // (a generated one, an `!include` that failed to read) finds its layout
-  // waiting (TEA-342).
-  next.unmatchedLayout = { ...prev.unmatchedLayout }
-  for (const key of unclaimed) {
-    const lost = prevViews.get(key)
-    if (!lost) continue
-    const elements: Record<string, { pinned?: boolean; locked?: boolean; x?: number; y?: number }> = {}
-    for (const el of lost.elements) {
-      if (!el.pinned && !el.locked) continue
-      elements[el.id] = { ...(el.pinned && { pinned: true }), ...(el.locked && { locked: true }), x: el.x, y: el.y }
-    }
-    if (Object.keys(elements).length > 0 || lost.locked) {
-      next.unmatchedLayout[key] = { ...(lost.locked && { locked: true }), ...(Object.keys(elements).length > 0 && { elements }) }
-    }
+  // view's layout — or nothing at all. When more entries share a base than
+  // there are views to own it, even an exact hit is suspect: make the
+  // fallback re-earn it on what the entry pins.
+  const contested = contestedDerivedViews(nextViews, candidates.keys())
+  const pinsAnyOf = (source: LayoutSource, view: View): boolean => {
+    const ids = source.kind === 'view'
+      ? source.view.elements.filter((el) => el.pinned || el.locked).map((el) => el.id)
+      : Object.keys(source.layout.elements ?? {})
+    return ids.some((id) => view.elements.some((el) => el.id === id))
   }
-  // A key a surviving view owns is not stale, whatever an older pass carried.
-  for (const view of nextViews) delete next.unmatchedLayout[view.key]
-  if (Object.keys(next.unmatchedLayout).length === 0) next.unmatchedLayout = undefined
+
+  const { byView, unclaimed } = resolveViewLayouts(nextViews, candidates, {
+    exactVeto: (_key, _source, view) => contested.has(view),
+    // A parked entry has no view left to compare, so it can only be claimed on
+    // its key. For a live candidate the fallback can insist it shows the same
+    // thing, and that its own key was derived too — a key someone typed as
+    // `Containers-payments-2` is part of the name, not a renumbering, so its
+    // layout is not a keyless sibling's to inherit.
+    isMatch: (_key, source, view) => {
+      if (contested.has(view)) return pinsAnyOf(source, view)
+      return source.kind === 'view'
+        && !!source.view.autoKey
+        && viewSignature(source.view) === viewSignature(view)
+    },
+  })
+
+  // Whatever nothing claimed is parked — rebuilt from scratch each re-parse,
+  // so it holds exactly the entries this pass declined to hand out and never
+  // accumulates. A key a live view owns can legitimately appear here: it means
+  // the match was contested and declining beat guessing.
+  const parked: Record<string, StoredViewLayout> = {}
+  for (const key of unclaimed) {
+    const source = candidates.get(key)
+    if (!source) continue
+    const layout = source.kind === 'parked' ? source.layout : viewLayoutOf(source.view)
+    if (layout) parked[key] = layout
+  }
+  next.unmatchedLayout = Object.keys(parked).length > 0 ? parked : undefined
 
   for (const view of nextViews) {
-    const old = byView.get(view)
-    if (!old) continue
+    const source = byView.get(view)
+    if (!source) continue
+    if (source.kind === 'parked') {
+      // Parked layout keys elements by id with no names to fall back on, so
+      // an element the DSL never named — its id is regenerated every re-parse
+      // — cannot be re-found. Its position is the cost of the view's absence.
+      if (source.layout.locked) view.locked = true
+      for (const el of view.elements) {
+        const stored = source.layout.elements?.[el.id]
+        if (!stored) continue
+        if (stored.x !== undefined) el.x = stored.x
+        if (stored.y !== undefined) el.y = stored.y
+        if (stored.pinned) el.pinned = true
+        if (stored.locked) el.locked = true
+      }
+      continue
+    }
+    const old = source.view
     if (old.locked) view.locked = true
     const oldById = new Map(old.elements.map((el) => [el.id, el]))
     const oldByName = new Map<string, ElementInView | null>()
