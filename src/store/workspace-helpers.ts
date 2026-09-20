@@ -180,6 +180,26 @@ export function forEachView(ws: Workspace, fn: (v: View) => void): void {
   }
 }
 
+/** Make the generated views explicit when the workspace is about to gain its
+ *  first authored one.
+ *
+ *  `generateDefaultViews` only runs on a workspace with no views at all, and
+ *  the serializer skips `autoView` views so a view-less DSL roundtrips
+ *  byte-identical. Writing a single authored view into that DSL would
+ *  therefore delete every generated diagram on the next parse. Structurizr's
+ *  implicit-views convention is all-or-nothing, so the whole generated set
+ *  becomes explicit together. No-op once any view is already authored.
+ *
+ *  Returns true when it materialized, so callers can tell the user the DSL
+ *  grew a views block. */
+export function materializeAutoViews(ws: Workspace): boolean {
+  const views = allViewsOf(ws)
+  if (views.length === 0) return false
+  if (!views.every(v => v.autoView)) return false
+  for (const v of views) v.autoView = undefined
+  return true
+}
+
 /** Return a name that doesn't collide with any existing element name. */
 export function uniqueElementName(base: string, ws: Workspace): string {
   // Names only: retained layout keys live in the ID namespace and are reserved

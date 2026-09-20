@@ -30,17 +30,24 @@ Absence alone must not delete that content on the next save.
   reset would leave old positions on disk and restore them at the next open.
   A workspace with no layout may therefore have an empty sidecar. A failed or
   cancelled DSL save must stop before writing its sidecar or included files.
+  Each destination stands alone: a failed root write suppresses that
+  destination's sidecar and fragments, not the other destination's writes.
+- Authoring a view in a workspace that has none makes the generated views
+  explicit first (`materializeAutoViews`). `generateDefaultViews` only runs on
+  a workspace with no views at all, so writing a single authored view into a
+  view-less DSL would delete every generated diagram at the next parse.
+  Structurizr's implicit-views convention is all-or-nothing.
 
 The sidecar stays at version 1. Existing files need no migration, and this
-change does not materialize generated views or rewrite DSL view keys.
+change does not rewrite DSL view keys.
 
 ## Boundary of this fix
 
 Preservation is separate from identity. Keyless views still derive their keys
 from scope and declaration order. Reordering them can apply a saved entry to
-the wrong diagram. Generated diagrams are still hidden when explicit views
-exist. Their retained layout remains in the sidecar, including element entries
-that the current diagram cannot display.
+the wrong diagram. Generated diagrams are still hidden when a DSL authored
+elsewhere declares explicit views. Their retained layout remains in the
+sidecar, including element entries that the current diagram cannot display.
 
 Use explicit, unique DSL view keys for stable ownership today. Reliable identity
 for keyless views needs a separate design; prefix/overlap matching cannot prove

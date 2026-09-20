@@ -3,7 +3,7 @@ import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement } from '../workspace-helpers'
+import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 
 /** View management: create / delete / rename / duplicate views, plus the
@@ -43,6 +43,9 @@ export const createViewSlice: StateCreator<
     set((s) => {
       if (!s.workspace) return
       pushUndoSnapshot(s)
+      // The new view is authored, so the generated set has to become authored
+      // with it or the next parse of the serialized DSL would drop it.
+      materializeAutoViews(s.workspace)
       appendScopedView(s.workspace, type, scopeId, title ?? `New ${type} view`, key, options)
       s.activeViewKey = key
       s.selectedElementIds = []
@@ -100,6 +103,9 @@ export const createViewSlice: StateCreator<
         const src = (ws.views[arrKey] ?? []).find(v => v.key === key)
         if (!src) continue
         pushUndoSnapshot(s)
+        // The copy is authored (it drops `autoView` below), so the generated
+        // set has to become authored with it — see materializeAutoViews.
+        materializeAutoViews(ws)
         // Deep-copy via current() unwrap so the clone is fully detached from
         // any existing view's draft sub-objects.
         const detached = current(src) as View
