@@ -10,6 +10,7 @@ import {
   addToCurrentView,
   cascadeDeleteElements,
   collectTakenIds,
+  hasViewKeyConflict,
   duplicateElementsInTree,
   findElementHelper,
   renameElementId,
@@ -24,7 +25,9 @@ import { getFirstViewKey } from '../workspace-selectors'
 function mintIdFor(ws: Workspace, name: string, excludeId?: string): string {
   const taken = collectTakenIds(ws)
   if (excludeId) taken.delete(excludeId)
-  return uniqueDerivedId(deriveIdFromName(name), (id) => taken.has(id))
+  return uniqueDerivedId(deriveIdFromName(name), (id) =>
+    taken.has(id) || (excludeId !== undefined && hasViewKeyConflict(ws, excludeId, id)),
+  )
 }
 
 /** Swap an element's ID and patch the state-level references the workspace
@@ -242,6 +245,9 @@ export const createElementSlice: StateCreator<
       const taken = collectTakenIds(s.workspace)
       taken.delete(id)
       error = validateElementId(newId, (candidate) => taken.has(candidate))
+      if (!error && hasViewKeyConflict(s.workspace, id, newId)) {
+        error = 'This ID would reuse another view’s layout key. Choose a different ID.'
+      }
       if (error) return
       pushUndoSnapshot(s)
       // A hand-set ID is pinned: renames stop re-deriving it.

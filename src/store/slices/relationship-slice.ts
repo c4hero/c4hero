@@ -3,7 +3,7 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import type { WorkspaceState } from '../workspace-types'
 import type { Relationship, View, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { allViewsOf, elementExists, forEachView, closeAiSurfaces } from '../workspace-helpers'
+import { allViewsOf, elementExists, forEachView, closeAiSurfaces, restoreViewElement } from '../workspace-helpers'
 
 /** Drop every step of `relId` from a dynamic view and recompute the view's
  *  derived element membership from the surviving steps. Dynamic membership
@@ -64,7 +64,7 @@ export const createRelationshipSlice: StateCreator<
         if (sourceIsScope || destIsScope) {
           const actorId = sourceIsScope ? destinationId : sourceId
           if (!v.elements.some(e => e.id === actorId)) {
-            v.elements.push({ id: actorId })
+            v.elements.push(restoreViewElement(ws, v.key, actorId))
           }
         }
       }
@@ -139,7 +139,7 @@ export const createRelationshipSlice: StateCreator<
       if (sourceIsScope || destIsScope) {
         const actorId = sourceIsScope ? newTargetId : newSourceId
         if (!v.elements.some(e => e.id === actorId)) {
-          v.elements.push({ id: actorId })
+          v.elements.push(restoreViewElement(ws, v.key, actorId))
         }
       }
     }

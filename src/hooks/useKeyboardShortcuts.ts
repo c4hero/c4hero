@@ -85,18 +85,18 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
       if (view) store.selectElements(view.elements.map(el => el.id))
     }
   },
-  'mod+s': (store) => {
+  'mod+s': async (store) => {
     if (store.workspace) {
       try {
         // Same rule as the Save button: write a linked workspace in place;
         // only an unlinked one goes through the picker / download (TEA-339).
         if (isWorkspaceLinked(store.activeWorkspaceFilename)) {
-          void writeLinkedWorkspace(store.workspace, store.activeWorkspaceFilename)
+          await writeLinkedWorkspace(store.workspace, store.activeWorkspaceFilename)
         } else {
           const dsl = serializeRoot(store.workspace)
-          void saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)
-          const sidecar = extractSidecar(store.workspace)
-          if (sidecar) void writeSidecarToHandle(serializeSidecar(sidecar))
+          if (!await saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)) return
+          const sidecar = extractSidecar(store.workspace) ?? { version: 1 as const, views: {} }
+          await writeSidecarToHandle(serializeSidecar(sidecar))
         }
       } catch (error) {
         announce(error instanceof Error ? error.message : 'Save failed')

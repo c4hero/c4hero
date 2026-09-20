@@ -40,17 +40,18 @@ export async function writeLinkedWorkspace(workspace: Workspace, activeFilename:
   if (!hasSingleFile && !(dirHandle && activeFilename)) return false
 
   const dsl = serializeRoot(workspace)
-  const sidecar = extractSidecar(workspace)
-  let ok = true
+  // Always write the projection, even when empty: a prior save in this same
+  // session may have written positions which the user has since reset.
+  const sidecar = extractSidecar(workspace) ?? { version: 1 as const, views: {} }
 
   if (hasSingleFile) {
-    ok = (await writeToCurrentHandle(dsl)) && ok
-    if (sidecar) await writeSidecarToHandle(serializeSidecar(sidecar))
+    if (!await writeToCurrentHandle(dsl)) return false
+    await writeSidecarToHandle(serializeSidecar(sidecar))
   }
 
   if (dirHandle && activeFilename) {
-    ok = (await writeDSLFile(activeFilename, dsl)) && ok
-    if (sidecar) await writeSidecarFile(activeFilename, serializeSidecar(sidecar))
+    if (!await writeDSLFile(activeFilename, dsl)) return false
+    await writeSidecarFile(activeFilename, serializeSidecar(sidecar))
     // Write-back: each writable !include'd file gets its own fragment,
     // only when it actually changed (TEA-325).
     const scope = `${dirHandle.name}/${activeFilename}`
@@ -64,5 +65,5 @@ export async function writeLinkedWorkspace(workspace: Workspace, activeFilename:
     }
   }
 
-  return ok
+  return true
 }

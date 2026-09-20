@@ -411,3 +411,33 @@ describe('view-level lock round-trip', () => {
     expect(parsed).toBeNull()
   })
 })
+
+
+describe('retained layout ownership', () => {
+  it('keeps an absent view lock without requiring any element positions', () => {
+    const workspace = makeWorkspace()
+    const saved = { version: 1 as const, views: { missing: { locked: true } } }
+    applySidecar(workspace, saved)
+    expect(extractSidecar(workspace)).toEqual(saved)
+  })
+
+  it('does not mutate the supplied sidecar or frozen workspace during extraction', () => {
+    const workspace = makeWorkspace()
+    const saved = { version: 1 as const, views: { sl1: { elements: {
+      alice: { pinned: true, x: 100, y: 200 },
+      missing: { pinned: true, x: 300, y: 400 },
+    } } } }
+    const original = structuredClone(saved)
+    applySidecar(workspace, saved)
+    workspace.views.systemLandscapeViews[0].elements[0].x = 900
+    Object.freeze(workspace.savedLayout!.sl1.elements)
+    Object.freeze(workspace.savedLayout!.sl1)
+    Object.freeze(workspace.savedLayout)
+    Object.freeze(workspace)
+    const result = extractSidecar(workspace)!
+    expect(result.views!.sl1.elements!.alice.x).toBe(900)
+    expect(result.views!.sl1.elements!.missing).toEqual(saved.views.sl1.elements.missing)
+    expect(saved).toEqual(original)
+    expect(workspace.savedLayout).toEqual(original.views)
+  })
+})

@@ -309,7 +309,17 @@ export interface IncludedFile {
   text?: string
 }
 
+/** Layout retained independently of whether a view or element is currently visible.
+ * Uses the version-1 sidecar shape; no on-disk migration is needed. */
+export interface SavedViewLayout {
+  locked?: boolean
+  elements?: Record<string, Pick<ElementInView, 'x' | 'y' | 'pinned' | 'locked'>>
+}
+
 export interface Workspace {
+  /** Last loaded/carried layout. Present entries are overlaid on extraction;
+   * absent entries survive. An empty map still requests clearing the old file. */
+  savedLayout?: Record<string, SavedViewLayout>
   name?: string
   description?: string
   scope?: WorkspaceScope

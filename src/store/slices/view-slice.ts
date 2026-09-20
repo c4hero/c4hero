@@ -3,7 +3,7 @@ import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView } from '../workspace-helpers'
+import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 
 /** View management: create / delete / rename / duplicate views, plus the
@@ -66,6 +66,7 @@ export const createViewSlice: StateCreator<
       }
     }
     if (!found) return
+    if (ws.savedLayout) delete ws.savedLayout[key]
     const switchingViews = s.activeViewKey === key
     if (switchingViews) {
       s.activeViewKey = getFirstViewKey(ws)
@@ -105,6 +106,9 @@ export const createViewSlice: StateCreator<
         const copy: View = {
           ...structuredClone(detached),
           key: newKey,
+          autoView: undefined,
+          autoKey: undefined,
+          originalKey: undefined,
           title: `${src.title ?? 'View'} copy`,
         }
         ws.views[arrKey].push(copy)
@@ -190,6 +194,9 @@ export const createViewSlice: StateCreator<
     if (removable.size === 0) return
 
     pushUndoSnapshot(s)
+    for (const id of removable) {
+      if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[id]
+    }
     view.elements = view.elements.filter((e) => !removable.has(e.id))
     view.relationships = view.relationships.filter((r) => {
       const rel = ws.model.relationships.find((mr) => mr.id === r.id)
@@ -206,6 +213,7 @@ export const createViewSlice: StateCreator<
     const idx = view.elements.findIndex(e => e.id === elementId)
     pushUndoSnapshot(s)
     if (idx >= 0) {
+      if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[elementId]
       view.elements.splice(idx, 1)
       // Also remove relationships that reference this element
       view.relationships = view.relationships.filter(r => {
@@ -216,7 +224,10 @@ export const createViewSlice: StateCreator<
     } else {
       // Capture IDs already in the view BEFORE adding the new element
       const existingElementIds = new Set(view.elements.map(e => e.id))
-      view.elements.push({ id: elementId })
+      // Absence caused by a DSL edit is not a reset. Restore the retained
+      // position when the user brings the element back; explicit removal
+      // above already discards its retained entry.
+      view.elements.push(restoreViewElement(ws, viewKey, elementId))
       // Auto-add any model relationships that connect the new element to elements
       // already present in the view (avoids forcing the user to re-draw connections)
       const existingRelIds = new Set(view.relationships.map(r => r.id))

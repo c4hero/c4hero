@@ -1,4 +1,4 @@
-import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
+import type { Workspace, ElementStatus, LineStyle, SavedViewLayout } from '@/types/model'
 import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
@@ -36,17 +36,11 @@ interface SidecarViewElement {
   y?: number
 }
 
-interface SidecarView {
-  /** View-level layout lock (freezes Auto-arrange + dragging for the view). */
-  locked?: boolean
-  elements?: Record<string, SidecarViewElement>
-}
-
 export interface SidecarData {
   version: 1
   elements?: Record<string, SidecarElement>
   relationships?: Record<string, SidecarRelationship>
-  views?: Record<string, SidecarView>
+  views?: Record<string, SavedViewLayout>
 }
 
 function isSidecarElement(value: unknown): value is SidecarElement {
@@ -71,7 +65,7 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
   return true
 }
 
-function isSidecarView(value: unknown): value is SidecarView {
+function isSidecarView(value: unknown): value is SavedViewLayout {
   if (!isRecord(value)) return false
   if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
@@ -90,7 +84,6 @@ function isSidecarData(value: unknown): value is SidecarData {
 
 export function extractSidecar(workspace: Workspace): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
-  let hasData = false
 
   // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
@@ -99,10 +92,18 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // Views: hand-placed and locked elements, plus the view-level layout lock.
   // A lock is worth persisting on its own — it survives a re-layout, so it
   // has to survive a reload.
-  const views: Record<string, SidecarView> = {}
+  // Merge at element granularity: a missing view OR element is not evidence
+  // that its hand-placed layout was deleted. Clone to keep extraction pure,
+  // including when the workspace is frozen by Immer.
+  const views: Record<string, SavedViewLayout> = Object.fromEntries(
+    Object.entries(workspace.savedLayout ?? {}).map(([key, data]) =>
+      [key, { ...data, ...(data.elements ? { elements: { ...data.elements } } : {}) }]),
+  )
   for (const view of allViewsOf(workspace)) {
-    const viewElements: Record<string, SidecarViewElement> = {}
+    const viewElements: Record<string, SidecarViewElement> = { ...views[view.key]?.elements }
     for (const el of view.elements) {
+      // A live element is authoritative, including an explicit layout reset.
+      delete viewElements[el.id]
       if (el.pinned || el.locked) {
         const entry: SidecarViewElement = {}
         if (el.pinned) entry.pinned = true
@@ -110,26 +111,35 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
         if (el.x !== undefined) entry.x = el.x
         if (el.y !== undefined) entry.y = el.y
         viewElements[el.id] = entry
-        hasData = true
       }
     }
-    const entry: SidecarView = {}
+    const entry: SavedViewLayout = {}
     if (view.locked) {
       entry.locked = true
-      hasData = true
     }
     if (Object.keys(viewElements).length > 0) entry.elements = viewElements
     if (entry.locked || entry.elements) views[view.key] = entry
+    else delete views[view.key]
   }
-  if (Object.keys(views).length > 0) sidecar.views = views
-
-  return hasData ? sidecar : null
+  if (Object.keys(views).length === 0 && workspace.savedLayout === undefined) return null
+  // Do not return null after clearing loaded layout: save callers must write
+  // the empty map, otherwise the old file resurrects positions on reopen.
+  sidecar.views = views
+  return sidecar
 }
 
 // ─── Apply sidecar to workspace ─────────────────────────────────────
 
 export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   if (sidecar.version !== 1) return
+  workspace.savedLayout = Object.fromEntries(
+    Object.entries(sidecar.views ?? {}).map(([key, data]) => [key, {
+      ...data,
+      ...(data.elements ? { elements: Object.fromEntries(
+        Object.entries(data.elements).map(([id, el]) => [id, { ...el }]),
+      ) } : {}),
+    }]),
+  )
 
   // Elements — only apply known sidecar properties
   if (sidecar.elements) {
@@ -178,6 +188,12 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       const viewData = sidecar.views[view.key]
         ?? (view.originalKey ? sidecar.views[view.originalKey] : undefined)
       if (!viewData) continue
+      // Migrate only the parser's explicit key normalization alias. Never
+      // infer ownership from key prefixes, declaration order or element overlap.
+      if (!Object.hasOwn(sidecar.views, view.key) && view.originalKey) {
+        workspace.savedLayout[view.key] = workspace.savedLayout[view.originalKey]
+        delete workspace.savedLayout[view.originalKey]
+      }
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue
       for (const el of view.elements) {

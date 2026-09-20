@@ -3,6 +3,7 @@ import type { WorkspaceState } from '../workspace-types'
 import type { DeploymentEnvironment, DeploymentNode, InfrastructureNode, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
+import { restoreViewElement } from '../workspace-helpers'
 
 function envByName(ws: Workspace, environment: string): DeploymentEnvironment | undefined {
   return (ws.model.deploymentEnvironments ?? []).find(e => e.name === environment)
@@ -18,13 +19,13 @@ function nodeById(env: DeploymentEnvironment, id: string): DeploymentNode | unde
 
 /** Recompute every deployment view of `environment` from the canonical
  *  membership rules (the same expansion `include *` parses to), keeping the
- *  positions of elements that survive. */
+ *  live positions and restoring retained layout for returning elements. */
 function refreshDeploymentViews(ws: Workspace, environment: string): void {
   for (const v of ws.views.deploymentViews ?? []) {
     if (v.environment !== environment) continue
     const existing = new Map(v.elements.map(e => [e.id, e]))
     v.elements = expandDeploymentElements(ws.model, v.environment, v.softwareSystemId)
-      .map(e => existing.get(e.id) ?? e)
+      .map(e => existing.get(e.id) ?? restoreViewElement(ws, v.key, e.id))
   }
 }
 
