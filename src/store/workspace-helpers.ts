@@ -931,9 +931,8 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
 
   if (ws.savedLayout) {
     for (const layout of Object.values(ws.savedLayout)) {
-      for (const id of allDeletedIds) {
-        if (layout.elements) delete layout.elements[id]
-      }
+      if (!layout.elements) continue
+      for (const id of allDeletedIds) delete layout.elements[id]
     }
     const survivingKeys = new Set(allViewsOf(ws).map(v => v.key))
     for (const key of previousViewKeys) {
