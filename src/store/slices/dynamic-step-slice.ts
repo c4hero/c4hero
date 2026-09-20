@@ -2,7 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import type { Relationship, View, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { allViewsOf, elementExists, findViewHelper } from '../workspace-helpers'
+import { allViewsOf, elementExists, findViewHelper, restoreViewElement } from '../workspace-helpers'
 
 /** Sequential renumber + membership recompute after any step edit.
  *
@@ -94,7 +94,7 @@ export const createDynamicStepSlice: StateCreator<
       description: description && description !== rel.description ? description : undefined,
     })
     for (const id of [sourceId, destinationId]) {
-      if (!view.elements.some(e => e.id === id)) view.elements.push({ id })
+      if (!view.elements.some(e => e.id === id)) view.elements.push(restoreViewElement(ws, viewKey, id))
     }
     normalizeDynamicView(ws, view)
     s.layoutVersion += 1

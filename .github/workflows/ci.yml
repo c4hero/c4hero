@@ -116,6 +116,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      # The preview suite needs the production build served by vite preview;
+      # it is excluded from the dev-server run above.
+      - run: npm run build
+      - run: npm run test:e2e:preview
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7

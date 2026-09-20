@@ -410,6 +410,12 @@ describe('navigation commands', () => {
 // ─── Export commands ─────────────────────────────────────────────────
 
 describe('export commands', () => {
+  it('does not write layout when the DSL save fails or is cancelled', async () => {
+    vi.mocked(saveDSLFile).mockResolvedValueOnce(false)
+    await command('save').execute()
+    expect(writeSidecarToHandle).not.toHaveBeenCalled()
+  })
+
   it('save serializes the workspace and writes the sidecar', async () => {
     await command('save').execute()
     expect(saveDSLFile).toHaveBeenCalledOnce()

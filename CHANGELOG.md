@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve saved layout for temporarily missing views and elements through model
+  edits and repeated saves/reopens (#201). Existing sidecars need no migration.
+  Explicit view/element deletion and layout reset still remove the affected
+  layout, including when the last saved position is cleared. Duplicated
+  generated views now have their own persistent key. Bringing hidden elements
+  back through view membership, dynamic steps, context relationships, or deployment
+  edits restores their layout; exact retained IDs take precedence over name
+  matching, and ID changes cannot overwrite retained entries. Failed or cancelled
+  DSL saves leave the layout file untouched.
+  This is a preservation fix: keyless views can still exchange layout when
+  reordered, and generated views remain hidden while explicit views exist.
+  Their saved positions are retained for recovery; use explicit, unique view
+  keys when stable layout ownership is needed.
+
 ## [0.7.0] - 2026-09-18
 
 ### Added
