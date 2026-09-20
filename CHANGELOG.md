@@ -9,35 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Hand-placed layout no longer disappears when views change.** Adding or
-  deleting a view could wipe whole sections of the `.c4hero.json` layout file
-  — people were restoring their diagrams from git. The layout file was
-  rewritten in full from whatever was on screen at the time, so a view that
-  was briefly absent — a generated view that stopped being generated, a key
-  renumbered by a sibling coming or going — had its positions deleted for
-  good.
+- **Hand-placed layout is no longer deleted when views change.** Adding a view
+  could wipe whole sections of the `.c4hero.json` layout file — people were
+  restoring their diagrams from git. The file is rewritten in full from
+  whatever is on screen at the time and never merged, so a view that was
+  briefly absent had its positions deleted for good.
 
-  Layout entries now record **which view they belong to**, so they are found by
-  what the view is rather than by the key it happens to be filed under. A key
-  c4hero derived for you can be renumbered by a sibling appearing or
-  disappearing without your layout going anywhere. Entries written by older
-  versions carry no such record and are still matched by key; they gain one the
-  first time you save.
+  Layout whose view is not present is now **kept rather than dropped**, and
+  written back out on every save. When the view returns — a generated view
+  that stopped being generated, an `!include` that failed to read — its
+  positions are still there and are re-applied.
 
-  Layout that still cannot be placed is kept rather than dropped, and comes
-  back when its view does. Where two entries genuinely fit one view equally
-  well, c4hero applies neither and keeps both — putting your layout on the
-  wrong diagram is harder to notice than leaving it unapplied. Existing files
-  load as they are; no migration is needed.
+  Adding or duplicating a view in a workspace whose views were all generated
+  now writes **all** of them into your `.dsl`. Generated views are
+  all-or-nothing, so writing just the new one suppressed the rest on the next
+  open and deleted them permanently. A workspace you have not added to is left
+  exactly as you wrote it.
 
-  Two things to know. Adding or duplicating a view in a workspace whose views
-  were all generated now writes **all** of them into your `.dsl`: generated
-  views are all-or-nothing, so writing just the new one would have suppressed
-  the rest on the next open and lost them. A workspace you have not added to is
-  left exactly as you wrote it. And one case remains unfixable: two views of the
-  same type over the same system, neither given a key and both showing the same
-  elements, are indistinguishable once parsed — reordering them swaps their
-  layout. Give either one a key to pin it down.
+  Existing files load as they are; no migration is needed.
+
+  **What this does not fix.** Layout is still filed under the view's key, and
+  for a view you did not name c4hero derives that key and numbers it by
+  declaration order. Delete or reorder such a view and the keys shift: the
+  affected diagrams come back **unplaced**, and two reordered views swap their
+  layout. Nothing is deleted in either case — the positions stay in the file —
+  but re-finding them needs entries to record which view they belong to, which
+  is a separate change. Give a view an explicit key in the DSL and it is immune.
   (TEA-342, [#201](https://github.com/c4hero/c4hero/issues/201))
 
 ## [0.7.0] - 2026-09-18

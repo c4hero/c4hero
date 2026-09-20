@@ -12,8 +12,6 @@
 // while the model can never hold a key Structurizr would reject. The rewrite
 // is reported as a parse warning, never applied silently.
 
-import type { View } from '@/types/model'
-
 /** The exact character class Structurizr accepts in a view key. */
 export const VIEW_KEY_PATTERN = /^[A-Za-z0-9_-]+$/
 
@@ -29,35 +27,4 @@ export function isConformantViewKey(key: string): boolean {
  *  given" and replace with a derived one. */
 export function sanitizeViewKey(raw: string): string {
   return raw.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
-}
-
-/**
- * The key the parser derives for a view the DSL does not name: the Structurizr
- * default-key convention, `Type-ScopeRef`. Collisions are then disambiguated
- * with a `-2`, `-3` suffix by declaration order.
- *
- * Shared so that anything re-finding layout under a shifted key can compute
- * the real base instead of guessing it by stripping a trailing `-<digits>` —
- * which would also strip the `-2` from a scope genuinely called `svc-2`, and
- * hand that view's layout to `svc` (TEA-342).
- */
-export function derivedViewKeyBase(view: Pick<View, 'type' | 'softwareSystemId' | 'containerId' | 'environment'>): string {
-  const typeKey =
-    view.type === 'systemLandscape' ? 'SystemLandscape'
-    : view.type === 'systemContext' ? 'SystemContext'
-    : view.type === 'container' ? 'Containers'
-    : view.type === 'component' ? 'Components'
-    : view.type === 'dynamic' ? 'Dynamic'
-    : 'Deployment'
-  // Mirrors what parseViewsBody passes as the element ref for each view kind.
-  const ref =
-    view.type === 'component' ? view.containerId
-    : view.type === 'dynamic' ? (view.softwareSystemId ?? view.containerId)
-    : view.type === 'deployment' ? (view.softwareSystemId ?? view.environment)
-    : view.type === 'systemLandscape' ? undefined
-    : view.softwareSystemId
-  // The base of a derived key is sanitized too — an element ref carrying a dot
-  // or a space must not be able to originate a bad key either.
-  const sanitized = ref ? sanitizeViewKey(ref) : ''
-  return sanitized ? `${typeKey}-${sanitized}` : typeKey
 }

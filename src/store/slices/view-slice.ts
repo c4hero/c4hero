@@ -55,30 +55,17 @@ export const createViewSlice: StateCreator<
   deleteView: (key) => set((s) => {
     if (!s.workspace) return
     const ws = s.workspace
-    let deleted: View | undefined
+    let found = false
     for (const arrKey of VIEW_ARRAY_KEYS) {
       const idx = (ws.views[arrKey] ?? []).findIndex(v => v.key === key)
       if (idx !== -1) {
         pushUndoSnapshot(s)
-        deleted = ws.views[arrKey][idx]
         ws.views[arrKey].splice(idx, 1)
+        found = true
         break
       }
     }
-    if (!deleted) return
-    // Deleting a view is the one moment the intent is unambiguous. Parked
-    // layout exists to outlive an *accidental* absence — a generated view that
-    // stopped being generated, an `!include` that failed to read — so without
-    // this the sidecar can only ever grow, and a later view that happens to
-    // derive the same key inherits a deleted diagram's positions (TEA-342).
-    // Both keys it could be held under: a key the parser normalised on import
-    // leaves the layout parked under the original, and that entry outlives the
-    // view just as readily.
-    if (ws.unmatchedLayout) {
-      delete ws.unmatchedLayout[key]
-      if (deleted.originalKey) delete ws.unmatchedLayout[deleted.originalKey]
-      if (Object.keys(ws.unmatchedLayout).length === 0) ws.unmatchedLayout = undefined
-    }
+    if (!found) return
     const switchingViews = s.activeViewKey === key
     if (switchingViews) {
       s.activeViewKey = getFirstViewKey(ws)
@@ -121,9 +108,10 @@ export const createViewSlice: StateCreator<
           title: `${src.title ?? 'View'} copy`,
           // A duplicate is a view the user just created: it has its own key and
           // has to be written to the DSL. Inheriting the source's provisional
-          // flags would drop it on the next save (`autoView` views are not
-          // serialized) or write it without its key (`autoKey`), and a
-          // cloned `originalKey` would let it claim the source's layout.
+          // flags would drop it on the next save (`autoView` views are only
+          // written once something authored exists) or write it without its key
+          // (`autoKey`), and a cloned `originalKey` would let it claim the
+          // source's layout (TEA-342).
           autoView: undefined,
           autoKey: undefined,
           originalKey: undefined,

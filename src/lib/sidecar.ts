@@ -1,6 +1,5 @@
-import type { Workspace, ElementStatus, LineStyle, StoredViewLayout, StoredViewIdentity, ViewType } from '@/types/model'
-import { allViewsOf, resolveViewLayouts, viewLayoutOf, storedIdentitySignature } from '@/store/workspace-helpers'
-import type { LayoutCandidate } from '@/store/workspace-helpers'
+import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
+import { allViewsOf, viewLayoutOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
@@ -30,12 +29,18 @@ interface SidecarRelationship {
   lineStyle?: LineStyle
 }
 
-// The file's view section *is* `StoredViewLayout` — the same shape the store
-// parks under `workspace.unmatchedLayout` and `viewLayoutOf` projects. Aliased
-// rather than restated so the two cannot drift: `extractSidecar` spreads
-// parked entries straight into the file.
-type SidecarViewElement = NonNullable<StoredViewLayout['elements']>[string]
-type SidecarView = StoredViewLayout
+interface SidecarViewElement {
+  pinned?: boolean
+  locked?: boolean
+  x?: number
+  y?: number
+}
+
+interface SidecarView {
+  /** View-level layout lock (freezes Auto-arrange + dragging for the view). */
+  locked?: boolean
+  elements?: Record<string, SidecarViewElement>
+}
 
 export interface SidecarData {
   version: 1
@@ -66,26 +71,8 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
   return true
 }
 
-const VIEW_TYPES: ReadonlySet<string> = new Set<ViewType>([
-  'systemLandscape', 'systemContext', 'container', 'component', 'dynamic', 'deployment',
-])
-
-/** The identity an entry claims to belong to. A malformed one is not fatal —
- *  the entry simply falls back to being matched by its key, as entries written
- *  before identities existed are — but it must never reach the matcher as a
- *  half-built object, so the whole field is rejected unless it is sound. */
-function isStoredViewIdentity(value: unknown): value is StoredViewIdentity {
-  if (!isRecord(value)) return false
-  if (typeof value.type !== 'string' || !VIEW_TYPES.has(value.type)) return false
-  for (const field of ['key', 'softwareSystemId', 'containerId', 'environment'] as const) {
-    if (field in value && value[field] !== undefined && typeof value[field] !== 'string') return false
-  }
-  return true
-}
-
 function isSidecarView(value: unknown): value is SidecarView {
   if (!isRecord(value)) return false
-  if ('view' in value && value.view !== undefined && !isStoredViewIdentity(value.view)) return false
   if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
   return true
@@ -103,34 +90,32 @@ function isSidecarData(value: unknown): value is SidecarData {
 
 export function extractSidecar(workspace: Workspace): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
-  // Start from layout whose view is not here right now. This projection is
-  // the whole file — anything missing from it is deleted from disk — and a
-  // view can go absent for reasons that are none of the user's doing, so
-  // their positions are carried rather than dropped (TEA-342).
-  const views: Record<string, SidecarView> = { ...(workspace.unmatchedLayout ?? {}) }
 
   // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
   // migration of existing sidecar files written by older versions of c4hero.
 
+  // Start from layout whose view is not here right now. This projection is the
+  // whole file — anything missing from it is deleted from disk — and a view can
+  // go absent for reasons that are none of the user's doing, so their positions
+  // are carried rather than dropped (TEA-342).
+  const views: Record<string, SidecarView> = { ...(workspace.unmatchedLayout ?? {}) }
+
   // Views: hand-placed and locked elements, plus the view-level layout lock.
-  // A lock is worth persisting on its own — it survives a re-layout, so it
-  // has to survive a reload.
-  //
-  // A present view with layout overwrites whatever is carried under its key.
-  // One *without* layout leaves the carried entry alone: `unmatchedLayout` is
-  // rebuilt from scratch on every parse and holds only entries a matcher
-  // deliberately declined to hand out, so a live view's key appearing there
-  // means the pairing was contested — not that the entry is stale. Clearing
-  // it here would delete the layout that declining was supposed to protect.
+  // A lock is worth persisting on its own — it survives a re-layout, so it has
+  // to survive a reload. A present view with layout speaks for its own key and
+  // replaces anything carried under it; one without layout leaves the carried
+  // entry alone, since `unmatchedLayout` holds only entries whose view really
+  // is absent.
   for (const view of allViewsOf(workspace)) {
     const layout = viewLayoutOf(view)
     if (layout) views[view.key] = layout
   }
+
   // Layout is the only thing this projection writes, so "is there anything to
-  // save?" is exactly "did any view survive the pass above". Deciding it up
-  // front from the carried entries would claim a sidecar is worth writing
-  // after a present view cleared the last of them.
+  // save?" is exactly "is `views` empty". A contentless `{version:1}` is not
+  // worth a file: every caller gates on truthiness and would write one where it
+  // used to write none.
   if (Object.keys(views).length === 0) return null
   sidecar.views = views
   return sidecar
@@ -184,30 +169,22 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
 
   // Views: the view-level layout lock, plus hand-placed and locked elements
   if (sidecar.views) {
-    // A derived view key is renumbered when a sibling with the same base comes
-    // or goes, so a sidecar written before that shift stores this view's layout
-    // under a key nothing matches any more. An entry that carries its own
-    // identity says what it is for, so the key is not consulted at all; one
-    // written before that falls back to the key as a migration path (TEA-342).
-    const views = allViewsOf(workspace)
-    const candidates: LayoutCandidate<SidecarView>[] = Object.entries(sidecar.views).map(([key, entry]) => ({
-      key,
-      signature: entry.view ? storedIdentitySignature(entry.view) : undefined,
-      elementIds: Object.keys(entry.elements ?? {}),
-      value: entry,
-    }))
+    // Entries no view claims are kept rather than dropped, so the next save
+    // cannot delete layout just because its view is not here right now
+    // (TEA-342). Rebuilt, not merged: it has to hold exactly what this pass
+    // did not apply.
+    const claimed = new Set<string>()
+    for (const view of allViewsOf(workspace)) {
+      const key = sidecar.views[view.key] !== undefined ? view.key
+        : (view.originalKey && sidecar.views[view.originalKey] !== undefined ? view.originalKey : undefined)
+      if (key !== undefined) claimed.add(key)
+    }
+    const unclaimed = Object.entries(sidecar.views).filter(([key]) => !claimed.has(key))
+    workspace.unmatchedLayout = unclaimed.length > 0 ? Object.fromEntries(unclaimed) : undefined
 
-    const { byView, unclaimed } = resolveViewLayouts(views, candidates)
-    // Anything no view took is kept verbatim so the next save cannot delete
-    // it. This is what makes declining an ambiguous match safe rather than
-    // destructive. Rebuilt, not merged: `unmatchedLayout` has to hold exactly
-    // what this pass declined, because `extractSidecar` trusts that an entry
-    // sitting there was deliberately preserved rather than left over.
-    workspace.unmatchedLayout = unclaimed.length > 0
-      ? Object.fromEntries(unclaimed.map((c) => [c.key, c.value]))
-      : undefined
-    for (const view of views) {
-      const viewData = byView.get(view)
+    for (const view of allViewsOf(workspace)) {
+      const viewData = sidecar.views[view.key]
+        ?? (view.originalKey ? sidecar.views[view.originalKey] : undefined)
       if (!viewData) continue
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue

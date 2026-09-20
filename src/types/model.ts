@@ -309,36 +309,11 @@ export interface IncludedFile {
   text?: string
 }
 
-/** One view's hand-placed layout, as the `.c4hero.json` sidecar stores it. */
 /**
- * What a stored layout entry is *for*, written alongside it so the entry does
- * not have to be re-identified from the key it happens to be filed under.
- *
- * A view key is not a view's identity: for a view the DSL does not name it is
- * derived from the scope and numbered by declaration order, so it moves when a
- * sibling comes or goes. Every attempt to reconstruct identity from the key
- * alone is a guess, and a wrong guess puts someone's layout on the wrong
- * diagram. The scope fields are stored discretely rather than flattened into
- * one `scope`, because a dynamic view's scope can come from either
- * `softwareSystemId` or `containerId` (TEA-342).
- *
- * Optional: entries written before this existed have none, and are matched by
- * key as a migration path.
+ * A view's saved layout, as the sidecar file stores it and as the store parks
+ * it while its view is absent.
  */
-export interface StoredViewIdentity {
-  /** The key, only when the DSL author wrote it. A name someone chose is part
-   *  of what the view *is*; a key the parser derived is not, since it moves
-   *  when a sibling comes or goes. */
-  key?: string
-  type: ViewType
-  softwareSystemId?: string
-  containerId?: string
-  environment?: string
-}
-
 export interface StoredViewLayout {
-  /** What this layout belongs to. Absent in files written before TEA-342. */
-  view?: StoredViewIdentity
   /** View-level layout lock. */
   locked?: boolean
   elements?: Record<string, { pinned?: boolean; locked?: boolean; x?: number; y?: number }>
@@ -365,16 +340,15 @@ export interface Workspace {
     configuration: ViewConfiguration
   }
   /**
-   * Layout belonging to views that are not in this workspace right now, kept
-   * so that saving cannot destroy it (TEA-342).
+   * Layout whose view is not in the workspace right now, kept verbatim.
    *
-   * The sidecar is written by projecting the current workspace, so anything
-   * absent from memory at save time is deleted from the file. Views go absent
-   * for ordinary reasons — a generated view stops being generated, a derived
-   * key is renumbered, an `!include` is temporarily unreadable — and the
-   * layout behind them is not the user's to lose over it. Entries land here
-   * instead of being dropped, and are written back out untouched until a view
-   * claims them again.
+   * The sidecar is rewritten in full from memory on every save — it never
+   * merges — so a view that is missing for one save has its positions deleted
+   * from disk. Views go missing for ordinary reasons: a generated view stops
+   * being generated, an `!include` is temporarily unreadable. The layout
+   * behind them is not the user's to lose over it, so entries land here
+   * instead of being dropped, and are written back out until a view claims
+   * them again (TEA-342).
    *
    * In-memory only; it *is* the sidecar's own content, so it is never part of
    * the DSL.

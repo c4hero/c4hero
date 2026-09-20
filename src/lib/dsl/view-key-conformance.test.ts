@@ -264,9 +264,7 @@ describe('layout migration for normalized view keys', () => {
         expect(view.elements.find(el => el.id === 'sys1')).toMatchObject(saved.elements.sys1)
         const migrated = extractSidecar(workspace)!
         expect(migrated.views?.[key]).toBeUndefined()
-        // The entry now also carries the identity it belongs to, so that a
-        // later rename cannot strand it; the layout itself is unchanged.
-        expect(migrated.views?.[view.key]).toMatchObject(saved)
+        expect(migrated.views?.[view.key]).toEqual(saved)
         const reloaded = parseDSL(serializeDSL(workspace)).workspace
         applySidecar(reloaded, migrated)
         expect(reloaded.views.systemContextViews[0].locked).toBe(true)
