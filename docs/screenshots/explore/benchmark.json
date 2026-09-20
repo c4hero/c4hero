@@ -1,0 +1,15 @@
+{
+  "systems": 50,
+  "elements": 500,
+  "relationships": 1000,
+  "initialLayoutMs": 264.29999999701977,
+  "frames": 256,
+  "p95FrameWorkMs": 5.100000008940697,
+  "maxFrameWorkMs": 13.900000005960464,
+  "longTasks": [],
+  "slowFrames": [],
+  "medianIntervalMs": 16.699999999999818,
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36",
+  "hardwareConcurrency": 4,
+  "browser": "151.0.7922.34"
+}

@@ -10,7 +10,7 @@ export default defineConfig({
     ? [['list'], ['html', { open: 'never' }]]
     : 'html',
   use: {
-    baseURL: 'http://localhost:3004',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3004',
     trace: 'on-first-retry',
   },
   projects: [
@@ -19,7 +19,7 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
+  webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
     command: 'npm run dev',
     url: 'http://localhost:3004',
     reuseExistingServer: !process.env.CI,

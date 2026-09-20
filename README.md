@@ -132,3 +132,12 @@ To report a security issue, see [`SECURITY.md`](SECURITY.md).
 Released under the [Apache License 2.0](LICENSE).
 
 The c4hero name, logo, domain, and product identity are not licensed under Apache-2.0. See [TRADEMARKS.md](TRADEMARKS.md) for the brand-use boundary.
+
+## Explore mode
+
+Switch from **Diagram** to **Explore** to navigate the whole workspace as a nested
+map. Zoom reveals containers and components in place. Selecting an element
+freezes detail while you follow its relationships; clearing selection resumes
+semantic zoom. Authored views and their layouts remain separate.
+
+See [Explore controls and behavior](docs/explore.md).

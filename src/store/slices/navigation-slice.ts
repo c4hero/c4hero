@@ -1,7 +1,8 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { findChildViewHelper as findChildView, getZoomTarget } from '../workspace-selectors'
-import { clearSelectionDraft } from '../workspace-helpers'
+import { clearSelectionDraft, findViewHelper } from '../workspace-helpers'
+import { getActiveCamera } from '@/lib/activeCamera'
 import { announce } from '@/lib/announce'
 
 /** If any Highlighter filter is non-empty, snapshot all four into
@@ -32,6 +33,7 @@ function clearHighlightFiltersWithStash(s: WorkspaceState): boolean {
  *  pending zoom-confirm prompt, and a transient focusElementId that the
  *  canvas consumes to pan to a freshly-created element. */
 export type NavigationSlice = Pick<WorkspaceState,
+  | 'rendererMode' | 'setRendererMode'
   | 'activeViewKey' | 'viewHistory'
   | 'pendingZoomConfirm' | 'createViewDefaults'
   | 'focusElementId' | 'clearFocusElement'
@@ -46,6 +48,23 @@ export const createNavigationSlice: StateCreator<
   [],
   NavigationSlice
 > = (set, get) => ({
+  rendererMode: 'diagram',
+  setRendererMode: (mode) => set((s) => {
+    if (s.rendererMode === mode) return
+    s.rendererMode = mode
+    s.selectedRelationshipId = null
+    s.selectedGroupId = null
+    if (mode === 'explore') {
+      s.selectedElementIds = []
+      s.multiSelectMode = false
+      s.canvasSettingsOpen = false
+      s.addElementPanelOpen = false
+    }
+    else {
+      const view = s.workspace && s.activeViewKey ? findViewHelper(s.workspace, s.activeViewKey) : undefined
+      s.selectedElementIds = s.selectedElementIds.filter(id => view?.elements.some(e => e.id === id))
+    }
+  }),
   activeViewKey: null,
   viewHistory: [],
   pendingZoomConfirm: null,
@@ -90,6 +109,7 @@ export const createNavigationSlice: StateCreator<
   }),
 
   setActiveView: (key) => set((s) => {
+    s.rendererMode = 'diagram'
     const changed = s.activeViewKey !== key
     s.activeViewKey = key
     s.selectedElementIds = []
@@ -100,26 +120,30 @@ export const createNavigationSlice: StateCreator<
     }
   }),
 
-  drillInto: (elementId) => set((s) => {
-    if (!s.workspace || !s.activeViewKey) return
-    const childView = findChildView(s.workspace, elementId)
-    if (!childView) return
-    // No-op if the "child" view is the one we're already on. This happens when
-    // drilling on a system inside its own systemContext view and no container
-    // view exists — findChildView falls back to the same systemContext view.
-    if (childView.key === s.activeViewKey) return
-    s.viewHistory.push(s.activeViewKey)
-    s.activeViewKey = childView.key
-    s.selectedElementIds = []
-    s.selectedRelationshipId = null
-    s.selectedGroupId = null
-    if (clearHighlightFiltersWithStash(s)) {
-      announce('Highlighter cleared on view change')
-    }
-  }),
+  drillInto: (elementId) => {
+    if (get().rendererMode === 'explore') { getActiveCamera()?.focus(elementId); return }
+    set((s) => {
+      if (!s.workspace || !s.activeViewKey) return
+      const childView = findChildView(s.workspace, elementId)
+      if (!childView) return
+      // No-op if the "child" view is the one we're already on. This happens when
+      // drilling on a system inside its own systemContext view and no container
+      // view exists — findChildView falls back to the same systemContext view.
+      if (childView.key === s.activeViewKey) return
+      s.viewHistory.push(s.activeViewKey)
+      s.activeViewKey = childView.key
+      s.selectedElementIds = []
+      s.selectedRelationshipId = null
+      s.selectedGroupId = null
+      if (clearHighlightFiltersWithStash(s)) {
+        announce('Highlighter cleared on view change')
+      }
+    })
+  },
 
   zoomInto: (elementId) => {
     const s = get()
+    if (s.rendererMode === 'explore') { getActiveCamera()?.focus(elementId); return }
     if (!s.workspace || !s.activeViewKey) return
     // Existing child view? Navigate like drillInto.
     const childView = findChildView(s.workspace, elementId, s.activeViewKey)

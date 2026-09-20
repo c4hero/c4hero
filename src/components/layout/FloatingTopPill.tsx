@@ -162,6 +162,7 @@ export default function FloatingTopPill() {
    *  success check for an export that did not happen. */
   async function handleExport(format: ExportFormat, theme: ExportTheme = 'dark'): Promise<boolean> {
     if (!workspace) return false
+    if (useWorkspaceStore.getState().rendererMode === 'explore' && (format === 'png' || format === 'svg')) { announce('Switch to Diagram for image export'); return false }
     try {
       switch (format) {
         case 'dsl':
@@ -213,6 +214,7 @@ export default function FloatingTopPill() {
 
   async function handleCopy(type: 'png-dark' | 'png-light' | 'png-current' | 'dsl') {
     if (!workspace) return
+    if (useWorkspaceStore.getState().rendererMode === 'explore' && type !== 'dsl') { announce('Switch to Diagram to copy an image'); return }
     try {
       let ok = false
       if (type === 'png-dark') ok = await copyCanvasAsPNG('dark')

@@ -1,3 +1,4 @@
+import { useWorkspaceStore } from '@/store/workspace'
 import { useState, useEffect, useRef } from 'react'
 import { Download, Copy, Check, FolderDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -29,6 +30,7 @@ interface ExportAction {
 }
 
 export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialogProps) {
+  const explore = useWorkspaceStore(s => s.rendererMode === 'explore')
   const [busy, setBusy] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -66,8 +68,8 @@ export default function ExportDialog({ onExport, onCopy, onClose }: ExportDialog
       <button
         key={id}
         onClick={() => act(id, fn)}
-        disabled={!!busy}
-        title={ariaLabel ?? label}
+        disabled={!!busy || (explore && (id.endsWith('.png') || id.endsWith('.svg')))}
+        title={explore && (id.endsWith('.png') || id.endsWith('.svg')) ? 'Switch to Diagram for image export' : ariaLabel ?? label}
         aria-label={ariaLabel ?? label}
         aria-busy={isLoading}
         style={{

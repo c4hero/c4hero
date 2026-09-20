@@ -1,3 +1,4 @@
+import { getActiveCamera } from '@/lib/activeCamera'
 import type { LucideIcon } from 'lucide-react'
 import {
   UserRound, Globe, Box, Puzzle, Layers, Undo2, Redo2, Trash2,
@@ -225,7 +226,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       icon: Maximize2,
       shortcut: '0',
       keywords: ['fit', 'zoom', 'reset'],
-      execute: () => { fitContentNodesToViewport(reactFlow) },
+      execute: () => { if (getActiveCamera()) getActiveCamera()!.fit(); else fitContentNodesToViewport(reactFlow) },
     },
     {
       id: 'zoom-in',
@@ -233,7 +234,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: ZoomIn,
       shortcut: '+',
-      execute: () => { reactFlow?.zoomIn({ duration: 200 }) },
+      execute: () => { if (getActiveCamera()) getActiveCamera()!.zoomBy(1.25); else reactFlow?.zoomIn({ duration: 200 }) },
     },
     {
       id: 'zoom-out',
@@ -241,7 +242,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: ZoomOut,
       shortcut: '−',
-      execute: () => { reactFlow?.zoomOut({ duration: 200 }) },
+      execute: () => { if (getActiveCamera()) getActiveCamera()!.zoomBy(1 / 1.25); else reactFlow?.zoomOut({ duration: 200 }) },
     },
     {
       id: 'auto-arrange',
@@ -589,6 +590,11 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
     }
   }
 
+  const diagramOnly = new Set(['duplicate-selected', 'delete-selected', 'select-all', 'auto-arrange', 'toggle-multi-select', 'new-view', 'duplicate-view', 'toggle-minimap', 'toggle-snap-to-grid', 'canvas-guide', 'canvas-settings', 'navigate-back', 'export-png', 'export-svg'])
+  for (const command of commands) if (diagramOnly.has(command.id) || command.category === 'create') {
+    const when = command.when
+    command.when = () => store().rendererMode === 'diagram' && (!when || when())
+  }
   return commands
 }
 

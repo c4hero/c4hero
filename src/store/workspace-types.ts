@@ -64,6 +64,10 @@ export interface DiskConflict {
 export interface WorkspaceState extends UndoState {
   workspace: Workspace | null
 
+  // Renderer mode is transient UI state, never workspace data or undo history.
+  rendererMode: 'diagram' | 'explore'
+  setRendererMode: (mode: 'diagram' | 'explore') => void
+
   // Navigation
   activeViewKey: string | null
   viewHistory: string[]

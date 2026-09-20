@@ -16,7 +16,8 @@ import {
   reconnectEdge,
 } from '@xyflow/react'
 import { applyAutoLayout } from '@/lib/canvasLayout'
-import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
+import { registerActiveCamera } from '@/lib/activeCamera'
+import { fitContentNodesToViewport, fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import type { HighlightFilters } from '@/lib/highlight'
 import type { View, Workspace } from '@/types/model'
@@ -217,6 +218,13 @@ export default function Canvas() {
   const themeEdgeColor = THEME_EDGE_COLORS[colorTheme]
   const isLightCanvas = isLightCanvasTheme(colorTheme)
   const reactFlowInstance = useReactFlow()
+  useEffect(() => registerActiveCamera({
+    zoomBy: factor => { void reactFlowInstance.zoomTo(reactFlowInstance.getZoom() * factor, { duration: 200 }) },
+    fit: () => { fitContentNodesToViewport(reactFlowInstance) },
+    focus: id => useWorkspaceStore.setState({ focusElementId: id }),
+    pan: (dx, dy) => { const vp = reactFlowInstance.getViewport(); void reactFlowInstance.setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy }) },
+    escape: () => useWorkspaceStore.getState().clearSelection(),
+  }), [reactFlowInstance])
   const guideAutoOpened = useRef(false)
 
   useEffect(() => {
@@ -992,6 +1000,13 @@ export default function Canvas() {
       saveViewport(workspaceRef.current?.name, activeViewKey, rf.getViewport())
     }
   }, [activeViewKey])
+
+  // A renderer switch may unmount during a camera animation, before onMoveEnd.
+  useEffect(() => () => {
+    const rf = rfInitInstance.current
+    const key = viewRef.current?.key
+    if (rf && key && useWorkspaceStore.getState().rendererMode === 'explore') saveViewport(workspaceRef.current?.name, key, rf.getViewport())
+  }, [])
 
   // Safety: never leave the chrome faded if we unmount mid-drag.
   useEffect(() => () => document.documentElement.removeAttribute('data-canvas-panning'), [])

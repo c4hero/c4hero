@@ -1,3 +1,4 @@
+import { getActiveCamera } from '@/lib/activeCamera'
 import { useEffect } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, isFocalScopeElement } from '@/store/workspace'
@@ -188,10 +189,10 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.workspace && store.activeViewKey) store.resetAndRelayout(store.activeViewKey)
   },
   '?': (store) => store.setCommandPaletteOpen(true),
-  '=': (_store, rf) => rf?.zoomIn({ duration: 200 }),
-  '+': (_store, rf) => rf?.zoomIn({ duration: 200 }),
-  '-': (_store, rf) => rf?.zoomOut({ duration: 200 }),
-  '0': (_store, rf) => fitContentNodesToViewport(rf),
+  '=': (_store, rf) => getActiveCamera() ? getActiveCamera()!.zoomBy(1.25) : rf?.zoomIn({ duration: 200 }),
+  '+': (_store, rf) => getActiveCamera() ? getActiveCamera()!.zoomBy(1.25) : rf?.zoomIn({ duration: 200 }),
+  '-': (_store, rf) => getActiveCamera() ? getActiveCamera()!.zoomBy(1 / 1.25) : rf?.zoomOut({ duration: 200 }),
+  '0': (_store, rf) => getActiveCamera() ? getActiveCamera()!.fit() : fitContentNodesToViewport(rf),
 }
 
 function getKeyCombo(e: KeyboardEvent): string {
@@ -263,6 +264,20 @@ export function useKeyboardShortcuts() {
           e.preventDefault()
         }
         return
+      }
+
+      if (store.rendererMode === 'explore') {
+        if ((e.key === 'Enter' || e.key === ' ') && target.closest('button, summary, [role=button]')) return
+        const camera = getActiveCamera()
+        const navigation: Record<string, () => void> = {
+          '+': () => camera?.zoomBy(1.25), '=': () => camera?.zoomBy(1.25), '-': () => camera?.zoomBy(1 / 1.25), '0': () => camera?.fit(),
+          ArrowLeft: () => camera?.pan(80, 0), ArrowRight: () => camera?.pan(-80, 0), ArrowUp: () => camera?.pan(0, 80), ArrowDown: () => camera?.pan(0, -80),
+          Enter: () => { if (store.selectedElementIds[0]) camera?.focus(store.selectedElementIds[0]) },
+          Escape: () => { if (store.presentationMode) store.setPresentationMode(false); else camera?.escape() },
+        }
+        if (!store.searchOpen && !store.commandPaletteOpen && navigation[e.key]) { e.preventDefault(); navigation[e.key](); return }
+        const diagramOnly = new Set(['mod+d', 'mod+a', 'Backspace', 'Delete', 'shift+Backspace', 'shift+Delete', 'shift+G', 'shift+P', 'shift+S', 'shift+C', 'shift+O', 'a', 'm', 'mod+shift+l'])
+        if (diagramOnly.has(combo)) { e.preventDefault(); announce('Switch to Diagram to edit the map layout'); return }
       }
 
       // Global shortcuts

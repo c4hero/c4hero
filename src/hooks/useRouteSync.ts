@@ -80,6 +80,7 @@ export function useRouteSync() {
       const allViews = allViewsOf(workspace)
       if (allViews.some(v => v.key === viewFromUrl)) {
         useWorkspaceStore.setState({
+          rendererMode: 'diagram',
           activeViewKey: viewFromUrl,
           selectedElementIds: [],
           selectedRelationshipId: null,
