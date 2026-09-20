@@ -190,9 +190,16 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       if (!viewData) continue
       // Migrate only the parser's explicit key normalization alias. Never
       // infer ownership from key prefixes, declaration order or element overlap.
+      // Guarded: two views can share one originalKey (the same non-conformant
+      // authored key declared twice), and the first of them already moved the
+      // entry — without this the second would store `undefined` under its key
+      // and every later savedLayout walk would throw on it.
       if (!Object.hasOwn(sidecar.views, view.key) && view.originalKey) {
-        workspace.savedLayout[view.key] = workspace.savedLayout[view.originalKey]
-        delete workspace.savedLayout[view.originalKey]
+        const carried = workspace.savedLayout[view.originalKey]
+        if (carried !== undefined) {
+          workspace.savedLayout[view.key] = carried
+          delete workspace.savedLayout[view.originalKey]
+        }
       }
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue

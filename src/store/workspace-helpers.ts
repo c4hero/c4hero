@@ -182,12 +182,10 @@ export function forEachView(ws: Workspace, fn: (v: View) => void): void {
 
 /** Return a name that doesn't collide with any existing element name. */
 export function uniqueElementName(base: string, ws: Workspace): string {
+  // Names only: retained layout keys live in the ID namespace and are reserved
+  // by collectTakenIds, which every ID mint already consults. Seeding them here
+  // would suffix a display name that collides with nothing a user can see.
   const taken = new Set<string>()
-  // A temporarily absent element still owns its saved positions. Reserve its
-  // ID for manual renames and generated IDs alike until explicitly deleted.
-  for (const layout of Object.values(ws.savedLayout ?? {})) {
-    for (const id of Object.keys(layout.elements ?? {})) taken.add(id)
-  }
   forEachElementHelper(ws, (el) => { taken.add(el.name) })
   if (!taken.has(base)) return base
   let n = 2
