@@ -4614,6 +4614,45 @@ describe('removeRelationshipFromView', () => {
     expect(b.relationships).toEqual([{ id: 'r1' }])
     expect(b.excludedRelationshipIds).toBeUndefined()
   })
+
+  it('keeps newly-created parallel relationships hidden with their excluded pair', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships = [{ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} }]
+    ws.views.systemLandscapeViews = [{
+      type: 'systemLandscape', key: 'land', elements: [{ id: 'alice' }, { id: 'api' }], relationships: [],
+      excludedRelationshipIds: ['r1'],
+    }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+
+    const newId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'Another call')
+
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.relationships).toEqual([])
+    expect(view.excludedRelationshipIds).toEqual(['r1', newId])
+  })
+
+  it('keeps a relationship hidden when it is reconnected onto an excluded pair', () => {
+    const ws = makeWorkspace()
+    ws.model.softwareSystems.push({
+      id: 'peer', type: 'softwareSystem', name: 'Peer', tags: ['Element', 'Software System'], properties: {}, containers: [],
+    })
+    ws.model.relationships = [
+      { id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} },
+      { id: 'r2', sourceId: 'alice', destinationId: 'peer', tags: ['Relationship'], properties: {} },
+    ]
+    ws.views.systemLandscapeViews = [{
+      type: 'systemLandscape', key: 'land',
+      elements: [{ id: 'alice' }, { id: 'api' }, { id: 'peer' }],
+      relationships: [{ id: 'r2' }], excludedRelationshipIds: ['r1'],
+    }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+
+    useWorkspaceStore.getState().reconnectRelationship('r2', 'alice', 'api')
+
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.relationships).toEqual([])
+    expect(view.excludedRelationshipIds).toEqual(['r1', 'r2'])
+  })
 })
 
 describe('deployment + dynamic view store integrity', () => {
