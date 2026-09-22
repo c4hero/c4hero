@@ -449,9 +449,9 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         if (!s.workspace) return
         try {
           const dsl = serializeRoot(s.workspace)
-          await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)
-          const sidecar = extractSidecar(s.workspace)
-          if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+          if (!await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)) return
+          const sidecar = extractSidecar(s.workspace) ?? { version: 1 as const, views: {} }
+          await writeSidecarToHandle(serializeSidecar(sidecar))
         } catch (error) {
           announce(error instanceof Error ? error.message : 'Save failed')
         }

@@ -3,6 +3,7 @@ import type { Workspace, ElementInView } from '@/types/model'
 import type { WorkspaceState } from '../workspace-types'
 import { validateScope } from '@/lib/scopeValidation'
 import { parseDSL } from '@/lib/dsl'
+import { applySidecar, extractSidecar } from '@/lib/sidecar'
 import { checkModelIntegrity } from '@/lib/modelIntegrity'
 import { pushUndoSnapshot } from '../internals'
 import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft } from '../workspace-helpers'
@@ -27,6 +28,11 @@ function elementNamesById(ws: Workspace): Map<string, string> {
  *  parser-generated id on every re-parse, so an unmatched id falls back to
  *  matching by element name (skipped when the name is ambiguous in that view). */
 function carryOverViewLayout(prev: Workspace, next: Workspace): void {
+  // Use the same lossless persistence boundary for a code-pane reparse as
+  // for a disk reopen. The existing pass below also carries transient canvas
+  // positions and handles identifier-less elements within the current session.
+  const saved = extractSidecar(prev)
+  if (saved) applySidecar(next, saved)
   const prevViews = new Map(allViewsOf(prev).map((v) => [v.key, v]))
   const prevNames = elementNamesById(prev)
   const nextNames = elementNamesById(next)
@@ -45,6 +51,9 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
     for (const el of view.elements) {
       let oldEl = oldById.get(el.id)
       if (!oldEl) {
+        // applySidecar already restored this exact ID, even if it was absent
+        // from the previous view. A name match cannot supersede that identity.
+        if (next.savedLayout?.[view.key]?.elements?.[el.id]) continue
         const name = nextNames.get(el.id)
         const byName = name !== undefined ? oldByName.get(name) : undefined
         // Only fall back when the old element's id no longer exists in the new
