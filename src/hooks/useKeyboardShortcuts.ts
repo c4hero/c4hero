@@ -42,8 +42,13 @@ const META_SHORTCUTS: Record<string, KeyHandler> = {
 function backspaceLikeHandler(destructive: boolean): KeyHandler {
   return (store) => {
     if (store.selectedRelationshipId) {
-      // Relationships are not redesigned in this plan — keep current confirm + delete behavior
-      // for both Backspace and Shift+Backspace on a selected relationship.
+      const activeView = store.workspace && store.activeViewKey
+        ? getActiveView(store.workspace, store.activeViewKey)
+        : undefined
+      if (!destructive && store.activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment') {
+        store.removeRelationshipFromView(store.activeViewKey, store.selectedRelationshipId)
+        return
+      }
       store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
       return
     }

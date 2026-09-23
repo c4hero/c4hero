@@ -442,13 +442,14 @@ ${callers.map((id) => `    ${id} -> hub "Integrates with"`).join('\n')}
 
   // ─── Edge deletion ────────────────────────────────────────────────────────
 
-  test('clicking an edge selects it and Delete removes it', async ({ workspace }) => {
+  test('clicking an edge selects it and Delete hides it from the view', async ({ workspace }) => {
     await workspace.loadSample()
     // Wait for canvas to fully settle (avoid "element not stable" from initial layout animation)
     await workspace.page.waitForTimeout(600)
 
     const edgesBefore = await workspace.getEdgeCount()
     expect(edgesBefore).toBeGreaterThan(0)
+    const modelRelationshipsBefore = (await workspace.getWorkspace())!.model.relationships.length
 
     // React Flow renders a wider invisible interaction path for reliable edge clicking.
     // Targeting the visual path bounding-box center misses when the path is diagonal.
@@ -456,14 +457,12 @@ ${callers.map((id) => `    ${id} -> hub "Integrates with"`).join('\n')}
     await edgeInteraction.click({ force: true })
     await workspace.page.waitForTimeout(300)
 
-    // Delete key opens a confirmation dialog; dialog auto-focuses the Delete button
-    // and handles Enter — press Enter to confirm.
+    // Delete is the lightweight per-view action and needs no confirmation.
     await workspace.page.keyboard.press('Delete')
-    await workspace.page.waitForTimeout(200)
-    await workspace.page.keyboard.press('Enter')
     await workspace.page.waitForTimeout(400)
 
     const edgesAfter = await workspace.getEdgeCount()
     expect(edgesAfter).toBe(edgesBefore - 1)
+    expect((await workspace.getWorkspace())!.model.relationships).toHaveLength(modelRelationshipsBefore)
   })
 })

@@ -188,6 +188,26 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       },
     },
     {
+      id: 'remove-selected-from-view',
+      label: 'Remove selected from view',
+      category: 'edit',
+      icon: EyeOff,
+      shortcut: '⌫',
+      keywords: ['remove', 'hide', 'exclude', 'view'],
+      when: () => {
+        const s = store()
+        return s.selectedRelationshipId !== null && s.activeViewKey !== null
+          && !!s.workspace
+          && !['dynamic', 'deployment'].includes(getActiveView(s.workspace, s.activeViewKey)?.type ?? '')
+      },
+      execute: () => {
+        const s = store()
+        if (s.activeViewKey && s.selectedRelationshipId) {
+          s.removeRelationshipFromView(s.activeViewKey, s.selectedRelationshipId)
+        }
+      },
+    },
+    {
       id: 'impact-of-removal',
       label: 'What breaks if I remove this?',
       category: 'edit',

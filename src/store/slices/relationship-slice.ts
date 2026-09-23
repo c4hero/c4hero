@@ -22,6 +22,27 @@ function dropDynamicSteps(ws: Workspace, v: View, relId: string): void {
   v.elements = v.elements.filter(e => endpoints.has(e.id))
 }
 
+/** Structurizr persists relationship exclusions by directed endpoint pair, not
+ * by relationship ID. Keep the live workspace on that same footing so adding
+ * or reconnecting a parallel relationship cannot make it appear until reload. */
+function viewExcludesPair(ws: Workspace, view: View, sourceId: string, destinationId: string): boolean {
+  const excludedIds = new Set(view.excludedRelationshipIds ?? [])
+  return ws.model.relationships.some(
+    (rel) => excludedIds.has(rel.id) && rel.sourceId === sourceId && rel.destinationId === destinationId,
+  )
+}
+
+function excludePair(ws: Workspace, view: View, sourceId: string, destinationId: string): void {
+  const pairIds = new Set(ws.model.relationships
+    .filter((rel) => rel.sourceId === sourceId && rel.destinationId === destinationId)
+    .map((rel) => rel.id))
+  view.relationships = view.relationships.filter((rel) => !pairIds.has(rel.id))
+  const excludedIds = (view.excludedRelationshipIds ??= [])
+  for (const id of pairIds) {
+    if (!excludedIds.includes(id)) excludedIds.push(id)
+  }
+}
+
 export type RelationshipSlice = Pick<WorkspaceState,
   | 'addRelationship' | 'updateRelationship'
   | 'reconnectRelationship' | 'deleteRelationship'
@@ -77,7 +98,9 @@ export const createRelationshipSlice: StateCreator<
       for (const view of allViewsOf(ws)) {
         if (view.type === 'dynamic' || view.type === 'deployment') continue
         const viewElIds = new Set(view.elements.map(e => e.id))
-        if (viewElIds.has(sourceId) && viewElIds.has(destinationId)) {
+        if (viewExcludesPair(ws, view, sourceId, destinationId)) {
+          excludePair(ws, view, sourceId, destinationId)
+        } else if (viewElIds.has(sourceId) && viewElIds.has(destinationId)) {
           if (!view.relationships.some(r => r.id === id)) {
             view.relationships.push({ id })
           }
@@ -153,6 +176,11 @@ export const createRelationshipSlice: StateCreator<
         dropDynamicSteps(ws, v, id)
         return
       }
+      if (v.type === 'deployment') return
+      if (viewExcludesPair(ws, v, newSourceId, newTargetId)) {
+        excludePair(ws, v, newSourceId, newTargetId)
+        return
+      }
       const elIds = new Set(v.elements.map(e => e.id))
       const hasRel = v.relationships.some(r => r.id === id)
       const bothPresent = elIds.has(newSourceId) && elIds.has(newTargetId)
@@ -178,6 +206,10 @@ export const createRelationshipSlice: StateCreator<
         return
       }
       v.relationships = v.relationships.filter(r => r.id !== id)
+      if (v.excludedRelationshipIds?.includes(id)) {
+        v.excludedRelationshipIds = v.excludedRelationshipIds.filter((excludedId) => excludedId !== id)
+        if (v.excludedRelationshipIds.length === 0) delete v.excludedRelationshipIds
+      }
     })
     if (s.selectedRelationshipId === id) s.selectedRelationshipId = null
   }),

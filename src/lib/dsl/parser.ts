@@ -752,7 +752,7 @@ export function parse(input: string): ParseResult {
             // Wildcard views include all relationships between expanded elements
             const expandedIds = new Set(expanded.map(e => e.id))
             view.relationships = ws.model.relationships
-                .filter(r => expandedIds.has(r.sourceId) && expandedIds.has(r.destinationId))
+                .filter(r => expandedIds.has(r.sourceId) && expandedIds.has(r.destinationId) && !view.excludedRelationshipIds?.includes(r.id))
                 .map(r => ({ id: r.id }))
         } else {
             // Apply `exclude` directives and deduplicate for explicit includes
@@ -770,7 +770,7 @@ export function parse(input: string): ParseResult {
             view.elements = elements
             const elementIds = seen
             view.relationships = ws.model.relationships
-                .filter(r => elementIds.has(r.sourceId) && elementIds.has(r.destinationId))
+                .filter(r => elementIds.has(r.sourceId) && elementIds.has(r.destinationId) && !view.excludedRelationshipIds?.includes(r.id))
                 .map(r => ({ id: r.id }))
         }
     }

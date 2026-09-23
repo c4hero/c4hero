@@ -12,7 +12,7 @@ import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
  *  layoutVersion epoch. */
 export type ViewSlice = Pick<WorkspaceState,
   | 'addView' | 'deleteView' | 'renameView' | 'duplicateView'
-  | 'toggleElementInView' | 'removeElementsFromView' | 'setLayoutDirection' | 'resetAndRelayout'
+  | 'toggleElementInView' | 'removeElementsFromView' | 'removeRelationshipFromView' | 'restoreRelationshipToView' | 'setLayoutDirection' | 'resetAndRelayout'
   | 'updateNodePosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
   | 'setElementsLocked' | 'unlockAllInView' | 'setViewLocked'
   | 'layoutVersion'
@@ -211,6 +211,56 @@ export const createViewSlice: StateCreator<
     })
   }),
 
+  removeRelationshipFromView: (viewKey, relationshipId) => set((s) => {
+    if (!s.workspace) return
+    const view = findViewHelper(s.workspace, viewKey)
+    // Dynamic relationships are ordered steps; deployment relationships are
+    // derived from instances at render time. Neither uses the persisted static
+    // view relationship set this operation edits.
+    if (!view || view.type === 'dynamic' || view.type === 'deployment') return
+    if (!view.relationships.some((r) => r.id === relationshipId)) return
+    const selected = s.workspace.model.relationships.find((r) => r.id === relationshipId)
+    if (!selected) return
+    // Structurizr's portable `source -> destination` exclusion addresses the
+    // whole directed pair. Keep the in-memory view aligned with what reload
+    // will produce when parallel relationships share those endpoints.
+    const pairIds = new Set(s.workspace.model.relationships
+      .filter((r) => r.sourceId === selected.sourceId && r.destinationId === selected.destinationId)
+      .map((r) => r.id))
+    pushUndoSnapshot(s)
+    view.relationships = view.relationships.filter((r) => !pairIds.has(r.id))
+    const exclusions = (view.excludedRelationshipIds ??= [])
+    for (const id of pairIds) {
+      if (!exclusions.includes(id)) exclusions.push(id)
+    }
+    if (s.selectedRelationshipId && pairIds.has(s.selectedRelationshipId)) s.selectedRelationshipId = null
+  }),
+
+  restoreRelationshipToView: (viewKey, relationshipId) => set((s) => {
+    if (!s.workspace) return
+    const view = findViewHelper(s.workspace, viewKey)
+    if (!view || view.type === 'dynamic' || view.type === 'deployment') return
+    const rel = s.workspace.model.relationships.find((r) => r.id === relationshipId)
+    if (!rel) return
+    const elementIds = new Set(view.elements.map((e) => e.id))
+    if (!elementIds.has(rel.sourceId) || !elementIds.has(rel.destinationId)) return
+    const pairIds = new Set(s.workspace.model.relationships
+      .filter((r) => r.sourceId === rel.sourceId && r.destinationId === rel.destinationId)
+      .map((r) => r.id))
+    const wasExcluded = view.excludedRelationshipIds?.some((id) => pairIds.has(id)) ?? false
+    const wasMissing = [...pairIds].some((id) => !view.relationships.some((r) => r.id === id))
+    if (!wasExcluded && !wasMissing) return
+    pushUndoSnapshot(s)
+    if (wasMissing) {
+      const presentIds = new Set(view.relationships.map((r) => r.id))
+      for (const id of pairIds) if (!presentIds.has(id)) view.relationships.push({ id })
+    }
+    if (wasExcluded) {
+      view.excludedRelationshipIds = view.excludedRelationshipIds!.filter((id) => !pairIds.has(id))
+      if (view.excludedRelationshipIds.length === 0) delete view.excludedRelationshipIds
+    }
+  }),
+
   toggleElementInView: (viewKey, elementId) => set((s) => {
     if (!s.workspace) return
     const ws = s.workspace
@@ -242,7 +292,7 @@ export const createViewSlice: StateCreator<
         const linksNewEl =
           (rel.sourceId === elementId && existingElementIds.has(rel.destinationId)) ||
           (rel.destinationId === elementId && existingElementIds.has(rel.sourceId))
-        if (linksNewEl) {
+        if (linksNewEl && !view.excludedRelationshipIds?.includes(rel.id)) {
           view.relationships.push({ id: rel.id })
           existingRelIds.add(rel.id)
         }

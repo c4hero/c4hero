@@ -222,6 +222,8 @@ export interface View {
   environment?: string
   elements: ElementInView[]
   relationships: RelationshipInView[]
+  /** Model relationship IDs deliberately hidden from this static view. */
+  excludedRelationshipIds?: string[]
   autoLayout?: AutoLayout
 }
 
