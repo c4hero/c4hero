@@ -1,3 +1,4 @@
+import { getActiveCamera } from '@/lib/activeCamera'
 import { useReactFlow, useViewport } from '@xyflow/react'
 import { Minus, Plus, Maximize2 } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
@@ -25,19 +26,19 @@ export default function FloatingZoomHud() {
         overflow: 'hidden',
       }}
     >
-      <ZoomHudBtn title="Zoom out" onClick={() => reactFlow.zoomOut({ duration: 200 })}>
+      <ZoomHudBtn title="Zoom out" onClick={() => getActiveCamera() ? getActiveCamera()!.zoomBy(1 / 1.25) : reactFlow.zoomOut({ duration: 200 })}>
         <Minus size={13} />
       </ZoomHudBtn>
 
       <ZoomLabel />
 
-      <ZoomHudBtn title="Zoom in" onClick={() => reactFlow.zoomIn({ duration: 200 })}>
+      <ZoomHudBtn title="Zoom in" onClick={() => getActiveCamera() ? getActiveCamera()!.zoomBy(1.25) : reactFlow.zoomIn({ duration: 200 })}>
         <Plus size={13} />
       </ZoomHudBtn>
 
       <div style={{ width: 1, height: 20, background: 'var(--color-border)' }} />
 
-      <ZoomHudBtn title="Fit to screen" onClick={() => fitContentNodesToViewport(reactFlow)}>
+      <ZoomHudBtn title="Fit to screen" onClick={() => getActiveCamera() ? getActiveCamera()!.fit() : fitContentNodesToViewport(reactFlow)}>
         <Maximize2 size={13} />
       </ZoomHudBtn>
     </div>
@@ -77,6 +78,7 @@ function ZoomHudBtn({
 }
 
 function ZoomLabel() {
+  const mode = useWorkspaceStore(s => s.rendererMode)
   const { zoom } = useViewport()
   return (
     <span
@@ -94,7 +96,7 @@ function ZoomLabel() {
         justifyContent: 'center',
       }}
     >
-      {Math.round(zoom * 100)}%
+      {mode === 'explore' ? 'Map' : `${Math.round(zoom * 100)}%`}
     </span>
   )
 }

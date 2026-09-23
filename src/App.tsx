@@ -20,6 +20,8 @@ import MultiSelectBar from '@/components/layout/MultiSelectBar'
 import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
 import ZoomConfirmDialog from '@/components/shared/ZoomConfirmDialog'
 import Canvas from '@/components/canvas/Canvas'
+import ExploreCanvas from '@/components/explore/ExploreCanvas'
+import RendererModeControl from '@/components/layout/RendererModeControl'
 import CanvasHints from '@/components/canvas/CanvasHints'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import NotFound from '@/components/shared/NotFound'
@@ -35,6 +37,7 @@ const ImpactDialog = lazy(() => import('@/components/impact/ImpactDialog'))
 const DocsDialog = lazy(() => import('@/components/docs/DocsDialog'))
 
 export default function App() {
+  const rendererMode = useWorkspaceStore(s => s.rendererMode)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const searchOpen = useWorkspaceStore((s) => s.searchOpen)
   const docsDialogOpen = useWorkspaceStore((s) => s.docsDialogOpen)
@@ -88,13 +91,14 @@ export default function App() {
       <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg-primary)' }}>
         <main id="c4hero-canvas" aria-label="Architecture diagram canvas" style={{ position: 'absolute', inset: 0 }}>
           <ErrorBoundary label="Canvas error" onHome={() => useWorkspaceStore.getState().closeWorkspace()}>
-            <Canvas />
+            {rendererMode === 'explore' ? <ExploreCanvas /> : <Canvas />}
           </ErrorBoundary>
         </main>
         <nav aria-label="Workspace navigation"><FloatingTopPill /></nav>
         <DiskConflictBar />
         <MultiSelectBar />
         <nav aria-label="Tools"><FloatingToolRail /></nav>
+        <RendererModeControl />
         <FloatingViewsPanel />
         <aside aria-label="Element inspector"><FloatingInspector /></aside>
         <BottomHighlighterBar />
@@ -105,7 +109,7 @@ export default function App() {
           </Suspense>
         )}
         <FloatingZoomHud />
-        <CanvasHints />
+        {rendererMode === 'diagram' && <CanvasHints />}
         <div id="c4hero-live" aria-live="polite" aria-atomic="true" className="sr-only" />
         <div className="commit-hash">v{__APP_VERSION__} · {__COMMIT_HASH__}</div>
       </div>
@@ -124,7 +128,7 @@ export default function App() {
       <ReactFlowProvider>
         <div className="h-full w-full" style={{ background: 'var(--color-bg-primary)' }}>
           <ErrorBoundary label="Canvas error" onHome={() => useWorkspaceStore.getState().closeWorkspace()}>
-            <Canvas />
+            {rendererMode === 'explore' ? <ExploreCanvas /> : <Canvas />}
           </ErrorBoundary>
           <PresentationExitPill />
         </div>

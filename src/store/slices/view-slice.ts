@@ -5,6 +5,7 @@ import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
 import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
+import { getActiveCamera } from '@/lib/activeCamera'
 
 /** View management: create / delete / rename / duplicate views, plus the
  *  per-view body actions (toggle element membership, layout direction,
@@ -185,6 +186,13 @@ export const createViewSlice: StateCreator<
   }),
 
   removeElementsFromView: (viewKey, ids) => set((s) => {
+    if (s.workspace && s.rendererMode === 'explore') {
+      pushUndoSnapshot(s)
+      const layout = s.workspace.exploreLayout ??= {}
+      layout.hiddenIds = [...new Set([...(layout.hiddenIds ?? []), ...ids])]
+      s.selectedElementIds = []
+      return
+    }
     if (!s.workspace) return
     if (ids.length === 0) return
     const ws = s.workspace
@@ -208,6 +216,13 @@ export const createViewSlice: StateCreator<
   }),
 
   toggleElementInView: (viewKey, elementId) => set((s) => {
+    if (s.workspace && s.rendererMode === 'explore') {
+      pushUndoSnapshot(s)
+      const layout = s.workspace.exploreLayout ??= {}
+      const hidden = layout.hiddenIds ?? []
+      layout.hiddenIds = hidden.includes(elementId) ? hidden.filter(id => id !== elementId) : [...hidden, elementId]
+      return
+    }
     if (!s.workspace) return
     const ws = s.workspace
     const view = findViewHelper(ws, viewKey)
@@ -257,6 +272,15 @@ export const createViewSlice: StateCreator<
 
   resetAndRelayout: (viewKey, direction) => set((s) => {
     if (!s.workspace) return
+    if (s.rendererMode === 'explore') {
+      if (s.workspace.exploreLayout?.locked) return
+      const layout = s.workspace.exploreLayout ?? {}
+      pushUndoSnapshot(s)
+      s.workspace.exploreLayout = { ...layout, direction: direction ?? layout.direction,
+        elements: Object.fromEntries(Object.entries(layout.elements ?? {}).filter(([, e]) => e.locked)) }
+      s.layoutVersion += 1
+      return
+    }
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     if (view.locked) return
@@ -270,6 +294,14 @@ export const createViewSlice: StateCreator<
 
   setElementsLocked: (viewKey, ids, locked) => set((s) => {
     if (!s.workspace || ids.length === 0) return
+    if (s.rendererMode === 'explore') {
+      const layout = getActiveCamera()?.layout?.() ?? s.workspace.exploreLayout ?? {}
+      pushUndoSnapshot(s)
+      layout.elements ??= {}
+      for (const id of ids) layout.elements[id] = { ...layout.elements[id], locked }
+      s.workspace.exploreLayout = layout
+      return
+    }
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     const targets = new Set(ids)
@@ -290,6 +322,11 @@ export const createViewSlice: StateCreator<
 
   setViewLocked: (viewKey, locked) => set((s) => {
     if (!s.workspace) return
+    if (s.rendererMode === 'explore') {
+      pushUndoSnapshot(s)
+      s.workspace.exploreLayout = { ...(getActiveCamera()?.layout?.() ?? s.workspace.exploreLayout), locked }
+      return
+    }
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     if ((view.locked ?? false) === locked) return
@@ -299,6 +336,12 @@ export const createViewSlice: StateCreator<
 
   unlockAllInView: (viewKey) => set((s) => {
     if (!s.workspace) return
+    if (s.rendererMode === 'explore') {
+      pushUndoSnapshot(s)
+      const layout = s.workspace.exploreLayout ??= {}
+      for (const el of Object.values(layout.elements ?? {})) el.locked = false
+      return
+    }
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     const locked = view.elements.filter((el) => el.locked)

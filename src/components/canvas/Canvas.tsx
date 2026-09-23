@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDocsLoader } from '@/hooks/useDocsLoader'
+import { useCanvasTheme } from '@/hooks/useCanvasTheme'
 import {
   ReactFlow,
   Background,
@@ -16,7 +17,8 @@ import {
   reconnectEdge,
 } from '@xyflow/react'
 import { applyAutoLayout } from '@/lib/canvasLayout'
-import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
+import { registerActiveCamera } from '@/lib/activeCamera'
+import { fitContentNodesToViewport, fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import type { HighlightFilters } from '@/lib/highlight'
 import type { View, Workspace } from '@/types/model'
@@ -24,11 +26,6 @@ import { useWorkspaceStore, getActiveView, allViewsOf, buildRelationshipMap } fr
 import { useSettingsStore } from '@/store/settings'
 import {
   THEMES,
-  THEME_CANVAS_BACKGROUNDS,
-  THEME_SELECTION_COLORS,
-  THEME_EDGE_COLORS,
-  THEME_LABEL_COLORS,
-  THEME_LABEL_MUTED_COLORS,
   isLightCanvasTheme,
 } from '@/lib/themes'
 import { nodeTypes } from './nodes'
@@ -212,11 +209,15 @@ export default function Canvas() {
   const canvasGuideDismissed = useSettingsStore((s) => s.canvasGuideDismissed)
   const updateSettings = useSettingsStore((s) => s.update)
   const themeStyles = THEMES[colorTheme]
-  const themeCanvasBackground = THEME_CANVAS_BACKGROUNDS[colorTheme]
-  const themeSelectionColor = THEME_SELECTION_COLORS[colorTheme]
-  const themeEdgeColor = THEME_EDGE_COLORS[colorTheme]
   const isLightCanvas = isLightCanvasTheme(colorTheme)
   const reactFlowInstance = useReactFlow()
+  useEffect(() => registerActiveCamera({
+    zoomBy: factor => { void reactFlowInstance.zoomTo(reactFlowInstance.getZoom() * factor, { duration: 200 }) },
+    fit: () => { fitContentNodesToViewport(reactFlowInstance) },
+    focus: id => useWorkspaceStore.setState({ focusElementId: id }),
+    pan: (dx, dy) => { const vp = reactFlowInstance.getViewport(); void reactFlowInstance.setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy }) },
+    escape: () => useWorkspaceStore.getState().clearSelection(),
+  }), [reactFlowInstance])
   const guideAutoOpened = useRef(false)
 
   useEffect(() => {
@@ -230,47 +231,7 @@ export default function Canvas() {
     updateSettings({ canvasGuideDismissed: true })
   }, [setCanvasGuideOpen, updateSettings])
 
-  // Cascade canvas-related theme vars to document.documentElement so the
-  // floating chrome (top pill, tool rail, inspector, etc.) — which is rendered
-  // outside the canvas tree — can also read them.
-  useEffect(() => {
-    const root = document.documentElement
-    const set = (key: string, value: string | null) => {
-      if (value == null) root.style.removeProperty(key)
-      else root.style.setProperty(key, value)
-    }
-    const labelColorOverride = THEME_LABEL_COLORS[colorTheme]
-    const labelMutedOverride = THEME_LABEL_MUTED_COLORS[colorTheme]
-    const boundaryBorder = colorTheme === 'highContrast'
-      ? '#000000'
-      : isLightCanvas
-        ? 'color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 42%, transparent)'
-        : null
-    set('--canvas-bg', themeCanvasBackground ?? null)
-    set('--canvas-selection', themeSelectionColor)
-    set('--canvas-label-color', labelColorOverride ?? (isLightCanvas ? '#1f2937' : 'var(--color-text-secondary)'))
-    set('--canvas-label-muted', labelMutedOverride ?? (isLightCanvas ? '#475569' : 'var(--color-text-muted)'))
-    set('--canvas-edge', themeEdgeColor ?? null)
-    set('--canvas-boundary-border', boundaryBorder)
-    set('--canvas-boundary-bg', isLightCanvas ? 'rgba(15, 23, 42, 0.012)' : null)
-    set('--canvas-boundary-title', isLightCanvas ? 'var(--canvas-label-muted)' : null)
-    set('--canvas-boundary-subtitle', isLightCanvas ? 'color-mix(in srgb, var(--canvas-label-muted) 74%, transparent)' : null)
-    if (isLightCanvas) root.setAttribute('data-canvas-light', '')
-    else root.removeAttribute('data-canvas-light')
-    return () => {
-      set('--canvas-bg', null)
-      set('--canvas-selection', null)
-      set('--canvas-label-color', null)
-      set('--canvas-label-muted', null)
-      set('--canvas-edge', null)
-      set('--canvas-boundary-border', null)
-      set('--canvas-boundary-bg', null)
-      set('--canvas-boundary-title', null)
-      set('--canvas-boundary-subtitle', null)
-      root.removeAttribute('data-canvas-light')
-    }
-  }, [themeCanvasBackground, themeSelectionColor, themeEdgeColor, isLightCanvas, colorTheme])
-
+  useCanvasTheme()
   // Stable callback refs — avoid new function references every render which would
   // invalidate expensive useMemos that depend on them.
   // Uses zoomInto (not drillInto) so that clicking the zoom button on a system
@@ -992,6 +953,13 @@ export default function Canvas() {
       saveViewport(workspaceRef.current?.name, activeViewKey, rf.getViewport())
     }
   }, [activeViewKey])
+
+  // A renderer switch may unmount during a camera animation, before onMoveEnd.
+  useEffect(() => () => {
+    const rf = rfInitInstance.current
+    const key = viewRef.current?.key
+    if (rf && key && useWorkspaceStore.getState().rendererMode === 'explore') saveViewport(workspaceRef.current?.name, key, rf.getViewport())
+  }, [])
 
   // Safety: never leave the chrome faded if we unmount mid-drag.
   useEffect(() => () => document.documentElement.removeAttribute('data-canvas-panning'), [])

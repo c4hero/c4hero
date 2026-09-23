@@ -44,6 +44,7 @@ interface SidecarView {
 
 export interface SidecarData {
   version: 1
+  explore?: Workspace['exploreLayout']
   elements?: Record<string, SidecarElement>
   relationships?: Record<string, SidecarRelationship>
   views?: Record<string, SidecarView>
@@ -80,6 +81,12 @@ function isSidecarView(value: unknown): value is SidecarView {
 
 function isSidecarData(value: unknown): value is SidecarData {
   if (!isRecord(value) || value.version !== 1) return false
+  if (value.explore !== undefined) {
+    if (!isRecord(value.explore)) return false
+    const { direction, hiddenIds } = value.explore
+    if (!isSidecarView(value.explore) || (direction !== undefined && !['TB', 'BT', 'LR', 'RL'].includes(String(direction))) ||
+      (hiddenIds !== undefined && (!Array.isArray(hiddenIds) || !hiddenIds.every(id => typeof id === 'string')))) return false
+  }
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarElement)) return false
   if ('relationships' in value && value.relationships !== undefined && !isRecordOf(value.relationships, isSidecarRelationship)) return false
   if ('views' in value && value.views !== undefined && !isRecordOf(value.views, isSidecarView)) return false
@@ -90,6 +97,7 @@ function isSidecarData(value: unknown): value is SidecarData {
 
 export function extractSidecar(workspace: Workspace): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
+  if (workspace.exploreLayout) sidecar.explore = structuredClone(workspace.exploreLayout)
 
   // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
@@ -116,7 +124,7 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // save?" is exactly "is `views` empty". A contentless `{version:1}` is not
   // worth a file: every caller gates on truthiness and would write one where it
   // used to write none.
-  if (Object.keys(views).length === 0) return null
+  if (Object.keys(views).length === 0 && !sidecar.explore) return null
   sidecar.views = views
   return sidecar
 }
@@ -125,6 +133,7 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
 
 export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   if (sidecar.version !== 1) return
+  if (sidecar.explore && isSidecarData({ version: 1, explore: sidecar.explore })) workspace.exploreLayout = structuredClone(sidecar.explore)
 
   // Elements — only apply known sidecar properties
   if (sidecar.elements) {

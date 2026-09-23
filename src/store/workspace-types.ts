@@ -36,6 +36,7 @@ export const MAX_UNDO = 25
 export interface UndoState {
   undoStack: Workspace[]
   redoStack: Workspace[]
+  updateExploreLayout: (layout: NonNullable<Workspace['exploreLayout']>) => void
 }
 
 // ─── Highlighter ─────────────────────────────────────────────────────
@@ -63,6 +64,10 @@ export interface DiskConflict {
 
 export interface WorkspaceState extends UndoState {
   workspace: Workspace | null
+
+  // Renderer mode is transient UI state, never workspace data or undo history.
+  rendererMode: 'diagram' | 'explore'
+  setRendererMode: (mode: 'diagram' | 'explore') => void
 
   // Navigation
   activeViewKey: string | null

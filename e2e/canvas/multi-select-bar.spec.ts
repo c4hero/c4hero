@@ -183,7 +183,8 @@ test.describe('multi-select bar — align', () => {
 
     const beforeCustomer = await getNodeBox(workspace.page, 'customer')
     const beforeAtm = await getNodeBox(workspace.page, 'atm')
-    expect(Math.abs(beforeCustomer.height - beforeAtm.height)).toBeGreaterThan(20)
+    // Compare proportional sizes: screen pixels depend on the fitted zoom.
+    expect(Math.abs(beforeCustomer.height - beforeAtm.height) / beforeAtm.height).toBeGreaterThan(.1)
 
     await workspace.page.getByRole('button', { name: /Multi-select/ }).click()
     await workspace.clickNode('Personal Banking Customer')

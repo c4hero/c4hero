@@ -320,6 +320,8 @@ export interface StoredViewLayout {
 }
 
 export interface Workspace {
+  /** Explore-only layout, persisted in the sidecar and included in undo. */
+  exploreLayout?: StoredViewLayout & { direction?: LayoutDirection; hiddenIds?: string[] }
   name?: string
   description?: string
   scope?: WorkspaceScope

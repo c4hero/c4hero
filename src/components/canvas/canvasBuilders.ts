@@ -1,6 +1,5 @@
 import type { Node, Edge } from '@xyflow/react'
 import { isHighlighted, isHighlightedRel, highlightActive, type HighlightFilters } from '@/lib/highlight'
-import { stripThemeManagedStyleFields } from '@/lib/themes'
 import { buildElementMap, buildRelationshipMap } from '@/store/workspace'
 import {
   expandedGroupElementIds,
@@ -12,45 +11,8 @@ import { buildDeploymentLayoutClusters, buildDeploymentBoundaryNodes } from './d
 import { deploymentViewRelationships } from '@/lib/deployment'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
 
-/** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
-export function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
-  const map = new Map<string, ElementStyle>()
-  for (const style of styles) {
-    map.set(style.tag, { ...map.get(style.tag), ...style })
-  }
-  return map
-}
-
-/** Get the best matching style for an element based on its tags.
- *  Cascade order follows Structurizr: Element → type tag → custom tags (in order). */
-export function getElementStyle(
-  element: ModelElement,
-  styleIndex: Map<string, ElementStyle>,
-): ElementStyle | undefined {
-  const typeTag =
-    element.type === 'person' ? 'Person'
-    : element.type === 'softwareSystem' ? 'Software System'
-    : element.type === 'container' ? 'Container'
-    : 'Component'
-
-  // 1. Start with the "Element" base tag (applies to all elements)
-  let matched: ElementStyle | undefined
-  const baseStyle = styleIndex.get('Element')
-  if (baseStyle) matched = { ...baseStyle }
-
-  // 2. Apply type tag style (Person, Software System, Container, Component)
-  const typeStyle = styleIndex.get(typeTag)
-  if (typeStyle) matched = { ...matched, ...typeStyle }
-
-  // 3. Apply custom tags in order (later tags override earlier ones)
-  for (const tag of element.tags) {
-    if (tag === 'Element' || tag === typeTag) continue
-    const tagStyle = styleIndex.get(tag)
-    if (tagStyle) matched = { ...matched, ...tagStyle }
-  }
-
-  return matched
-}
+import { buildDiagramStyleIndex, getElementStyle } from '@/lib/elementStyles'
+export { buildStyleIndex, getElementStyle } from '@/lib/elementStyles'
 
 /** Get the best matching relationship style based on tags */
 function getRelationshipStyle(
@@ -158,10 +120,7 @@ export function buildNodes(
   // Theme styles form the base layer. Truly custom workspace styles still
   // override them, but colors copied from our bundled palettes stay
   // theme-managed so switching themes updates node fills consistently.
-  const workspaceStyles = workspace.views.configuration.styles.elements
-    .map(stripThemeManagedStyleFields)
-    .filter((style): style is ElementStyle => style !== null)
-  const styleIndex = buildStyleIndex([...themeStyles, ...workspaceStyles])
+  const styleIndex = buildDiagramStyleIndex(workspace, themeStyles)
 
   const active = highlightActive(filters)
   const nodes: Node[] = []

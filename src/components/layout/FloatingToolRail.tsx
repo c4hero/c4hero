@@ -25,6 +25,8 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
 import AddElementPanel from '@/components/layout/AddElementPanel'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
+import { getActiveCamera } from '@/lib/activeCamera'
+import { editingView } from '@/lib/explore/editing'
 import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
 
 const DIRECTION_ICONS: Record<LayoutDirection, React.ReactNode> = {
@@ -42,6 +44,7 @@ const DIRECTION_LABELS: Record<LayoutDirection, string> = {
 }
 
 export default function FloatingToolRail() {
+  const rendererMode = useWorkspaceStore(s => s.rendererMode)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const resetAndRelayout = useWorkspaceStore((s) => s.resetAndRelayout)
@@ -131,7 +134,7 @@ export default function FloatingToolRail() {
 
   if (!workspace) return null
 
-  const view = activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
+  const view = editingView(workspace, activeViewKey, rendererMode)
   const currentDirection = view?.autoLayout?.direction ?? 'TB'
   const lockedCount = view?.elements.filter((el) => el.locked).length ?? 0
   const viewLocked = view?.locked === true
@@ -142,7 +145,7 @@ export default function FloatingToolRail() {
     setArrangePanelOpen(false)
     // Wait for the new layout to be applied (positions recomputed + nodes
     // re-measured) before fitting the viewport to the freshly arranged graph.
-    setTimeout(() => fitContentNodesToViewport(reactFlow), 120)
+    setTimeout(() => { if (getActiveCamera()) getActiveCamera()!.fit(); else fitContentNodesToViewport(reactFlow) }, 120)
   }
 
   return (
@@ -265,10 +268,6 @@ export default function FloatingToolRail() {
         {arrangePanelOpen && (
           <>
             <div
-              style={{ position: 'fixed', inset: 0, zIndex: 49 }}
-              onClick={() => setArrangePanelOpen(false)}
-            />
-            <div
               ref={arrangeFlyoutRef}
               role="menu"
               data-flyout="arrange"
@@ -369,7 +368,7 @@ export default function FloatingToolRail() {
       <RailBtn
         icon={<Maximize2 size={16} />}
         label="Zoom to fit"
-        onClick={() => fitContentNodesToViewport(reactFlow)}
+        onClick={() => { if (getActiveCamera()) getActiveCamera()!.fit(); else fitContentNodesToViewport(reactFlow) }}
       />
       <RailSep />
       <RailBtn

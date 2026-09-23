@@ -235,6 +235,9 @@ export function collectTakenIds(ws: Workspace): Set<string> {
  *  scope element's ID, e.g. `SystemContext-<id>` — left stale, the layout
  *  sidecar written against the old key would orphan on the next import). */
 export function renameElementId(ws: Workspace, oldId: string, newId: string): { from: string; to: string }[] {
+  const explore = ws.exploreLayout
+  if (explore?.elements?.[oldId]) { explore.elements[newId] = explore.elements[oldId]; delete explore.elements[oldId] }
+  if (explore?.hiddenIds) explore.hiddenIds = explore.hiddenIds.map(id => id === oldId ? newId : id)
   forEachElementHelper(ws, (el) => {
     if (el.id !== oldId) return false
     el.id = newId
@@ -779,6 +782,8 @@ export function collectCascadeIds(ws: Workspace, ids: Iterable<string>): Cascade
  */
 export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): CascadeDeleteResult {
   const { idSet, deletedContainerIds, allDeletedIds } = collectCascadeIds(ws, ids)
+  if (ws.exploreLayout?.elements) for (const id of allDeletedIds) delete ws.exploreLayout.elements[id]
+  if (ws.exploreLayout?.hiddenIds) ws.exploreLayout.hiddenIds = ws.exploreLayout.hiddenIds.filter(id => !allDeletedIds.has(id))
 
   // Filter people + tree
   ws.model.people = ws.model.people.filter((p) => !idSet.has(p.id))

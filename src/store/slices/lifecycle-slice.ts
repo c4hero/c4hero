@@ -27,6 +27,7 @@ function elementNamesById(ws: Workspace): Map<string, string> {
  *  parser-generated id on every re-parse, so an unmatched id falls back to
  *  matching by element name (skipped when the name is ambiguous in that view). */
 function carryOverViewLayout(prev: Workspace, next: Workspace): void {
+  next.exploreLayout = prev.exploreLayout
   const prevViews = new Map(allViewsOf(prev).map((v) => [v.key, v]))
   const prevNames = elementNamesById(prev)
   const nextNames = elementNamesById(next)
@@ -140,6 +141,7 @@ export const createLifecycleSlice: StateCreator<
     const firstView = getFirstViewKey(workspace)
     set({
       workspace,
+      rendererMode: 'diagram',
       activeViewKey: firstView,
       viewHistory: [],
       selectedElementIds: [],
@@ -211,6 +213,7 @@ export const createLifecycleSlice: StateCreator<
     set({
       workspace: null,
       activeWorkspaceFilename: null,
+      rendererMode: 'diagram',
       activeViewKey: null,
       viewHistory: [],
       selectedElementIds: [],

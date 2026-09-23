@@ -2,7 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { announce } from '@/lib/announce'
 import { validateScope } from '@/lib/scopeValidation'
-import { undoSnapshot } from '../internals'
+import { undoSnapshot, pushUndoSnapshot } from '../internals'
 import { findViewHelper, clearSelectionDraft, normalizeWorkspaceShape } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 
@@ -12,6 +12,7 @@ export type UndoSlice = Pick<WorkspaceState,
   | 'undoStack' | 'redoStack'
   | 'undo' | 'redo' | 'canUndo' | 'canRedo' | 'resetWorkspaceTo'
   | 'lastSavedUndoLength' | 'setLastSavedUndoLength'
+  | 'updateExploreLayout'
 >
 
 export const createUndoSlice: StateCreator<
@@ -23,6 +24,11 @@ export const createUndoSlice: StateCreator<
   undoStack: [],
   redoStack: [],
   lastSavedUndoLength: 0,
+  updateExploreLayout: (layout) => set(s => {
+    if (!s.workspace) return
+    pushUndoSnapshot(s)
+    s.workspace.exploreLayout = layout
+  }),
 
   setLastSavedUndoLength: (n) => set({ lastSavedUndoLength: n }),
 
