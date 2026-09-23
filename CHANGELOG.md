@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.
+- Orphaned view layout retained after deleting a view in the DSL code pane can
+  now be reviewed and permanently removed with **Clean Up Orphaned View
+  Layout** in the command palette. Cleanup lists the affected view keys, is
+  undoable, and leaves current-view layout untouched. (TEA-343)
 - Preserve saved layout for temporarily missing views and elements through model
   edits and repeated saves/reopens (#201). Existing sidecars need no migration.
   Explicit view/element deletion and layout reset still remove the affected

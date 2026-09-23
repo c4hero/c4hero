@@ -60,6 +60,21 @@ describe('ConfirmDeleteDialog', () => {
     expect(screen.getByText('Confirm delete')).toBeTruthy()
   })
 
+  it('lists concrete affected items when provided', () => {
+    render(
+      <ConfirmDeleteDialog
+        message="Delete orphaned layout?"
+        details={['Deleted view', 'Older deleted view']}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    )
+    const list = screen.getByRole('list', { name: /affected items/i })
+    expect(list).toBeTruthy()
+    expect(screen.getByText('Deleted view')).toBeTruthy()
+    expect(screen.getByText('Older deleted view')).toBeTruthy()
+  })
+
   it('clicking "Delete" button calls onConfirm', () => {
     render(
       <ConfirmDeleteDialog

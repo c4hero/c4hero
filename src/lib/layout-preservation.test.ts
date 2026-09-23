@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { applySidecar, extractSidecar, parseSidecar, serializeSidecar } from './sidecar'
 import { useWorkspaceStore } from '@/store/workspace'
-import { allViewsOf } from '@/store/workspace-helpers'
+import { allViewsOf, orphanedLayoutViewKeys } from '@/store/workspace-helpers'
 import type { Workspace, SavedViewLayout } from '@/types/model'
 
 const state = () => useWorkspaceStore.getState()
@@ -150,6 +150,34 @@ describe('intentional changes remain authoritative', () => {
     cycles()
     expect(layout().Wide).toBeUndefined()
     expect(layout().Narrow).toEqual(before.Narrow)
+  })
+
+  it('explicitly prunes views removed through the code pane without touching live layout', () => {
+    load(); place(); reopen()
+    const before = layout()
+    expect(state().replaceWorkspaceFromDSL(dsl(narrow)).ok).toBe(true)
+    expect(orphanedLayoutViewKeys(state().workspace!)).toEqual(['Wide'])
+
+    state().pruneOrphanedViewLayout()
+    expect(layout().Wide).toBeUndefined()
+    expect(layout().Narrow).toEqual(before.Narrow)
+    expect(orphanedLayoutViewKeys(state().workspace!)).toEqual([])
+
+    state().undo()
+    expect(layout()).toEqual(before)
+    state().redo()
+    cycles()
+    expect(layout().Wide).toBeUndefined()
+    expect(layout().Narrow).toEqual(before.Narrow)
+  })
+
+  it('does not create an undo entry when there is no orphaned view layout', () => {
+    load(); place(); reopen()
+    const before = layout()
+    const undoCount = state().undoStack.length
+    state().pruneOrphanedViewLayout()
+    expect(state().undoStack).toHaveLength(undoCount)
+    expect(layout()).toEqual(before)
   })
 
   it('removing an element from a view does not resurrect its saved position', () => {

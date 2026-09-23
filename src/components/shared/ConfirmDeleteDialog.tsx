@@ -7,6 +7,7 @@ import ImpactReportBody from '@/components/impact/ImpactReportBody'
 
 interface Props {
   message: string
+  details?: string[]
   impact?: CascadeImpact
   /** Element ids being deleted — when set, the full removal-impact report
    *  ("what breaks if this is removed") renders inline in the confirmation. */
@@ -15,7 +16,7 @@ interface Props {
   onCancel: () => void
 }
 
-export default function ConfirmDeleteDialog({ message, impact, targetIds, onConfirm, onCancel }: Props) {
+export default function ConfirmDeleteDialog({ message, details, impact, targetIds, onConfirm, onCancel }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const workspace = useWorkspaceStore((s) => s.workspace)
@@ -111,6 +112,17 @@ export default function ConfirmDeleteDialog({ message, impact, targetIds, onConf
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
               {message}
             </div>
+            {details && details.length > 0 && (
+              <ul
+                aria-label="Affected items"
+                style={{
+                  margin: '8px 0 0', paddingLeft: 18, maxHeight: 128, overflowY: 'auto',
+                  fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', overflowWrap: 'anywhere',
+                }}
+              >
+                {details.map((detail) => <li key={detail}>{detail}</li>)}
+              </ul>
+            )}
             {impactItems.length > 0 && (
               <ul
                 aria-label="Cascade impact"

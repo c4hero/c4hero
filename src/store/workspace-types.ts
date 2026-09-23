@@ -22,6 +22,8 @@ export interface CascadeImpact {
 
 export interface PendingDelete {
   message: string
+  /** Optional concrete items affected by a non-model cleanup. */
+  details?: string[]
   impact?: CascadeImpact
   /** Element ids being deleted — when set, the confirmation dialog renders the
    *  full removal-impact report (what breaks, orphans, affected views) inline. */
@@ -80,7 +82,7 @@ export interface WorkspaceState extends UndoState {
   commandPaletteOpen: boolean
   pendingDelete: PendingDelete | null
   confirmDelete: (
-    payload: string | { message: string; impact?: CascadeImpact; targetIds?: string[] },
+    payload: string | { message: string; details?: string[]; impact?: CascadeImpact; targetIds?: string[] },
     onConfirm: () => void,
   ) => void
   cancelDelete: () => void
@@ -246,6 +248,9 @@ export interface WorkspaceState extends UndoState {
   // View management
   addView: (type: ViewType, scopeId?: string, title?: string, options?: { environment?: string }) => string
   deleteView: (key: string) => void
+  /** Permanently remove saved layout for views not currently present. This is
+   * explicit because absence during a DSL reparse may only be temporary. */
+  pruneOrphanedViewLayout: () => void
   renameView: (key: string, title: string) => void
   duplicateView: (key: string) => string
   updateNodePosition: (nodeId: string, x: number, y: number) => void

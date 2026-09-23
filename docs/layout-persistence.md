@@ -53,9 +53,12 @@ Use explicit, unique DSL view keys for stable ownership today. Reliable identity
 for keyless views needs a separate design; prefix/overlap matching cannot prove
 which view owns an entry. Do not add such guesses to persistence.
 
-Entries removed through DSL edits are retained indefinitely: the application
-cannot distinguish intentional removal from temporary absence. Cleanup needs
-an explicit user action or a separately designed retention policy.
+Entries removed through DSL edits are retained because the application cannot
+distinguish intentional removal from temporary absence. When that recovery
+window is no longer useful, **Clean Up Orphaned View Layout** in the command
+palette lists every retained view key that is not currently in the DSL and,
+after confirmation, permanently removes those entries. Cleanup is undoable and
+does not touch layout belonging to a current view.
 
 ## Regression coverage
 
