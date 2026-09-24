@@ -26,12 +26,6 @@ test.describe('Node Connections', () => {
 
   // ─── Arrow marker rendering ───────────────────────────────────────────────
 
-  test('arrow marker SVG element is defined in the document', async ({ workspace }) => {
-    await workspace.loadSample()
-    const marker = workspace.page.locator('#c4-arrow')
-    await expect(marker).toBeAttached()
-  })
-
   test('arrow marker SVG does not take up canvas space (zero size)', async ({ workspace }) => {
     await workspace.loadSample()
     // The SVG wrapper around the marker defs should be zero-size
@@ -40,6 +34,14 @@ test.describe('Node Connections', () => {
     // Should be zero/hidden — not taking up visual space
     expect(box?.width ?? 0).toBe(0)
     expect(box?.height ?? 0).toBe(0)
+  })
+
+  test('arrow marker defs live inside the subtree image export clones (#207)', async ({ workspace }) => {
+    await workspace.loadSample()
+    // PNG/SVG export clones .react-flow__renderer; markers outside it are
+    // dropped and exported edges lose their arrowheads.
+    const marker = workspace.page.locator('.react-flow__renderer #c4-arrow')
+    await expect(marker).toBeAttached()
   })
 
   // ─── Edge labels ─────────────────────────────────────────────────────────
