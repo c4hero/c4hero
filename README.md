@@ -121,6 +121,10 @@ See [`CHANGELOG.md`](CHANGELOG.md) for notable changes. Releases are tagged in [
 
 c4hero is maintained by one person in their spare time. I aim to respond to issues within a week. If something is broken, please include browser, OS, and a minimal `.dsl` snippet so I can reproduce — the bug template will prompt you. PRs that come with tests get reviewed first.
 
+## Supporting c4hero
+
+If c4hero is useful to you, you can [sponsor its maintainer on GitHub](https://github.com/sponsors/kevnord). Starring the repo, sharing it, and filing good issues help too.
+
 ## Contributing
 
 Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, workflow, and testing guidance, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
