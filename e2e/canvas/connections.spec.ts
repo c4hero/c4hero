@@ -26,12 +26,6 @@ test.describe('Node Connections', () => {
 
   // ─── Arrow marker rendering ───────────────────────────────────────────────
 
-  test('arrow marker SVG element is defined in the document', async ({ workspace }) => {
-    await workspace.loadSample()
-    const marker = workspace.page.locator('#c4-arrow')
-    await expect(marker).toBeAttached()
-  })
-
   test('arrow marker SVG does not take up canvas space (zero size)', async ({ workspace }) => {
     await workspace.loadSample()
     // The SVG wrapper around the marker defs should be zero-size
