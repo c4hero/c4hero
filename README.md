@@ -123,7 +123,7 @@ c4hero is maintained by one person in their spare time. I aim to respond to issu
 
 ## Supporting c4hero
 
-If c4hero is useful to you, you can [sponsor the project on GitHub](https://github.com/sponsors/c4hero). Starring the repo, sharing it, and filing good issues help too.
+If c4hero is useful to you, you can [sponsor its maintainer on GitHub](https://github.com/sponsors/kevnord). Starring the repo, sharing it, and filing good issues help too.
 
 ## Contributing
 
