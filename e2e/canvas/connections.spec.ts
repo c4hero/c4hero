@@ -42,6 +42,14 @@ test.describe('Node Connections', () => {
     expect(box?.height ?? 0).toBe(0)
   })
 
+  test('arrow marker defs live inside the subtree image export clones (#207)', async ({ workspace }) => {
+    await workspace.loadSample()
+    // PNG/SVG export clones .react-flow__renderer; markers outside it are
+    // dropped and exported edges lose their arrowheads.
+    const marker = workspace.page.locator('.react-flow__renderer #c4-arrow')
+    await expect(marker).toBeAttached()
+  })
+
   // ─── Edge labels ─────────────────────────────────────────────────────────
 
   test('edge labels display the relationship description', async ({ workspace }) => {
