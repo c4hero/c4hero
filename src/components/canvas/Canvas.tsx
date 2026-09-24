@@ -14,7 +14,6 @@ import {
   type Connection,
   BackgroundVariant,
   reconnectEdge,
-  ViewportPortal,
 } from '@xyflow/react'
 import { applyAutoLayout } from '@/lib/canvasLayout'
 import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
@@ -161,10 +160,6 @@ function carryForwardMeasurements(nodes: Node[], measuredNodes: Node[]): Node[] 
     return measured ? { ...node, measured } : node
   })
 }
-
-// Constant style for the zero-size SVG that holds the arrow marker definition.
-// Hoisted so React never re-creates it on render.
-const MARKER_SVG_STYLE: React.CSSProperties = { position: 'absolute', width: 0, height: 0, overflow: 'hidden' }
 
 
 export default function Canvas() {
@@ -1201,58 +1196,6 @@ export default function Canvas() {
             style={minimapStyle}
           />
         )}
-        {/* Custom arrow marker — zero-size so it doesn't occupy canvas space.
-            Portaled into the viewport so it sits inside .react-flow__renderer,
-            the subtree image export clones; otherwise exported edges reference
-            markers that aren't in the image and lose their arrowheads. */}
-        <ViewportPortal>
-          <svg style={MARKER_SVG_STYLE}>
-            <defs>
-              <marker
-                id="c4-arrow"
-                viewBox="0 0 10 10"
-                refX="10"
-                refY="5"
-                markerWidth={8}
-                markerHeight={8}
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--canvas-edge, var(--color-edge))" />
-              </marker>
-              <marker
-                id="c4-arrow-selected"
-                viewBox="0 0 10 10"
-                refX="10"
-                refY="5"
-                markerWidth={8}
-                markerHeight={8}
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--canvas-selection, var(--color-accent))" />
-              </marker>
-              <marker
-                id="c4-dot"
-                viewBox="0 0 10 10"
-                refX="5"
-                refY="5"
-                markerWidth={6}
-                markerHeight={6}
-              >
-                <circle cx="5" cy="5" r="4" fill="var(--canvas-edge, var(--color-edge))" />
-              </marker>
-              <marker
-                id="c4-dot-selected"
-                viewBox="0 0 10 10"
-                refX="5"
-                refY="5"
-                markerWidth={6}
-                markerHeight={6}
-              >
-                <circle cx="5" cy="5" r="4" fill="var(--canvas-selection, var(--color-accent))" />
-              </marker>
-            </defs>
-          </svg>
-        </ViewportPortal>
       </ReactFlow>
       {canvasGuideOpen && <CanvasGuide onClose={closeCanvasGuide} />}
     </div>

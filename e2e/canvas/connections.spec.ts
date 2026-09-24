@@ -26,22 +26,22 @@ test.describe('Node Connections', () => {
 
   // ─── Arrow marker rendering ───────────────────────────────────────────────
 
-  test('arrow marker SVG does not take up canvas space (zero size)', async ({ workspace }) => {
-    await workspace.loadSample()
-    // The SVG wrapper around the marker defs should be zero-size
-    const markerSvg = workspace.page.locator('svg:has(#c4-arrow)')
-    const box = await markerSvg.first().boundingBox()
-    // Should be zero/hidden — not taking up visual space
-    expect(box?.width ?? 0).toBe(0)
-    expect(box?.height ?? 0).toBe(0)
-  })
-
-  test('arrow marker defs live inside the subtree image export clones (#207)', async ({ workspace }) => {
+  test('every edge marker resolves to a def inside the subtree image export clones (#207)', async ({ workspace }) => {
     await workspace.loadSample()
     // PNG/SVG export clones .react-flow__renderer; markers outside it are
     // dropped and exported edges lose their arrowheads.
-    const marker = workspace.page.locator('.react-flow__renderer #c4-arrow')
-    await expect(marker).toBeAttached()
+    const missing = await workspace.page.evaluate(() => {
+      const renderer = document.querySelector('.react-flow__renderer')!
+      const refs = Array.from(document.querySelectorAll('.react-flow__edge path[marker-end], .react-flow__edge path[marker-start]'))
+        .flatMap((p) => [p.getAttribute('marker-end'), p.getAttribute('marker-start')])
+        .filter((r): r is string => !!r)
+      if (refs.length === 0) return ['<no marker refs>']
+      return refs.filter((r) => {
+        const id = r.match(/^url\(#(.+)\)$/)?.[1]
+        return !id || !renderer.querySelector(`marker[id="${id}"]`)
+      })
+    })
+    expect(missing).toEqual([])
   })
 
   // ─── Edge labels ─────────────────────────────────────────────────────────

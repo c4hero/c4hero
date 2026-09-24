@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Exported PNG and SVG images now include relationship arrowheads (#207).
+- Relationship arrowheads and start dots take the relationship's own color
+  instead of always using the theme edge color.
 - Preserve saved layout for temporarily missing views and elements through model
   edits and repeated saves/reopens (#201). Existing sidecars need no migration.
   Explicit view/element deletion and layout reset still remove the affected
