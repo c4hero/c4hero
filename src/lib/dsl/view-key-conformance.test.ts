@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
-import { isConformantViewKey, sanitizeViewKey } from './viewKey'
+import { derivedViewKeyBase, isConformantViewKey, sanitizeViewKey } from './viewKey'
 import { applySidecar, extractSidecar } from '@/lib/sidecar'
 import { generateDefaultViews } from './auto-views'
 import { validateForStructurizr } from '@/lib/structurizrValidation'
@@ -211,6 +211,49 @@ describe('keys c4hero generates are conformant by construction', () => {
         expect(keys.length).toBeGreaterThan(0)
         for (const key of keys) expect(isConformantViewKey(key)).toBe(true)
         expect(keys).toContain('SystemContext-my-sys-1')
+    })
+})
+
+describe('generated and parsed views derive keys the same way (TEA-344)', () => {
+    it('builds a derived key from the sanitized ref, not by sanitizing the composed key', () => {
+        expect(derivedViewKeyBase('container', 'payments')).toBe('Containers-payments')
+        expect(derivedViewKeyBase('container', '-x')).toBe('Containers-x')
+        expect(derivedViewKeyBase('systemContext', 'my sys.1')).toBe('SystemContext-my-sys-1')
+        expect(derivedViewKeyBase('systemLandscape', undefined)).toBe('SystemLandscape')
+        expect(derivedViewKeyBase('component', '...')).toBe('Components')
+    })
+
+    it('gives every generated view the key the parser derives for its type and scope', () => {
+        // Awkward ids on purpose: a leading or trailing dash is where sanitizing
+        // the whole key and sanitizing only the ref used to disagree.
+        const el = (id: string, type: 'softwareSystem' | 'container' | 'component') => ({
+            id, type, name: id, tags: ['Element'], properties: {},
+        })
+        const ws: Workspace = {
+            name: 'T',
+            model: {
+                people: [],
+                softwareSystems: ['-x', 'y-', 'a.b', 'plain'].map((id) => ({
+                    ...el(id, 'softwareSystem'),
+                    containers: [{ ...el(`${id}-api`, 'container'), components: [el(`-${id}-c`, 'component')] }],
+                })),
+                relationships: [], groups: [], deploymentEnvironments: [],
+            },
+            views: {
+                systemLandscapeViews: [], systemContextViews: [], containerViews: [], componentViews: [],
+                dynamicViews: [], deploymentViews: [],
+                configuration: { styles: { elements: [], relationships: [] } },
+            },
+        } as unknown as Workspace
+        generateDefaultViews(ws)
+        const views = [
+            ...ws.views.systemLandscapeViews, ...ws.views.systemContextViews,
+            ...ws.views.containerViews, ...ws.views.componentViews,
+        ]
+        expect(views.length).toBe(13)
+        for (const view of views) {
+            expect(view.key).toBe(derivedViewKeyBase(view.type, view.containerId ?? view.softwareSystemId))
+        }
     })
 })
 

@@ -9,7 +9,7 @@ import type { Workspace, View, ViewType, AutoLayout, LayoutDirection, Model, Rel
 import type { ContextAwareParser } from './parser'
 import type { Token } from './lexer'
 import { parseStylesBody } from './parser-styles'
-import { isConformantViewKey, sanitizeViewKey } from './viewKey'
+import { derivedViewKeyBase, isConformantViewKey, sanitizeViewKey } from './viewKey'
 
 interface ViewsContainer {
     systemLandscapeViews: View[]
@@ -29,21 +29,6 @@ interface PendingViewKey {
     /** The view's opening keyword, so a warning points at the view's own line
      *  rather than at whatever token follows its closing brace. */
     at: Token
-}
-
-/** The Structurizr default-key convention, `Type-ScopeRef`. */
-function derivedKeyBase(view: View, elementRef: string | undefined): string {
-    const typeKey =
-        view.type === 'systemLandscape' ? 'SystemLandscape'
-        : view.type === 'systemContext' ? 'SystemContext'
-        : view.type === 'container' ? 'Containers'
-        : view.type === 'component' ? 'Components'
-        : view.type === 'dynamic' ? 'Dynamic'
-        : 'Deployment'
-    // The base of a derived key is sanitized too — an element ref carrying a
-    // dot or a space must not be able to originate a bad key either.
-    const ref = elementRef ? sanitizeViewKey(elementRef) : ''
-    return ref ? `${typeKey}-${ref}` : typeKey
 }
 
 /** Settle every parsed view's key in one pass: keep a conformant one exactly
@@ -112,7 +97,7 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
             )
         }
 
-        view.key = claim(derivedKeyBase(view, elementRef))
+        view.key = claim(derivedViewKeyBase(view.type, elementRef))
         view.autoKey = true
     }
 }
