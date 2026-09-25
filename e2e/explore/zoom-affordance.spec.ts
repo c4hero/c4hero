@@ -14,11 +14,13 @@ test('zoomable cards stand out only during zoom with no selection', async ({ pag
   await page.mouse.move(100, 400)
   await page.mouse.wheel(0, -40)
   await expect(host).toHaveAttribute('data-zoom-active', 'true')
-  expect(await card.evaluate(el => getComputedStyle(el, '::after').opacity)).toBe('1')
+  expect(await card.evaluate(el => getComputedStyle(el, '::after').boxShadow)).toBe('none')
+  await expect(card.locator('.semantic-frame')).toHaveCSS('border-width', '2px')
+  await expect(card.locator('.semantic-frame')).toHaveCSS('border-color', 'rgb(251, 191, 36)')
   await expect(card.locator('.semantic-frame')).toHaveCSS('opacity', '1')
   await expect(page.locator('.react-flow__node[data-id="customer"] .c4-node')).not.toHaveAttribute('data-semantic-expandable')
   await expect(host).not.toHaveAttribute('data-zoom-active', 'true')
-  expect(await card.evaluate(el => getComputedStyle(el, '::after').opacity)).toBe('0')
+  await expect(card.locator('.semantic-frame')).toHaveCSS('border-width', '1px')
   await expect(card.locator('.semantic-frame')).toHaveCSS('opacity', '0.52')
   for (const selection of ['element', 'relationship', 'group']) {
     await page.evaluate(selection => {

@@ -2473,21 +2473,16 @@ textarea:focus-visible {
   opacity: var(--semantic-content-opacity, 1);
 }
 
-/* A quiet affordance while zooming; no layout or border-size change. */
-.c4-node[data-semantic-expandable]::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 0;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--node-glow) 62%, transparent),
-    0 0 16px color-mix(in srgb, var(--node-glow) 32%, transparent);
-  transition: opacity 140ms ease;
+/* Distinguish zoom affordance from the outer selection glow. */
+[data-zoom-active="true"] .c4-node[data-semantic-expandable] {
+  --zoom-inset-opacity: 1;
+  --zoom-inset-width: 2px;
+  --zoom-inset-color: #fbbf24;
 }
-[data-zoom-active="true"] .c4-node[data-semantic-expandable] { --zoom-inset-opacity: 1; }
-[data-zoom-active="true"] .c4-node[data-semantic-expandable]::after { opacity: 1; }
-.c4-node .semantic-frame { transition: opacity 140ms ease; }
+[data-canvas-light] [data-zoom-active="true"] .c4-node[data-semantic-expandable] {
+  --zoom-inset-color: #a16207;
+}
+.c4-node .semantic-frame { transition: opacity 140ms ease, border-color 140ms ease; }
 @media (prefers-reduced-motion: reduce) {
-  .c4-node[data-semantic-expandable]::after, .c4-node .semantic-frame { transition: none; }
+  .c4-node .semantic-frame { transition: none; }
 }
