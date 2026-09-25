@@ -60,6 +60,10 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
     const cards = page.locator('.c4-node[data-semantic-expandable] > .semantic-frame')
     expect(await cards.count()).toBeGreaterThan(0)
     for (const frame of await cards.all()) {
+      const card = frame.locator('..')
+      await expect(card).toHaveCSS('animation-name', reducedMotion === 'reduce' ? 'none' : 'zoom-border-pulse')
+      if (reducedMotion !== 'reduce') await expect(card).toHaveCSS('animation-duration', '2s')
+      else await expect(card).toHaveCSS('border-color', await frame.evaluate(el => getComputedStyle(el).borderColor))
       await expect(frame).toHaveCSS('border-width', '2px')
       await expect(frame).toHaveCSS('animation-name', reducedMotion === 'reduce' ? 'none' : 'zoom-inset-pulse')
       if (reducedMotion !== 'reduce') await expect(frame).toHaveCSS('animation-duration', '2s')
