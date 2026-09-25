@@ -45,7 +45,21 @@ for (const [parent, from, to] of [
     }).toBeLessThan(1)
     // The preview must be painted above the enclosing card.
     expect(await path.evaluate(p => Number(getComputedStyle(p.closest('svg')!).zIndex))).toBeGreaterThan(14)
+    const nodeScale = () => page.evaluate(([from, to]) => Math.min(...[from, to].map(id => {
+      const card = document.querySelector(`.react-flow__node[data-id="${id}"] .c4-node`)!
+      const transform = getComputedStyle(card).transform
+      return transform === 'none' ? 1 : new DOMMatrix(transform).a
+    })), [from, to])
+    const previewWidth = await path.evaluate(p => parseFloat(getComputedStyle(p).strokeWidth))
+    const previewScale = await nodeScale()
+    expect(previewWidth / previewScale).toBeCloseTo(1.5, 3)
     await page.mouse.up()
-    await expect.poll(() => page.evaluate(([from, to]) => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.model.relationships.some(r => r.sourceId === from && r.destinationId === to), [from, to])).toBe(true)
+    const relationshipId = () => page.evaluate(([from, to]) => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.model.relationships.find(r => r.sourceId === from && r.destinationId === to)?.id, [from, to])
+    await expect.poll(relationshipId).toBeTruthy()
+    const edge = page.locator(`.react-flow__edge-path[id="${await relationshipId()}"]`)
+    await expect(edge).toBeVisible()
+    await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().clearSelection())
+    // Adding the relationship can refit the graph; compare at each rendered scale.
+    await expect.poll(async () => (await edge.evaluate(p => parseFloat(getComputedStyle(p).strokeWidth))) / (await nodeScale())).toBeCloseTo(previewWidth / previewScale, 3)
   })
 }

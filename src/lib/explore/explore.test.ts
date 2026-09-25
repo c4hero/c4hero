@@ -97,6 +97,14 @@ describe('Explore transitions', () => {
     expect(revealFor(n, 1, n.width, n.height)).toBe(1)
     expect(revealFor(n, .001, 1200, 800)).toBe(0)
   })
+  it('waits a little longer before starting system and container reveal', () => {
+    const map = buildLayout(createBigBankSample())
+    for (const [type, before, after] of [['softwareSystem', 275, 290], ['container', 300, 315]] as const) {
+      const node = map.nodes.find(n => n.element.type === type && n.children.length)!
+      expect(revealFor(node, before / node.width, 10000, 10000)).toBe(0)
+      expect(revealFor(node, after / node.width, 10000, 10000)).toBeGreaterThan(0)
+    }
+  })
   it('keeps the pointer world position fixed and interpolates zoom logarithmically', () => {
     const current = { x: 10, y: 20, zoom: .5 }, screen = { x: 300, y: 200 }, world = { x: 580, y: 360 }
     const target = zoomAt(current, 4, screen)

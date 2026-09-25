@@ -1,5 +1,5 @@
 import type { Box, MapNode } from './layout'
-export const TUNING = { system: [255, 350], container: [280, 380], occupancy: [.385, .55], cameraMs: 110, revealMs: 85, idleMs: 240 } as const
+export const TUNING = { system: [280, 350], container: [305, 380], occupancy: [.42, .55], cameraMs: 110, revealMs: 85, idleMs: 240 } as const
 export interface Camera { x: number; y: number; zoom: number }
 export interface Point { x: number; y: number }
 /** Integrate exponential drag in screen pixels, independent of frame rate. */
