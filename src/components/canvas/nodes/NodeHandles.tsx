@@ -1,4 +1,4 @@
-import { Handle, Position, useNodeId, useStore, useUpdateNodeInternals } from '@xyflow/react'
+import { Handle, Position, useNodeId, useStore, useUpdateNodeInternals, useStoreApi } from '@xyflow/react'
 import { useMemo, useEffect } from 'react'
 import {
   CENTER_SLOT,
@@ -40,6 +40,14 @@ function getHandleStyle(side: Side, slot: string): React.CSSProperties {
 
 export default function NodeHandles() {
   const nodeId = useNodeId()
+  const store = useStoreApi()
+  const prepareConnection = () => {
+    const data = nodeId ? store.getState().nodeLookup.get(nodeId)?.data : undefined
+    const scale = (data?.semantic as { scale: number } | undefined)?.scale ?? 1
+    // The drag handler captures this radius at pointer-down, before a
+    // connection exists. Set it before that handler runs, not on the next render.
+    store.setState({ connectionRadius: 40 * scale })
+  }
 
   // Only subscribe to edges connected to this node (avoids O(N*E) re-renders).
   // Shallow-compare by IDs so the component doesn't re-render when unrelated edges change.
@@ -112,7 +120,7 @@ export default function NodeHandles() {
             : 'c4-handle c4-handle-target c4-handle-hidden-extra !border-0'
 
           return (
-            <span key={`${side}-${slot}`}>
+            <span key={`${side}-${slot}`} onMouseDownCapture={prepareConnection} onTouchStartCapture={prepareConnection}>
               <Handle
                 type="target"
                 position={pos}

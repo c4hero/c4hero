@@ -1,3 +1,4 @@
+import ConnectionPreview from './edges/ConnectionPreview'
 import { useSemanticZoom } from './useSemanticZoom'
 import { useCanvasTouchPinch } from './useCanvasTouchPinch'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -1194,6 +1195,8 @@ export default function Canvas() {
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
+        connectionLineComponent={ConnectionPreview}
+        connectionLineContainerStyle={{ zIndex: 1001, pointerEvents: 'none' }}
         onConnect={onConnect}
         onReconnect={onReconnect}
         onPaneClick={onPaneClick}
