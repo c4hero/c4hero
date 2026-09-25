@@ -54,7 +54,7 @@ export function useSemanticZoom(
     if (!layout || !workspace || !view) return []
     const nested = layout.nodes.filter(n => n.parent)
     const nestedView: View = { ...view, elements: nested.map(n => ({ id: n.id, x: n.x, y: n.y, ...view.exploreLayout?.elements?.[n.id] })) }
-    return buildNodes(workspace, nestedView, id => controller.current?.focus(id), filters, viewCounts, buildDrillableSet(workspace), theme)
+    return buildNodes(workspace, nestedView, id => useWorkspaceStore.getState().zoomInto(id), filters, viewCounts, buildDrillableSet(workspace), theme)
   }, [layout, workspace, view, filters, theme, viewCounts])
 
   const connections = useMemo(() => layout && workspace && view ? connectionsFor(layout, workspace.model.relationships, view).connections : [], [layout, workspace, view])
@@ -88,7 +88,8 @@ export function useSemanticZoom(
       const alpha = opacity(edge.id)
       // Each edge sits above its enclosing cards and below its endpoints.
       const zIndex = 9 + 2 * Math.max(depth(from), depth(to))
-      return { ...edge, zIndex, hidden: alpha < .002,
+      const selected = useWorkspaceStore.getState().selectedRelationshipId === edge.id
+      return { ...edge, selected, zIndex, hidden: alpha < .002, reconnectable: edge.reconnectable !== false && selected,
         data: { ...edge.data, sourceScale: from.scale, targetScale: to.scale, semanticAlpha: alpha, semanticZIndex: zIndex },
       }
     })

@@ -130,7 +130,6 @@ export const createNavigationSlice: StateCreator<
   }),
 
   drillInto: (elementId) => {
-    if (get().rendererMode === 'explore') { getActiveCamera()?.focus(elementId); return }
     set((s) => {
       if (!s.workspace || !s.activeViewKey) return
       const childView = findChildView(s.workspace, elementId)
@@ -152,7 +151,6 @@ export const createNavigationSlice: StateCreator<
 
   zoomInto: (elementId) => {
     const s = get()
-    if (s.rendererMode === 'explore') { getActiveCamera()?.focus(elementId); return }
     if (!s.workspace || !s.activeViewKey) return
     // Existing child view? Navigate like drillInto.
     const childView = findChildView(s.workspace, elementId, s.activeViewKey)

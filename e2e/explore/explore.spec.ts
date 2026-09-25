@@ -233,7 +233,7 @@ test.describe('mobile appearance', () => {
     // Hidden descendants may be present in React Flow, but roots are never duplicated.
     await expect(page.locator('.react-flow')).toHaveCount(1)
     await expect(page.locator('.react-flow__node[data-id="customer"]')).toHaveCount(1)
-    await expect(page.getByRole('button', { name: /Zoom into / })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Zoom into Internet Banking System', exact: true })).toBeVisible()
     for (const frame of result.frames) {
       expect(frame.cards).toEqual(result.before)
       expect(frame.camera).toBe(result.camera)

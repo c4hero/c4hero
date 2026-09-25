@@ -308,9 +308,13 @@ describe('BaseC4Node zoom button', () => {
   })
 })
 
-it('hides the drill-in magnifier while semantic Zoom is active', () => {
+it('keeps the view navigation magnifier active during semantic Zoom', () => {
   useWorkspaceStore.setState({ rendererMode: 'explore' })
-  renderNode({ data: { childCount: 2 } })
-  expect(screen.queryByRole('button', { name: /Zoom into/ })).toBeNull()
+  const onDrillIn = vi.fn()
+  const { node } = renderNode({ data: { childCount: 2, onDrillIn } })
+  const button = node.querySelector<HTMLButtonElement>('.c4-node-action-btn')!
+  expect(button.closest('[inert], [aria-hidden="true"]')).toBeNull()
+  fireEvent.click(button)
+  expect(onDrillIn).toHaveBeenCalledWith('sys-1')
   act(() => useWorkspaceStore.setState({ rendererMode: 'diagram' }))
 })

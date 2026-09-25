@@ -42,7 +42,6 @@ export default function BaseC4Node({
   technology,
   isExternal,
 }: BaseC4NodeProps) {
-  const semanticZoom = useWorkspaceStore(s => s.rendererMode === 'explore')
   const storeSelected = useWorkspaceStore((s) => s.selectedElementIds.includes(data.element.id))
   // useShallow does a shallow array compare so the inline filter doesn't
   // create a "new reference every render → infinite re-render" loop.
@@ -213,7 +212,7 @@ export default function BaseC4Node({
             </span>
           )}
           {childCount !== undefined && (
-            <ZoomButton element={element} typeColor={resolvedTypeColor} onDrillIn={onDrillIn} hidden={semanticZoom} />
+            <ZoomButton element={element} typeColor={resolvedTypeColor} onDrillIn={onDrillIn} />
           )}
         </div>
       </div>
@@ -289,8 +288,7 @@ export default function BaseC4Node({
 }
 
 /** Zoom button with hover card popover */
-function ZoomButton({ element, typeColor, onDrillIn, hidden = false }: {
-  hidden?: boolean
+function ZoomButton({ element, typeColor, onDrillIn }: {
   element: C4NodeData['element']
   typeColor: string
   onDrillIn?: (id: string) => void
@@ -309,9 +307,7 @@ function ZoomButton({ element, typeColor, onDrillIn, hidden = false }: {
 
   return (
     <div
-      aria-hidden={hidden}
-      inert={hidden}
-      style={{ position: 'relative', visibility: hidden ? 'hidden' : undefined }}
+      style={{ position: 'relative' }}
       onMouseEnter={show}
       onMouseLeave={scheduleHide}
     >

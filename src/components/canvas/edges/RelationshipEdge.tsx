@@ -125,7 +125,7 @@ function RelationshipEdge({
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={20}
+        strokeWidth={20 * semanticScale}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{ pointerEvents: 'stroke' }}
@@ -133,6 +133,7 @@ function RelationshipEdge({
       <BaseEdge
         id={id}
         path={edgePath}
+        interactionWidth={20 * semanticScale}
         style={{
           stroke: strokeColor,
           strokeWidth,
