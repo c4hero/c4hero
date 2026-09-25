@@ -65,7 +65,7 @@ export function useSemanticZoom(
       if (!n) return node.data.element ? { ...node, hidden: true } : node
       const alpha = visibility(n, reveal), amount = reveal.get(n.id) ?? 0
       return { ...node,
-        ...(n.parent ? { measured: measurements.current.get(n.id) ?? { width: n.width, height: n.height }, position: { x: n.x, y: n.y }, hidden: alpha < .002, zIndex: 10 + depth(n),
+        ...(n.parent ? { measured: measurements.current.get(n.id) ?? { width: n.width, height: n.height }, position: { x: n.x, y: n.y }, hidden: alpha < .002, zIndex: 10 + 2 * depth(n),
           selected: useWorkspaceStore.getState().selectedElementIds.includes(n.id),
           style: { ...node.style, width: n.width, height: n.height, opacity: intrinsic.has(n.id) ? alpha : 0, pointerEvents: alpha > .5 ? undefined : 'none' }, selectable: alpha > .5, draggable: node.draggable !== false && alpha > .5 && !view.exploreLayout?.locked && !view.exploreLayout?.elements?.[n.id]?.locked,
         } : {}),
@@ -78,8 +78,10 @@ export function useSemanticZoom(
     const nestedEdges = buildEdges(workspace, nestedView, renderedNodes, filters).map(edge => {
       const from = layout.byId.get(edge.source)!, to = layout.byId.get(edge.target)!
       const alpha = Math.min(visibility(from, reveal), visibility(to, reveal))
-      return { ...edge, hidden: alpha < .002, style: { ...edge.style, opacity: alpha },
-        data: { ...edge.data, sourceScale: from.scale, targetScale: to.scale, semanticAlpha: alpha },
+      // Each edge sits above its enclosing cards and below its endpoints.
+      const zIndex = 9 + 2 * Math.max(depth(from), depth(to))
+      return { ...edge, zIndex, hidden: alpha < .002, style: { ...edge.style, opacity: alpha },
+        data: { ...edge.data, sourceScale: from.scale, targetScale: to.scale, semanticAlpha: alpha, semanticZIndex: zIndex },
       }
     })
     renderedEdges = [...edges, ...nestedEdges.filter(e => !edges.some(root => root.id === e.id))]

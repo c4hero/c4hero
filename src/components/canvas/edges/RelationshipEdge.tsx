@@ -14,6 +14,7 @@ import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels
 interface RelationshipEdgeData {
   sourceScale?: number
   targetScale?: number
+  semanticZIndex?: number
   semanticAlpha?: number
   relationship: Relationship
   relationshipStyle?: RelationshipStyle
@@ -191,6 +192,7 @@ function RelationshipEdge({
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px) scale(${semanticScale})`,
               opacity: data?.semanticAlpha,
+              zIndex: data?.semanticZIndex,
               maxWidth: labelMaxWidth,
               padding: labelDensity === 'compact' ? '3px 7px' : '4px 8px',
               borderRadius: 10,
