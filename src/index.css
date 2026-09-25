@@ -2480,7 +2480,13 @@ textarea:focus-visible {
   --zoom-inset-width: 2px;
   --zoom-inset-color: color-mix(in srgb, var(--node-glow) 25%, white);
 }
-.c4-node .semantic-frame { transition: opacity 140ms ease, border-color 140ms ease; }
+.c4-node .semantic-frame {
+  transition: opacity 900ms ease-out, border-color 900ms ease-out, border-width 900ms ease-out;
+}
+[data-zoom-active="true"] .c4-node[data-semantic-expandable] > .semantic-frame,
+[data-zoom-pulse="true"] .c4-node[data-semantic-expandable] > .semantic-frame {
+  transition-duration: 140ms;
+}
 [data-zoom-pulse="true"] .c4-node[data-semantic-expandable] {
   animation: zoom-border-pulse 2s ease-in-out;
 }
@@ -2489,7 +2495,7 @@ textarea:focus-visible {
 }
 @keyframes zoom-inset-pulse {
   0%, 100% { opacity: .35; }
-  40%, 60% { opacity: 1; }
+  20%, 35% { opacity: 1; }
 }
 @keyframes zoom-border-pulse {
   0%, 100% { border-color: var(--node-glow); }
