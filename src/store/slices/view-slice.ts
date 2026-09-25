@@ -3,7 +3,7 @@ import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews } from '../workspace-helpers'
+import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews, orphanedLayoutViewKeys } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 
 /** View management: create / delete / rename / duplicate views, plus the
@@ -11,7 +11,7 @@ import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
  *  reset+relayout, drag-position updates, auto-layout sync) and the
  *  layoutVersion epoch. */
 export type ViewSlice = Pick<WorkspaceState,
-  | 'addView' | 'deleteView' | 'renameView' | 'duplicateView'
+  | 'addView' | 'deleteView' | 'pruneOrphanedViewLayout' | 'renameView' | 'duplicateView'
   | 'toggleElementInView' | 'removeElementsFromView' | 'removeRelationshipFromView' | 'restoreRelationshipToView' | 'setLayoutDirection' | 'resetAndRelayout'
   | 'updateNodePosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
   | 'setElementsLocked' | 'unlockAllInView' | 'setViewLocked'
@@ -78,6 +78,16 @@ export const createViewSlice: StateCreator<
       s.selectedGroupId = null
     }
     s.viewHistory = s.viewHistory.filter(k => k !== key)
+  }),
+
+  pruneOrphanedViewLayout: () => set((s) => {
+    if (!s.workspace?.savedLayout) return
+    const keys = orphanedLayoutViewKeys(s.workspace)
+    if (keys.length === 0) return
+    pushUndoSnapshot(s)
+    for (const key of keys) delete s.workspace.savedLayout[key]
+    // Keep the empty record: extractSidecar must write `views: {}` so an old
+    // on-disk sidecar cannot resurrect the entries on the next reopen.
   }),
 
   renameView: (key, title) => set((s) => {

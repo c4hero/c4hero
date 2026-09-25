@@ -240,6 +240,16 @@ export function collectTakenIds(ws: Workspace): Set<string> {
   return taken
 }
 
+/** Saved view-layout entries that do not belong to any view currently in the
+ * workspace. They are retained intentionally across reparses, but can become
+ * permanent after a view is deliberately removed in the DSL code pane. */
+export function orphanedLayoutViewKeys(ws: Workspace): string[] {
+  const liveViewKeys = new Set(allViewsOf(ws).map((view) => view.key))
+  return Object.keys(ws.savedLayout ?? {})
+    .filter((key) => !liveViewKeys.has(key))
+    .sort((a, b) => a.localeCompare(b))
+}
+
 /** Keep collision checks and the rename cascade on the same key mapping. */
 function renamedAutoViewKey(view: View, oldId: string, newId: string): string {
   return view.autoKey

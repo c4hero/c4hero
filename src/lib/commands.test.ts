@@ -342,6 +342,35 @@ describe('view commands', () => {
     expect(getAllViews(store().workspace!).length).toBe(before + 1)
   })
 
+  it('clean-up-orphaned-layout lists and removes only retained views that are absent', () => {
+    const workspace = makeWorkspace()
+    workspace.savedLayout = {
+      landscape: { elements: { alice: { pinned: true, x: 10, y: 20 } } },
+      'Deleted view': { locked: true },
+      'Older deleted view': { elements: { alice: { pinned: true, x: 30, y: 40 } } },
+    }
+    store().loadWorkspace(workspace)
+
+    const cmd = command('clean-up-orphaned-layout')
+    expect(cmd.when!()).toBe(true)
+    cmd.execute()
+    expect(store().pendingDelete?.message).toContain('2 orphaned layout entries')
+    expect(store().pendingDelete?.details).toEqual(['Deleted view', 'Older deleted view'])
+
+    store().pendingDelete!.onConfirm()
+    expect(store().workspace!.savedLayout).toEqual({
+      landscape: { elements: { alice: { pinned: true, x: 10, y: 20 } } },
+    })
+    expect(command('clean-up-orphaned-layout').when!()).toBe(false)
+
+    store().undo()
+    expect(store().workspace!.savedLayout).toEqual(workspace.savedLayout)
+  })
+
+  it('clean-up-orphaned-layout is unavailable when every saved entry has a live view', () => {
+    expect(command('clean-up-orphaned-layout').when!()).toBe(false)
+  })
+
   it('toggle-minimap and toggle-snap-to-grid flip their settings', () => {
     command('toggle-minimap').execute()
     expect(store().minimapEnabled).toBe(false)

@@ -7,7 +7,7 @@ import {
   Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff, FileInput, FolderDown, BookOpen,
 } from 'lucide-react'
 import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
-import { computeCascadeImpact } from '@/store/workspace-helpers'
+import { computeCascadeImpact, orphanedLayoutViewKeys } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
@@ -360,6 +360,34 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       execute: () => {
         const s = store()
         if (s.activeViewKey) s.duplicateView(s.activeViewKey)
+      },
+    },
+    {
+      id: 'clean-up-orphaned-layout',
+      label: 'Clean Up Orphaned View Layout',
+      category: 'view',
+      icon: Trash2,
+      keywords: ['cleanup', 'orphan', 'layout', 'sidecar', 'positions', 'prune'],
+      when: () => {
+        const workspace = store().workspace
+        return !!workspace && orphanedLayoutViewKeys(workspace).length > 0
+      },
+      execute: () => {
+        const s = store()
+        if (!s.workspace) return
+        const keys = orphanedLayoutViewKeys(s.workspace)
+        if (keys.length === 0) return
+        const noun = keys.length === 1 ? 'entry' : 'entries'
+        s.confirmDelete(
+          {
+            message: `Permanently delete ${keys.length} orphaned layout ${noun}? These views are not currently in the DSL and will lose their saved positions if restored:`,
+            details: keys,
+          },
+          () => {
+            store().pruneOrphanedViewLayout()
+            announce(`Deleted ${keys.length} orphaned layout ${noun}`)
+          },
+        )
       },
     },
     {
