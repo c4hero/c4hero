@@ -3,10 +3,10 @@ import { expect, it } from 'vitest'
 import { useAnchoredPopover } from './useAnchoredPopover'
 
 function Picker() {
-  const popover = useAnchoredPopover({ width: 240 })
+  const { triggerRef, popupRef, toggle, open } = useAnchoredPopover({ width: 240 })
   return <>
-    <button ref={popover.triggerRef} onClick={popover.toggle}>Open picker</button>
-    {popover.open && <div ref={popover.popupRef} role="listbox"><div data-testid="options">Options</div></div>}
+    <button ref={triggerRef} onClick={toggle}>Open picker</button>
+    {open && <div ref={popupRef} role="listbox"><div data-testid="options">Options</div></div>}
     <div data-testid="outside">Outside</div>
   </>
 }
