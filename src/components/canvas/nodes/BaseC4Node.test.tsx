@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ReactFlow, type NodeProps } from '@xyflow/react'
 import { Box } from 'lucide-react'
 import BaseC4Node from './BaseC4Node'
@@ -306,4 +306,11 @@ describe('BaseC4Node zoom button', () => {
     await new Promise((r) => setTimeout(r, 250))
     expect(screen.queryByText('New diagram')).not.toBeNull()
   })
+})
+
+it('hides the drill-in magnifier while semantic Zoom is active', () => {
+  useWorkspaceStore.setState({ rendererMode: 'explore' })
+  renderNode({ data: { childCount: 2 } })
+  expect(screen.queryByRole('button', { name: /Zoom into/ })).toBeNull()
+  act(() => useWorkspaceStore.setState({ rendererMode: 'diagram' }))
 })

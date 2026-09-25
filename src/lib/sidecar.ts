@@ -37,6 +37,7 @@ interface SidecarViewElement {
 }
 
 interface SidecarView {
+  exploreLayout?: Workspace['exploreLayout']
   /** View-level layout lock (freezes Auto-arrange + dragging for the view). */
   locked?: boolean
   elements?: Record<string, SidecarViewElement>
@@ -74,6 +75,7 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
 
 function isSidecarView(value: unknown): value is SidecarView {
   if (!isRecord(value)) return false
+  if ('exploreLayout' in value && value.exploreLayout !== undefined && !isSidecarData({ version: 1, explore: value.exploreLayout })) return false
   if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
   return true
@@ -195,6 +197,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       const viewData = sidecar.views[view.key]
         ?? (view.originalKey ? sidecar.views[view.originalKey] : undefined)
       if (!viewData) continue
+      if (viewData.exploreLayout) view.exploreLayout = structuredClone(viewData.exploreLayout)
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue
       for (const el of view.elements) {

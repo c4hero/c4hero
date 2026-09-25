@@ -195,6 +195,8 @@ export interface AutoLayout {
 }
 
 export interface View {
+  /** Semantic zoom layout for this view, stored in the sidecar. */
+  exploreLayout?: Workspace['exploreLayout']
   type: ViewType
   key: string
   /** Import-only alias for layout saved before the parser normalized the key. */
@@ -314,6 +316,7 @@ export interface IncludedFile {
  * it while its view is absent.
  */
 export interface StoredViewLayout {
+  exploreLayout?: Workspace['exploreLayout']
   /** View-level layout lock. */
   locked?: boolean
   elements?: Record<string, { pinned?: boolean; locked?: boolean; x?: number; y?: number }>
@@ -321,7 +324,7 @@ export interface StoredViewLayout {
 
 export interface Workspace {
   /** Explore-only layout, persisted in the sidecar and included in undo. */
-  exploreLayout?: StoredViewLayout & { direction?: LayoutDirection; hiddenIds?: string[] }
+  exploreLayout?: Omit<StoredViewLayout, 'exploreLayout'> & { direction?: LayoutDirection; hiddenIds?: string[] }
   name?: string
   description?: string
   scope?: WorkspaceScope

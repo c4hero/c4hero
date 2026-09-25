@@ -1,3 +1,5 @@
+import { wrapText } from './text'
+import { zoomElements } from './editing'
 import { applyAutoLayout, BOUNDARY_PADDING_TOP } from '@/lib/canvasLayout'
 import type { View } from '@/types/model'
 import type { ModelElement, Relationship, Workspace } from '@/types/model'
@@ -6,6 +8,7 @@ export const HEADER_HEIGHT = { softwareSystem: BOUNDARY_PADDING_TOP, container: 
 
 export interface Box { x: number; y: number; width: number; height: number }
 export interface MapNode extends Box {
+  headerHeight?: number
   scale: number; id: string; element: ModelElement; parent?: MapNode; children: MapNode[]; root: MapNode
 }
 export interface MapLayout { nodes: MapNode[]; roots: MapNode[]; byId: Map<string, MapNode>; bounds: Box }
@@ -25,17 +28,21 @@ export function contains(parent: MapNode, child: MapNode): boolean {
   return false
 }
 
-export function buildLayout(workspace: Workspace): MapLayout {
+export function buildLayout(workspace: Workspace, activeView?: View, snapshot?: Map<string, Box>, useSnapshotPositions = true, intrinsic?: Map<string, { width: number; height: number; headerHeight?: number }>): MapLayout {
+  const zoomLayout = activeView ? activeView.exploreLayout : workspace.exploreLayout
   const nodes: MapNode[] = [], byId = new Map<string, MapNode>()
-  const hidden = new Set(workspace.exploreLayout?.hiddenIds)
+  const hidden = new Set(zoomLayout?.hiddenIds)
+  const eligible = zoomElements(workspace, activeView)
+  const eligibleIds = new Set(eligible.map(e => e.id))
+  const childIds = new Set(eligible.flatMap(e => e.type === 'softwareSystem' ? e.containers.map(c => c.id) : e.type === 'container' ? e.components.map(c => c.id) : []))
   function adapt(element: ModelElement, parent?: MapNode): MapNode {
     const n = { id: element.id, element, parent, children: [], scale: 1, x: 0, y: 0, width: 0, height: 0 } as unknown as MapNode
     n.root = parent?.root ?? n
     nodes.push(n); byId.set(n.id, n)
-    n.children = (element.type === 'softwareSystem' ? element.containers : element.type === 'container' ? element.components : []).filter(e => !hidden.has(e.id)).map(e => adapt(e, n))
+    n.children = (element.type === 'softwareSystem' ? element.containers : element.type === 'container' ? element.components : []).filter(e => eligibleIds.has(e.id) && !hidden.has(e.id)).map(e => adapt(e, n))
     return n
   }
-  const roots = [...workspace.model.people, ...workspace.model.softwareSystems].filter(e => !hidden.has(e.id)).map(e => adapt(e))
+  const roots = eligible.filter(e => !childIds.has(e.id) && !hidden.has(e.id)).map(e => adapt(e))
   function arrange(siblings: MapNode[], parent?: MapNode) {
     if (!siblings.length) return { width: 0, height: 0 }
     const ids = new Set(siblings.map(n => n.id))
@@ -54,36 +61,46 @@ export function buildLayout(workspace: Workspace): MapLayout {
       : v.type === 'systemLandscape')
     // Prefer the Diagram view that places the most nodes at this C4 level.
     // Absolute canvas offsets are normalized below; relative ordering survives.
-    const authored = matching.sort((a, b) => b.elements.filter(e => ids.has(e.id) && e.x !== undefined && e.y !== undefined).length - a.elements.filter(e => ids.has(e.id) && e.x !== undefined && e.y !== undefined).length)[0]
-    const useAuthoredPositions = !workspace.exploreLayout?.direction
+    const authored = (!parent && activeView) || matching.sort((a, b) => b.elements.filter(e => ids.has(e.id) && e.x !== undefined && e.y !== undefined).length - a.elements.filter(e => ids.has(e.id) && e.x !== undefined && e.y !== undefined).length)[0]
+    const useAuthoredPositions = !zoomLayout?.direction
     const saved = new Map(useAuthoredPositions ? authored?.elements.filter(e => ids.has(e.id) && e.x !== undefined && e.y !== undefined).map(e => [e.id, { x: e.x!, y: e.y! }]) ?? [] : [])
+    if (!parent && useSnapshotPositions && snapshot) for (const n of siblings) {
+      const box = snapshot.get(n.id)
+      if (box) saved.set(n.id, { x: box.x, y: box.y })
+    }
     const view: View = { type: authored?.type ?? 'systemLandscape', key: '__explore', elements: siblings.map(n => ({ id: n.id, ...saved.get(n.id) })), relationships: [] }
-    const directions = workspace.exploreLayout?.direction ? [workspace.exploreLayout.direction] : saved.size ? [authored?.autoLayout?.direction ?? 'TB'] : parent ? ['LR', 'TB'] : [authored?.autoLayout?.direction ?? 'TB']
+    const directions = zoomLayout?.direction ? [zoomLayout.direction] : saved.size ? [authored?.autoLayout?.direction ?? 'TB'] : parent ? ['LR', 'TB'] : [authored?.autoLayout?.direction ?? 'TB']
     const candidates = directions.map(direction => {
       const arranged = applyAutoLayout(siblings.map(n => ({ id: n.id, data: {}, position: saved.get(n.id) ?? { x: 0, y: 0 }, style: { width: n.width, height: n.height } })),
         edges, view, workspace.model.groups, direction, new Set(), [], parent ? { ranksep: 80, nodesep: 48 } : undefined)
       const width = Math.max(...arranged.map(n => n.position.x + byId.get(n.id)!.width)) - Math.min(...arranged.map(n => n.position.x))
       const height = Math.max(...arranged.map(n => n.position.y + byId.get(n.id)!.height)) - Math.min(...arranged.map(n => n.position.y))
-      return { arranged, fit: parent ? Math.min((parent.width - 28) / width, (parent.height - 54) / height) : 1 }
+      return { arranged, fit: parent ? Math.min((parent.width - 28) / width, Math.max(8, parent.height - (parent.headerHeight ?? 48) - 14) / height) : 1 }
     })
     // Prefer the orientation that makes children largest in the available body;
     // LR wins ties. This is computed once, never during zoom/reveal.
     const arranged = candidates.sort((a, b) => b.fit - a.fit)[0].arranged
     const minX = Math.min(...arranged.map(n => n.position.x)), minY = Math.min(...arranged.map(n => n.position.y))
-    for (const n of arranged) { const target = byId.get(n.id)!; target.x = n.position.x - minX; target.y = n.position.y - minY }
+    for (const n of arranged) { const target = byId.get(n.id)!; target.x = n.position.x - (!parent && activeView ? 0 : minX); target.y = n.position.y - (!parent && activeView ? 0 : minY) }
     return { width: Math.max(...siblings.map(n => n.x + n.width)), height: Math.max(...siblings.map(n => n.y + n.height)) }
   }
 
   function measure(n: MapNode) {
+    n.headerHeight = intrinsic?.get(n.id)?.headerHeight ?? (n.parent ? 64 : 48)
     n.children.forEach(measure)
-    n.width = Math.max(200, Math.min(280, n.element.name.length * 7 + 52))
-    n.height = 120
+    n.width = (!n.parent && snapshot?.get(n.id)?.width) || 280
+    // A conservative initial box for descendants. Rendering and typography are
+    // owned entirely by the native card components, not a second text painter.
+    const titleLines = Math.min(2, wrapText(n.element.name, 220, text => text.length * 7.7).length)
+    const descriptionLines = Math.min(3, wrapText(n.element.description ?? '', 248, text => text.length * 6.05).length)
+    n.height = (!n.parent && snapshot?.get(n.id)?.height) || Math.max(100, 36 + Math.max(26, titleLines * 18.2) + (descriptionLines ? 6 + descriptionLines * 15.4 : 0) + 24)
+    if (n.parent && intrinsic?.has(n.id)) { n.width = intrinsic.get(n.id)!.width; n.height = intrinsic.get(n.id)!.height }
     if (!n.children.length) return
     const inner = arrange(n.children, n)
     // Each level has its own Diagram coordinate scale. Fit its already-laid-out
     // graph inside a normal card once, rather than inflating every ancestor.
-    const padding = 14, header = 40
-    const factor = Math.min((n.width - padding * 2) / inner.width, (n.height - header - padding) / inner.height)
+    const padding = 14, header = n.headerHeight!
+    const factor = Math.min((n.width - padding * 2) / inner.width, Math.max(8, n.height - header - padding) / inner.height)
     const shrink = (child: MapNode) => {
       child.x *= factor; child.y *= factor; child.width *= factor; child.height *= factor; child.scale *= factor
       child.children.forEach(shrink)
@@ -99,7 +116,9 @@ export function buildLayout(workspace: Workspace): MapLayout {
   function translate(n: MapNode) { for (const c of n.children) { c.x += n.x; c.y += n.y; translate(c) } }
   roots.forEach(translate)
   for (const n of nodes) {
-    const saved = workspace.exploreLayout?.elements?.[n.id]
+    // The incoming renderer owns root positions during a mode handoff.
+    // Persisted Zoom positions may predate a drag in the normal view.
+    const saved = !n.parent && useSnapshotPositions && snapshot?.has(n.id) ? snapshot.get(n.id) : zoomLayout?.elements?.[n.id]
     if (saved?.x === undefined || saved.y === undefined) continue
     const dx = (n.parent?.x ?? 0) + saved.x * n.scale - n.x
     const dy = (n.parent?.y ?? 0) + saved.y * n.scale - n.y
@@ -116,11 +135,18 @@ export function translateSubtree(node: MapNode, dx: number, dy: number) {
 
 export interface Connection { relationship: Relationship; from: MapNode; to: MapNode; external: boolean }
 export interface Bundle { key: string; from: MapNode; to: MapNode; connections: Connection[] }
-export function connectionsFor(layout: MapLayout, relationships: Relationship[]) {
+export function connectionsFor(layout: MapLayout, relationships: Relationship[], view?: View) {
   const connections: Connection[] = [], bundles = new Map<string, Bundle>()
+  const authored = view && new Set(view.relationships.map(r => r.id))
+  const seen = new Set<string>()
   for (const relationship of relationships) {
+    if (seen.has(relationship.id)) continue
+    seen.add(relationship.id)
     const from = layout.byId.get(relationship.sourceId), to = layout.byId.get(relationship.destinationId)
     if (!from || !to) continue // Deployment instances never enter the static map.
+    // Hidden descendants never add overview edges. Root-to-root membership is
+    // exactly the authored view; actual child edges appear with their endpoints.
+    if (authored && !from.parent && !to.parent && !authored.has(relationship.id)) continue
     const c = { relationship, from, to, external: from.root !== to.root }
     connections.push(c)
     if (!c.external) continue

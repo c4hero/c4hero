@@ -9,7 +9,6 @@ import {
   Trash2,
   Check,
   Copy,
-  Compass,
 } from 'lucide-react'
 
 interface ViewSwitcherProps {
@@ -23,7 +22,6 @@ interface ViewSwitcherProps {
 export default function ViewSwitcher({ isMobile, open, onToggle }: ViewSwitcherProps) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const rendererMode = useWorkspaceStore((s) => s.rendererMode)
 
   if (!workspace) return null
 
@@ -68,9 +66,9 @@ export default function ViewSwitcher({ isMobile, open, onToggle }: ViewSwitcherP
               minWidth: 0,
             }}
           >
-            {rendererMode === 'explore' ? 'Explore' : activeView?.title ?? activeViewKey ?? 'No view'}
+            {activeView?.title ?? activeViewKey ?? 'No view'}
           </span>
-          {rendererMode === 'diagram' && activeView && (
+          {activeView && (
             <span
               style={{
                 fontSize: 'var(--text-xs)',
@@ -97,8 +95,6 @@ export default function ViewSwitcher({ isMobile, open, onToggle }: ViewSwitcherP
 export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () => void; onShowCreateView: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const rendererMode = useWorkspaceStore((s) => s.rendererMode)
-  const setRendererMode = useWorkspaceStore((s) => s.setRendererMode)
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   const deleteView = useWorkspaceStore((s) => s.deleteView)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
@@ -138,28 +134,6 @@ export function ViewSwitcherPanel({ onClose, onShowCreateView }: { onClose: () =
         }}>
         {/* Views grouped by type */}
         <div style={{ padding: '12px 0' }}>
-          <div style={{ padding: '0 8px 12px', borderBottom: '1px solid var(--color-border)', marginBottom: 10 }}>
-            <button
-              type="button"
-              aria-label="Explore workspace"
-              aria-current={rendererMode === 'explore' ? 'page' : undefined}
-              className="hover-subtle-inactive"
-              data-active={rendererMode === 'explore' ? 'true' : undefined}
-              onClick={() => { setRendererMode('explore'); onClose(); setRenamingViewKey(null) }}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 8px', textAlign: 'left', border: 'none', borderRadius: 'var(--radius-sm)',
-                background: rendererMode === 'explore' ? 'var(--color-accent-subtle)' : 'transparent',
-                color: rendererMode === 'explore' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', cursor: 'pointer',
-              }}
-            >
-              <Compass size={16} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-              <span style={{ minWidth: 0 }}>
-                <strong style={{ display: 'block', fontSize: 'var(--text-base)' }}>Explore workspace</strong>
-                <span style={{ display: 'block', marginTop: 2, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Navigate the architecture with semantic zoom</span>
-              </span>
-            </button>
-          </div>
           {Object.entries(viewsByType).map(([type, typeViews]) => (
             <div key={type}>
               <div className="flyout-label" style={{ padding: '4px 16px 6px', letterSpacing: '0.12em' }}>

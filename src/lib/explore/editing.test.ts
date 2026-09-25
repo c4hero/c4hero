@@ -3,21 +3,21 @@ import { createBigBankSample } from '@/lib/templates'
 import { useWorkspaceStore } from '@/store/workspace'
 import { extractSidecar, applySidecar, parseSidecar } from '@/lib/sidecar'
 import { buildLayout } from './layout'
-import { creatableTypes } from './editing'
+import { creatableTypes, zoomLayoutOwner } from './editing'
 
 describe('Explore editing', () => {
   it('persists layout separately and supports undo/redo without altering Diagram coordinates', () => {
     const s = useWorkspaceStore
     s.getState().loadWorkspace(createBigBankSample()); s.getState().setRendererMode('explore')
-    const original = s.getState().workspace!, views = JSON.stringify(original.views), id = original.model.softwareSystems[0].id
+    const original = s.getState().workspace!, key = s.getState().activeViewKey!, view = zoomLayoutOwner(original, key), id = original.model.softwareSystems[0].id
     s.getState().updateExploreLayout({ elements: { [id]: { x: 321, y: 456, pinned: true, locked: true } }, direction: 'LR' })
     const ws = s.getState().workspace!, restored = createBigBankSample()
     const sidecar = extractSidecar(ws)!
     applySidecar(restored, sidecar)
-    expect(buildLayout(restored).byId.get(id)).toMatchObject({ x: 321, y: 456 })
-    expect(JSON.stringify(ws.views)).toBe(views)
-    s.getState().undo(); expect(s.getState().workspace?.exploreLayout).toBeUndefined()
-    s.getState().redo(); expect(s.getState().workspace?.exploreLayout).toEqual(ws.exploreLayout)
+    expect(zoomLayoutOwner(restored, key).exploreLayout).toEqual(zoomLayoutOwner(ws, key).exploreLayout)
+    expect(zoomLayoutOwner(ws, key)).toEqual({ ...view, exploreLayout: zoomLayoutOwner(ws, key).exploreLayout })
+    s.getState().undo(); expect(zoomLayoutOwner(s.getState().workspace!, key).exploreLayout).toBeUndefined()
+    s.getState().redo(); expect(zoomLayoutOwner(s.getState().workspace!, key).exploreLayout).toEqual(zoomLayoutOwner(ws, key).exploreLayout)
   })
   it('relayout retains locked positions, and hide/show never removes model elements', () => {
     const s = useWorkspaceStore
@@ -25,11 +25,11 @@ describe('Explore editing', () => {
     const [a, b] = buildLayout(s.getState().workspace!).roots, key = s.getState().activeViewKey!
     s.getState().updateExploreLayout({ elements: { [a.id]: { x: 111, y: 222, locked: true }, [b.id]: { x: 333, y: 444 } } })
     s.getState().resetAndRelayout(key, 'LR')
-    expect(s.getState().workspace!.exploreLayout!.elements).toEqual({ [a.id]: { x: 111, y: 222, locked: true } })
+    expect(zoomLayoutOwner(s.getState().workspace!, key).exploreLayout!.elements).toEqual({ [a.id]: { x: 111, y: 222, locked: true } })
     s.getState().removeElementsFromView(key, [a.id])
-    expect(buildLayout(s.getState().workspace!).byId.has(a.id)).toBe(false)
+    expect(buildLayout({ ...s.getState().workspace!, exploreLayout: zoomLayoutOwner(s.getState().workspace!, key).exploreLayout }).byId.has(a.id)).toBe(false)
     s.getState().toggleElementInView(key, a.id)
-    expect(buildLayout(s.getState().workspace!).byId.has(a.id)).toBe(true)
+    expect(buildLayout({ ...s.getState().workspace!, exploreLayout: zoomLayoutOwner(s.getState().workspace!, key).exploreLayout }).byId.has(a.id)).toBe(true)
   })
   it('chooses creation scope from the selected system/container rather than the underlying Diagram', () => {
     const ws = createBigBankSample(), system = ws.model.softwareSystems.find(s => s.containers.length)!, container = system.containers[0]
@@ -41,4 +41,22 @@ describe('Explore editing', () => {
     expect(parseSidecar(JSON.stringify({ version: 1, explore: { elements: { a: { x: 'bad' } } } }))).toBeNull()
     expect(parseSidecar(JSON.stringify({ version: 1, explore: { hiddenIds: [123] } }))).toBeNull()
   })
+})
+
+it('isolates zoom edits across views and restores them from the sidecar', () => {
+  const s = useWorkspaceStore
+  s.getState().loadWorkspace(createBigBankSample())
+  const ws = s.getState().workspace!, first = s.getState().activeViewKey!
+  const second = ws.views.systemContextViews[0].key
+  s.getState().setRendererMode('explore')
+  s.getState().updateExploreLayout({ hiddenIds: ['customer'], direction: 'LR' })
+  s.getState().setActiveView(second)
+  expect(s.getState().rendererMode).toBe('explore')
+  expect(zoomLayoutOwner(s.getState().workspace!, second).exploreLayout).toBeUndefined()
+  s.getState().updateExploreLayout({ direction: 'TB' })
+  const restored = createBigBankSample()
+  applySidecar(restored, parseSidecar(JSON.stringify(extractSidecar(s.getState().workspace!)))!)
+  expect(zoomLayoutOwner(restored, first).exploreLayout).toEqual({ hiddenIds: ['customer'], direction: 'LR' })
+  expect(zoomLayoutOwner(restored, second).exploreLayout).toEqual({ direction: 'TB' })
+  expect(parseSidecar(JSON.stringify({ version: 1, views: { [first]: { exploreLayout: { elements: { customer: { x: 'bad' } } } } } }))).toBeNull()
 })

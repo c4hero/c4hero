@@ -1,242 +1,250 @@
 import { test, expect } from '../fixtures/workspace'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { ExploreController } from '../../src/lib/explore/controller'
-import { readFileSync, writeFileSync } from 'node:fs'
-const fixture = readFileSync(new URL('../fixtures/northstar-commerce.dsl', import.meta.url), 'utf8')
-async function enterExplore(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: 'Switch view' }).click()
-  await page.getByRole('button', { name: 'Explore workspace' }).click()
-}
+import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
 
-test('description lines remain stable across zoom and scale continuously', async ({ page, workspace }) => {
-  await workspace.loadSample()
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await enterExplore(page)
-  const canvas = page.getByTestId('explore-canvas')
-  await canvas.evaluate(el => (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.focus('internetBanking'))
-  await page.waitForTimeout(150)
-  const samples = []
-  for (const zoom of [1.8, 1.99, 2.01, 2.2, 3.2]) {
-    await canvas.evaluate((el, zoom) => {
-      const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-      engine.state.reveal.set('internetBanking', 0)
-      engine.zoomBy(zoom / engine.state.camera.zoom)
-    }, zoom)
-    await page.waitForTimeout(100)
-    samples.push(await canvas.evaluate(el => {
-      const s = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.state
-      const text = s.textLayouts!.get('internetBanking')!
-      return { lines: text.lines, scale: text.descriptionScale / s.camera.zoom }
-    }))
-  }
-  for (const sample of samples) {
-    expect(sample.lines).toEqual(samples[0].lines)
-    expect(sample.scale).toBeCloseTo(samples[0].scale, 8)
-  }
-})
-
-test('nested edge labels never overlap other captions or leaf cards', async ({ page, workspace }, testInfo) => {
-  await workspace.loadSample()
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await enterExplore(page)
-  const canvas = page.getByTestId('explore-canvas')
-  await expect(canvas).toHaveAttribute('data-camera', /zoom/)
-  const overview = await canvas.evaluate(el => (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.exportSVG('current'))
-  expect(overview).not.toContain('zoom in')
-  expect(overview).toContain('data-expandable="true"')
-  await canvas.evaluate(el => (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.focus('internetBanking'))
-  await page.waitForTimeout(150)
-  for (const zoom of [3.5, 6, 10]) {
-    await canvas.evaluate((el, zoom) => { const e = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore; e.zoomBy(zoom / e.state.camera.zoom) }, zoom)
-    await page.waitForTimeout(100)
-    const collisions = await canvas.evaluate(el => {
-      const s = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.state
-      const labels = s.edgeLabels ?? []
-      const cards = s.layout.nodes.filter(n => !n.children.length).map(n => ({ x: n.x * s.camera.zoom + s.camera.x, y: n.y * s.camera.zoom + s.camera.y, width: n.width * s.camera.zoom, height: n.height * s.camera.zoom }))
-      const intersects = (a: typeof cards[number], b: typeof cards[number]) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-      const overlapping = labels.some((label, i) => labels.slice(i + 1).some(other => intersects(label, other)) || cards.some(card => intersects(label, card)))
-      const misplaced = labels.some((label, i) => label.y + label.height >= s.edgeLabelAnchors![i].y)
-      return overlapping || misplaced
-    })
-    expect(collisions).toBe(false)
-    if (zoom === 3.5) await page.screenshot({ path: testInfo.outputPath('nested-labels.png') })
-  }
-})
-
-test('leaf text grows with zoom and person descriptions fit inside rounded cards', async ({ page, workspace }, testInfo) => {
-  await workspace.loadSample()
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await enterExplore(page)
-  const canvas = page.getByTestId('explore-canvas')
-  await canvas.evaluate(el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    engine.focus('customer')
-  })
-  await page.waitForTimeout(150)
-  await canvas.evaluate(el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    engine.zoomBy(3.5 / engine.state.camera.zoom)
-  })
-  await page.waitForTimeout(150)
-  const label = await canvas.evaluate(el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    return engine.state.textLayouts?.get('customer')
-  })
-  expect(label?.scale).toBeGreaterThan(2)
-  expect(label!.lines.join(' ')).toBe('A customer of the bank, with personal bank accounts.')
-  await page.screenshot({ path: testInfo.outputPath('explore-person-text.png') })
-})
-
-test('drag release glides, new input interrupts, and reduced motion stops immediately', async ({ page, workspace }) => {
-  await workspace.loadSample()
-  await enterExplore(page)
-  const canvas = page.getByTestId('explore-canvas')
-  await expect(canvas).toHaveAttribute('data-camera', /zoom/)
-  const readX = () => canvas.evaluate(el => (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.state.camera.x)
-  await page.mouse.move(700, 350); await page.mouse.down()
-  await page.mouse.move(780, 350, { steps: 5 }); await page.mouse.up()
-  const released = await readX()
-  await expect.poll(readX).toBeGreaterThan(released + 1)
-  await page.mouse.down()
-  const interrupted = await readX()
-  await page.waitForTimeout(150)
-  expect(await readX()).toBeCloseTo(interrupted)
-  await page.mouse.up()
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.mouse.move(700, 350); await page.mouse.down()
-  await page.mouse.move(780, 350, { steps: 5 }); await page.mouse.up()
-  const stopped = await readX()
-  await page.waitForTimeout(150)
-  expect(await readX()).toBeCloseTo(stopped)
-})
-
-test('Explore preserves authored state, supports focus through lock and restores Diagram', async ({ page, workspace }) => {
+test('Zoom toggles behavior without replacing native nodes, edges or the viewport', async ({ page, workspace }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => { if (!e.message.includes('WebSocket')) errors.push(e.message) })
   await workspace.loadSample()
   await page.waitForTimeout(500)
-  const before = await page.evaluate(() => { const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore(); return { workspace: JSON.stringify(s.workspace), undo: s.undoStack.length, view: s.activeViewKey } })
-  const viewport = await page.locator('.react-flow__viewport').getAttribute('style')
-  await enterExplore(page)
-  const canvas = page.getByTestId('explore-canvas')
-  await expect(canvas).toBeVisible()
-  await expect(page.getByText('Workspace architecture', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Browse architecture' }).click()
-  await page.getByRole('button', { name: /API Application · container/ }).click()
-  await expect(page.getByText('Detail frozen · clear selection to resume', { exact: true })).toBeVisible()
-  const reveal = await canvas.getAttribute('data-reveal')
-  await canvas.focus(); await page.keyboard.press('+'); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(800)
-  await page.keyboard.down('Space')
-  await page.mouse.move(650, 380); await page.mouse.down(); await page.mouse.move(710, 410, { steps: 4 }); await page.mouse.up(); await page.waitForTimeout(400)
-  await page.keyboard.up('Space')
-  await expect(page.getByText('Detail frozen · clear selection to resume', { exact: true })).toBeVisible()
-  expect(await canvas.getAttribute('data-reveal')).toBe(reveal)
+  const result = await page.evaluate(async () => {
+    const viewport = document.querySelector('.react-flow__viewport')!
+    const nodes = [...document.querySelectorAll('.c4-node')]
+    const edges = [...document.querySelectorAll('.react-flow__edge-path')]
+    const initial = getComputedStyle(viewport).transform
+    const before = nodes.map(n => { const r = n.getBoundingClientRect(); return [r.x, r.y, r.width, r.height] })
+    for (let i = 0; i < 6; i++) {
+      ;(document.querySelector('button[aria-label="Zoom"]') as HTMLButtonElement).click()
+      await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+      if (document.querySelector('.react-flow__viewport') !== viewport || nodes.some((n, i) => n !== document.querySelectorAll('.c4-node')[i])) return { error: 'remounted nodes' }
+      if (getComputedStyle(viewport).transform !== initial) return { error: 'camera changed' }
+      if (edges.some(e => !e.isConnected)) return { error: 'remounted edges' }
+      const after = nodes.map(n => { const r = n.getBoundingClientRect(); return [r.x, r.y, r.width, r.height] })
+      if (after.some((values, i) => values.some((v, j) => Math.abs(v - before[i][j]) > .1))) return { error: 'geometry changed' }
+    }
+    return { error: null }
+  })
+  expect(result.error).toBeNull()
+  await expect(page.locator('.react-flow')).toHaveCount(1)
+  await expect(page.locator('canvas[data-explore-canvas]')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('nested focus reveals native containers and components with native relationships', async ({ page, workspace }, testInfo) => {
+  const errors: string[] = []
+  page.on('pageerror', e => { if (!e.message.includes('WebSocket')) errors.push(e.message) })
+  await workspace.loadSample()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  await page.locator('[data-semantic-zoom="true"]').evaluate(el => (el as HTMLDivElement & { __semantic: SemanticCamera }).__semantic.focus('signinController'))
+  await expect(page.locator('.react-flow__node[data-id="signinController"]')).toBeVisible()
+  await expect.poll(() => page.locator('.react-flow__node[data-id="signinController"]').boundingBox().then(b => b?.width ?? 0)).toBeGreaterThan(100)
+  await expect(page.locator('.react-flow__node[data-id="apiApp"]')).toBeVisible()
+  const relationships = await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.model.relationships.filter(r => r.sourceId === 'signinController' || r.destinationId === 'signinController').map(r => r.id))
+  expect(relationships.length).toBeGreaterThan(0)
+  for (const id of relationships) await expect(page.locator(`.react-flow__edge-path[id="${id}"]`)).toHaveAttribute('d', /^M/)
+  await page.screenshot({ path: testInfo.outputPath('native-nested-focus.png') })
+  expect(errors).toEqual([])
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  await expect(page.locator('.react-flow__node[data-id="signinController"]')).toHaveCount(0)
+})
+
+test('selection freezes reveal and clearing it settles detail without moving the camera', async ({ page, workspace }) => {
+  await workspace.loadSample()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  const host = page.locator('[data-semantic-zoom="true"]')
+  await host.evaluate(async el => {
+    const camera = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic
+    camera.reveal.set('internetBanking', .4);
+    (window as unknown as { __testStore(): WorkspaceState }).__testStore().selectElements(['customer'])
+    camera.zoomBy(1.1)
+  })
+  await page.waitForTimeout(350)
+  expect(await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.reveal.get('internetBanking'))).toBe(.4)
+  const camera = await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.getViewport())
+  await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.escape())
+  await expect.poll(() => host.evaluate(el => [0, 1].includes((el as HTMLElement & { __semantic: SemanticCamera }).__semantic.reveal.get('internetBanking')!))).toBe(true)
+  expect(await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.getViewport())).toEqual(camera)
+})
+
+test.describe('touch input', () => {
+test.use({ hasTouch: true })
+test('native touch pinch, resize and presentation preserve Zoom behavior', async ({ page, workspace }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await workspace.loadSample()
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  const host = page.locator('[data-semantic-zoom="true"]')
+  const zoom = () => host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.getZoom())
+  const before = await zoom()
+  const client = await page.context().newCDPSession(page)
+  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 500, y: 650, id: 0 }, { x: 600, y: 650, id: 1 }] })
+  await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 450, y: 650, id: 0 }, { x: 650, y: 650, id: 1 }] })
+  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await expect.poll(zoom).toBeGreaterThan(before)
+  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 500, y: 650, id: 0 }] })
+  await client.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] })
+  await page.setViewportSize({ width: 1000, height: 800 })
+  await page.keyboard.press('p')
+  await expect(host).toBeVisible()
+  await expect(page.locator('.react-flow')).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: 'Zoom', exact: true })).toHaveAttribute('aria-pressed', 'true')
+})
+
+})
+
+test('navigation preserves authored state and search focuses through a frozen selection', async ({ page, workspace }) => {
+  await workspace.loadSample()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.waitForTimeout(500)
+  const authored = () => page.evaluate(() => { const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore(); return { workspace: JSON.stringify(s.workspace), undo: s.undoStack.length, view: s.activeViewKey } })
+  const before = await authored()
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  const host = page.locator('[data-semantic-zoom="true"]')
+  await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.focus('apiApp'))
+  await expect(page.locator('.react-flow__node[data-id="apiApp"]')).toBeVisible()
   await page.keyboard.press('Control+f')
   await page.getByRole('textbox', { name: 'Search elements and views' }).fill('Security Component')
   await page.getByRole('button').filter({ hasText: 'Security Component' }).last().click()
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().selectedElementIds[0])).toBeTruthy()
-  await page.waitForTimeout(800)
-  const focusedWidth = await canvas.evaluate(el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    const selected = [...engine.state.selected][0]
-    return engine.state.layout.byId.get(selected)!.width * engine.state.camera.zoom
-  })
-  expect(focusedWidth).toBeGreaterThan(120)
-  await page.getByRole('button', { name: 'Switch view' }).click()
-  await page.getByRole('button', { name: 'System Landscape', exact: true }).click()
-  await expect(page.locator('.react-flow')).toBeVisible(); await page.waitForTimeout(400)
-  expect(await page.locator('.react-flow__viewport').getAttribute('style')).toBe(viewport)
-  const after = await page.evaluate(() => { const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore(); return { workspace: JSON.stringify(s.workspace), undo: s.undoStack.length, view: s.activeViewKey } })
-  expect(after).toEqual(before)
+  await expect.poll(() => host.evaluate(el => {
+    const camera = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic
+    const selected = (window as unknown as { __testStore(): WorkspaceState }).__testStore().selectedElementIds[0]
+    const node = camera.layoutState.byId.get(selected)
+    return node ? node.width * camera.getZoom() : 0
+  })).toBeGreaterThan(120)
+  const camera = await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.getViewport())
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  expect(await page.locator('.react-flow__viewport').evaluate(el => new DOMMatrix(getComputedStyle(el).transform).a)).toBeCloseTo(camera.zoom, 4)
+  expect(await authored()).toEqual(before)
 })
 
-test('partial reveal freezes on selection; idle completion and Escape never move camera', async ({ page, workspace }, testInfo) => {
-  await workspace.loadSample(); await enterExplore(page)
-  const canvas = page.getByTestId('explore-canvas')
-  await page.waitForTimeout(800)
-  await page.screenshot({ path: testInfo.outputPath('explore-big-bank-overview.png') })
-  // Begin above the reveal threshold, then cross it with actual wheel input.
-  // The compact overview intentionally starts with every system closed.
-  await canvas.evaluate(el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    const parent = engine.state.layout.roots.find(n => n.children.length)!
-    engine.zoomBy(400 / (parent.width * engine.state.camera.zoom))
-  })
-  await page.waitForTimeout(900)
-  // Exercise actual wheel input, select during its transition, then redirect it.
-  await page.mouse.move(600, 400); await page.mouse.wheel(0, 300)
-  const snapshot = await canvas.evaluate(async el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    const state = (window as unknown as { __testStore(): WorkspaceState }).__testStore()
-    const deadline = performance.now() + 2500
-    while (![...engine.state.reveal.values()].some(v => v > 0 && v < 1)) {
-      if (performance.now() > deadline) throw new Error('Wheel navigation never produced a partial reveal')
-      await new Promise(resolve => requestAnimationFrame(resolve))
-    }
-    state.selectElements([engine.state.layout.roots[0].id])
-    return Object.fromEntries(engine.state.reveal)
-  })
-  expect(Object.values(snapshot).some(v => v > 0 && v < 1)).toBe(true)
-  await page.waitForTimeout(200)
-  await page.screenshot({ path: testInfo.outputPath('explore-partial.png') })
-  await page.mouse.wheel(0, -160); await page.waitForTimeout(1400)
-  expect(await canvas.evaluate(el => Object.fromEntries((el as HTMLCanvasElement & { __explore: ExploreController }).__explore.state.reveal))).toEqual(snapshot)
-  const camera = await canvas.getAttribute('data-camera')
-  await canvas.focus(); await page.keyboard.press('Escape'); await page.waitForTimeout(650)
-  expect(await canvas.getAttribute('data-camera')).toBe(camera)
-  const values = await canvas.evaluate(el => [...(el as HTMLCanvasElement & { __explore: ExploreController }).__explore.state.reveal.values()])
-  expect(values.every(v => v === 0 || v === 1)).toBe(true)
-})
-
-test('Northstar portals, keyboard inspection, model reconciliation and screenshots', async ({ page, workspace }, testInfo) => {
-  await workspace.parseAndLoad(fixture)
-  await page.screenshot({ path: testInfo.outputPath('diagram-before.png') })
-  await enterExplore(page); await page.waitForTimeout(750)
-  await page.screenshot({ path: testInfo.outputPath('explore-overview.png') })
-  await page.getByRole('button', { name: 'Browse architecture' }).click()
-  await page.getByRole('button', { name: 'Storefront · Software system', exact: true }).click(); await expect(page.getByText('Detail frozen · clear selection to resume', { exact: true })).toBeVisible(); await page.waitForTimeout(150)
-  await expect.poll(() => page.getByTestId('explore-canvas').evaluate(el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    const node = engine.state.layout.byId.get('storefront')!
-    const inspector = document.querySelector('[data-canvas-chrome="inspector"]')!.getBoundingClientRect()
-    return (node.x + node.width) * engine.state.camera.zoom + engine.state.camera.x <= inspector.left - 10
-  })).toBe(true)
-  await page.screenshot({ path: testInfo.outputPath('explore-expanded.png') })
-  await page.getByText('Cross-system connections', { exact: true }).click()
-  const bundles = page.getByRole('button').filter({ hasText: /Storefront → Identity .*Synchronous/ })
-  await bundles.first().click()
-  await expect(page.getByRole('region', { name: 'Boundary connections' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Unpin connections' })).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath('explore-connections.png') })
-  await page.getByRole('region', { name: 'Boundary connections' }).getByRole('button').nth(1).click()
-  await expect(page.getByText('Cross-system relationship', { exact: true })).toBeVisible()
-  await page.getByTestId('explore-canvas').focus(); await page.keyboard.press('Escape')
-  await expect(page.getByRole('region', { name: 'Boundary connections' })).toHaveCount(0)
-  await page.evaluate(() => { const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore(); s.selectElements(['storefront']); s.deleteElements(['storefront']) })
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().selectedElementIds.length)).toBe(0)
-  await expect(page.getByTestId('explore-canvas')).toBeVisible()
-})
-
-
-test('touch pinch, cancellation, reduced motion, resize and presentation retain Explore', async ({ page, workspace }) => {
+test('drag release glides, pointer input interrupts and reduced motion stops immediately', async ({ page, workspace }) => {
+  await workspace.loadSample()
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  const host = page.locator('[data-semantic-zoom="true"]')
+  const x = () => host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.getViewport().x)
+  await page.locator('.react-flow__pane').click({ position: { x: 1000, y: 650 } })
+  await page.keyboard.down('Space')
+  await page.mouse.move(600, 650); await page.mouse.down()
+  await page.mouse.move(680, 650, { steps: 5 }); await page.mouse.up()
+  const released = await x()
+  await expect.poll(x).toBeGreaterThan(released + 1)
+  await page.mouse.down()
+  const interrupted = await x()
+  await page.waitForTimeout(150)
+  expect(await x()).toBeCloseTo(interrupted)
+  await page.mouse.up()
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await workspace.loadSample(); await enterExplore(page)
-  const canvas = page.getByTestId('explore-canvas')
-  await expect(canvas).toHaveAttribute('data-camera', /zoom/)
-  const client = await page.context().newCDPSession(page)
-  const before = JSON.parse((await canvas.getAttribute('data-camera'))!).zoom
-  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 500, y: 300, id: 0 }, { x: 600, y: 300, id: 1 }] })
-  await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 450, y: 300, id: 0 }, { x: 650, y: 300, id: 1 }] })
-  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await expect.poll(async () => JSON.parse((await canvas.getAttribute('data-camera'))!).zoom).toBeGreaterThan(before)
-  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 500, y: 300, id: 0 }] })
-  await client.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] })
-  await page.setViewportSize({ width: 1000, height: 800 })
-  await canvas.focus(); await page.keyboard.press('0'); await page.keyboard.press('p')
-  await expect(canvas).toBeVisible(); await expect(page.locator('.react-flow')).toHaveCount(0)
-  await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: 'Switch view' })).toBeVisible()
+  await page.mouse.move(600, 650); await page.mouse.down()
+  await page.mouse.move(680, 650, { steps: 5 }); await page.mouse.up()
+  const stopped = await x()
+  await page.waitForTimeout(150)
+  expect(await x()).toBeCloseTo(stopped)
+  await page.keyboard.up('Space')
 })
 
-test('50-system / 500-element / 1000-relationship navigation benchmark', async ({ page, workspace, browser }, testInfo) => {
-  test.skip(!process.env.EXPLORE_BENCHMARK, 'Run separately with EXPLORE_BENCHMARK=1 to avoid concurrent-suite CPU contention')
+test('Zoom follows the selected static view and reconciles model deletion', async ({ page, workspace }) => {
+  await workspace.loadSample()
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  await page.getByRole('button', { name: 'Switch view' }).click()
+  await expect(page.getByRole('button', { name: 'Explore workspace' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Containers', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Zoom', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  const host = page.locator('[data-semantic-zoom="true"]')
+  await expect.poll(() => host.evaluate(el => {
+    const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore()
+    const view = s.workspace!.views.containerViews.find(v => v.key === s.activeViewKey)!
+    const camera = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic
+    return camera.layoutState.roots.every(n => view.elements.some(e => e.id === n.id)) && camera.layoutState.roots.some(n => n.element.type === 'container')
+  })).toBe(true)
+  await page.evaluate(() => {
+    const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore()
+    s.selectElements(['apiApp']); s.deleteElements(['apiApp'])
+  })
+  await expect(page.locator('.react-flow__node[data-id="apiApp"]')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().selectedElementIds.length)).toBe(0)
+  await expect(host).toBeVisible()
+})
+
+test('native leaf text scales continuously and stays inside the person card', async ({ page, workspace }) => {
+  await workspace.loadSample()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  const host = page.locator('[data-semantic-zoom="true"]')
+  const samples = []
+  for (const zoom of [1.8, 1.99, 2.01, 2.2, 3.2]) {
+    await host.evaluate((el, zoom) => { const c = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic; c.zoomBy(zoom / c.getZoom()) }, zoom)
+    await page.waitForTimeout(100)
+    samples.push(await page.locator('.react-flow__node[data-id="customer"] .c4-node').evaluate(el => {
+      const p = el.querySelector('p')!, range = document.createRange()
+      range.selectNodeContents(p)
+      const card = el.getBoundingClientRect(), bounds = p.getBoundingClientRect()
+      const scale = new DOMMatrix(getComputedStyle(document.querySelector('.react-flow__viewport')!).transform).a
+      return { text: p.textContent, lines: range.getClientRects().length, width: bounds.width / scale, height: bounds.height / scale,
+        inside: bounds.left >= card.left && bounds.right <= card.right && bounds.top >= card.top && bounds.bottom <= card.bottom }
+    }))
+  }
+  expect(samples[0].text).toBe('A customer of the bank, with personal bank accounts.')
+  for (const sample of samples) {
+    expect(sample.inside).toBe(true)
+    expect(sample.lines).toBe(samples[0].lines)
+    expect(sample.width).toBeCloseTo(samples[0].width, 2)
+    expect(sample.height).toBeCloseTo(samples[0].height, 2)
+  }
+})
+
+test.describe('mobile appearance', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
+  for (const zoom of [.47, .98]) test(`same cards, text, borders and camera at ${zoom} despite stale legacy coordinates`, async ({ page, workspace }, testInfo) => {
+    await workspace.loadSample()
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.waitForTimeout(500)
+    await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+    await page.locator('[data-semantic-zoom="true"]').evaluate((el, zoom) => { const c = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic; c.zoomBy(zoom / c.getZoom()) }, zoom)
+    await page.waitForTimeout(100)
+    await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+    await page.evaluate(() => {
+      const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore()
+      const view = s.workspace!.views.systemLandscapeViews.find(v => v.key === s.activeViewKey)!
+      s.updateExploreLayout({ elements: Object.fromEntries(view.elements.map(e => [e.id, { x: 9999, y: 9999 }])) })
+    })
+    const result = await page.evaluate(async () => {
+      const cards = [...document.querySelectorAll('.c4-node')]
+      const snapshot = () => cards.map(card => [card, ...card.querySelectorAll('.c4-node-name, p, .c4-type-chip, .c4-node-view-count, svg')].map(el => {
+        const s = getComputedStyle(el)
+        return { box: el.getBoundingClientRect().toJSON(), text: el.textContent, color: s.color, border: s.border, font: [s.fontFamily, s.fontSize, s.fontWeight, s.lineHeight], clamp: s.webkitLineClamp }
+      }))
+      const before = snapshot(), camera = getComputedStyle(document.querySelector('.react-flow__viewport')!).transform
+      ;(document.querySelector('button[aria-label="Zoom"]') as HTMLButtonElement).click()
+      const frames = []
+      for (let i = 0; i < 12; i++) {
+        await new Promise<void>(r => requestAnimationFrame(() => r()))
+        frames.push({ cards: snapshot(), camera: getComputedStyle(document.querySelector('.react-flow__viewport')!).transform })
+      }
+      return { before, camera, frames, retained: cards.every(c => c.isConnected), count: cards.length, renderedCount: document.querySelectorAll('.c4-node').length }
+    })
+    expect(result.retained).toBe(true)
+    // Hidden descendants may be present in React Flow, but roots are never duplicated.
+    await expect(page.locator('.react-flow')).toHaveCount(1)
+    await expect(page.locator('.react-flow__node[data-id="customer"]')).toHaveCount(1)
+    await expect(page.getByRole('button', { name: /Zoom into / })).toHaveCount(0)
+    for (const frame of result.frames) {
+      expect(frame.cards).toEqual(result.before)
+      expect(frame.camera).toBe(result.camera)
+    }
+    await page.screenshot({ path: testInfo.outputPath(`mobile-${zoom}.png`) })
+  })
+})
+
+// Opt-in, isolated to avoid concurrent browser CPU contention.
+test('50-system / 500-element / 1000-relationship navigation benchmark', async ({ page, workspace }, testInfo) => {
+  test.skip(!process.env.EXPLORE_BENCHMARK, 'Run with EXPLORE_BENCHMARK=1')
   test.setTimeout(90000)
   await workspace.loadBlank()
   await page.evaluate(() => {
@@ -253,65 +261,33 @@ test('50-system / 500-element / 1000-relationship navigation benchmark', async (
       const system = i % 50, container = Math.floor(i / 50) % 3, toSystem = i < 400 ? system : (system + 1 + Math.floor(i / 200) % 3) % 50
       return { id: `r${i}`, sourceId: `s${system}c${container}m0`, destinationId: `s${toSystem}c${(container + 1) % 3}m1`, description: `Request ${i}`, interactionStyle: i % 5 ? 'Synchronous' : 'Asynchronous', tags: [], properties: {} }
     })
+    ws.views.systemLandscapeViews = [{ key: 'benchmark', type: 'systemLandscape', elements: ws.model.softwareSystems.map(s => ({ id: s.id })), relationships: [] }]
     s.loadWorkspace(ws)
   })
-  await enterExplore(page)
-  const canvas = page.getByTestId('explore-canvas'); await page.waitForTimeout(1500)
-  const traceClient = process.env.EXPLORE_TRACE ? await page.context().newCDPSession(page) : null
-  if (traceClient) await traceClient.send('Tracing.start', { categories: 'devtools.timeline,v8.execute,disabled-by-default-devtools.timeline', transferMode: 'ReturnAsStream' })
-  const result = await canvas.evaluate(async el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    engine.frameWork.length = 0
-    const longTasks: number[] = [], intervals: number[] = []
-    const slowFrames: unknown[] = []
-    const frameObserver = new PerformanceObserver(list => { for (const entry of list.getEntries()) slowFrames.push(entry.toJSON()) })
-    frameObserver.observe({ type: 'long-animation-frame' })
+  await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+  await page.waitForTimeout(1000)
+  const result = await page.locator('[data-semantic-zoom="true"]').evaluate(async el => {
+    const camera = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic
+    const intervals: number[] = [], longTasks: number[] = []
     const observer = new PerformanceObserver(list => { for (const e of list.getEntries()) longTasks.push(e.duration) })
     observer.observe({ type: 'longtask' })
     let previous = performance.now()
-    for (let i = 0; i < 240; i++) {
-      await new Promise<void>(resolve => requestAnimationFrame(now => { intervals.push(now - previous); previous = now; engine.pan(Math.sin(i / 15) * 8, Math.cos(i / 23) * 5); if (i % 8 === 0) engine.zoomBy(i < 120 ? 1.09 : 1 / 1.09); resolve() }))
+    for (let i = 0; i < 120; i++) {
+      await new Promise<void>(resolve => requestAnimationFrame(now => {
+        intervals.push(now - previous); previous = now
+        camera.pan(Math.sin(i / 15) * 8, Math.cos(i / 23) * 5)
+        if (i % 8 === 0) camera.zoomBy(i < 60 ? 1.09 : 1 / 1.09)
+        resolve()
+      }))
     }
-    await new Promise(resolve => setTimeout(resolve, 300)); observer.disconnect(); frameObserver.disconnect()
-    const work = [...engine.frameWork].sort((a, b) => a - b)
-    return { systems: engine.state.layout.roots.length, elements: engine.state.layout.nodes.length, relationships: engine.state.connections.length,
-      initialLayoutMs: engine.initialLayoutMs, frames: work.length, p95FrameWorkMs: work[Math.floor(work.length * .95)], maxFrameWorkMs: work.at(-1), longTasks, slowFrames,
-      medianIntervalMs: intervals.sort((a, b) => a - b)[Math.floor(intervals.length / 2)], userAgent: navigator.userAgent, hardwareConcurrency: navigator.hardwareConcurrency }
+    observer.disconnect()
+    return { roots: camera.layoutState.roots.length, elements: camera.layoutState.nodes.length,
+      relationships: (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.model.relationships.length,
+      medianInterval: intervals.sort((a, b) => a - b)[Math.floor(intervals.length / 2)], longTasks }
   })
-  if (traceClient) {
-    const complete = new Promise<string>(resolve => traceClient.once('Tracing.tracingComplete', data => resolve(data.stream!)))
-    await traceClient.send('Tracing.end')
-    const stream = await complete; let trace = ''
-    for (;;) { const part = await traceClient.send('IO.read', { handle: stream }); trace += part.data; if (part.eof) break }
-    await traceClient.send('IO.close', { handle: stream })
-    writeFileSync(testInfo.outputPath('performance-trace.json'), trace)
-    await testInfo.attach('trace.json', { path: testInfo.outputPath('performance-trace.json'), contentType: 'application/json' })
-  }
-  writeFileSync(testInfo.outputPath('benchmark.json'), JSON.stringify({ ...result, browser: browser.version() }, null, 2))
-  await testInfo.attach('benchmark.json', { path: testInfo.outputPath('benchmark.json'), contentType: 'application/json' })
-  console.log('EXPLORE_BENCHMARK', JSON.stringify(result))
-  expect(result.elements).toBe(500); expect(result.relationships).toBe(1000)
-  expect(result.p95FrameWorkMs).toBeLessThanOrEqual(16.7)
+  await testInfo.attach('benchmark.json', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
+  expect(result.roots).toBe(50); expect(result.elements).toBe(500); expect(result.relationships).toBe(1000)
+  // Allow timer jitter around a 60 Hz frame interval.
+  expect(result.medianInterval).toBeLessThan(20)
   expect(result.longTasks).toEqual([])
-})
-
-test('Explore follows Diagram themes live without moving geometry or camera', async ({ page, workspace }, testInfo) => {
-  await workspace.loadSample()
-  await enterExplore(page)
-  await page.waitForTimeout(750)
-  const result = await page.getByTestId('explore-canvas').evaluate(async el => {
-    const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
-    const settingsPath = '/src/store/settings.ts', themesPath = '/src/lib/themes.ts'
-    const { useSettingsStore } = await import(/* @vite-ignore */ settingsPath)
-    const { THEMES } = await import(/* @vite-ignore */ themesPath)
-    const layout = engine.state.layout, camera = JSON.stringify(engine.state.camera)
-    const system = layout.roots.find(n => n.element.type === 'softwareSystem')!
-    useSettingsStore.getState().update({ colorTheme: 'light' })
-    await new Promise(resolve => requestAnimationFrame(resolve))
-    return { actual: engine.state.styles.get(system.id)?.background, expected: THEMES.light.find((s: { tag: string }) => s.tag === 'Software System').background,
-      sameGeometry: layout === engine.state.layout, sameCamera: camera === JSON.stringify(engine.state.camera) }
-  })
-  expect(result.actual).toBe(result.expected)
-  expect(result.sameGeometry).toBe(true); expect(result.sameCamera).toBe(true)
-  await page.screenshot({ path: testInfo.outputPath('explore-light-theme.png') })
 })

@@ -12,6 +12,9 @@ import type { Relationship, RelationshipStyle } from '@/types/model'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
 
 interface RelationshipEdgeData {
+  sourceScale?: number
+  targetScale?: number
+  semanticAlpha?: number
   relationship: Relationship
   relationshipStyle?: RelationshipStyle
   /** Dynamic views: the ordered interaction sequence label ("1", "2", …). */
@@ -55,6 +58,7 @@ function RelationshipEdge({
 }: EdgeProps & { data?: RelationshipEdgeData }) {
   const relationship = data?.relationship
   const relStyle = data?.relationshipStyle
+  const semanticScale = Math.min(data?.sourceScale ?? 1, data?.targetScale ?? 1)
   const order = data?.order
   // Dynamic-view steps may override the model relationship's description.
   const effectiveDescription = data?.stepDescription ?? relationship?.description
@@ -62,8 +66,8 @@ function RelationshipEdge({
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
 
-  const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
-  const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
+  const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET * (data?.sourceScale ?? 1))
+  const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET * (data?.targetScale ?? 1))
 
   // Choose path function based on lineStyle
   let edgePath: string
@@ -92,7 +96,7 @@ function RelationshipEdge({
   const strokeColor = emphasized
     ? 'var(--canvas-selection, var(--color-accent))'
     : (relStyle?.color ?? 'var(--canvas-edge, var(--color-edge))')
-  const strokeWidth = emphasized ? 2 : (relStyle?.thickness ?? 1.5)
+  const strokeWidth = (emphasized ? 2 : (relStyle?.thickness ?? 1.5)) * semanticScale
   const isDashed = isAsync || (relStyle?.dashed ?? false)
 
   const [hovered, setHovered] = useState(false)
@@ -138,7 +142,7 @@ function RelationshipEdge({
         style={{
           stroke: strokeColor,
           strokeWidth,
-          strokeDasharray: isDashed ? '6 4' : undefined,
+          strokeDasharray: isDashed ? `${6 * semanticScale} ${4 * semanticScale}` : undefined,
           opacity: relStyle?.opacity,
           ...edgeStyle,
         }}
@@ -180,9 +184,13 @@ function RelationshipEdge({
           <div
             className="nodrag nopan pointer-events-auto"
             data-label-density={labelDensity}
+            data-relationship-label={id}
+            data-relationship-description={effectiveDescription ?? ''}
+            data-relationship-technology={relationship?.technology ?? ''}
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px) scale(${semanticScale})`,
+              opacity: data?.semanticAlpha,
               maxWidth: labelMaxWidth,
               padding: labelDensity === 'compact' ? '3px 7px' : '4px 8px',
               borderRadius: 10,

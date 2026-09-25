@@ -1,3 +1,4 @@
+import { zoomLayoutOwner, zoomElements } from '@/lib/explore/editing'
 import type { StateCreator } from 'zustand'
 import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
@@ -188,7 +189,7 @@ export const createViewSlice: StateCreator<
   removeElementsFromView: (viewKey, ids) => set((s) => {
     if (s.workspace && s.rendererMode === 'explore') {
       pushUndoSnapshot(s)
-      const layout = s.workspace.exploreLayout ??= {}
+      const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout ??= {}
       layout.hiddenIds = [...new Set([...(layout.hiddenIds ?? []), ...ids])]
       s.selectedElementIds = []
       return
@@ -216,9 +217,9 @@ export const createViewSlice: StateCreator<
   }),
 
   toggleElementInView: (viewKey, elementId) => set((s) => {
-    if (s.workspace && s.rendererMode === 'explore') {
+    if (s.workspace && s.rendererMode === 'explore' && zoomElements(s.workspace, findViewHelper(s.workspace, viewKey)).some(e => e.id === elementId)) {
       pushUndoSnapshot(s)
-      const layout = s.workspace.exploreLayout ??= {}
+      const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout ??= {}
       const hidden = layout.hiddenIds ?? []
       layout.hiddenIds = hidden.includes(elementId) ? hidden.filter(id => id !== elementId) : [...hidden, elementId]
       return
@@ -273,11 +274,16 @@ export const createViewSlice: StateCreator<
   resetAndRelayout: (viewKey, direction) => set((s) => {
     if (!s.workspace) return
     if (s.rendererMode === 'explore') {
-      if (s.workspace.exploreLayout?.locked) return
-      const layout = s.workspace.exploreLayout ?? {}
+      if (zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout?.locked) return
+      const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout ?? {}
       pushUndoSnapshot(s)
-      s.workspace.exploreLayout = { ...layout, direction: direction ?? layout.direction,
+      zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout = { ...layout, direction: direction ?? layout.direction,
         elements: Object.fromEntries(Object.entries(layout.elements ?? {}).filter(([, e]) => e.locked)) }
+      const authored = findViewHelper(s.workspace, viewKey)
+      if (authored && !authored.locked) {
+        clearUnlockedPositions(authored)
+        if (direction) authored.autoLayout = { ...authored.autoLayout, direction }
+      }
       s.layoutVersion += 1
       return
     }
@@ -295,11 +301,16 @@ export const createViewSlice: StateCreator<
   setElementsLocked: (viewKey, ids, locked) => set((s) => {
     if (!s.workspace || ids.length === 0) return
     if (s.rendererMode === 'explore') {
-      const layout = getActiveCamera()?.layout?.() ?? s.workspace.exploreLayout ?? {}
+      const layout = getActiveCamera()?.layout?.() ?? zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout ?? {}
       pushUndoSnapshot(s)
       layout.elements ??= {}
-      for (const id of ids) layout.elements[id] = { ...layout.elements[id], locked }
-      s.workspace.exploreLayout = layout
+      const authored = findViewHelper(s.workspace, viewKey)
+      for (const id of ids) {
+        const root = authored?.elements.find(e => e.id === id)
+        if (root) root.locked = locked || undefined
+        layout.elements[id] = { ...layout.elements[id], locked }
+      }
+      zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout = layout
       return
     }
     const view = findViewHelper(s.workspace, viewKey)
@@ -324,7 +335,9 @@ export const createViewSlice: StateCreator<
     if (!s.workspace) return
     if (s.rendererMode === 'explore') {
       pushUndoSnapshot(s)
-      s.workspace.exploreLayout = { ...(getActiveCamera()?.layout?.() ?? s.workspace.exploreLayout), locked }
+      zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout = { ...(getActiveCamera()?.layout?.() ?? zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout), locked }
+      const authored = findViewHelper(s.workspace, viewKey)
+      if (authored) authored.locked = locked || undefined
       return
     }
     const view = findViewHelper(s.workspace, viewKey)
@@ -338,8 +351,10 @@ export const createViewSlice: StateCreator<
     if (!s.workspace) return
     if (s.rendererMode === 'explore') {
       pushUndoSnapshot(s)
-      const layout = s.workspace.exploreLayout ??= {}
+      const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout ??= {}
       for (const el of Object.values(layout.elements ?? {})) el.locked = false
+      const authored = findViewHelper(s.workspace, viewKey)
+      for (const el of authored?.elements ?? []) el.locked = false
       return
     }
     const view = findViewHelper(s.workspace, viewKey)

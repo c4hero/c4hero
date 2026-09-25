@@ -68,6 +68,7 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
     // parse — cannot be re-found. That is the cost of the view's absence.
     const stored = parked[key]
     if (stored) {
+      view.exploreLayout = stored.exploreLayout
       if (stored.locked) view.locked = true
       for (const el of view.elements) {
         const e = stored.elements?.[el.id]
@@ -80,6 +81,7 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
     }
     const old = prevViews.get(key)
     if (!old) continue
+    view.exploreLayout = old.exploreLayout
     if (old.locked) view.locked = true
     const oldById = new Map(old.elements.map((el) => [el.id, el]))
     const oldByName = new Map<string, ElementInView | null>()

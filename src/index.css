@@ -2466,3 +2466,9 @@ textarea:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -3px;
 }
+
+
+/* Keep the title visible above the child graph; fade only the parent body. */
+.c4-node[data-semantic-reveal] > .c4-node-body {
+  opacity: var(--semantic-content-opacity, 1);
+}

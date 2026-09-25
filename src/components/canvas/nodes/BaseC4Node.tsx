@@ -1,9 +1,8 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useLayoutEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { LucideIcon } from 'lucide-react'
 import {
   ZoomIn,
-  Database, Circle, Hexagon, Diamond, UserRound, Bot, Folder, Globe, Smartphone,
   AlertTriangle, Lock, BookOpen,
 } from 'lucide-react'
 import type { C4NodeData } from './types'
@@ -16,20 +15,7 @@ import { useDocsStore, selectElementHasDocs } from '@/store/docs'
 import { useZoomLevel } from '@/hooks/useZoomLevel'
 import { pickHighlightReason } from '@/lib/highlight'
 
-/** Map Structurizr shape names to Lucide icons */
-const SHAPE_ICON_MAP: Record<string, LucideIcon> = {
-  Cylinder: Database,
-  Circle: Circle,
-  Ellipse: Circle,
-  Hexagon: Hexagon,
-  Diamond: Diamond,
-  Person: UserRound,
-  Robot: Bot,
-  Folder: Folder,
-  WebBrowser: Globe,
-  MobileDevicePortrait: Smartphone,
-  MobileDeviceLandscape: Smartphone,
-}
+import { SHAPE_ICON_MAP } from '@/lib/nodeIcons'
 
 interface BaseC4NodeProps {
   data: C4NodeData
@@ -56,6 +42,7 @@ export default function BaseC4Node({
   technology,
   isExternal,
 }: BaseC4NodeProps) {
+  const semanticZoom = useWorkspaceStore(s => s.rendererMode === 'explore')
   const storeSelected = useWorkspaceStore((s) => s.selectedElementIds.includes(data.element.id))
   // useShallow does a shallow array compare so the inline filter doesn't
   // create a "new reference every render → infinite re-render" loop.
@@ -106,16 +93,39 @@ export default function BaseC4Node({
   const hasDocs = useDocsStore((s) => selectElementHasDocs(s.bundles, element))
 
   // Semantic zoom: show different detail levels based on viewport zoom
-  const zoomLevel = useZoomLevel()
+  const zoomLevel = useZoomLevel(data.semantic?.scale ?? 1)
   const isCompact = zoomLevel === 'compact'
   const isFull = zoomLevel === 'full'
-  const nameClamp = isCompact ? 1 : isFull ? undefined : 2
-  const descClamp = isCompact ? undefined : isFull ? undefined : 3
+  const nested = !!data.semantic?.nested
+  const nameClamp = nested ? 2 : isCompact ? 1 : isFull ? undefined : 2
+  const descClamp = nested ? 3 : isCompact ? undefined : isFull ? undefined : 3
+  const cardRef = useRef<HTMLDivElement>(null)
+  const reportSize = data.semantic?.onMeasure
+  useLayoutEffect(() => {
+    const card = cardRef.current
+    if (!card || !reportSize) return
+    const measure = () => {
+      const header = card.querySelector<HTMLElement>('.c4-node-header')!
+      reportSize(element.id, { width: card.offsetWidth, height: card.offsetHeight, headerHeight: header.offsetTop + header.offsetHeight + 12 })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(card)
+    observer.observe(card.querySelector('.c4-node-header')!)
+    return () => observer.disconnect()
+  }, [nested, reportSize, element.id])
 
   return (
     <div
+      ref={cardRef}
+      data-semantic-reveal={data.semantic ? data.semantic.reveal : undefined}
       className={`c4-node relative ${selected ? 'selected' : ''} ${isPerson ? 'c4-node-person' : ''}`}
       style={{
+        ...(data.semantic && data.semantic.scale !== 1 ? {
+          transform: `scale(${data.semantic.scale})`, transformOrigin: '0 0',
+          width: data.semantic.width,
+        } : {}),
+        ['--semantic-content-opacity' as string]: 1 - (data.semantic?.reveal ?? 0),
         background: resolvedTint,
         border: resolvedBorder,
         // Per-node tier color for selection halo, hover handles, and the
@@ -143,7 +153,7 @@ export default function BaseC4Node({
       )}
 
       {/* Row 1: icon + title + action buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="c4-node-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {isPerson ? (
           <span
             aria-hidden="true"
@@ -203,23 +213,23 @@ export default function BaseC4Node({
             </span>
           )}
           {childCount !== undefined && (
-            <ZoomButton element={element} typeColor={resolvedTypeColor} onDrillIn={onDrillIn} />
+            <ZoomButton element={element} typeColor={resolvedTypeColor} onDrillIn={onDrillIn} hidden={semanticZoom} />
           )}
         </div>
       </div>
 
       {/* Row 2: description (hidden in compact mode) */}
-      {desc && !isCompact && (
+      {desc && (nested || !isCompact) && (
         <p
-          className={descClamp ? `line-clamp-${descClamp}` : undefined}
-          style={{ fontSize: resolvedFontSize != null ? `${Math.round(resolvedFontSize * 0.78)}px` : 'var(--text-xs-plus)', color: style?.color ? `color-mix(in srgb, ${style.color} 70%, ${resolvedTint})` : borderColor, margin: '6px 0 0', lineHeight: '1.4' }}
+          className={`c4-node-body ${descClamp ? `line-clamp-${descClamp}` : ''}`}
+          style={{ visibility: nested && isCompact ? 'hidden' : undefined, fontSize: resolvedFontSize != null ? `${Math.round(resolvedFontSize * 0.78)}px` : 'var(--text-xs-plus)', color: style?.color ? `color-mix(in srgb, ${style.color} 70%, ${resolvedTint})` : borderColor, margin: '6px 0 0', lineHeight: '1.4' }}
         >
           {desc}
         </p>
       )}
 
       {/* Row 3: type chip + technology pills */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>
+      <div className="c4-node-body" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>
         <span
           className="c4-type-chip"
           style={{
@@ -229,13 +239,14 @@ export default function BaseC4Node({
         >
           {chipLabel}
         </span>
-        {technology && !isCompact && technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+        {technology && (nested || !isCompact) && technology.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
           <span
             key={t}
             className="c4-type-chip"
             style={{
               background: `color-mix(in srgb, ${style?.color ?? 'var(--color-text-muted)'} 10%, transparent)`,
               color: style?.color ?? 'var(--color-text-muted)',
+              visibility: nested && isCompact ? 'hidden' : undefined,
               fontWeight: 600,
               textTransform: 'none',
               letterSpacing: 'normal',
@@ -246,6 +257,7 @@ export default function BaseC4Node({
         ))}
       </div>
 
+      {data.semantic?.expandable && <div className="semantic-frame" aria-hidden="true" style={{ position: 'absolute', inset: 7, border: `1px solid ${borderColor}`, borderRadius: isPerson ? 999 : 7, opacity: .52 * (1 - data.semantic.reveal), pointerEvents: 'none' }} />}
       <NodeHandles />
       {reasonLabel && (
         <span
@@ -277,7 +289,8 @@ export default function BaseC4Node({
 }
 
 /** Zoom button with hover card popover */
-function ZoomButton({ element, typeColor, onDrillIn }: {
+function ZoomButton({ element, typeColor, onDrillIn, hidden = false }: {
+  hidden?: boolean
   element: C4NodeData['element']
   typeColor: string
   onDrillIn?: (id: string) => void
@@ -296,7 +309,9 @@ function ZoomButton({ element, typeColor, onDrillIn }: {
 
   return (
     <div
-      style={{ position: 'relative' }}
+      aria-hidden={hidden}
+      inert={hidden}
+      style={{ position: 'relative', visibility: hidden ? 'hidden' : undefined }}
       onMouseEnter={show}
       onMouseLeave={scheduleHide}
     >

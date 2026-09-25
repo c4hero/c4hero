@@ -1,3 +1,5 @@
+import { saveViewport } from '@/lib/viewportStorage'
+import { supportsSemanticZoom } from '@/lib/explore/editing'
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { findChildViewHelper as findChildView, getZoomTarget } from '../workspace-selectors'
@@ -50,7 +52,14 @@ export const createNavigationSlice: StateCreator<
 > = (set, get) => ({
   rendererMode: 'diagram',
   setRendererMode: (mode) => set((s) => {
+    if (mode === 'explore' && !supportsSemanticZoom(s.workspace && s.activeViewKey ? findViewHelper(s.workspace, s.activeViewKey) : undefined)) return
     if (s.rendererMode === mode) return
+    const camera = getActiveCamera()
+    if (s.workspace && s.activeViewKey) {
+      const viewport = camera?.getViewport?.()
+      if (viewport) saveViewport(s.workspace.name, s.activeViewKey, viewport)
+
+    }
     s.rendererMode = mode
     s.selectedRelationshipId = null
     s.selectedGroupId = null
@@ -109,7 +118,7 @@ export const createNavigationSlice: StateCreator<
   }),
 
   setActiveView: (key) => set((s) => {
-    s.rendererMode = 'diagram'
+    if (!supportsSemanticZoom(s.workspace ? findViewHelper(s.workspace, key) : undefined)) s.rendererMode = 'diagram'
     const changed = s.activeViewKey !== key
     s.activeViewKey = key
     s.selectedElementIds = []

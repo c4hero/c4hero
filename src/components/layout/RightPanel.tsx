@@ -1,3 +1,4 @@
+import { zoomLayoutOwner } from '@/lib/explore/editing'
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useWorkspaceStore, getSelectedElement, getSelectedDeploymentElement, getRelationshipById, buildElementMap, getAllViews, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -192,7 +193,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
     v.elements.some(e => e.id === element.id)
   ) : []
   const isLocked = useWorkspaceStore((s) => {
-    if (s.rendererMode === 'explore') return s.workspace?.exploreLayout?.elements?.[element.id]?.locked === true
+    if (s.rendererMode === 'explore') return !!s.workspace && zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout?.elements?.[element.id]?.locked === true
     if (!s.workspace || !s.activeViewKey) return false
     const view = getActiveView(s.workspace, s.activeViewKey)
     return view?.elements.find((el) => el.id === element.id)?.locked === true

@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   LayoutDashboard,
   Maximize2,
+  ScanSearch,
   Settings,
   MousePointerClick,
   Sparkles,
@@ -26,7 +27,7 @@ import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
 import AddElementPanel from '@/components/layout/AddElementPanel'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import { getActiveCamera } from '@/lib/activeCamera'
-import { editingView } from '@/lib/explore/editing'
+import { editingView, supportsSemanticZoom } from '@/lib/explore/editing'
 import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
 
 const DIRECTION_ICONS: Record<LayoutDirection, React.ReactNode> = {
@@ -230,6 +231,15 @@ export default function FloatingToolRail() {
         borderRadius: 'var(--radius-xl)',
       }}
     >
+      <RailBtn
+        icon={<ScanSearch size={16} />}
+        label="Zoom"
+        disabled={!supportsSemanticZoom(activeViewKey ? getActiveView(workspace, activeViewKey) : undefined)}
+        title="Zoom inside systems and containers (static C4 views)"
+        active={rendererMode === 'explore'}
+        onClick={() => useWorkspaceStore.getState().setRendererMode(rendererMode === 'explore' ? 'diagram' : 'explore')}
+      />
+      <RailSep />
       {/* Add element */}
       <div style={{ position: 'relative' }}>
         <RailBtn
@@ -414,13 +424,17 @@ const RailBtn = forwardRef<HTMLButtonElement, {
   color?: string
   active?: boolean
   expanded?: boolean
+  disabled?: boolean
+  title?: string
   onClick?: () => void
-}>(function RailBtn({ icon, label, color, active, expanded, onClick }, ref) {
+}>(function RailBtn({ icon, label, color, active, expanded, disabled, title, onClick }, ref) {
   return (
     <button
       ref={ref}
-      title={label}
+      title={title ?? label}
+      disabled={disabled}
       aria-label={label}
+      aria-pressed={expanded === undefined && active !== undefined ? active : undefined}
       aria-expanded={expanded}
       aria-haspopup={expanded !== undefined ? 'true' : undefined}
       onClick={onClick}
@@ -438,7 +452,8 @@ const RailBtn = forwardRef<HTMLButtonElement, {
         margin: '1px 0',
         ...(active ? { background: 'var(--color-accent-active)' } : {}),
         color: active ? 'var(--color-accent)' : color ?? 'var(--color-text-muted)',
-        cursor: onClick ? 'pointer' : 'default',
+        opacity: disabled ? 0.4 : undefined,
+        cursor: disabled ? 'default' : onClick ? 'pointer' : 'default',
         transition: 'background 0.12s, color 0.12s',
         border: 'none',
       }}

@@ -78,7 +78,6 @@ function ZoomHudBtn({
 }
 
 function ZoomLabel() {
-  const mode = useWorkspaceStore(s => s.rendererMode)
   const { zoom } = useViewport()
   return (
     <span
@@ -96,7 +95,7 @@ function ZoomLabel() {
         justifyContent: 'center',
       }}
     >
-      {mode === 'explore' ? 'Map' : `${Math.round(zoom * 100)}%`}
+      {Math.round(zoom * 100)}%
     </span>
   )
 }

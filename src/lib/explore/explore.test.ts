@@ -6,6 +6,21 @@ import { loadExploreCamera, saveExploreCamera } from './persistence'
 import { useWorkspaceStore } from '@/store/workspace'
 
 describe('Explore geometry and model isolation', () => {
+  it('uses displayed root positions on entry even when Zoom has older saved positions', () => {
+    const ws = createBigBankSample()
+    const view = ws.views.systemLandscapeViews[0]
+    const initial = buildLayout(ws, view)
+    const snapshot = new Map(initial.roots.map(n => [n.id, { x: n.x + 23, y: n.y - 9, width: n.width, height: 80 }]))
+    view.exploreLayout = { direction: 'LR', elements: Object.fromEntries(initial.roots.map(n => [n.id, { x: n.x + 100, y: n.y + 50 }])) }
+    const entered = buildLayout(ws, view, snapshot)
+    for (const root of entered.roots) {
+      expect({ x: root.x, y: root.y, width: root.width, height: root.height }).toEqual(snapshot.get(root.id))
+    }
+    // Explicit layout edits inside Zoom still take effect.
+    const edited = buildLayout(ws, view, snapshot, false)
+    expect(edited.roots[0].x).toBe(view.exploreLayout.elements![edited.roots[0].id].x)
+  })
+
   it('automatically chooses a wide, compact child layout while preserving explicit direction', () => {
     const ws = createBigBankSample()
     const system = ws.model.softwareSystems.find(s => s.containers.length > 2)!
@@ -108,7 +123,7 @@ describe('Explore persistence and store integration', () => {
     localStorage.setItem('c4hero.explore.camera.v2:collection/a', '{"x":1,"y":2,"zoom":0}')
     expect(loadExploreCamera('collection/a')).toBeNull()
   })
-  it('switches modes without changing workspace, views or undo, and choosing even the same view exits', () => {
+  it('switches modes without changing workspace, views or undo, and keeps Zoom enabled when selecting a view', () => {
     const s = useWorkspaceStore; s.getState().loadWorkspace(createBigBankSample())
     const before = s.getState(), workspace = before.workspace, key = before.activeViewKey, undo = before.undoStack
     s.setState({ multiSelectMode: true, canvasSettingsOpen: true })
@@ -118,7 +133,7 @@ describe('Explore persistence and store integration', () => {
     expect(s.getState().workspace).toBe(workspace); expect(s.getState().undoStack).toBe(undo)
     expect(s.getState().activeViewKey).toBe(key)
     s.getState().setActiveView(key!)
-    expect(s.getState().rendererMode).toBe('diagram')
+    expect(s.getState().rendererMode).toBe('explore')
     expect(s.getState().workspace).toBe(workspace)
   })
 })
@@ -140,7 +155,7 @@ describe('Explore shares Diagram layout policy', () => {
     ws.views.systemLandscapeViews[0].elements = []
     ws.views.systemLandscapeViews[0].autoLayout!.direction = 'TB'
     const vertical = buildLayout(ws), top = vertical.byId.get(a.id)!, bottom = vertical.byId.get(b.id)!
-    expect(bottom.y - top.y - top.height).toBe(300)
+    expect(bottom.y - top.y - top.height).toBeCloseTo(300, 8)
   })
 })
 
@@ -151,4 +166,49 @@ it('keeps populated systems card-sized and scales nested geometry without overla
   for (const system of ws.model.softwareSystems) system.containers = []
   expect(buildLayout(ws).roots.map(n => [n.id, n.width, n.height])).toEqual(original)
   expect(populated.nodes.filter(n => n.parent).every(n => n.scale < n.parent!.scale)).toBe(true)
+})
+
+describe('Zoom in authored views', () => {
+  it('uses only the selected roots and descendants, preserving authored relative positions', () => {
+    const ws = createBigBankSample()
+    const system = ws.model.softwareSystems.find(s => s.containers.length)!
+    const person = ws.model.people[0]
+    const view = { type: 'systemContext' as const, key: 'focused', softwareSystemId: system.id,
+      elements: [{ id: system.id, x: 400, y: 200 }, { id: person.id, x: 0, y: 0 }], relationships: [] }
+    const before = JSON.stringify(ws)
+    const layout = buildLayout(ws, view)
+    expect(new Set(layout.roots.map(n => n.id))).toEqual(new Set([system.id, person.id]))
+    expect(layout.byId.has(system.containers[0].id)).toBe(true)
+    expect(layout.byId.get(system.id)!.x - layout.byId.get(person.id)!.x).toBe(400)
+    expect(layout.byId.get(system.id)!.y - layout.byId.get(person.id)!.y).toBe(200)
+    expect(JSON.stringify(ws)).toBe(before)
+  })
+
+  it('starts container and component views at their own level without adding excluded siblings', () => {
+    const ws = createBigBankSample()
+    const system = ws.model.softwareSystems.find(s => s.containers.some(c => c.components.length))!
+    const container = system.containers.find(c => c.components.length)!
+    const containers = buildLayout(ws, { type: 'container', key: 'containers', softwareSystemId: system.id,
+      elements: [{ id: system.id }, { id: container.id }], relationships: [] })
+    expect(containers.roots.map(n => n.id)).toEqual([container.id])
+    expect(containers.byId.has(container.components[0].id)).toBe(true)
+    const components = buildLayout(ws, { type: 'component', key: 'components', containerId: container.id,
+      elements: [{ id: container.id }, { id: container.components[0].id }], relationships: [] })
+    expect(components.nodes.map(n => n.id)).toEqual([container.components[0].id])
+  })
+
+  it('keeps an empty authored view empty', () => {
+    expect(buildLayout(createBigBankSample(), { type: 'systemLandscape', key: 'empty', elements: [], relationships: [] }).nodes).toEqual([])
+  })
+})
+
+it('keeps authored overview relationships distinct and excludes hidden descendant aggregation', () => {
+  const ws = createBigBankSample(), view = ws.views.systemLandscapeViews[0]
+  const layout = buildLayout(ws, view)
+  const result = connectionsFor(layout, [...ws.model.relationships, ...ws.model.relationships], view)
+  const rootEdges = result.connections.filter(c => !c.from.parent && !c.to.parent)
+  expect(new Set(rootEdges.map(c => c.relationship.id))).toEqual(new Set(view.relationships.map(r => r.id)))
+  expect(new Set(result.connections.map(c => c.relationship.id)).size).toBe(result.connections.length)
+  const empty = connectionsFor(layout, ws.model.relationships, { ...view, relationships: [] })
+  expect(empty.connections.filter(c => !c.from.parent && !c.to.parent)).toHaveLength(0)
 })

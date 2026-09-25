@@ -75,12 +75,12 @@ describe('ViewSwitcher (trigger)', () => {
     expect(onToggle).toHaveBeenCalledTimes(1)
   })
 
-  it('shows Explore as the current virtual view without an authored-view badge', () => {
+  it('keeps the selected view title and badge while Zoom is enabled', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     act(() => { useWorkspaceStore.getState().setRendererMode('explore') })
     render(<ViewSwitcher isMobile={false} open={false} onToggle={noop} onClose={noop} onShowCreateView={noop} />)
-    expect(screen.getByText('Explore')).toBeTruthy()
-    expect(screen.queryByText('Map')).toBeNull()
+    expect(screen.getByText('Overview')).toBeTruthy()
+    expect(screen.getByText('Map')).toBeTruthy()
   })
 })
 
@@ -110,23 +110,18 @@ describe('ViewSwitcherPanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('offers Explore workspace as a special view and preserves the last authored view', () => {
+  it('does not offer a separate Explore view', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
-    useWorkspaceStore.getState().setActiveView('ctx')
-    const onClose = vi.fn()
-    render(<ViewSwitcherPanel onClose={onClose} onShowCreateView={noop} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Explore workspace' }))
-    expect(useWorkspaceStore.getState().rendererMode).toBe('explore')
-    expect(useWorkspaceStore.getState().activeViewKey).toBe('ctx')
-    expect(onClose).toHaveBeenCalledTimes(1)
+    render(<ViewSwitcherPanel onClose={noop} onShowCreateView={noop} />)
+    expect(screen.queryByRole('button', { name: 'Explore workspace' })).toBeNull()
   })
 
-  it('returns to Diagram when an authored view is selected', () => {
+  it('keeps Zoom enabled when another authored view is selected', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
     useWorkspaceStore.getState().setRendererMode('explore')
     render(<ViewSwitcherPanel onClose={noop} onShowCreateView={noop} />)
     fireEvent.click(screen.getByText('Second Map'))
-    expect(useWorkspaceStore.getState().rendererMode).toBe('diagram')
+    expect(useWorkspaceStore.getState().rendererMode).toBe('explore')
     expect(useWorkspaceStore.getState().activeViewKey).toBe('second')
   })
 
