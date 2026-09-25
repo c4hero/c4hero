@@ -1,6 +1,7 @@
 import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding, ReviewFixOption } from './types'
 import { isRecord, isStringArray } from '@/lib/guards'
 import { createLogger } from '@/lib/logger'
+import { MAX_STATUS_LENGTH, BUILT_IN_ELEMENT_STATUSES } from '@/lib/elementStatus'
 
 // JSON Schemas (for Anthropic structured outputs) plus runtime validators for the
 // two features that need machine-readable results. Validators are exported and
@@ -59,7 +60,10 @@ const opSchema = {
     // updateElement extras: category tags (added, not replaced), lifecycle status,
     // and owner. The applier validates status against the enum and merges tags.
     tags: { type: 'array', items: { type: 'string' } },
-    status: { type: 'string', enum: ['Live', 'Planned', 'Deprecated', 'Removed'] },
+    // Open vocabulary: the built-ins are the documented ones, but a workspace may
+    // use others, so the schema takes any bounded string rather than an enum and
+    // the sanitizer enforces the shape.
+    status: { type: 'string', maxLength: MAX_STATUS_LENGTH, description: `Lifecycle status. Usually one of ${BUILT_IN_ELEMENT_STATUSES.join(', ')}; a workspace may define others.` },
     owner: { type: 'string' },
     // addView: the kind of diagram and its scope element.
     viewType: { type: 'string', enum: ['systemLandscape', 'systemContext', 'container', 'component'] },
@@ -69,8 +73,9 @@ const opSchema = {
   required: ['op'],
 }
 
-/** Valid lifecycle status values (mirrors ElementStatus). */
-export const ELEMENT_STATUS_VALUES: ReadonlySet<string> = new Set(['Live', 'Planned', 'Deprecated', 'Removed'])
+/** Longest accepted status value. Re-exported from the status module so the AI
+ *  sanitizer caps are all readable in one place. */
+export { MAX_STATUS_LENGTH }
 
 /** Valid view-type values (mirrors ViewType). */
 export const VIEW_TYPE_VALUES: ReadonlySet<string> = new Set(['systemLandscape', 'systemContext', 'container', 'component'])

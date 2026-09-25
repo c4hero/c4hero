@@ -159,11 +159,22 @@ describe('applySidecar', () => {
     expect(ws.model.people[0].status).toBeUndefined()
   })
 
-  it('rejects invalid status values not in the union type', () => {
+  it('accepts a status outside the built-in set', () => {
+    // The vocabulary is open: a sidecar written on a machine that declared
+    // extra statuses still applies on one that has not.
     const ws = makeWorkspace()
     applySidecar(ws, {
       version: 1,
-      elements: { alice: { status: 'Injected' as 'Live' } },
+      elements: { alice: { status: 'Beyond MVP' } },
+    })
+    expect(ws.model.people[0].status).toBe('Beyond MVP')
+  })
+
+  it('rejects a status value of the wrong shape', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      elements: { alice: { status: '   ' } },
     })
     expect(ws.model.people[0].status).toBeUndefined()
   })
@@ -234,7 +245,9 @@ describe('parseSidecar', () => {
   })
 
   it('returns null for invalid element metadata', () => {
-    expect(parseSidecar(JSON.stringify({ version: 1, elements: { alice: { status: 'Injected' } } }))).toBeNull()
+    // A status is rejected on shape, not on membership — the vocabulary is open.
+    expect(parseSidecar(JSON.stringify({ version: 1, elements: { alice: { status: '' } } }))).toBeNull()
+    expect(parseSidecar(JSON.stringify({ version: 1, elements: { alice: { status: 42 } } }))).toBeNull()
     expect(parseSidecar(JSON.stringify({ version: 1, elements: { alice: { owner: 42 } } }))).toBeNull()
   })
 

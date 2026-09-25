@@ -38,6 +38,18 @@ describe('StatusDot', () => {
     }
   })
 
+  it('renders a derived colour for a status outside the built-in set', () => {
+    // No `--color-status-beyond mvp` custom property exists, so the dot falls
+    // back to a hue derived from the name — a custom status still gets a dot.
+    render(<StatusDot status="Beyond MVP" />)
+    const dot = screen.getByTestId('status-dot')
+    const style = dot.getAttribute('style') ?? ''
+    expect(style).not.toContain('--color-status-')
+    // jsdom normalizes the hsl() the component emits to rgb() on read-back.
+    expect(style).toMatch(/background:\s*(hsl|rgb)\(/)
+    expect(dot.getAttribute('aria-label')).toBe('Status: Beyond MVP')
+  })
+
   it('applies positional classes for absolute placement', () => {
     render(<StatusDot status="Removed" />)
     const dot = screen.getByTestId('status-dot')

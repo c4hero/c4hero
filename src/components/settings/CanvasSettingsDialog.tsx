@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAnchoredPopover } from '@/hooks/useAnchoredPopover'
 import { X, Check, ChevronDown, CircleHelp } from 'lucide-react'
@@ -5,6 +6,7 @@ import { useSettingsStore, type MinimapMode, type ColorTheme } from '@/store/set
 import { useWorkspaceStore } from '@/store/workspace'
 import DialogShell from '@/components/shared/DialogShell'
 import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
+import { BUILT_IN_ELEMENT_STATUSES, parseCustomStatuses, statusColor } from '@/lib/elementStatus'
 
 export default function CanvasSettingsDialog({ onClose }: { onClose: () => void }) {
   const settings = useSettingsStore()
@@ -139,6 +141,8 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
             />
           </SettingRow>
 
+          <CustomStatusesRow />
+
           <SettingRow
             label="Canvas guide"
             description="Show the quick getting-started walkthrough"
@@ -186,6 +190,74 @@ export default function CanvasSettingsDialog({ onClose }: { onClose: () => void 
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────
+
+/** Lets a user extend the lifecycle-status vocabulary. c4hero's status axis is
+ *  its own — neither C4 nor Structurizr has a lifecycle concept — and the four
+ *  built-ins only answer "does this exist yet?". A team that tracks "proposed,
+ *  not yet committed" has no built-in for it, so the list is open. Statuses a
+ *  loaded file already uses need no declaration here; they are picked up from
+ *  the file. This is for statuses you want to *choose* before any element has
+ *  one. */
+function CustomStatusesRow() {
+  const customStatuses = useSettingsStore((s) => s.customStatuses)
+  const update = useSettingsStore((s) => s.update)
+  const [draft, setDraft] = useState(customStatuses.join(', '))
+
+  function commit() {
+    const parsed = parseCustomStatuses(draft)
+    update({ customStatuses: parsed })
+    // Re-seed from the parsed list so the field shows what was actually kept:
+    // blanks, duplicates and built-ins are dropped rather than silently ignored.
+    setDraft(parsed.join(', '))
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+        Custom statuses
+      </div>
+      <div style={{ fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)', marginTop: 2 }}>
+        Lifecycle values to offer alongside {BUILT_IN_ELEMENT_STATUSES.join(', ')}. Comma-separated.
+      </div>
+      <input
+        type="text"
+        value={draft}
+        aria-label="Custom statuses"
+        placeholder="e.g. Proposed, Under review"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur() } }}
+        style={{
+          marginTop: 8,
+          width: '100%',
+          minHeight: 32,
+          padding: '0 8px',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--color-border)',
+          background: 'var(--color-surface-2)',
+          color: 'var(--color-text-primary)',
+          fontSize: 'var(--text-xs-plus)',
+        }}
+      />
+      {customStatuses.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }} data-testid="custom-status-preview">
+          {customStatuses.map((status) => (
+            <span
+              key={status}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                fontSize: 'var(--text-xxs)', color: 'var(--color-text-muted)',
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor(status) }} />
+              {status}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function SettingRow({
   label,

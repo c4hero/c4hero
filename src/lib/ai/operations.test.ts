@@ -378,11 +378,22 @@ describe('applyEditPlan — tags / status / owner (TEA-45)', () => {
     expect(db.owner).toBe('Data Team')
   })
 
-  it('drops a bogus status value but still applies the rest of the update', () => {
+  it('keeps a status outside the built-in set — the vocabulary is open', () => {
     const ws = makeWorkspace()
     const actions = fakeActions()
     applyEditPlan({ operations: [
-      { op: 'updateElement', id: 'db', status: 'Retired' as 'Live', owner: 'Platform' },
+      { op: 'updateElement', id: 'db', status: 'Retired', owner: 'Platform' },
+    ] }, actions, ws)
+    const patch = vi.mocked(actions.updateElement).mock.calls[0][1]
+    expect(patch).toHaveProperty('status', 'Retired')
+    expect(patch).toHaveProperty('owner', 'Platform')
+  })
+
+  it('drops a status of the wrong shape but still applies the rest of the update', () => {
+    const ws = makeWorkspace()
+    const actions = fakeActions()
+    applyEditPlan({ operations: [
+      { op: 'updateElement', id: 'db', status: 'x'.repeat(200), owner: 'Platform' },
     ] }, actions, ws)
     const patch = vi.mocked(actions.updateElement).mock.calls[0][1]
     expect(patch).not.toHaveProperty('status')

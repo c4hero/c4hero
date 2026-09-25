@@ -3,15 +3,21 @@
 export type Location = 'Internal' | 'External' | 'Unspecified'
 export type InteractionStyle = 'Synchronous' | 'Asynchronous'
 export type LayoutDirection = 'TB' | 'BT' | 'LR' | 'RL'
-export type ElementStatus = 'Live' | 'Planned' | 'Deprecated' | 'Removed'
+/** The lifecycle statuses c4hero ships with. */
+export type BuiltInElementStatus = 'Live' | 'Planned' | 'Deprecated' | 'Removed'
+/** An element's lifecycle status. Open on purpose: the built-ins cannot express
+ *  every lifecycle position a team needs, and a value c4hero does not know must
+ *  never be silently dropped. `string & {}` keeps editor completion on the
+ *  built-ins while accepting a user-declared or file-discovered status.
+ *  See `@/lib/elementStatus` for the vocabulary and validation rules. */
+export type ElementStatus = BuiltInElementStatus | (string & {})
 export type LineStyle = 'Curved' | 'Straight' | 'Orthogonal'
 
 // Runtime guards for the unions above. The DSL parser validates untrusted
 // input against these in two places each (legacy bare keyword + property
 // hoist), so they live next to the type to keep the lists from diverging.
-export function isElementStatus(v: string): v is ElementStatus {
-  return v === 'Live' || v === 'Planned' || v === 'Deprecated' || v === 'Removed'
-}
+// ElementStatus is open, so its guard lives in `@/lib/elementStatus`
+// (`normalizeElementStatus`) next to the vocabulary rules it shares.
 export function isInteractionStyle(v: string): v is InteractionStyle {
   return v === 'Synchronous' || v === 'Asynchronous'
 }

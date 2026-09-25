@@ -3,13 +3,13 @@ import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
+import { isElementStatusValue } from '@/lib/elementStatus'
 
-const VALID_STATUSES: ReadonlySet<string> = new Set<ElementStatus>(['Live', 'Planned', 'Deprecated', 'Removed'])
 const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
 
-function isValidStatus(v: unknown): v is ElementStatus {
-  return typeof v === 'string' && VALID_STATUSES.has(v)
-}
+// The status vocabulary is open, so a sidecar written against a vocabulary this
+// machine has not declared still reads back — the value shape is what's checked.
+const isValidStatus = isElementStatusValue
 
 function isValidLineStyle(v: unknown): v is LineStyle {
   return typeof v === 'string' && VALID_LINE_STYLES.has(v)
