@@ -231,15 +231,6 @@ export default function FloatingToolRail() {
         borderRadius: 'var(--radius-xl)',
       }}
     >
-      <RailBtn
-        icon={<ScanSearch size={16} />}
-        label="Zoom"
-        disabled={!supportsSemanticZoom(activeViewKey ? getActiveView(workspace, activeViewKey) : undefined)}
-        title="Zoom inside systems and containers (static C4 views)"
-        active={rendererMode === 'explore'}
-        onClick={() => useWorkspaceStore.getState().setRendererMode(rendererMode === 'explore' ? 'diagram' : 'explore')}
-      />
-      <RailSep />
       {/* Add element */}
       <div style={{ position: 'relative' }}>
         <RailBtn
@@ -256,6 +247,16 @@ export default function FloatingToolRail() {
           </div>
         )}
       </div>
+
+      <RailSep />
+      <RailBtn
+        icon={<ScanSearch size={16} />}
+        label="Zoom"
+        disabled={!supportsSemanticZoom(activeViewKey ? getActiveView(workspace, activeViewKey) : undefined)}
+        title="Zoom inside systems and containers (static C4 views)"
+        active={rendererMode === 'explore'}
+        onClick={() => useWorkspaceStore.getState().setRendererMode(rendererMode === 'explore' ? 'diagram' : 'explore')}
+      />
 
       {/* Auto-arrange */}
       <RailSep />
