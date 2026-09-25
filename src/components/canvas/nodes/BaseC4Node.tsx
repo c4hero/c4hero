@@ -257,7 +257,7 @@ export default function BaseC4Node({
         ))}
       </div>
 
-      {data.semantic?.expandable && <div className="semantic-frame" aria-hidden="true" style={{ position: 'absolute', inset: 7, border: `1px solid ${borderColor}`, borderRadius: isPerson ? 999 : 7, opacity: .52 * (1 - data.semantic.reveal), pointerEvents: 'none' }} />}
+      {data.semantic?.expandable && <div className="semantic-frame" aria-hidden="true" style={{ position: 'absolute', inset: 7, border: `1px solid ${borderColor}`, borderRadius: isPerson ? 999 : 7, opacity: 'calc(var(--zoom-inset-opacity, .52) * var(--semantic-content-opacity, 1))', pointerEvents: 'none' }} />}
       <NodeHandles />
       {reasonLabel && (
         <span

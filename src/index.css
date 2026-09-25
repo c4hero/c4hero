@@ -2485,7 +2485,9 @@ textarea:focus-visible {
     0 0 16px color-mix(in srgb, var(--node-glow) 32%, transparent);
   transition: opacity 140ms ease;
 }
+[data-zoom-active="true"] .c4-node[data-semantic-expandable] { --zoom-inset-opacity: 1; }
 [data-zoom-active="true"] .c4-node[data-semantic-expandable]::after { opacity: 1; }
+.c4-node .semantic-frame { transition: opacity 140ms ease; }
 @media (prefers-reduced-motion: reduce) {
-  .c4-node[data-semantic-expandable]::after { transition: none; }
+  .c4-node[data-semantic-expandable]::after, .c4-node .semantic-frame { transition: none; }
 }
