@@ -144,8 +144,8 @@ function RelationshipEdge({
           stroke: strokeColor,
           strokeWidth,
           strokeDasharray: isDashed ? `${6 * semanticScale} ${4 * semanticScale}` : undefined,
-          opacity: relStyle?.opacity,
           ...edgeStyle,
+          opacity: Number(edgeStyle?.opacity ?? relStyle?.opacity ?? 1) * (data?.semanticAlpha ?? 1),
         }}
         markerStart={emphasized ? 'url(#c4-dot-selected)' : 'url(#c4-dot)'}
         markerEnd={emphasized ? 'url(#c4-arrow-selected)' : 'url(#c4-arrow)'}
@@ -192,6 +192,7 @@ function RelationshipEdge({
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px) scale(${semanticScale})`,
               opacity: data?.semanticAlpha,
+              pointerEvents: data?.semanticAlpha === 0 ? 'none' : undefined,
               zIndex: data?.semanticZIndex,
               maxWidth: labelMaxWidth,
               padding: labelDensity === 'compact' ? '3px 7px' : '4px 8px',

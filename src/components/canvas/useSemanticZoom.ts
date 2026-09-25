@@ -4,6 +4,7 @@ import type { ElementStyle, View, Workspace } from '@/types/model'
 import type { HighlightFilters } from '@/lib/highlight'
 import { registerActiveCamera } from '@/lib/activeCamera'
 import { buildLayout, connectionsFor, type Box, type MapNode } from '@/lib/explore/layout'
+import { relationshipRefinements, relationshipOpacity } from '@/lib/explore/relationshipReveal'
 import { visibility } from '@/lib/explore/motion'
 import { SemanticCamera } from '@/lib/explore/semanticCamera'
 import { useWorkspaceStore } from '@/store/workspace'
@@ -56,6 +57,8 @@ export function useSemanticZoom(
     return buildNodes(workspace, nestedView, id => controller.current?.focus(id), filters, viewCounts, buildDrillableSet(workspace), theme)
   }, [layout, workspace, view, filters, theme, viewCounts])
 
+  const connections = useMemo(() => layout && workspace && view ? connectionsFor(layout, workspace.model.relationships, view).connections : [], [layout, workspace, view])
+  const refinements = useMemo(() => relationshipRefinements(connections), [connections])
   const camera = controller.current
   let renderedNodes = nodes, renderedEdges = edges
   if (enabled && layout && workspace && view) {
@@ -73,18 +76,28 @@ export function useSemanticZoom(
       }
     }
     renderedNodes = [...nodes.map(annotate), ...descendants.map(annotate)]
-    const nestedConnections = connectionsFor(layout, workspace.model.relationships, view).connections.filter(c => c.from.parent || c.to.parent)
+    const byId = new Map(connections.map(c => [c.relationship.id, c]))
+    const opacity = (id: string) => {
+      const c = byId.get(id)
+      return c ? relationshipOpacity(c, refinements, reveal, n => !n.parent || intrinsic.has(n.id)) : 1
+    }
+    const nestedConnections = connections.filter(c => c.from.parent || c.to.parent)
     const nestedView: View = { ...view, elements: layout.nodes.map(n => ({ id: n.id })), relationships: nestedConnections.map(c => ({ id: c.relationship.id })) }
     const nestedEdges = buildEdges(workspace, nestedView, renderedNodes, filters).map(edge => {
       const from = layout.byId.get(edge.source)!, to = layout.byId.get(edge.target)!
-      const alpha = Math.min(visibility(from, reveal), visibility(to, reveal))
+      const alpha = opacity(edge.id)
       // Each edge sits above its enclosing cards and below its endpoints.
       const zIndex = 9 + 2 * Math.max(depth(from), depth(to))
-      return { ...edge, zIndex, hidden: alpha < .002, style: { ...edge.style, opacity: alpha },
+      return { ...edge, zIndex, hidden: alpha < .002,
         data: { ...edge.data, sourceScale: from.scale, targetScale: to.scale, semanticAlpha: alpha, semanticZIndex: zIndex },
       }
     })
-    renderedEdges = [...edges, ...nestedEdges.filter(e => !edges.some(root => root.id === e.id))]
+    renderedEdges = [...edges.map(edge => {
+      const alpha = opacity(edge.id)
+      return { ...edge, hidden: edge.hidden || alpha < .002,
+        data: { ...edge.data, semanticAlpha: alpha },
+      }
+    }), ...nestedEdges.filter(e => !edges.some(root => root.id === e.id))]
   }
   return {
     nodes: renderedNodes, edges: renderedEdges, controller,
