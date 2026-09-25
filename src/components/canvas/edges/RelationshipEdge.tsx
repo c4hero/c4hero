@@ -5,10 +5,11 @@ import {
   getSmoothStepPath,
   getBezierPath,
   getStraightPath,
-  Position,
   type EdgeProps,
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
+import { CENTER_SLOT, handleSlot } from '../handleSlots'
+import { snapToNode } from './edgeAnchors'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
 
 interface RelationshipEdgeData {
@@ -35,15 +36,6 @@ const COMPACT_TECH_CHIP_LIMIT = 1
 const SRC_OFFSET = 4  // 8px source handle / 2
 const TGT_OFFSET = 7  // 14px target handle / 2
 
-function snapToNode(x: number, y: number, pos: Position, offset: number): [number, number] {
-  switch (pos) {
-    case Position.Left:   return [x + offset, y]
-    case Position.Right:  return [x - offset, y]
-    case Position.Top:    return [x, y + offset]
-    case Position.Bottom: return [x, y - offset]
-    default:              return [x, y]
-  }
-}
 
 function RelationshipEdge({
   id,
@@ -53,6 +45,7 @@ function RelationshipEdge({
   targetY: rawTgtY,
   sourcePosition,
   targetPosition,
+  sourceHandleId,
   data,
   selected,
   style: edgeStyle,
@@ -67,8 +60,8 @@ function RelationshipEdge({
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
 
-  const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET * (data?.sourceScale ?? 1))
-  const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET * (data?.targetScale ?? 1))
+  const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, sourceHandleId && handleSlot(sourceHandleId) !== CENTER_SLOT ? 3 : SRC_OFFSET, data?.sourceScale ?? 1)
+  const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET, data?.targetScale ?? 1)
 
   // Choose path function based on lineStyle
   let edgePath: string

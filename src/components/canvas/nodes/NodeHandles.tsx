@@ -1,5 +1,5 @@
-import { Handle, Position, useNodeId, useStore } from '@xyflow/react'
-import { useMemo } from 'react'
+import { Handle, Position, useNodeId, useStore, useUpdateNodeInternals } from '@xyflow/react'
+import { useMemo, useEffect } from 'react'
 import {
   CENTER_SLOT,
   SIDES,
@@ -54,6 +54,13 @@ export default function NodeHandles() {
       prev.length === next.length &&
       prev.every((e, i) => e.id === next[i].id && e.sourceHandle === next[i].sourceHandle && e.targetHandle === next[i].targetHandle),
   )
+
+  const updateNodeInternals = useUpdateNodeInternals()
+  useEffect(() => {
+    // Occupied slots grow from zero to their visible size. Refresh the handle
+    // measurements after React commits those classes, including on reveal.
+    if (nodeId) updateNodeInternals(nodeId)
+  }, [nodeId, connectedEdges, updateNodeInternals])
 
   // Slots this node's own edges land on, keyed by side. A slot counts as
   // occupied whichever end of the edge it is — the source dot and the target
