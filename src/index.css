@@ -2473,16 +2473,25 @@ textarea:focus-visible {
   opacity: var(--semantic-content-opacity, 1);
 }
 
-/* Distinguish zoom affordance from the outer selection glow. */
-[data-zoom-active="true"] .c4-node[data-semantic-expandable] {
+/* Emphasize the existing hue inside the card, distinct from selection. */
+[data-zoom-active="true"] .c4-node[data-semantic-expandable],
+[data-zoom-pulse="true"] .c4-node[data-semantic-expandable] {
   --zoom-inset-opacity: 1;
   --zoom-inset-width: 2px;
-  --zoom-inset-color: #fbbf24;
-}
-[data-canvas-light] [data-zoom-active="true"] .c4-node[data-semantic-expandable] {
-  --zoom-inset-color: #a16207;
+  --zoom-inset-color: color-mix(in srgb, var(--node-glow) 55%, white);
 }
 .c4-node .semantic-frame { transition: opacity 140ms ease, border-color 140ms ease; }
+[data-zoom-pulse="true"] .c4-node[data-semantic-expandable] > .semantic-frame {
+  animation: zoom-inset-pulse 2s ease-in-out;
+}
+@keyframes zoom-inset-pulse {
+  0%, 100% { opacity: .35; }
+  40%, 60% { opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
   .c4-node .semantic-frame { transition: none; }
+  [data-zoom-pulse="true"] .c4-node[data-semantic-expandable] > .semantic-frame {
+    animation: none;
+    opacity: 1 !important;
+  }
 }

@@ -9,6 +9,7 @@ test('zoomable cards stand out only during zoom with no selection', async ({ pag
   await page.getByRole('button', { name: 'Zoom', exact: true }).click()
   const host = page.locator('[data-semantic-zoom="true"]')
   const card = page.locator('.react-flow__node[data-id="internetBanking"] .c4-node')
+  await expect(host).not.toHaveAttribute('data-zoom-pulse', 'true')
   await expect(host).not.toHaveAttribute('data-zoom-active', 'true')
   await expect(card.locator('.semantic-frame')).toHaveCSS('opacity', '0.52')
   await page.mouse.move(100, 400)
@@ -16,7 +17,8 @@ test('zoomable cards stand out only during zoom with no selection', async ({ pag
   await expect(host).toHaveAttribute('data-zoom-active', 'true')
   expect(await card.evaluate(el => getComputedStyle(el, '::after').boxShadow)).toBe('none')
   await expect(card.locator('.semantic-frame')).toHaveCSS('border-width', '2px')
-  await expect(card.locator('.semantic-frame')).toHaveCSS('border-color', 'rgb(251, 191, 36)')
+  expect(await card.evaluate(el => getComputedStyle(el).getPropertyValue('--zoom-inset-color'))).toContain('color-mix(in srgb,')
+  expect(await card.evaluate(el => getComputedStyle(el).getPropertyValue('--zoom-inset-color'))).toContain('white')
   await expect(card.locator('.semantic-frame')).toHaveCSS('opacity', '1')
   await expect(page.locator('.react-flow__node[data-id="customer"] .c4-node')).not.toHaveAttribute('data-semantic-expandable')
   await expect(host).not.toHaveAttribute('data-zoom-active', 'true')
@@ -45,3 +47,30 @@ test('zoomable cards stand out only during zoom with no selection', async ({ pag
   await page.getByRole('button', { name: 'Zoom', exact: true }).click()
   await expect(page.locator('[data-zoom-active="true"]')).toHaveCount(0)
 })
+
+for (const reducedMotion of ['reduce', 'no-preference'] as const) {
+  test(`enabling Zoom pulses all expandable cards for two seconds (${reducedMotion})`, async ({ page, workspace }) => {
+    await workspace.loadSample()
+    await page.emulateMedia({ reducedMotion })
+    await page.waitForTimeout(400)
+    const toggle = page.getByRole('button', { name: 'Zoom', exact: true })
+    await toggle.click()
+    const host = page.locator('[data-semantic-zoom="true"]')
+    await expect(host).toHaveAttribute('data-zoom-pulse', 'true')
+    const cards = page.locator('.c4-node[data-semantic-expandable] > .semantic-frame')
+    expect(await cards.count()).toBeGreaterThan(0)
+    for (const frame of await cards.all()) {
+      await expect(frame).toHaveCSS('border-width', '2px')
+      await expect(frame).toHaveCSS('animation-name', reducedMotion === 'reduce' ? 'none' : 'zoom-inset-pulse')
+      if (reducedMotion !== 'reduce') await expect(frame).toHaveCSS('animation-duration', '2s')
+    }
+    await page.waitForTimeout(500)
+    await expect(host).toHaveAttribute('data-zoom-pulse', 'true')
+    await expect(host).not.toHaveAttribute('data-zoom-pulse', 'true')
+    await toggle.click()
+    await toggle.click()
+    await expect(host).toHaveAttribute('data-zoom-pulse', 'true')
+    await toggle.click()
+    await expect(page.locator('[data-zoom-pulse="true"]')).toHaveCount(0)
+  })
+}

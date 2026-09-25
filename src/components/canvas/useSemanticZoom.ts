@@ -25,6 +25,14 @@ export function useSemanticZoom(
         ? new Map(previous).set(id, size) : previous
     })
   }, [])
+  // Pulse once per mode activation, rather than on every selected-view change.
+  useLayoutEffect(() => {
+    const element = host.current
+    if (!enabled || !element) return
+    element.dataset.zoomPulse = 'true'
+    const timer = setTimeout(() => { delete element.dataset.zoomPulse }, 2000)
+    return () => { clearTimeout(timer); delete element.dataset.zoomPulse }
+  }, [enabled, host])
   const controller = useRef<SemanticCamera | null>(null)
   const layout = useMemo(() => {
     if (!enabled || !workspace || !view) return null
