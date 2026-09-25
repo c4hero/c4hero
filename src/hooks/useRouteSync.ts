@@ -32,10 +32,15 @@ export function useRouteSync() {
   const location = useLocation()
   const { viewKey: urlViewKey } = useParams<{ viewKey?: string }>()
   const isInitialSync = useRef(true)
+  const appliedInitialView = useRef(false)
 
   // On mount / workspace load: apply view key from URL
   useEffect(() => {
-    if (!workspace) return
+    if (!workspace) { appliedInitialView.current = false; return }
+    // Immutable edits and undo replace workspace too. Replaying the old URL
+    // then can overwrite a view switch before its navigation has committed.
+    if (appliedInitialView.current) return
+    appliedInitialView.current = true
     if (urlViewKey) {
       const decoded = decodeURIComponent(urlViewKey)
       if (decoded !== activeViewKey) {

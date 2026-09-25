@@ -129,6 +129,19 @@ describe('useRouteSync — state → URL', () => {
     expect(router.navigate).toHaveBeenCalledWith('/collection/team/my-ws/cont')
   })
 
+  it('does not replay the stale URL when an edit and view switch share a render', () => {
+    seedCanvas()
+    router.params = { viewKey: 'land' }
+    router.location.pathname = '/collection/team/my-ws/land'
+    renderHook(() => useRouteSync())
+    act(() => {
+      useWorkspaceStore.getState().updateElement('sys', { name: 'Edited system' })
+      useWorkspaceStore.getState().setActiveView('cont')
+    })
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('cont')
+    expect(router.navigate).toHaveBeenLastCalledWith('/collection/team/my-ws/cont')
+  })
+
   it('does nothing when no workspace is loaded', () => {
     renderHook(() => useRouteSync())
     expect(router.navigate).not.toHaveBeenCalled()
