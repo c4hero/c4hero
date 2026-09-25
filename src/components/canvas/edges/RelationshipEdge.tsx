@@ -10,6 +10,7 @@ import {
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
+import { markerIdSuffix } from './edgeMarkers'
 
 interface RelationshipEdgeData {
   relationship: Relationship
@@ -18,6 +19,8 @@ interface RelationshipEdgeData {
   order?: string
   /** Dynamic views: per-step description overriding the model relationship's. */
   stepDescription?: string
+  /** Tech-filter highlight; the CSS recolors the line, so the markers follow. */
+  highlighted?: boolean
 }
 
 const FULL_LABEL_MAX_WIDTH = 200
@@ -40,6 +43,9 @@ function snapToNode(x: number, y: number, pos: Position, offset: number): [numbe
     default:              return [x, y]
   }
 }
+
+const EDGE_COLOR = 'var(--canvas-edge, var(--color-edge))'
+const SELECTION_COLOR = 'var(--canvas-selection, var(--color-accent))'
 
 function RelationshipEdge({
   id,
@@ -89,9 +95,13 @@ function RelationshipEdge({
   }
 
   // Apply style from RelationshipStyle if available
-  const strokeColor = emphasized
-    ? 'var(--canvas-selection, var(--color-accent))'
-    : (relStyle?.color ?? 'var(--canvas-edge, var(--color-edge))')
+  const strokeColor = emphasized ? SELECTION_COLOR : (relStyle?.color ?? EDGE_COLOR)
+  // Markers are defined per edge, inside the edge layer, so they match the
+  // line's color and travel with the subtree image export clones (#207).
+  const markerColor = data?.highlighted ? SELECTION_COLOR : strokeColor
+  const markerSuffix = markerIdSuffix(id)
+  const arrowId = `c4-arrow-${markerSuffix}`
+  const dotId = `c4-dot-${markerSuffix}`
   const strokeWidth = emphasized ? 2 : (relStyle?.thickness ?? 1.5)
   const isDashed = isAsync || (relStyle?.dashed ?? false)
 
@@ -122,6 +132,29 @@ function RelationshipEdge({
 
   return (
     <>
+      <defs>
+        <marker
+          id={arrowId}
+          viewBox="0 0 10 10"
+          refX="10"
+          refY="5"
+          markerWidth={8}
+          markerHeight={8}
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" style={{ fill: markerColor }} />
+        </marker>
+        <marker
+          id={dotId}
+          viewBox="0 0 10 10"
+          refX="5"
+          refY="5"
+          markerWidth={6}
+          markerHeight={6}
+        >
+          <circle cx="5" cy="5" r="4" style={{ fill: markerColor }} />
+        </marker>
+      </defs>
       {/* Invisible wider path for easier hover targeting */}
       <path
         d={edgePath}
@@ -142,8 +175,8 @@ function RelationshipEdge({
           opacity: relStyle?.opacity,
           ...edgeStyle,
         }}
-        markerStart={emphasized ? 'url(#c4-dot-selected)' : 'url(#c4-dot)'}
-        markerEnd={emphasized ? 'url(#c4-arrow-selected)' : 'url(#c4-arrow)'}
+        markerStart={`url(#${dotId})`}
+        markerEnd={`url(#${arrowId})`}
       />
       {/* Dynamic-view interaction order badge — a numbered chip on the edge. */}
       {order && (
@@ -164,7 +197,7 @@ function RelationshipEdge({
               fontSize: 11,
               fontWeight: 700,
               lineHeight: '20px',
-              background: emphasized ? 'var(--canvas-selection, var(--color-accent))' : 'var(--canvas-edge, var(--color-edge))',
+              background: emphasized ? SELECTION_COLOR : EDGE_COLOR,
               color: 'var(--color-bg-primary, #0b0f17)',
               boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
               pointerEvents: 'none',

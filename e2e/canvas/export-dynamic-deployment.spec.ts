@@ -75,7 +75,7 @@ async function exportImage(page: Page, rowLabel: string, ext: string): Promise<{
 /** The exported SVG must carry the marker defs its edges reference (#207). */
 async function expectSvgHasArrowMarkers(path: string) {
   const { readFileSync } = await import('node:fs')
-  expect(readFileSync(path, 'utf8')).toContain('id="c4-arrow"')
+  expect(readFileSync(path, 'utf8')).toMatch(/<marker[^>]*id="c4-arrow-/)
 }
 
 test.describe('Export for dynamic and deployment views', () => {
