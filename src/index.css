@@ -2481,8 +2481,8 @@ textarea:focus-visible {
   border-radius: inherit;
   pointer-events: none;
   opacity: 0;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--node-glow) 48%, transparent),
-    0 0 12px color-mix(in srgb, var(--node-glow) 22%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--node-glow) 62%, transparent),
+    0 0 16px color-mix(in srgb, var(--node-glow) 32%, transparent);
   transition: opacity 140ms ease;
 }
 [data-zoom-active="true"] .c4-node[data-semantic-expandable]::after { opacity: 1; }
