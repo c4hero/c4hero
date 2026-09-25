@@ -146,6 +146,21 @@ describe('useRouteSync — state → URL', () => {
     renderHook(() => useRouteSync())
     expect(router.navigate).not.toHaveBeenCalled()
   })
+
+  it('does not replay a delayed navigation over a newer view switch, but still handles Back', () => {
+    seedCanvas()
+    router.location.pathname = '/collection/team/my-ws'
+    const { rerender } = renderHook(() => useRouteSync())
+    act(() => useWorkspaceStore.getState().setActiveView('cont'))
+    router.location.pathname = '/collection/team/my-ws/land'
+    rerender()
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('cont')
+    router.location.pathname = '/collection/team/my-ws/cont'
+    rerender()
+    router.location.pathname = '/collection/team/my-ws/land'
+    rerender()
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('land')
+  })
 })
 
 describe('useRouteSync — URL → state', () => {

@@ -131,8 +131,18 @@ test('drag release glides, pointer input interrupts and reduced motion stops imm
   await page.locator('.react-flow__pane').click({ position: { x: 1000, y: 650 } })
   await page.keyboard.down('Space')
   await page.mouse.move(600, 650); await page.mouse.down()
-  await page.mouse.move(680, 650, { steps: 5 }); await page.mouse.up()
-  const released = await x()
+  // Deliver the short flick and capture release in the browser. Protocol
+  // round trips under CI load can otherwise insert a >100ms pause before
+  // release, correctly suppressing inertia and making this assertion flaky.
+  const released = await host.evaluate(async el => {
+    for (let step = 1; step <= 5; step++) {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      window.dispatchEvent(new MouseEvent('mousemove', { view: window, bubbles: true, buttons: 1, clientX: 600 + step * 16, clientY: 650 }))
+    }
+    window.dispatchEvent(new MouseEvent('mouseup', { view: window, bubbles: true, clientX: 680, clientY: 650 }))
+    return (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.getViewport().x
+  })
+  await page.mouse.up()
   await expect.poll(x).toBeGreaterThan(released + 1)
   await page.mouse.down()
   const interrupted = await x()

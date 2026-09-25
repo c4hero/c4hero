@@ -33,10 +33,12 @@ export function useRouteSync() {
   const { viewKey: urlViewKey } = useParams<{ viewKey?: string }>()
   const isInitialSync = useRef(true)
   const appliedInitialView = useRef(false)
+  const pendingPaths = useRef<string[]>([])
+  const previousPath = useRef(location.pathname)
 
   // On mount / workspace load: apply view key from URL
   useEffect(() => {
-    if (!workspace) { appliedInitialView.current = false; return }
+    if (!workspace) { appliedInitialView.current = false; pendingPaths.current = []; return }
     // Immutable edits and undo replace workspace too. Replaying the old URL
     // then can overwrite a view switch before its navigation has committed.
     if (appliedInitialView.current) return
@@ -58,6 +60,7 @@ export function useRouteSync() {
     if (!workspace) return
     const targetPath = buildCanvasPath(activeViewKey)
     if (location.pathname !== targetPath) {
+      pendingPaths.current.push(targetPath)
       if (isInitialSync.current) {
         navigate(targetPath, { replace: true })
       } else {
@@ -71,6 +74,17 @@ export function useRouteSync() {
   // React to location changes (browser back/forward)
   useEffect(() => {
     if (!workspace) return
+
+    // A navigation requested by state can commit after a newer view switch.
+    // Acknowledge it without replaying that older view into the store.
+    const pathChanged = previousPath.current !== location.pathname
+    previousPath.current = location.pathname
+    const pendingIndex = pendingPaths.current.lastIndexOf(location.pathname)
+    if (pendingIndex >= 0) {
+      pendingPaths.current.splice(0, pendingIndex + 1)
+      return
+    }
+    if (pathChanged) pendingPaths.current = []
 
     // Check if we navigated away from canvas
     const match = location.pathname.match(/^\/collection\/[^/]+\/[^/]+(?:\/(.+))?$/)

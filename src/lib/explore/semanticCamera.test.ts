@@ -59,3 +59,27 @@ it('disposal cancels pending focus, motion, hints and wheel interception', () =>
   host.dispatchEvent(after)
   expect(after.defaultPrevented).toBe(false)
 })
+
+it('uses gesture timestamps for inertia even when the release callback is delayed', () => {
+  const { camera } = setup()
+  const eventAt = (type: string, timeStamp: number) => {
+    const event = new MouseEvent(type)
+    Object.defineProperty(event, 'timeStamp', { value: timeStamp })
+    return event
+  }
+  try {
+    camera.onMove(eventAt('mousemove', 10), { x: 10, y: 0, zoom: 1 })
+    camera.onMove(eventAt('mousemove', 26), { x: 30, y: 0, zoom: 1 })
+    vi.advanceTimersByTime(200)
+    camera.onMoveEnd(eventAt('mouseup', 27))
+    vi.advanceTimersByTime(32)
+    expect(camera.getViewport().x).toBeGreaterThan(1)
+    camera.interrupt()
+    const stopped = camera.getViewport().x
+    camera.onMove(eventAt('mousemove', 300), { x: 40, y: 0, zoom: 1 })
+    camera.onMove(eventAt('mousemove', 316), { x: 60, y: 0, zoom: 1 })
+    camera.onMoveEnd(eventAt('mouseup', 500))
+    vi.advanceTimersByTime(200)
+    expect(camera.getViewport().x).toBe(stopped)
+  } finally { camera.dispose() }
+})

@@ -118,7 +118,7 @@ export class SemanticCamera implements ActiveCamera {
     if (!event) return // Programmatic animation frames aren't a new gesture.
     this.focusedId = undefined
     if ('touches' in event && event.touches.length > 1) this.pinching = true
-    const camera = this.rf.getViewport(), time = performance.now()
+    const camera = viewport ?? this.rf.getViewport(), time = event.timeStamp
     if (this.previousMove) {
       const dt = Math.max(1, time - this.previousMove.time)
       this.velocity = { x: (camera.x - this.previousMove.camera.x) / dt, y: (camera.y - this.previousMove.camera.y) / dt }
@@ -128,7 +128,9 @@ export class SemanticCamera implements ActiveCamera {
   }
   onMoveEnd(event: MouseEvent | TouchEvent | null) {
     if (!event) return
-    const recent = this.previousMove && performance.now() - this.previousMove.time < 100
+    // React Flow defers its end callback. Judge the gesture at release, not
+    // after rendering or another busy task delayed that callback.
+    const recent = this.previousMove && event.timeStamp - this.previousMove.time < 100
     this.gliding = !!recent && !this.pinching && !this.media.matches && Math.hypot(this.velocity.x, this.velocity.y) > .015
     this.input()
   }
