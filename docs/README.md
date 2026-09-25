@@ -5,10 +5,6 @@ need any of this — the [top-level README](../README.md) is the entry point.
 
 ## What's here
 
-- [Explore controls and behavior](explore.md) — workspace scope, semantic zoom, selection freeze, and connection inspection.
-- [Explore validation](explore-validation.md) — architecture, acceptance coverage, browser evidence and benchmark conditions.
-
-
 - **`c4hero-state-lifecycle.html`** — interactive walk-through of the workspace
   state model: how data moves between disk, store, view, and React Flow.
   Open it locally in a browser.
