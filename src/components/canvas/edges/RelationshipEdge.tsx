@@ -5,14 +5,19 @@ import {
   getSmoothStepPath,
   getBezierPath,
   getStraightPath,
-  Position,
   type EdgeProps,
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
+import { CENTER_SLOT, handleSlot } from '../handleSlots'
+import { snapToNode } from './edgeAnchors'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
 import { markerIdSuffix } from './edgeMarkers'
 
 interface RelationshipEdgeData {
+  sourceScale?: number
+  targetScale?: number
+  semanticZIndex?: number
+  semanticAlpha?: number
   relationship: Relationship
   relationshipStyle?: RelationshipStyle
   /** Dynamic views: the ordered interaction sequence label ("1", "2", …). */
@@ -34,15 +39,6 @@ const COMPACT_TECH_CHIP_LIMIT = 1
 const SRC_OFFSET = 4  // 8px source handle / 2
 const TGT_OFFSET = 7  // 14px target handle / 2
 
-function snapToNode(x: number, y: number, pos: Position, offset: number): [number, number] {
-  switch (pos) {
-    case Position.Left:   return [x + offset, y]
-    case Position.Right:  return [x - offset, y]
-    case Position.Top:    return [x, y + offset]
-    case Position.Bottom: return [x, y - offset]
-    default:              return [x, y]
-  }
-}
 
 const EDGE_COLOR = 'var(--canvas-edge, var(--color-edge))'
 const SELECTION_COLOR = 'var(--canvas-selection, var(--color-accent))'
@@ -55,12 +51,14 @@ function RelationshipEdge({
   targetY: rawTgtY,
   sourcePosition,
   targetPosition,
+  sourceHandleId,
   data,
   selected,
   style: edgeStyle,
 }: EdgeProps & { data?: RelationshipEdgeData }) {
   const relationship = data?.relationship
   const relStyle = data?.relationshipStyle
+  const semanticScale = Math.min(data?.sourceScale ?? 1, data?.targetScale ?? 1)
   const order = data?.order
   // Dynamic-view steps may override the model relationship's description.
   const effectiveDescription = data?.stepDescription ?? relationship?.description
@@ -68,8 +66,8 @@ function RelationshipEdge({
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
 
-  const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
-  const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
+  const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, sourceHandleId && handleSlot(sourceHandleId) !== CENTER_SLOT ? 3 : SRC_OFFSET, data?.sourceScale ?? 1)
+  const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET, data?.targetScale ?? 1)
 
   // Choose path function based on lineStyle
   let edgePath: string
@@ -102,7 +100,7 @@ function RelationshipEdge({
   const markerSuffix = markerIdSuffix(id)
   const arrowId = `c4-arrow-${markerSuffix}`
   const dotId = `c4-dot-${markerSuffix}`
-  const strokeWidth = emphasized ? 2 : (relStyle?.thickness ?? 1.5)
+  const strokeWidth = (emphasized ? 2 : (relStyle?.thickness ?? 1.5)) * semanticScale
   const isDashed = isAsync || (relStyle?.dashed ?? false)
 
   const [hovered, setHovered] = useState(false)
@@ -160,7 +158,7 @@ function RelationshipEdge({
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={20}
+        strokeWidth={20 * semanticScale}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{ pointerEvents: 'stroke' }}
@@ -168,12 +166,13 @@ function RelationshipEdge({
       <BaseEdge
         id={id}
         path={edgePath}
+        interactionWidth={20 * semanticScale}
         style={{
           stroke: strokeColor,
           strokeWidth,
-          strokeDasharray: isDashed ? '6 4' : undefined,
-          opacity: relStyle?.opacity,
+          strokeDasharray: isDashed ? `${6 * semanticScale} ${4 * semanticScale}` : undefined,
           ...edgeStyle,
+          opacity: Number(edgeStyle?.opacity ?? relStyle?.opacity ?? 1) * (data?.semanticAlpha ?? 1),
         }}
         markerStart={`url(#${dotId})`}
         markerEnd={`url(#${arrowId})`}
@@ -213,9 +212,15 @@ function RelationshipEdge({
           <div
             className="nodrag nopan pointer-events-auto"
             data-label-density={labelDensity}
+            data-relationship-label={id}
+            data-relationship-description={effectiveDescription ?? ''}
+            data-relationship-technology={relationship?.technology ?? ''}
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px) scale(${semanticScale})`,
+              opacity: data?.semanticAlpha,
+              pointerEvents: data?.semanticAlpha === 0 ? 'none' : undefined,
+              zIndex: data?.semanticZIndex,
               maxWidth: labelMaxWidth,
               padding: labelDensity === 'compact' ? '3px 7px' : '4px 8px',
               borderRadius: 10,

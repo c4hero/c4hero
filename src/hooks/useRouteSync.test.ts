@@ -129,9 +129,37 @@ describe('useRouteSync — state → URL', () => {
     expect(router.navigate).toHaveBeenCalledWith('/collection/team/my-ws/cont')
   })
 
+  it('does not replay the stale URL when an edit and view switch share a render', () => {
+    seedCanvas()
+    router.params = { viewKey: 'land' }
+    router.location.pathname = '/collection/team/my-ws/land'
+    renderHook(() => useRouteSync())
+    act(() => {
+      useWorkspaceStore.getState().updateElement('sys', { name: 'Edited system' })
+      useWorkspaceStore.getState().setActiveView('cont')
+    })
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('cont')
+    expect(router.navigate).toHaveBeenLastCalledWith('/collection/team/my-ws/cont')
+  })
+
   it('does nothing when no workspace is loaded', () => {
     renderHook(() => useRouteSync())
     expect(router.navigate).not.toHaveBeenCalled()
+  })
+
+  it('does not replay a delayed navigation over a newer view switch, but still handles Back', () => {
+    seedCanvas()
+    router.location.pathname = '/collection/team/my-ws'
+    const { rerender } = renderHook(() => useRouteSync())
+    act(() => useWorkspaceStore.getState().setActiveView('cont'))
+    router.location.pathname = '/collection/team/my-ws/land'
+    rerender()
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('cont')
+    router.location.pathname = '/collection/team/my-ws/cont'
+    rerender()
+    router.location.pathname = '/collection/team/my-ws/land'
+    rerender()
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('land')
   })
 })
 

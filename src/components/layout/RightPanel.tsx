@@ -1,3 +1,4 @@
+import { zoomLayoutOwner } from '@/lib/explore/editing'
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useWorkspaceStore, getSelectedElement, getSelectedDeploymentElement, getRelationshipById, buildElementMap, getAllViews, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -120,6 +121,7 @@ function SuggestButton({ onClick, busy, multiline, title }: { onClick: () => voi
 // ─── Element Properties ──────────────────────────────────────────────
 
 function ElementProperties({ element, onClose }: { element: ModelElement; onClose: () => void }) {
+  const explore = useWorkspaceStore(s => s.rendererMode === 'explore')
   const [activeTab, setActiveTab] = useState<PanelTab>('properties')
   const updateElement = useWorkspaceStore((s) => s.updateElement)
   const updateElementLive = useWorkspaceStore((s) => s.updateElementLive)
@@ -191,6 +193,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
     v.elements.some(e => e.id === element.id)
   ) : []
   const isLocked = useWorkspaceStore((s) => {
+    if (s.rendererMode === 'explore') return !!s.workspace && zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout?.elements?.[element.id]?.locked === true
     if (!s.workspace || !s.activeViewKey) return false
     const view = getActiveView(s.workspace, s.activeViewKey)
     return view?.elements.find((el) => el.id === element.id)?.locked === true
@@ -226,7 +229,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               {busyField === 'all' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             </button>
           )}
-          {activeViewKey && appearsInActiveView && (
+          {activeViewKey && (explore || appearsInActiveView) && (
             <button
               onClick={() => setElementsLocked(activeViewKey, [element.id], !isLocked)}
               className="btn-icon !min-h-7 !min-w-7 !p-1"
@@ -240,7 +243,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               {isLocked ? <Lock size={14} /> : <LockOpen size={14} />}
             </button>
           )}
-          {!isFocal && activeViewKey && appearsInActiveView && (
+          {(explore || !isFocal) && activeViewKey && (explore || appearsInActiveView) && (
             <button
               onClick={() => {
                 if (!activeViewKey) return
@@ -605,6 +608,7 @@ function ViewLink({ viewKey, title }: { viewKey: string; title: string }) {
 // ─── Relationship Properties ─────────────────────────────────────────
 
 function RelationshipProperties({ relationship, onClose }: { relationship: Relationship; onClose: () => void }) {
+  const explore = useWorkspaceStore(s => s.rendererMode === 'explore')
   const workspace = useWorkspaceStore((s) => s.workspace)
   const updateRelationship = useWorkspaceStore((s) => s.updateRelationship)
   const deleteRelationship = useWorkspaceStore((s) => s.deleteRelationship)
@@ -614,6 +618,13 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
   const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
+  const systemFor = (id: string) => workspace?.model.softwareSystems.find(system =>
+    system.id === id || system.containers.some(container => container.id === id || container.components.some(component => component.id === id)),
+  )?.id
+  const sourceSystem = systemFor(relationship.sourceId)
+  const scopeLabel = sourceSystem && sourceSystem === systemFor(relationship.destinationId)
+    ? 'Within-system relationship'
+    : relationship.sourceId === relationship.destinationId ? 'Within-element relationship' : 'Cross-system relationship'
   const source = elementMap.get(relationship.sourceId)
   const dest = elementMap.get(relationship.destinationId)
   const safeUrl = relationship.url ? normalizeSafeExternalUrl(relationship.url) : null
@@ -628,7 +639,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
             <ArrowRight size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
             <span className="truncate max-w-[80px]">{dest?.name ?? '?'}</span>
           </div>
-          <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Relationship</div>
+          <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{explore ? scopeLabel : 'Relationship'}</div>
         </div>
         <div className="flex items-center gap-1">
           {activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment' && (

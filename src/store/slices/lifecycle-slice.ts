@@ -104,6 +104,7 @@ export const createLifecycleSlice: StateCreator<
     const firstView = getFirstViewKey(workspace)
     set({
       workspace,
+      rendererMode: 'diagram',
       activeViewKey: firstView,
       viewHistory: [],
       selectedElementIds: [],
@@ -174,6 +175,7 @@ export const createLifecycleSlice: StateCreator<
   closeWorkspace: () =>
     set({
       workspace: null,
+      rendererMode: 'diagram',
       activeWorkspaceFilename: null,
       activeViewKey: null,
       viewHistory: [],

@@ -277,6 +277,10 @@ export function hasViewKeyConflict(ws: Workspace, oldId: string, newId: string):
  *  scope element's ID, e.g. `SystemContext-<id>` — left stale, the layout
  *  sidecar written against the old key would orphan on the next import). */
 export function renameElementId(ws: Workspace, oldId: string, newId: string): { from: string; to: string }[] {
+  for (const explore of [ws.exploreLayout, ...allViewsOf(ws).map(v => v.exploreLayout)]) {
+    if (explore?.elements?.[oldId]) { explore.elements[newId] = explore.elements[oldId]; delete explore.elements[oldId] }
+    if (explore?.hiddenIds) explore.hiddenIds = explore.hiddenIds.map(id => id === oldId ? newId : id)
+  }
   forEachElementHelper(ws, (el) => {
     if (el.id !== oldId) return false
     el.id = newId
@@ -836,6 +840,10 @@ export function collectCascadeIds(ws: Workspace, ids: Iterable<string>): Cascade
  */
 export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): CascadeDeleteResult {
   const { idSet, deletedContainerIds, allDeletedIds } = collectCascadeIds(ws, ids)
+  for (const layout of [ws.exploreLayout, ...allViewsOf(ws).map(v => v.exploreLayout)]) {
+    if (layout?.elements) for (const id of allDeletedIds) delete layout.elements[id]
+    if (layout?.hiddenIds) layout.hiddenIds = layout.hiddenIds.filter(id => !allDeletedIds.has(id))
+  }
   const previousViewKeys = allViewsOf(ws).map(v => v.key)
 
   // Filter people + tree

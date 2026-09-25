@@ -1,8 +1,13 @@
 import type { Workspace, ElementStatus, LineStyle, SavedViewLayout } from '@/types/model'
+import { current, isDraft } from 'immer'
 import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
+
+function cloneZoomLayout(layout: NonNullable<Workspace['exploreLayout']>) {
+  return structuredClone(isDraft(layout) ? current(layout) : layout)
+}
 
 const VALID_STATUSES: ReadonlySet<string> = new Set<ElementStatus>(['Live', 'Planned', 'Deprecated', 'Removed'])
 const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
@@ -38,6 +43,7 @@ interface SidecarViewElement {
 
 export interface SidecarData {
   version: 1
+  explore?: Workspace['exploreLayout']
   elements?: Record<string, SidecarElement>
   relationships?: Record<string, SidecarRelationship>
   views?: Record<string, SavedViewLayout>
@@ -67,6 +73,7 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
 
 function isSidecarView(value: unknown): value is SavedViewLayout {
   if (!isRecord(value)) return false
+  if ('exploreLayout' in value && value.exploreLayout !== undefined && !isSidecarData({ version: 1, explore: value.exploreLayout })) return false
   if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
   return true
@@ -74,6 +81,12 @@ function isSidecarView(value: unknown): value is SavedViewLayout {
 
 function isSidecarData(value: unknown): value is SidecarData {
   if (!isRecord(value) || value.version !== 1) return false
+  if (value.explore !== undefined) {
+    if (!isRecord(value.explore)) return false
+    const { direction, hiddenIds } = value.explore
+    if (!isSidecarView(value.explore) || (direction !== undefined && !['TB', 'BT', 'LR', 'RL'].includes(String(direction))) ||
+      (hiddenIds !== undefined && (!Array.isArray(hiddenIds) || !hiddenIds.every(id => typeof id === 'string')))) return false
+  }
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarElement)) return false
   if ('relationships' in value && value.relationships !== undefined && !isRecordOf(value.relationships, isSidecarRelationship)) return false
   if ('views' in value && value.views !== undefined && !isRecordOf(value.views, isSidecarView)) return false
@@ -84,6 +97,7 @@ function isSidecarData(value: unknown): value is SidecarData {
 
 export function extractSidecar(workspace: Workspace): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
+  if (workspace.exploreLayout) sidecar.explore = cloneZoomLayout(workspace.exploreLayout)
 
   // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
@@ -97,7 +111,7 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // including when the workspace is frozen by Immer.
   const views: Record<string, SavedViewLayout> = Object.fromEntries(
     Object.entries(workspace.savedLayout ?? {}).map(([key, data]) =>
-      [key, { ...data, ...(data.elements ? { elements: { ...data.elements } } : {}) }]),
+      [key, { ...data, ...(data.exploreLayout ? { exploreLayout: cloneZoomLayout(data.exploreLayout) } : {}), ...(data.elements ? { elements: { ...data.elements } } : {}) }]),
   )
   for (const view of allViewsOf(workspace)) {
     const viewElements: Record<string, SidecarViewElement> = { ...views[view.key]?.elements }
@@ -114,14 +128,15 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
       }
     }
     const entry: SavedViewLayout = {}
+    if (view.exploreLayout) entry.exploreLayout = cloneZoomLayout(view.exploreLayout)
     if (view.locked) {
       entry.locked = true
     }
     if (Object.keys(viewElements).length > 0) entry.elements = viewElements
-    if (entry.locked || entry.elements) views[view.key] = entry
+    if (entry.locked || entry.elements || entry.exploreLayout) views[view.key] = entry
     else delete views[view.key]
   }
-  if (Object.keys(views).length === 0 && workspace.savedLayout === undefined) return null
+  if (Object.keys(views).length === 0 && workspace.savedLayout === undefined && !sidecar.explore) return null
   // Do not return null after clearing loaded layout: save callers must write
   // the empty map, otherwise the old file resurrects positions on reopen.
   sidecar.views = views
@@ -132,9 +147,11 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
 
 export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   if (sidecar.version !== 1) return
+  if (sidecar.explore && isSidecarData({ version: 1, explore: sidecar.explore })) workspace.exploreLayout = cloneZoomLayout(sidecar.explore)
   workspace.savedLayout = Object.fromEntries(
     Object.entries(sidecar.views ?? {}).map(([key, data]) => [key, {
       ...data,
+      ...(data.exploreLayout ? { exploreLayout: cloneZoomLayout(data.exploreLayout) } : {}),
       ...(data.elements ? { elements: Object.fromEntries(
         Object.entries(data.elements).map(([id, el]) => [id, { ...el }]),
       ) } : {}),
@@ -201,6 +218,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
           delete workspace.savedLayout[view.originalKey]
         }
       }
+      if (viewData.exploreLayout) view.exploreLayout = cloneZoomLayout(viewData.exploreLayout)
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue
       for (const el of view.elements) {

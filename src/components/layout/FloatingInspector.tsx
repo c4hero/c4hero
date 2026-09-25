@@ -1,8 +1,11 @@
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useEffect, useRef } from 'react'
 import { useWorkspaceStore, getSelectedElement, getSelectedDeploymentElement, getRelationshipById } from '@/store/workspace'
 import RightPanel from '@/components/layout/RightPanel'
 
 export default function FloatingInspector() {
+  const mobile = useBreakpoint() === 'mobile'
+  const explore = useWorkspaceStore(s => s.rendererMode === 'explore')
   const workspace = useWorkspaceStore((s) => s.workspace)
   const selectedIds = useWorkspaceStore((s) => s.selectedElementIds)
   const selectedRelId = useWorkspaceStore((s) => s.selectedRelationshipId)
@@ -34,9 +37,12 @@ export default function FloatingInspector() {
       const target = e.target as Node | null
       if (!target) return
       if (containerRef.current?.contains(target)) return
+      // Explore owns empty-map clicks. Chrome interaction (including zoom and
+      // portal controls) must not release the map-wide selection lock.
+      if (useWorkspaceStore.getState().rendererMode === 'explore') return
       // Don't dismiss when clicking inside the React Flow canvas — its own
       // pane / node handlers already manage selection.
-      const inCanvas = (target as Element).closest?.('.react-flow, [data-canvas-chrome]')
+      const inCanvas = (target as Element).closest?.('.react-flow, [data-explore-canvas], [data-canvas-chrome]')
       if (inCanvas) return
       clearSelection()
     }
@@ -54,14 +60,16 @@ export default function FloatingInspector() {
     <div
       ref={containerRef}
       data-canvas-chrome="inspector"
+      data-canvas-fit-chrome={explore ? (mobile ? "bottom" : "right") : undefined}
       style={{
         // Frame matched to the AI assistant panel so the two read as a set.
         position: 'fixed',
-        top: 64,
+        top: mobile ? undefined : 64,
+        bottom: mobile ? 82 : undefined,
         right: 14,
         zIndex: 50,
         width: 'min(360px, calc(100vw - 28px))',
-        maxHeight: 'calc(100dvh - 136px)',
+        maxHeight: mobile ? '40dvh' : 'calc(100dvh - 136px)',
         overflowY: 'auto',
         borderRadius: 12,
         border: '1px solid rgba(88,166,255,0.16)',

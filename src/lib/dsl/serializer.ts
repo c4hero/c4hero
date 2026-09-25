@@ -984,46 +984,59 @@ class SerializerContext {
         const views = this.workspace.views
         let needsBlank = this.emitDirectives('views')
 
-        // Skip parser-synthesised views — they exist to give the canvas
-        // something to render when the DSL declares no views; serializing them
-        // would mutate the source DSL.
+        // Parser-synthesised views exist to give the canvas something to
+        // render when the DSL declares no views; serializing them would mutate
+        // the source DSL. But they are all-or-nothing: `generateDefaultViews`
+        // only runs when the DSL declares *no* views, so writing one authored
+        // view while skipping the generated ones suppresses generation on the
+        // next open and deletes them permanently.
+        //
+        // So the rule is one rule, here, rather than something each action
+        // that creates a view has to remember: either the workspace is still
+        // purely generated and nothing is written, or something authored
+        // exists and all of it is written (TEA-342).
+        const skipGenerated = ![
+            ...views.systemLandscapeViews, ...views.systemContextViews,
+            ...views.containerViews, ...views.componentViews,
+            ...(views.dynamicViews ?? []), ...(views.deploymentViews ?? []),
+        ].some(v => !v.autoView)
         for (const view of views.systemLandscapeViews) {
-            if (view.autoView) continue
+            if (skipGenerated && view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
         }
 
         for (const view of views.systemContextViews) {
-            if (view.autoView) continue
+            if (skipGenerated && view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
         }
 
         for (const view of views.containerViews) {
-            if (view.autoView) continue
+            if (skipGenerated && view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
         }
 
         for (const view of views.componentViews) {
-            if (view.autoView) continue
+            if (skipGenerated && view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
         }
 
         for (const view of views.dynamicViews ?? []) {
-            if (view.autoView) continue
+            if (skipGenerated && view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeDynamicView(view)
             needsBlank = true
         }
 
         for (const view of views.deploymentViews ?? []) {
-            if (view.autoView) continue
+            if (skipGenerated && view.autoView) continue
             if (needsBlank) this.emitBlank()
             this.serializeView(view)
             needsBlank = true
