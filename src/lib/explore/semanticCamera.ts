@@ -15,6 +15,9 @@ export class SemanticCamera implements ActiveCamera {
   private timer: ReturnType<typeof setTimeout> | undefined
   private previousTime = 0
   private lastInput = -Infinity
+  private zoomHintTimer: ReturnType<typeof setTimeout> | undefined
+  private zooming = false
+  private observedZoom: number
   private target: Camera | null = null
   private anchor?: { world: Point; screen: Point }
   private velocity: Point = { x: 0, y: 0 }
@@ -33,7 +36,9 @@ export class SemanticCamera implements ActiveCamera {
   constructor(host: HTMLElement, rf: ReactFlowInstance, layout: MapLayout, changed: () => void) {
     this.host = host; this.rf = rf; this.changed = changed
     this.layoutState = layout
+    this.observedZoom = rf.getZoom()
     this.unsubscribe = useWorkspaceStore.subscribe((state, previous) => {
+      this.refreshZoomHint()
       if (previous.selectedElementIds.length && !state.selectedElementIds.length) this.input()
     })
     host.addEventListener('wheel', this.wheel, { passive: false, capture: true })
@@ -50,6 +55,23 @@ export class SemanticCamera implements ActiveCamera {
     // Native fitting and intrinsic card measurements can finish after mount.
     this.wake()
   }
+  private refreshZoomHint = () => {
+    const state = useWorkspaceStore.getState()
+    const show = this.zooming && !state.selectedElementIds.length && !state.selectedRelationshipId && !state.selectedGroupId
+    if (show) this.host.dataset.zoomActive = 'true'
+    else delete this.host.dataset.zoomActive
+  }
+  private observeZoom(zoom = this.rf.getZoom()) {
+    if (Math.abs(zoom - this.observedZoom) < .000001) return
+    this.observedZoom = zoom
+    this.zooming = true
+    this.refreshZoomHint()
+    clearTimeout(this.zoomHintTimer)
+    this.zoomHintTimer = setTimeout(() => {
+      this.zooming = false
+      this.refreshZoomHint()
+    }, TUNING.idleMs)
+  }
   private wake = () => {
     if (this.disposed || this.frame) return
     this.previousTime = performance.now()
@@ -63,6 +85,7 @@ export class SemanticCamera implements ActiveCamera {
   }
   interrupt = () => {
     cancelAnimationFrame(this.focusFrame)
+    clearTimeout(this.zoomHintTimer); this.zooming = false; this.refreshZoomHint()
     this.focusTarget = undefined; this.focusAncestors.clear()
     this.pinching = false
     this.target = null; this.anchor = undefined; this.gliding = false
@@ -80,7 +103,8 @@ export class SemanticCamera implements ActiveCamera {
     this.target = { x: screen.x - this.anchor.world.x * zoom, y: screen.y - this.anchor.world.y * zoom, zoom }
     this.input()
   }
-  onMove(event: MouseEvent | TouchEvent | null) {
+  onMove(event: MouseEvent | TouchEvent | null, viewport?: Camera) {
+    this.observeZoom(viewport?.zoom)
     if (!event) return // Programmatic animation frames aren't a new gesture.
     if ('touches' in event && event.touches.length > 1) this.pinching = true
     const camera = this.rf.getViewport(), time = performance.now()
@@ -116,6 +140,7 @@ export class SemanticCamera implements ActiveCamera {
       moving ||= Math.abs(camera.zoom - this.target.zoom) > .00001 || Math.hypot(camera.x - this.target.x, camera.y - this.target.y) > .01
       if (!moving) { this.target = null; this.anchor = undefined }
     }
+    this.observeZoom(camera.zoom)
     const rect = this.host.getBoundingClientRect(), insets = getCanvasFitInsets(rect)
     const state = useWorkspaceStore.getState(), locked = state.selectedElementIds.length > 0 && !this.focusTarget
     let changed = false
@@ -209,6 +234,7 @@ export class SemanticCamera implements ActiveCamera {
     return !!(v?.locked || v?.exploreLayout?.locked || v?.exploreLayout?.elements?.[id]?.locked)
   }
   dispose() {
+    clearTimeout(this.zoomHintTimer); delete this.host.dataset.zoomActive
     this.disposed = true; cancelAnimationFrame(this.frame); cancelAnimationFrame(this.focusFrame); clearTimeout(this.timer)
     this.unsubscribe()
     this.host.removeEventListener('wheel', this.wheel, true)

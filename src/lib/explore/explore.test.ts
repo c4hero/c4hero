@@ -99,7 +99,7 @@ describe('Explore transitions', () => {
   })
   it('waits a little longer before starting system and container reveal', () => {
     const map = buildLayout(createBigBankSample())
-    for (const [type, before, after] of [['softwareSystem', 275, 290], ['container', 300, 315]] as const) {
+    for (const [type, before, after] of [['softwareSystem', 315, 330], ['container', 340, 355]] as const) {
       const node = map.nodes.find(n => n.element.type === type && n.children.length)!
       expect(revealFor(node, before / node.width, 10000, 10000)).toBe(0)
       expect(revealFor(node, after / node.width, 10000, 10000)).toBeGreaterThan(0)

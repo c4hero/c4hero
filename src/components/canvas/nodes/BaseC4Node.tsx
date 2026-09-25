@@ -117,6 +117,7 @@ export default function BaseC4Node({
   return (
     <div
       ref={cardRef}
+      data-semantic-expandable={data.semantic?.expandable || undefined}
       data-semantic-reveal={data.semantic ? data.semantic.reveal : undefined}
       className={`c4-node relative ${selected ? 'selected' : ''} ${isPerson ? 'c4-node-person' : ''}`}
       style={{

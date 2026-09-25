@@ -2472,3 +2472,20 @@ textarea:focus-visible {
 .c4-node[data-semantic-reveal] > .c4-node-body {
   opacity: var(--semantic-content-opacity, 1);
 }
+
+/* A quiet affordance while zooming; no layout or border-size change. */
+.c4-node[data-semantic-expandable]::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--node-glow) 48%, transparent),
+    0 0 12px color-mix(in srgb, var(--node-glow) 22%, transparent);
+  transition: opacity 140ms ease;
+}
+[data-zoom-active="true"] .c4-node[data-semantic-expandable]::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .c4-node[data-semantic-expandable]::after { transition: none; }
+}

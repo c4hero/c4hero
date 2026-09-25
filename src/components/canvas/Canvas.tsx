@@ -16,6 +16,7 @@ import {
   type Edge,
   type OnSelectionChangeParams,
   type Connection,
+  type Viewport,
   BackgroundVariant,
   reconnectEdge,
 } from '@xyflow/react'
@@ -971,8 +972,8 @@ export default function Canvas() {
     if (!paneDragging) document.documentElement.removeAttribute('data-canvas-panning')
   }, [paneDragging])
 
-  const onMove = useCallback((event: MouseEvent | TouchEvent | null) => {
-    semantic.controller.current?.onMove(event)
+  const onMove = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+    semantic.controller.current?.onMove(event, viewport)
     if (draggingRef.current) document.documentElement.setAttribute('data-canvas-panning', '')
   }, [semantic.controller])
 
