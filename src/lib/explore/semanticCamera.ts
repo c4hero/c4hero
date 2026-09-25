@@ -171,7 +171,13 @@ export class SemanticCamera implements ActiveCamera {
   layout(): NonNullable<Workspace['exploreLayout']> {
     const s = useWorkspaceStore.getState()
     const existing = s.workspace && s.activeViewKey ? getActiveView(s.workspace, s.activeViewKey)?.exploreLayout : undefined
-    return { ...existing, elements: { ...existing?.elements, ...Object.fromEntries(this.layoutState.nodes.filter(n => n.parent).map(n => [n.id, { pinned: true, x: (n.x - n.parent!.x) / n.scale, y: (n.y - n.parent!.y) / n.scale }])) } }
+    return { ...existing, positionSpace: 'parent-body', elements: { ...existing?.elements, ...Object.fromEntries(this.layoutState.nodes.filter(n => n.parent).map(n => {
+      const p = n.parent!, padding = 14 * p.scale, header = (p.headerHeight ?? 48) * p.scale
+      return [n.id, { ...existing?.elements?.[n.id], pinned: true,
+        x: (n.x - p.x - padding) / Math.max(.001, p.width - 2 * padding - n.width),
+        y: (n.y - p.y - header) / Math.max(.001, p.height - header - padding - n.height),
+      }]
+    })) } }
   }
   moveNodes(positions: { id: string; x: number; y: number }[]) {
     const state = useWorkspaceStore.getState()

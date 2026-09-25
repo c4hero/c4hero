@@ -120,9 +120,23 @@ export function buildLayout(workspace: Workspace, activeView?: View, snapshot?: 
     // Persisted Zoom positions may predate a drag in the normal view.
     const saved = !n.parent && useSnapshotPositions && snapshot?.has(n.id) ? snapshot.get(n.id) : zoomLayout?.elements?.[n.id]
     if (saved?.x === undefined || saved.y === undefined) continue
-    const dx = (n.parent?.x ?? 0) + saved.x * n.scale - n.x
-    const dy = (n.parent?.y ?? 0) + saved.y * n.scale - n.y
-    translateSubtree(n, dx, dy)
+    let x = (n.parent?.x ?? 0) + saved.x * n.scale
+    let y = (n.parent?.y ?? 0) + saved.y * n.scale
+    if (n.parent) {
+      const p = n.parent, padding = 14 * p.scale, header = (p.headerHeight ?? 48) * p.scale
+      const left = p.x + padding, top = p.y + header
+      const right = Math.max(left, p.x + p.width - padding - n.width)
+      const bottom = Math.max(top, p.y + p.height - padding - n.height)
+      if (zoomLayout?.positionSpace === 'parent-body') {
+        x = left + Math.max(0, Math.min(1, saved.x)) * (right - left)
+        y = top + Math.max(0, Math.min(1, saved.y)) * (bottom - top)
+      } else if (x < left - .01 || x > right + .01 || y < top - .01 || y > bottom + .01) {
+        // Old positions used the child's previous scale. When that no longer
+        // fits, retain the freshly fitted placement instead of restoring it.
+        continue
+      }
+    }
+    translateSubtree(n, x - n.x, y - n.y)
   }
   const x = Math.min(0, ...roots.map(n => n.x)) - 60, y = Math.min(0, ...roots.map(n => n.y)) - 60
   return { nodes, roots, byId, bounds: { x, y, width: Math.max(120, size.width + 120, ...roots.map(n => n.x + n.width - x + 60)), height: Math.max(120, size.height + 120, ...roots.map(n => n.y + n.height - y + 60)) } }
