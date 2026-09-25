@@ -4554,6 +4554,107 @@ describe('removeElementsFromView', () => {
   })
 })
 
+describe('removeRelationshipFromView', () => {
+  beforeEach(() => useWorkspaceStore.getState().closeWorkspace())
+
+  it('hides only the view reference and records a persistent exclusion', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships = [{ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} }]
+    ws.views.systemLandscapeViews = [{
+      type: 'systemLandscape', key: 'land', elements: [{ id: 'alice' }, { id: 'api' }], relationships: [{ id: 'r1' }],
+    }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+    useWorkspaceStore.setState({ activeViewKey: 'land', selectedRelationshipId: 'r1' })
+
+    useWorkspaceStore.getState().removeRelationshipFromView('land', 'r1')
+
+    const state = useWorkspaceStore.getState()
+    expect(state.workspace!.model.relationships).toHaveLength(1)
+    expect(state.workspace!.views.systemLandscapeViews[0].relationships).toEqual([])
+    expect(state.workspace!.views.systemLandscapeViews[0].excludedRelationshipIds).toEqual(['r1'])
+    expect(state.selectedRelationshipId).toBeNull()
+  })
+
+  it('restores a hidden relationship and supports undo in both directions', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships = [{ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} }]
+    ws.views.systemLandscapeViews = [{
+      type: 'systemLandscape', key: 'land', elements: [{ id: 'alice' }, { id: 'api' }], relationships: [{ id: 'r1' }],
+    }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+
+    useWorkspaceStore.getState().removeRelationshipFromView('land', 'r1')
+    useWorkspaceStore.getState().restoreRelationshipToView('land', 'r1')
+    let view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.relationships).toEqual([{ id: 'r1' }])
+    expect(view.excludedRelationshipIds).toBeUndefined()
+
+    useWorkspaceStore.getState().undo()
+    view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.relationships).toEqual([])
+    expect(view.excludedRelationshipIds).toEqual(['r1'])
+  })
+
+  it('keeps an exclusion isolated to one view and does not re-add it with an endpoint', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships = [{ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} }]
+    ws.views.systemLandscapeViews = [
+      { type: 'systemLandscape', key: 'a', elements: [{ id: 'alice' }, { id: 'api' }], relationships: [{ id: 'r1' }] },
+      { type: 'systemLandscape', key: 'b', elements: [{ id: 'alice' }, { id: 'api' }], relationships: [{ id: 'r1' }] },
+    ]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+
+    useWorkspaceStore.getState().removeRelationshipFromView('a', 'r1')
+    useWorkspaceStore.getState().toggleElementInView('a', 'alice')
+    useWorkspaceStore.getState().toggleElementInView('a', 'alice')
+
+    const [a, b] = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews
+    expect(a.relationships).toEqual([])
+    expect(a.excludedRelationshipIds).toEqual(['r1'])
+    expect(b.relationships).toEqual([{ id: 'r1' }])
+    expect(b.excludedRelationshipIds).toBeUndefined()
+  })
+
+  it('keeps newly-created parallel relationships hidden with their excluded pair', () => {
+    const ws = makeWorkspace()
+    ws.model.relationships = [{ id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} }]
+    ws.views.systemLandscapeViews = [{
+      type: 'systemLandscape', key: 'land', elements: [{ id: 'alice' }, { id: 'api' }], relationships: [],
+      excludedRelationshipIds: ['r1'],
+    }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+
+    const newId = useWorkspaceStore.getState().addRelationship('alice', 'api', 'Another call')
+
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.relationships).toEqual([])
+    expect(view.excludedRelationshipIds).toEqual(['r1', newId])
+  })
+
+  it('keeps a relationship hidden when it is reconnected onto an excluded pair', () => {
+    const ws = makeWorkspace()
+    ws.model.softwareSystems.push({
+      id: 'peer', type: 'softwareSystem', name: 'Peer', tags: ['Element', 'Software System'], properties: {}, containers: [],
+    })
+    ws.model.relationships = [
+      { id: 'r1', sourceId: 'alice', destinationId: 'api', tags: ['Relationship'], properties: {} },
+      { id: 'r2', sourceId: 'alice', destinationId: 'peer', tags: ['Relationship'], properties: {} },
+    ]
+    ws.views.systemLandscapeViews = [{
+      type: 'systemLandscape', key: 'land',
+      elements: [{ id: 'alice' }, { id: 'api' }, { id: 'peer' }],
+      relationships: [{ id: 'r2' }], excludedRelationshipIds: ['r1'],
+    }]
+    useWorkspaceStore.getState().loadWorkspace(ws)
+
+    useWorkspaceStore.getState().reconnectRelationship('r2', 'alice', 'api')
+
+    const view = useWorkspaceStore.getState().workspace!.views.systemLandscapeViews[0]
+    expect(view.relationships).toEqual([])
+    expect(view.excludedRelationshipIds).toEqual(['r1', 'r2'])
+  })
+})
+
 describe('deployment + dynamic view store integrity', () => {
   const DSL = `workspace {
     model {

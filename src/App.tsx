@@ -173,6 +173,7 @@ export default function App() {
       {pendingDelete && (
         <ConfirmDeleteDialog
           message={pendingDelete.message}
+          details={pendingDelete.details}
           impact={pendingDelete.impact}
           targetIds={pendingDelete.targetIds}
           onConfirm={() => { pendingDelete.onConfirm(); cancelDelete() }}

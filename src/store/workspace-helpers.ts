@@ -2,7 +2,7 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
-  ViewType, ElementInView, DeploymentNode, StoredViewLayout,
+  ViewType, ElementInView, DeploymentNode,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
@@ -43,28 +43,17 @@ export function allViewsOf(ws: Workspace): View[] {
   ]
 }
 
-/** A view's layout as it is stored: the view-level lock plus every element the
- *  user has pinned or locked. The one projection, so the sidecar writer and
- *  the re-parse carry-over cannot drift apart on what "layout" means. */
-export function viewLayoutOf(view: View): StoredViewLayout | undefined {
-  const elements: NonNullable<StoredViewLayout['elements']> = {}
-  for (const el of view.elements) {
-    if (!el.pinned && !el.locked) continue
-    const entry: NonNullable<StoredViewLayout['elements']>[string] = {}
-    if (el.pinned) entry.pinned = true
-    if (el.locked) entry.locked = true
-    if (el.x !== undefined) entry.x = el.x
-    if (el.y !== undefined) entry.y = el.y
-    elements[el.id] = entry
-  }
-  const hasElements = Object.keys(elements).length > 0
-  if (!hasElements && !view.locked && !view.exploreLayout) return undefined
-  return { ...(view.exploreLayout && { exploreLayout: view.exploreLayout }), ...(view.locked && { locked: true }), ...(hasElements && { elements }) }
-}
-
 /** Find a view by key inside a workspace */
 export function findViewHelper(ws: Workspace, key: string): View | undefined {
   return allViewsOf(ws).find(v => v.key === key)
+}
+
+/** Restore layout only when bringing an absent element into a view. Existing
+ *  live elements remain authoritative, including explicit resets/unlocks. */
+export function restoreViewElement(ws: Workspace, viewKey: string, id: string): ElementInView {
+  const saved = ws.savedLayout?.[viewKey]?.elements?.[id]
+  if (!saved) return { id }
+  return { id, x: saved.x, y: saved.y, pinned: saved.pinned, locked: saved.locked }
 }
 
 /** Iterate every element in the model tree. Return true from callback to stop early. */
@@ -191,8 +180,31 @@ export function forEachView(ws: Workspace, fn: (v: View) => void): void {
   }
 }
 
+/** Make the generated views explicit when the workspace is about to gain its
+ *  first authored one.
+ *
+ *  `generateDefaultViews` only runs on a workspace with no views at all, and
+ *  the serializer skips `autoView` views so a view-less DSL roundtrips
+ *  byte-identical. Writing a single authored view into that DSL would
+ *  therefore delete every generated diagram on the next parse. Structurizr's
+ *  implicit-views convention is all-or-nothing, so the whole generated set
+ *  becomes explicit together. No-op once any view is already authored.
+ *
+ *  Returns true when it materialized, so callers can tell the user the DSL
+ *  grew a views block. */
+export function materializeAutoViews(ws: Workspace): boolean {
+  const views = allViewsOf(ws)
+  if (views.length === 0) return false
+  if (!views.every(v => v.autoView)) return false
+  for (const v of views) v.autoView = undefined
+  return true
+}
+
 /** Return a name that doesn't collide with any existing element name. */
 export function uniqueElementName(base: string, ws: Workspace): string {
+  // Names only: retained layout keys live in the ID namespace and are reserved
+  // by collectTakenIds, which every ID mint already consults. Seeding them here
+  // would suffix a display name that collides with nothing a user can see.
   const taken = new Set<string>()
   forEachElementHelper(ws, (el) => { taken.add(el.name) })
   if (!taken.has(base)) return base
@@ -201,12 +213,16 @@ export function uniqueElementName(base: string, ws: Workspace): string {
   return `${base} ${n}`
 }
 
-/** Every ID that lives in the workspace's DSL identifier namespace: model
- *  elements, relationships, groups, and the deployment tree. Used to keep
- *  user-set and derived element IDs collision-free (the serializer would
- *  otherwise suffix-rename on export, breaking ID stability). */
+/** IDs reserved by the model and retained layout: elements, relationships,
+ *  groups, the deployment tree, and temporarily absent elements. Used to keep
+ *  user-set and derived IDs from colliding or overwriting saved positions. */
 export function collectTakenIds(ws: Workspace): Set<string> {
   const taken = new Set<string>()
+  // A temporarily absent element still owns its saved positions. Reserve its
+  // ID for manual renames and generated IDs alike until explicitly deleted.
+  for (const layout of Object.values(ws.savedLayout ?? {})) {
+    for (const id of Object.keys(layout.elements ?? {})) taken.add(id)
+  }
   forEachElementHelper(ws, (el) => { taken.add(el.id) })
   for (const r of ws.model.relationships) taken.add(r.id)
   for (const g of ws.model.groups) taken.add(g.id)
@@ -222,6 +238,32 @@ export function collectTakenIds(ws: Workspace): Set<string> {
     for (const n of env.deploymentNodes) walkNode(n)
   }
   return taken
+}
+
+/** Saved view-layout entries that do not belong to any view currently in the
+ * workspace. They are retained intentionally across reparses, but can become
+ * permanent after a view is deliberately removed in the DSL code pane. */
+export function orphanedLayoutViewKeys(ws: Workspace): string[] {
+  const liveViewKeys = new Set(allViewsOf(ws).map((view) => view.key))
+  return Object.keys(ws.savedLayout ?? {})
+    .filter((key) => !liveViewKeys.has(key))
+    .sort((a, b) => a.localeCompare(b))
+}
+
+/** Keep collision checks and the rename cascade on the same key mapping. */
+function renamedAutoViewKey(view: View, oldId: string, newId: string): string {
+  return view.autoKey
+    ? view.key.split('-').map(part => part === oldId ? newId : part).join('-')
+    : view.key
+}
+
+export function hasViewKeyConflict(ws: Workspace, oldId: string, newId: string): boolean {
+  const views = allViewsOf(ws)
+  const occupied = new Set([...views.map(v => v.key), ...Object.keys(ws.savedLayout ?? {})])
+  return views.some(view => {
+    const key = renamedAutoViewKey(view, oldId, newId)
+    return key !== view.key && occupied.has(key)
+  })
 }
 
 /** Rewrite every reference to a model element's ID, in place. The caller has
@@ -274,12 +316,27 @@ export function renameElementId(ws: Workspace, oldId: string, newId: string): { 
     }
     if (v.softwareSystemId === oldId) v.softwareSystemId = newId
     if (v.containerId === oldId) v.containerId = newId
-    if (v.autoKey && v.key.split('-').includes(oldId)) {
+    const renamedKey = renamedAutoViewKey(v, oldId, newId)
+    if (renamedKey !== v.key) {
       const from = v.key
-      v.key = v.key.split('-').map(seg => (seg === oldId ? newId : seg)).join('-')
+      v.key = renamedKey
       keyRenames.push({ from, to: v.key })
     }
   })
+  // IDs in retained layout participate in the same atomic rename, including
+  // entries belonging to views that are temporarily absent.
+  for (const layout of Object.values(ws.savedLayout ?? {})) {
+    if (layout.elements && Object.hasOwn(layout.elements, oldId)) {
+      layout.elements[newId] = layout.elements[oldId]
+      delete layout.elements[oldId]
+    }
+  }
+  for (const { from, to } of keyRenames) {
+    if (ws.savedLayout && Object.hasOwn(ws.savedLayout, from)) {
+      ws.savedLayout[to] = ws.savedLayout[from]
+      delete ws.savedLayout[from]
+    }
+  }
   invalidateElementIndex(ws)
   return keyRenames
 }
@@ -787,6 +844,7 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
     if (layout?.elements) for (const id of allDeletedIds) delete layout.elements[id]
     if (layout?.hiddenIds) layout.hiddenIds = layout.hiddenIds.filter(id => !allDeletedIds.has(id))
   }
+  const previousViewKeys = allViewsOf(ws).map(v => v.key)
 
   // Filter people + tree
   ws.model.people = ws.model.people.filter((p) => !idSet.has(p.id))
@@ -909,6 +967,16 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
     elementIds: g.elementIds.filter((eid) => !allDeletedIds.has(eid)),
   }))
 
+  if (ws.savedLayout) {
+    for (const layout of Object.values(ws.savedLayout)) {
+      if (!layout.elements) continue
+      for (const id of allDeletedIds) delete layout.elements[id]
+    }
+    const survivingKeys = new Set(allViewsOf(ws).map(v => v.key))
+    for (const key of previousViewKeys) {
+      if (!survivingKeys.has(key)) delete ws.savedLayout[key]
+    }
+  }
   invalidateElementIndex(ws)
   return { allDeletedIds, deletedContainerIds }
 }

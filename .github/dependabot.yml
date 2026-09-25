@@ -43,6 +43,12 @@ updates:
       # until we have time for a focused refactor pass.
       - dependency-name: "eslint-plugin-react-hooks"
         versions: [">=7.1.0"]
+      # Playwright 1.63.0 bundles Chromium 153, which crashes the page when an
+      # OPFS directory handle is read back from IndexedDB (breaks
+      # e2e/welcome/welcome.spec.ts; see #211). Skip only this release so a
+      # later 1.63.x with a fixed Chromium is still proposed.
+      - dependency-name: "@playwright/test"
+        versions: ["1.63.0"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

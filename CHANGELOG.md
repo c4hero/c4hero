@@ -9,33 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Hand-placed layout is no longer deleted when views change.** Adding a view
-  could wipe whole sections of the `.c4hero.json` layout file — people were
-  restoring their diagrams from git. The file is rewritten in full from
-  whatever is on screen at the time and never merged, so a view that was
-  briefly absent had its positions deleted for good.
-
-  Layout whose view is not present is now **kept rather than dropped**, and
-  written back out on every save. When the view returns — a generated view
-  that stopped being generated, an `!include` that failed to read — its
-  positions are still there and are re-applied.
-
-  Adding or duplicating a view in a workspace whose views were all generated
-  now writes **all** of them into your `.dsl`. Generated views are
-  all-or-nothing, so writing just the new one suppressed the rest on the next
-  open and deleted them permanently. A workspace you have not added to is left
-  exactly as you wrote it.
-
-  Existing files load as they are; no migration is needed.
-
-  **What this does not fix.** Layout is still filed under the view's key, and
-  for a view you did not name c4hero derives that key and numbers it by
-  declaration order. Delete or reorder such a view and the keys shift: the
-  affected diagrams come back **unplaced**, and two reordered views swap their
-  layout. Nothing is deleted in either case — the positions stay in the file —
-  but re-finding them needs entries to record which view they belong to, which
-  is a separate change. Give a view an explicit key in the DSL and it is immune.
-  (TEA-342, [#201](https://github.com/c4hero/c4hero/issues/201))
+- Exported PNG and SVG images now include relationship arrowheads (#207).
+- Relationship arrowheads and start dots take the relationship's own color
+  instead of always using the theme edge color.
+- Orphaned view layout retained after deleting a view in the DSL code pane can
+  now be reviewed and permanently removed with **Clean Up Orphaned View
+  Layout** in the command palette. Cleanup lists the affected view keys, is
+  undoable, and leaves current-view layout untouched. (TEA-343)
+- Preserve saved layout for temporarily missing views and elements through model
+  edits and repeated saves/reopens (#201). Existing sidecars need no migration.
+  Explicit view/element deletion and layout reset still remove the affected
+  layout, including when the last saved position is cleared. Duplicated
+  generated views now have their own persistent key. Bringing hidden elements
+  back through view membership, dynamic steps, context relationships, or deployment
+  edits restores their layout; exact retained IDs take precedence over name
+  matching, and ID changes cannot overwrite retained entries. Failed or cancelled
+  DSL saves leave the layout file untouched.
+  This is a preservation fix: keyless views can still exchange layout when
+  reordered, and generated views remain hidden while explicit views exist.
+  Their saved positions are retained for recovery; use explicit, unique view
+  keys when stable layout ownership is needed.
 
 ## [0.7.0] - 2026-09-18
 

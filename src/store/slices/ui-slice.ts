@@ -171,7 +171,7 @@ export const createUiSlice: StateCreator<
   confirmDelete: (payload, onConfirm) => set({
     pendingDelete: typeof payload === 'string'
       ? { message: payload, onConfirm }
-      : { message: payload.message, impact: payload.impact, targetIds: payload.targetIds, onConfirm },
+      : { message: payload.message, details: payload.details, impact: payload.impact, targetIds: payload.targetIds, onConfirm },
   }),
   cancelDelete: () => set({ pendingDelete: null }),
 })

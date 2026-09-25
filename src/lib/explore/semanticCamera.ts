@@ -24,6 +24,7 @@ export class SemanticCamera implements ActiveCamera {
   private gliding = false
   private previousMove?: { camera: Camera; time: number }
   private focusTarget?: string
+  private focusedId?: string
   private focusAncestors = new Set<string>()
   private disposed = false
   private pinching = false
@@ -38,6 +39,7 @@ export class SemanticCamera implements ActiveCamera {
     this.layoutState = layout
     this.observedZoom = rf.getZoom()
     this.unsubscribe = useWorkspaceStore.subscribe((state, previous) => {
+      if (this.focusedId && !state.selectedElementIds.includes(this.focusedId)) this.interrupt()
       this.refreshZoomHint()
       if (previous.selectedElementIds.length && !state.selectedElementIds.length) this.input()
     })
@@ -50,7 +52,12 @@ export class SemanticCamera implements ActiveCamera {
     this.wake()
   }
   update(layout: MapLayout) {
+    const previous = this.focusedId ? this.layoutState.byId.get(this.focusedId) : undefined
+    const next = this.focusedId ? layout.byId.get(this.focusedId) : undefined
     this.layoutState = layout
+    // Revealing descendants measures their native cards and can refit the
+    // nested graph after focus started. Keep the requested card in frame.
+    if (previous && next && (['x', 'y', 'width', 'height'] as const).some(key => Math.abs(previous[key] - next[key]) > .000001)) this.focus(next.id)
     for (const id of this.reveal.keys()) if (!layout.byId.has(id)) this.reveal.delete(id)
     // Native fitting and intrinsic card measurements can finish after mount.
     this.wake()
@@ -86,6 +93,7 @@ export class SemanticCamera implements ActiveCamera {
   interrupt = () => {
     cancelAnimationFrame(this.focusFrame)
     clearTimeout(this.zoomHintTimer); this.zooming = false; this.refreshZoomHint()
+    this.focusedId = undefined
     this.focusTarget = undefined; this.focusAncestors.clear()
     this.pinching = false
     this.target = null; this.anchor = undefined; this.gliding = false
@@ -94,6 +102,8 @@ export class SemanticCamera implements ActiveCamera {
   private wheel = (event: WheelEvent) => {
     if ((event.target as HTMLElement).closest('input, textarea, select, [data-canvas-chrome]')) return
     event.preventDefault(); event.stopPropagation()
+    this.focusedId = undefined
+    this.focusTarget = undefined; this.focusAncestors.clear()
     this.gliding = false
     const rect = this.host.getBoundingClientRect(), current = this.rf.getViewport()
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top }
@@ -106,6 +116,7 @@ export class SemanticCamera implements ActiveCamera {
   onMove(event: MouseEvent | TouchEvent | null, viewport?: Camera) {
     this.observeZoom(viewport?.zoom)
     if (!event) return // Programmatic animation frames aren't a new gesture.
+    this.focusedId = undefined
     if ('touches' in event && event.touches.length > 1) this.pinching = true
     const camera = this.rf.getViewport(), time = performance.now()
     if (this.previousMove) {
@@ -181,10 +192,12 @@ export class SemanticCamera implements ActiveCamera {
     const node = this.layoutState.byId.get(id)
     if (!node) return
     useWorkspaceStore.getState().selectElements([id])
-    this.interrupt(); this.focusTarget = id; this.focusAncestors.clear()
+    this.interrupt(); this.focusedId = id; this.focusTarget = id; this.focusAncestors.clear()
     for (let p = node.parent; p; p = p.parent) this.focusAncestors.add(p.id)
     // Let selection mount the inspector before measuring the available canvas.
     this.focusFrame = requestAnimationFrame(() => {
+    const node = this.layoutState.byId.get(id)
+    if (!node) return
     const rect = this.host.getBoundingClientRect(), insets = getCanvasFitInsets(rect)
     const width = rect.width - insets.left - insets.right, height = rect.height - insets.top - insets.bottom
     const zoom = Math.min(10000, Math.min(width * .7 / node.width, height * .7 / node.height))
@@ -215,8 +228,7 @@ export class SemanticCamera implements ActiveCamera {
       this.drag(p.id, p); nested = true
     }
     if (nested) {
-      const ws = state.workspace!, view = [...ws.views.systemLandscapeViews, ...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews].find(v => v.key === state.activeViewKey)
-      state.updateExploreLayout({ ...view?.exploreLayout, elements: { ...view?.exploreLayout?.elements, ...this.layout().elements } })
+      state.updateExploreLayout(this.layout())
       this.changed()
     }
   }

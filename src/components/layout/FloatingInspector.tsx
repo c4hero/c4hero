@@ -1,8 +1,10 @@
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useEffect, useRef } from 'react'
 import { useWorkspaceStore, getSelectedElement, getSelectedDeploymentElement, getRelationshipById } from '@/store/workspace'
 import RightPanel from '@/components/layout/RightPanel'
 
 export default function FloatingInspector() {
+  const mobile = useBreakpoint() === 'mobile'
   const explore = useWorkspaceStore(s => s.rendererMode === 'explore')
   const workspace = useWorkspaceStore((s) => s.workspace)
   const selectedIds = useWorkspaceStore((s) => s.selectedElementIds)
@@ -58,15 +60,16 @@ export default function FloatingInspector() {
     <div
       ref={containerRef}
       data-canvas-chrome="inspector"
-      data-canvas-fit-chrome={explore ? "right" : undefined}
+      data-canvas-fit-chrome={explore ? (mobile ? "bottom" : "right") : undefined}
       style={{
         // Frame matched to the AI assistant panel so the two read as a set.
         position: 'fixed',
-        top: 64,
+        top: mobile ? undefined : 64,
+        bottom: mobile ? 82 : undefined,
         right: 14,
         zIndex: 50,
         width: 'min(360px, calc(100vw - 28px))',
-        maxHeight: 'calc(100dvh - 136px)',
+        maxHeight: mobile ? '40dvh' : 'calc(100dvh - 136px)',
         overflowY: 'auto',
         borderRadius: 12,
         border: '1px solid rgba(88,166,255,0.16)',

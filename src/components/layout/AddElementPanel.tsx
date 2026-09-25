@@ -21,6 +21,7 @@ import {
   HardDrive,
   Monitor,
   ChevronDown,
+  ArrowRight,
 } from 'lucide-react'
 
 const CONTAINER_SUBTYPES = [
@@ -38,6 +39,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const toggleElementInView = useWorkspaceStore((s) => s.toggleElementInView)
+  const restoreRelationshipToView = useWorkspaceStore((s) => s.restoreRelationshipToView)
   const [search, setSearch] = useState('')
   const [createExpanded, setCreateExpanded] = useState(true)
   const isMobile = useBreakpoint() === 'mobile'
@@ -98,6 +100,11 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   const containersAllowed = scopeAllowsContainers(workspace.scope)
   const view = editingView(workspace, activeViewKey, mode)
   const viewElementIds = new Set(view?.elements.map((e) => e.id) ?? [])
+  const hiddenRelationships = (view?.excludedRelationshipIds ?? [])
+    .map((id) => workspace.model.relationships.find((relationship) => relationship.id === id))
+    .filter((relationship) => relationship
+      && viewElementIds.has(relationship.sourceId)
+      && viewElementIds.has(relationship.destinationId))
 
   // Dynamic views get the interaction-step editor; deployment views have no
   // creatable element types yet — say so instead of an empty dead end.
@@ -362,6 +369,30 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
 
         {/* Element list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px 8px' }}>
+          {hiddenRelationships.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div className="flyout-label" style={{ padding: '4px 8px 2px' }}>Hidden relationships</div>
+              {hiddenRelationships.map((relationship) => {
+                if (!relationship) return null
+                const source = elementMap.get(relationship.sourceId)
+                const destination = elementMap.get(relationship.destinationId)
+                return (
+                  <button
+                    key={relationship.id}
+                    onClick={() => restoreRelationshipToView(activeViewKey, relationship.id)}
+                    className="flyout-item"
+                    style={{ padding: '5px 8px' }}
+                    title="Restore relationship to this view"
+                  >
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {source?.name ?? relationship.sourceId} <ArrowRight size={11} style={{ display: 'inline' }} /> {destination?.name ?? relationship.destinationId}
+                    </span>
+                    <Plus size={12} style={{ flexShrink: 0, color: 'var(--color-text-muted)' }} />
+                  </button>
+                )
+              })}
+            </div>
+          )}
           {notInView.length === 0 ? (
             <div style={{ padding: '12px 6px', fontSize: 'var(--text-xs-plus)', color: 'var(--color-text-muted)', textAlign: 'center' }}>
               All elements are already in this view

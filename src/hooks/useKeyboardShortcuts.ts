@@ -2,7 +2,7 @@ import { creatableTypes, editingView } from '@/lib/explore/editing'
 import { getActiveCamera } from '@/lib/activeCamera'
 import { useEffect } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { useWorkspaceStore, isFocalScopeElement } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
@@ -44,8 +44,13 @@ const META_SHORTCUTS: Record<string, KeyHandler> = {
 function backspaceLikeHandler(destructive: boolean): KeyHandler {
   return (store) => {
     if (store.selectedRelationshipId) {
-      // Relationships are not redesigned in this plan — keep current confirm + delete behavior
-      // for both Backspace and Shift+Backspace on a selected relationship.
+      const activeView = store.workspace && store.activeViewKey
+        ? getActiveView(store.workspace, store.activeViewKey)
+        : undefined
+      if (!destructive && store.activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment') {
+        store.removeRelationshipFromView(store.activeViewKey, store.selectedRelationshipId)
+        return
+      }
       store.confirmDelete('Delete this relationship?', () => store.deleteRelationship(store.selectedRelationshipId!))
       return
     }
@@ -88,18 +93,18 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
       if (view) store.selectElements(view.elements.map(el => el.id))
     }
   },
-  'mod+s': (store) => {
+  'mod+s': async (store) => {
     if (store.workspace) {
       try {
         // Same rule as the Save button: write a linked workspace in place;
         // only an unlinked one goes through the picker / download (TEA-339).
         if (isWorkspaceLinked(store.activeWorkspaceFilename)) {
-          void writeLinkedWorkspace(store.workspace, store.activeWorkspaceFilename)
+          await writeLinkedWorkspace(store.workspace, store.activeWorkspaceFilename)
         } else {
           const dsl = serializeRoot(store.workspace)
-          void saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)
-          const sidecar = extractSidecar(store.workspace)
-          if (sidecar) void writeSidecarToHandle(serializeSidecar(sidecar))
+          if (!await saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)) return
+          const sidecar = extractSidecar(store.workspace) ?? { version: 1 as const, views: {} }
+          await writeSidecarToHandle(serializeSidecar(sidecar))
         }
       } catch (error) {
         announce(error instanceof Error ? error.message : 'Save failed')

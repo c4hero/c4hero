@@ -41,11 +41,11 @@ async function getViewRelationships(page: Page) {
 }
 
 /**
- * Delete the currently-selected relationship via keyboard.
+ * Destructively delete the currently-selected relationship via keyboard.
  * addRelationship auto-selects the new relationship, so we don't need to click the edge.
  */
 async function deleteSelectedRelationship(page: Page) {
-  await page.keyboard.press('Delete')
+  await page.keyboard.press('Shift+Delete')
   await page.waitForTimeout(200)
   await page.keyboard.press('Enter')
   await page.waitForTimeout(400)
@@ -187,7 +187,7 @@ test.describe('Connection Bug Diagnostics', () => {
     expect(edgeCount).toBe(1)
   })
 
-  test('Bug 2: REPRO — click edge + Backspace + reconnect produces exactly 1 connection', async ({ workspace }) => {
+  test('Bug 2: REPRO — click edge + Shift+Backspace + reconnect produces exactly 1 connection', async ({ workspace }) => {
     await workspace.loadBlank()
 
     await workspace.page.keyboard.press('Shift+S')
@@ -205,7 +205,7 @@ test.describe('Connection Bug Diagnostics', () => {
     expect(rels.length).toBe(1)
 
     // Click the edge to mark it as "selected" in React Flow's internal state
-    // (needed for React Flow's built-in Backspace delete to fire)
+    // (needed for React Flow's keyboard action to target the edge)
     // Use page.mouse.click at the edge's computed center — works around viewport issues
     await workspace.page.evaluate(() => {
       const edge = document.querySelector('.react-flow__edge-interaction') as SVGPathElement | null
@@ -223,9 +223,9 @@ test.describe('Connection Bug Diagnostics', () => {
     })
     await workspace.page.waitForTimeout(300)
 
-    // Press Backspace — React Flow's deleteKeyCode='Backspace' deletes the edge
-    // from local state. Any confirmation dialog gets an Enter to confirm.
-    await workspace.page.keyboard.press('Backspace')
+    // Shift+Backspace is the destructive model delete. Any confirmation dialog
+    // gets an Enter to confirm.
+    await workspace.page.keyboard.press('Shift+Backspace')
     await workspace.page.waitForTimeout(300)
     await workspace.page.keyboard.press('Enter')
     await workspace.page.waitForTimeout(400)

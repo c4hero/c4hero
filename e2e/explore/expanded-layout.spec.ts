@@ -32,7 +32,7 @@ test('expanded parents keep their titles and child cards fit at every text detai
     const geometry = await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.layoutState.nodes.map(n => [n.id, n.x, n.y, n.width, n.height]))
     if (previousGeometry) expect(geometry).toEqual(previousGeometry)
     previousGeometry = geometry
-    const errors = await host.evaluate(el => {
+    await expect.poll(() => host.evaluate(el => {
       const camera = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic
       const errors: string[] = []
       for (const node of camera.layoutState.nodes) {
@@ -52,8 +52,7 @@ test('expanded parents keep their titles and child cards fit at every text detai
         if (bounds.left < parent.left - 1 || bounds.right > parent.right + 1 || bounds.bottom > parent.bottom + 1 || bounds.top < parentHeader.bottom - 1) errors.push(`outside parent body: ${node.id}`)
       }
       return errors
-    })
-    expect(errors).toEqual([])
+    })).toEqual([])
   }
   await page.screenshot({ path: testInfo.outputPath('expanded-titles-and-children.png') })
 })

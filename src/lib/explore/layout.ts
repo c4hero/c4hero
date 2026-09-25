@@ -152,9 +152,10 @@ export interface Bundle { key: string; from: MapNode; to: MapNode; connections: 
 export function connectionsFor(layout: MapLayout, relationships: Relationship[], view?: View) {
   const connections: Connection[] = [], bundles = new Map<string, Bundle>()
   const authored = view && new Set(view.relationships.map(r => r.id))
+  const excluded = new Set(view?.excludedRelationshipIds)
   const seen = new Set<string>()
   for (const relationship of relationships) {
-    if (seen.has(relationship.id)) continue
+    if (seen.has(relationship.id) || excluded.has(relationship.id)) continue
     seen.add(relationship.id)
     const from = layout.byId.get(relationship.sourceId), to = layout.byId.get(relationship.destinationId)
     if (!from || !to) continue // Deployment instances never enter the static map.

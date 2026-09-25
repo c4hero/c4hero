@@ -73,6 +73,7 @@ test('nested positions persist in the sidecar, stay within their parent and undo
   expect(moved.inside).toBe(true)
   const saved = () => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].exploreLayout?.elements?.api)
   await expect.poll(saved).toBeTruthy()
+  expect(await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].exploreLayout?.positionSpace)).toBe('parent-body')
   await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().undo())
   await expect.poll(saved).toBeUndefined()
 })

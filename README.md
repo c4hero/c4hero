@@ -121,6 +121,10 @@ See [`CHANGELOG.md`](CHANGELOG.md) for notable changes. Releases are tagged in [
 
 c4hero is maintained by one person in their spare time. I aim to respond to issues within a week. If something is broken, please include browser, OS, and a minimal `.dsl` snippet so I can reproduce — the bug template will prompt you. PRs that come with tests get reviewed first.
 
+## Supporting c4hero
+
+If c4hero is useful to you, you can [sponsor c4hero on GitHub](https://github.com/sponsors/c4hero). Starring the repo, sharing it, and filing good issues help too.
+
 ## Contributing
 
 Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, workflow, and testing guidance, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -132,12 +136,3 @@ To report a security issue, see [`SECURITY.md`](SECURITY.md).
 Released under the [Apache License 2.0](LICENSE).
 
 The c4hero name, logo, domain, and product identity are not licensed under Apache-2.0. See [TRADEMARKS.md](TRADEMARKS.md) for the brand-use boundary.
-
-## Explore mode
-
-Choose **Explore workspace** from the view dropdown to navigate the whole workspace as a nested
-map. Zoom reveals containers and components in place. Selecting an element
-freezes detail while you follow its relationships; clearing selection resumes
-semantic zoom. Authored views and their layouts remain separate.
-
-See [Explore controls and behavior](docs/explore.md).

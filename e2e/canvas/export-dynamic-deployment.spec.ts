@@ -46,7 +46,7 @@ const DSL = `workspace "Exportable" {
   }
 }`
 
-async function exportImage(page: Page, rowLabel: string, ext: string): Promise<number> {
+async function exportImage(page: Page, rowLabel: string, ext: string): Promise<{ size: number; path: string }> {
   await page.getByRole('button', { name: 'Export', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Export workspace' })
   await expect(dialog).toBeVisible()
@@ -65,11 +65,17 @@ async function exportImage(page: Page, rowLabel: string, ext: string): Promise<n
 
   const path = await download.path()
   const { statSync } = await import('node:fs')
-  const size = statSync(path!).size
+  const size = statSync(path).size
 
   await page.keyboard.press('Escape')
   await expect(dialog).not.toBeVisible()
-  return size
+  return { size, path }
+}
+
+/** The exported SVG must carry the marker defs its edges reference (#207). */
+async function expectSvgHasArrowMarkers(path: string) {
+  const { readFileSync } = await import('node:fs')
+  expect(readFileSync(path, 'utf8')).toMatch(/<marker[^>]*id="c4-arrow-/)
 }
 
 test.describe('Export for dynamic and deployment views', () => {
@@ -79,21 +85,23 @@ test.describe('Export for dynamic and deployment views', () => {
 
     // A real render of the deployment view compresses to well over a blank
     // canvas; a blank/failed export is a few hundred bytes.
-    const pngSize = await exportImage(page, 'PNG Image', 'png')
-    expect(pngSize).toBeGreaterThan(5_000)
+    const png = await exportImage(page, 'PNG Image', 'png')
+    expect(png.size).toBeGreaterThan(5_000)
 
-    const svgSize = await exportImage(page, 'SVG Vector', 'svg')
-    expect(svgSize).toBeGreaterThan(1_000)
+    const svg = await exportImage(page, 'SVG Vector', 'svg')
+    expect(svg.size).toBeGreaterThan(1_000)
+    await expectSvgHasArrowMarkers(svg.path)
   })
 
   test('dynamic view exports PNG and SVG', async ({ workspace, page }) => {
     await workspace.parseAndLoad(DSL)
     await workspace.setView('Checkout')
 
-    const pngSize = await exportImage(page, 'PNG Image', 'png')
-    expect(pngSize).toBeGreaterThan(5_000)
+    const png = await exportImage(page, 'PNG Image', 'png')
+    expect(png.size).toBeGreaterThan(5_000)
 
-    const svgSize = await exportImage(page, 'SVG Vector', 'svg')
-    expect(svgSize).toBeGreaterThan(1_000)
+    const svg = await exportImage(page, 'SVG Vector', 'svg')
+    expect(svg.size).toBeGreaterThan(1_000)
+    await expectSvgHasArrowMarkers(svg.path)
   })
 })

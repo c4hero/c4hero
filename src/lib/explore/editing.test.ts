@@ -3,7 +3,7 @@ import { createBigBankSample } from '@/lib/templates'
 import { useWorkspaceStore } from '@/store/workspace'
 import { extractSidecar, applySidecar, parseSidecar } from '@/lib/sidecar'
 import { buildLayout } from './layout'
-import { creatableTypes, zoomLayoutOwner } from './editing'
+import { creatableTypes, zoomLayoutOwner, editingView } from './editing'
 
 describe('Explore editing', () => {
   it('persists layout separately and supports undo/redo without altering Diagram coordinates', () => {
@@ -59,4 +59,32 @@ it('isolates zoom edits across views and restores them from the sidecar', () => 
   expect(zoomLayoutOwner(restored, first).exploreLayout).toEqual({ hiddenIds: ['customer'], direction: 'LR' })
   expect(zoomLayoutOwner(restored, second).exploreLayout).toEqual({ direction: 'TB' })
   expect(parseSidecar(JSON.stringify({ version: 1, views: { [first]: { exploreLayout: { elements: { customer: { x: 'bad' } } } } } }))).toBeNull()
+})
+
+
+it('shares view and root locks across Zoom toggles, including unlocking in Diagram', () => {
+  const store = useWorkspaceStore
+  store.getState().loadWorkspace(createBigBankSample())
+  const key = store.getState().activeViewKey!
+  const currentView = () => editingView(store.getState().workspace!, key, store.getState().rendererMode)!
+  const id = currentView().elements[0].id
+  store.getState().setElementsLocked(key, [id], true)
+  store.getState().setViewLocked(key, true)
+  store.getState().setRendererMode('explore')
+  expect(currentView().locked).toBe(true)
+  expect(currentView().elements.find(e => e.id === id)?.locked).toBe(true)
+  const before = store.getState().workspace
+  store.getState().resetAndRelayout(key, 'LR')
+  expect(store.getState().workspace).toBe(before)
+  store.getState().setViewLocked(key, false)
+  store.getState().setViewLocked(key, true)
+  store.getState().setElementsLocked(key, [id], true)
+  store.getState().setRendererMode('diagram')
+  store.getState().setViewLocked(key, false)
+  store.getState().setElementsLocked(key, [id], false)
+  store.getState().setRendererMode('explore')
+  expect(currentView().locked).toBeFalsy()
+  expect(currentView().elements.find(e => e.id === id)?.locked).toBeFalsy()
+  expect(currentView().exploreLayout?.locked).toBeFalsy()
+  expect(currentView().exploreLayout?.elements?.[id]?.locked).toBeFalsy()
 })

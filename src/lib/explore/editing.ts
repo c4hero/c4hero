@@ -32,9 +32,9 @@ export function editingView(ws: Workspace, key: string | null, mode: string): Vi
   if (mode !== 'explore') return key ? getActiveView(ws, key) : undefined
   const authored = key ? getActiveView(ws, key) : undefined
   const layout = zoomLayoutOwner(ws, key).exploreLayout
-  return { ...authored, key: key ?? '__explore', type: authored?.type ?? 'systemLandscape', locked: layout?.locked,
+  return { ...authored, key: key ?? '__explore', type: authored?.type ?? 'systemLandscape', locked: authored?.locked || layout?.locked,
     autoLayout: { direction: layout?.direction ?? 'TB' },
-    elements: zoomElements(ws, authored).filter(e => !layout?.hiddenIds?.includes(e.id)).map(e => ({ id: e.id, ...layout?.elements?.[e.id] })),
+    elements: zoomElements(ws, authored).filter(e => !layout?.hiddenIds?.includes(e.id)).map(e => ({ id: e.id, ...(authored?.elements.find(root => root.id === e.id) ?? layout?.elements?.[e.id]) })),
     relationships: ws.model.relationships.map(r => ({ id: r.id })) }
 }
 

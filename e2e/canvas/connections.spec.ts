@@ -26,20 +26,22 @@ test.describe('Node Connections', () => {
 
   // ─── Arrow marker rendering ───────────────────────────────────────────────
 
-  test('arrow marker SVG element is defined in the document', async ({ workspace }) => {
+  test('every edge marker resolves to a def inside the subtree image export clones (#207)', async ({ workspace }) => {
     await workspace.loadSample()
-    const marker = workspace.page.locator('#c4-arrow')
-    await expect(marker).toBeAttached()
-  })
-
-  test('arrow marker SVG does not take up canvas space (zero size)', async ({ workspace }) => {
-    await workspace.loadSample()
-    // The SVG wrapper around the marker defs should be zero-size
-    const markerSvg = workspace.page.locator('svg:has(#c4-arrow)')
-    const box = await markerSvg.first().boundingBox()
-    // Should be zero/hidden — not taking up visual space
-    expect(box?.width ?? 0).toBe(0)
-    expect(box?.height ?? 0).toBe(0)
+    // PNG/SVG export clones .react-flow__renderer; markers outside it are
+    // dropped and exported edges lose their arrowheads.
+    const missing = await workspace.page.evaluate(() => {
+      const renderer = document.querySelector('.react-flow__renderer')!
+      const refs = Array.from(document.querySelectorAll('.react-flow__edge path[marker-end], .react-flow__edge path[marker-start]'))
+        .flatMap((p) => [p.getAttribute('marker-end'), p.getAttribute('marker-start')])
+        .filter((r): r is string => !!r)
+      if (refs.length === 0) return ['<no marker refs>']
+      return refs.filter((r) => {
+        const id = r.match(/^url\(#(.+)\)$/)?.[1]
+        return !id || !renderer.querySelector(`marker[id="${id}"]`)
+      })
+    })
+    expect(missing).toEqual([])
   })
 
   // ─── Edge labels ─────────────────────────────────────────────────────────
@@ -442,13 +444,14 @@ ${callers.map((id) => `    ${id} -> hub "Integrates with"`).join('\n')}
 
   // ─── Edge deletion ────────────────────────────────────────────────────────
 
-  test('clicking an edge selects it and Delete removes it', async ({ workspace }) => {
+  test('clicking an edge selects it and Delete hides it from the view', async ({ workspace }) => {
     await workspace.loadSample()
     // Wait for canvas to fully settle (avoid "element not stable" from initial layout animation)
     await workspace.page.waitForTimeout(600)
 
     const edgesBefore = await workspace.getEdgeCount()
     expect(edgesBefore).toBeGreaterThan(0)
+    const modelRelationshipsBefore = (await workspace.getWorkspace())!.model.relationships.length
 
     // React Flow renders a wider invisible interaction path for reliable edge clicking.
     // Targeting the visual path bounding-box center misses when the path is diagonal.
@@ -456,14 +459,12 @@ ${callers.map((id) => `    ${id} -> hub "Integrates with"`).join('\n')}
     await edgeInteraction.click({ force: true })
     await workspace.page.waitForTimeout(300)
 
-    // Delete key opens a confirmation dialog; dialog auto-focuses the Delete button
-    // and handles Enter — press Enter to confirm.
+    // Delete is the lightweight per-view action and needs no confirmation.
     await workspace.page.keyboard.press('Delete')
-    await workspace.page.waitForTimeout(200)
-    await workspace.page.keyboard.press('Enter')
     await workspace.page.waitForTimeout(400)
 
     const edgesAfter = await workspace.getEdgeCount()
     expect(edgesAfter).toBe(edgesBefore - 1)
+    expect((await workspace.getWorkspace())!.model.relationships).toHaveLength(modelRelationshipsBefore)
   })
 })

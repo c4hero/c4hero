@@ -4,7 +4,7 @@ import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView } from '../workspace-helpers'
+import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews, orphanedLayoutViewKeys } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 import { getActiveCamera } from '@/lib/activeCamera'
 
@@ -13,8 +13,8 @@ import { getActiveCamera } from '@/lib/activeCamera'
  *  reset+relayout, drag-position updates, auto-layout sync) and the
  *  layoutVersion epoch. */
 export type ViewSlice = Pick<WorkspaceState,
-  | 'addView' | 'deleteView' | 'renameView' | 'duplicateView'
-  | 'toggleElementInView' | 'removeElementsFromView' | 'setLayoutDirection' | 'resetAndRelayout'
+  | 'addView' | 'deleteView' | 'pruneOrphanedViewLayout' | 'renameView' | 'duplicateView'
+  | 'toggleElementInView' | 'removeElementsFromView' | 'removeRelationshipFromView' | 'restoreRelationshipToView' | 'setLayoutDirection' | 'resetAndRelayout'
   | 'updateNodePosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
   | 'setElementsLocked' | 'unlockAllInView' | 'setViewLocked'
   | 'layoutVersion'
@@ -45,6 +45,9 @@ export const createViewSlice: StateCreator<
     set((s) => {
       if (!s.workspace) return
       pushUndoSnapshot(s)
+      // The new view is authored, so the generated set has to become authored
+      // with it or the next parse of the serialized DSL would drop it.
+      materializeAutoViews(s.workspace)
       appendScopedView(s.workspace, type, scopeId, title ?? `New ${type} view`, key, options)
       s.activeViewKey = key
       s.selectedElementIds = []
@@ -68,6 +71,7 @@ export const createViewSlice: StateCreator<
       }
     }
     if (!found) return
+    if (ws.savedLayout) delete ws.savedLayout[key]
     const switchingViews = s.activeViewKey === key
     if (switchingViews) {
       s.activeViewKey = getFirstViewKey(ws)
@@ -76,6 +80,16 @@ export const createViewSlice: StateCreator<
       s.selectedGroupId = null
     }
     s.viewHistory = s.viewHistory.filter(k => k !== key)
+  }),
+
+  pruneOrphanedViewLayout: () => set((s) => {
+    if (!s.workspace?.savedLayout) return
+    const keys = orphanedLayoutViewKeys(s.workspace)
+    if (keys.length === 0) return
+    pushUndoSnapshot(s)
+    for (const key of keys) delete s.workspace.savedLayout[key]
+    // Keep the empty record: extractSidecar must write `views: {}` so an old
+    // on-disk sidecar cannot resurrect the entries on the next reopen.
   }),
 
   renameView: (key, title) => set((s) => {
@@ -101,6 +115,9 @@ export const createViewSlice: StateCreator<
         const src = (ws.views[arrKey] ?? []).find(v => v.key === key)
         if (!src) continue
         pushUndoSnapshot(s)
+        // The copy is authored (it drops `autoView` below), so the generated
+        // set has to become authored with it — see materializeAutoViews.
+        materializeAutoViews(ws)
         // Deep-copy via current() unwrap so the clone is fully detached from
         // any existing view's draft sub-objects.
         const detached = current(src) as View
@@ -208,12 +225,65 @@ export const createViewSlice: StateCreator<
     if (removable.size === 0) return
 
     pushUndoSnapshot(s)
+    for (const id of removable) {
+      if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[id]
+    }
     view.elements = view.elements.filter((e) => !removable.has(e.id))
     view.relationships = view.relationships.filter((r) => {
       const rel = ws.model.relationships.find((mr) => mr.id === r.id)
       if (!rel) return false
       return !removable.has(rel.sourceId) && !removable.has(rel.destinationId)
     })
+  }),
+
+  removeRelationshipFromView: (viewKey, relationshipId) => set((s) => {
+    if (!s.workspace) return
+    const view = findViewHelper(s.workspace, viewKey)
+    // Dynamic relationships are ordered steps; deployment relationships are
+    // derived from instances at render time. Neither uses the persisted static
+    // view relationship set this operation edits.
+    if (!view || view.type === 'dynamic' || view.type === 'deployment') return
+    if (!view.relationships.some((r) => r.id === relationshipId)) return
+    const selected = s.workspace.model.relationships.find((r) => r.id === relationshipId)
+    if (!selected) return
+    // Structurizr's portable `source -> destination` exclusion addresses the
+    // whole directed pair. Keep the in-memory view aligned with what reload
+    // will produce when parallel relationships share those endpoints.
+    const pairIds = new Set(s.workspace.model.relationships
+      .filter((r) => r.sourceId === selected.sourceId && r.destinationId === selected.destinationId)
+      .map((r) => r.id))
+    pushUndoSnapshot(s)
+    view.relationships = view.relationships.filter((r) => !pairIds.has(r.id))
+    const exclusions = (view.excludedRelationshipIds ??= [])
+    for (const id of pairIds) {
+      if (!exclusions.includes(id)) exclusions.push(id)
+    }
+    if (s.selectedRelationshipId && pairIds.has(s.selectedRelationshipId)) s.selectedRelationshipId = null
+  }),
+
+  restoreRelationshipToView: (viewKey, relationshipId) => set((s) => {
+    if (!s.workspace) return
+    const view = findViewHelper(s.workspace, viewKey)
+    if (!view || view.type === 'dynamic' || view.type === 'deployment') return
+    const rel = s.workspace.model.relationships.find((r) => r.id === relationshipId)
+    if (!rel) return
+    const elementIds = new Set(view.elements.map((e) => e.id))
+    if (!elementIds.has(rel.sourceId) || !elementIds.has(rel.destinationId)) return
+    const pairIds = new Set(s.workspace.model.relationships
+      .filter((r) => r.sourceId === rel.sourceId && r.destinationId === rel.destinationId)
+      .map((r) => r.id))
+    const wasExcluded = view.excludedRelationshipIds?.some((id) => pairIds.has(id)) ?? false
+    const wasMissing = [...pairIds].some((id) => !view.relationships.some((r) => r.id === id))
+    if (!wasExcluded && !wasMissing) return
+    pushUndoSnapshot(s)
+    if (wasMissing) {
+      const presentIds = new Set(view.relationships.map((r) => r.id))
+      for (const id of pairIds) if (!presentIds.has(id)) view.relationships.push({ id })
+    }
+    if (wasExcluded) {
+      view.excludedRelationshipIds = view.excludedRelationshipIds!.filter((id) => !pairIds.has(id))
+      if (view.excludedRelationshipIds.length === 0) delete view.excludedRelationshipIds
+    }
   }),
 
   toggleElementInView: (viewKey, elementId) => set((s) => {
@@ -231,6 +301,7 @@ export const createViewSlice: StateCreator<
     const idx = view.elements.findIndex(e => e.id === elementId)
     pushUndoSnapshot(s)
     if (idx >= 0) {
+      if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[elementId]
       view.elements.splice(idx, 1)
       // Also remove relationships that reference this element
       view.relationships = view.relationships.filter(r => {
@@ -241,7 +312,10 @@ export const createViewSlice: StateCreator<
     } else {
       // Capture IDs already in the view BEFORE adding the new element
       const existingElementIds = new Set(view.elements.map(e => e.id))
-      view.elements.push({ id: elementId })
+      // Absence caused by a DSL edit is not a reset. Restore the retained
+      // position when the user brings the element back; explicit removal
+      // above already discards its retained entry.
+      view.elements.push(restoreViewElement(ws, viewKey, elementId))
       // Auto-add any model relationships that connect the new element to elements
       // already present in the view (avoids forcing the user to re-draw connections)
       const existingRelIds = new Set(view.relationships.map(r => r.id))
@@ -250,7 +324,7 @@ export const createViewSlice: StateCreator<
         const linksNewEl =
           (rel.sourceId === elementId && existingElementIds.has(rel.destinationId)) ||
           (rel.destinationId === elementId && existingElementIds.has(rel.sourceId))
-        if (linksNewEl) {
+        if (linksNewEl && !view.excludedRelationshipIds?.includes(rel.id)) {
           view.relationships.push({ id: rel.id })
           existingRelIds.add(rel.id)
         }
@@ -274,7 +348,7 @@ export const createViewSlice: StateCreator<
   resetAndRelayout: (viewKey, direction) => set((s) => {
     if (!s.workspace) return
     if (s.rendererMode === 'explore') {
-      if (zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout?.locked) return
+      if (findViewHelper(s.workspace, viewKey)?.locked || zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout?.locked) return
       const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout ?? {}
       pushUndoSnapshot(s)
       zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout = { ...layout, direction: direction ?? layout.direction,
@@ -323,6 +397,7 @@ export const createViewSlice: StateCreator<
     pushUndoSnapshot(s)
     for (const el of changed) {
       el.locked = locked || undefined
+      if (view.exploreLayout?.elements?.[el.id]) view.exploreLayout.elements[el.id].locked = locked || undefined
       // Adopt the current position as hand-authored. Without this, a
       // locked-but-never-dragged node is persisted only via `locked`, and
       // unlocking it later would silently drop the position it had been
@@ -345,6 +420,7 @@ export const createViewSlice: StateCreator<
     if ((view.locked ?? false) === locked) return
     pushUndoSnapshot(s)
     view.locked = locked || undefined
+    if (view.exploreLayout) view.exploreLayout.locked = locked || undefined
   }),
 
   unlockAllInView: (viewKey) => set((s) => {
@@ -364,6 +440,7 @@ export const createViewSlice: StateCreator<
     pushUndoSnapshot(s)
     for (const el of locked) {
       el.locked = undefined
+      if (view.exploreLayout?.elements?.[el.id]) view.exploreLayout.elements[el.id].locked = undefined
       // Same as setElementsLocked: unlocking releases the node, it doesn't
       // forfeit the position the lock was holding.
       if (el.x !== undefined && el.y !== undefined) el.pinned = true

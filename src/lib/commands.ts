@@ -8,8 +8,8 @@ import {
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
   Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff, FileInput, FolderDown, BookOpen,
 } from 'lucide-react'
-import { useWorkspaceStore, getAllViews, isFocalScopeElement } from '@/store/workspace'
-import { computeCascadeImpact } from '@/store/workspace-helpers'
+import { useWorkspaceStore, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
+import { computeCascadeImpact, orphanedLayoutViewKeys } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
@@ -190,6 +190,26 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       },
     },
     {
+      id: 'remove-selected-from-view',
+      label: 'Remove selected from view',
+      category: 'edit',
+      icon: EyeOff,
+      shortcut: '⌫',
+      keywords: ['remove', 'hide', 'exclude', 'view'],
+      when: () => {
+        const s = store()
+        return s.selectedRelationshipId !== null && s.activeViewKey !== null
+          && !!s.workspace
+          && !['dynamic', 'deployment'].includes(getActiveView(s.workspace, s.activeViewKey)?.type ?? '')
+      },
+      execute: () => {
+        const s = store()
+        if (s.activeViewKey && s.selectedRelationshipId) {
+          s.removeRelationshipFromView(s.activeViewKey, s.selectedRelationshipId)
+        }
+      },
+    },
+    {
       id: 'impact-of-removal',
       label: 'What breaks if I remove this?',
       category: 'edit',
@@ -346,6 +366,34 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       },
     },
     {
+      id: 'clean-up-orphaned-layout',
+      label: 'Clean Up Orphaned View Layout',
+      category: 'view',
+      icon: Trash2,
+      keywords: ['cleanup', 'orphan', 'layout', 'sidecar', 'positions', 'prune'],
+      when: () => {
+        const workspace = store().workspace
+        return !!workspace && orphanedLayoutViewKeys(workspace).length > 0
+      },
+      execute: () => {
+        const s = store()
+        if (!s.workspace) return
+        const keys = orphanedLayoutViewKeys(s.workspace)
+        if (keys.length === 0) return
+        const noun = keys.length === 1 ? 'entry' : 'entries'
+        s.confirmDelete(
+          {
+            message: `Permanently delete ${keys.length} orphaned layout ${noun}? These views are not currently in the DSL and will lose their saved positions if restored:`,
+            details: keys,
+          },
+          () => {
+            store().pruneOrphanedViewLayout()
+            announce(`Deleted ${keys.length} orphaned layout ${noun}`)
+          },
+        )
+      },
+    },
+    {
       id: 'toggle-minimap',
       label: 'Toggle Minimap',
       category: 'view',
@@ -432,9 +480,9 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         if (!s.workspace) return
         try {
           const dsl = serializeRoot(s.workspace)
-          await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)
-          const sidecar = extractSidecar(s.workspace)
-          if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+          if (!await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)) return
+          const sidecar = extractSidecar(s.workspace) ?? { version: 1 as const, views: {} }
+          await writeSidecarToHandle(serializeSidecar(sidecar))
         } catch (error) {
           announce(error instanceof Error ? error.message : 'Save failed')
         }

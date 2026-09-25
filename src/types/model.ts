@@ -224,6 +224,8 @@ export interface View {
   environment?: string
   elements: ElementInView[]
   relationships: RelationshipInView[]
+  /** Model relationship IDs deliberately hidden from this static view. */
+  excludedRelationshipIds?: string[]
   autoLayout?: AutoLayout
 }
 
@@ -311,20 +313,20 @@ export interface IncludedFile {
   text?: string
 }
 
-/**
- * A view's saved layout, as the sidecar file stores it and as the store parks
- * it while its view is absent.
- */
-export interface StoredViewLayout {
+/** Layout retained independently of whether a view or element is currently visible.
+ * Uses the version-1 sidecar shape; no on-disk migration is needed. */
+export interface SavedViewLayout {
   exploreLayout?: Workspace['exploreLayout']
-  /** View-level layout lock. */
   locked?: boolean
-  elements?: Record<string, { pinned?: boolean; locked?: boolean; x?: number; y?: number }>
+  elements?: Record<string, Pick<ElementInView, 'x' | 'y' | 'pinned' | 'locked'>>
 }
 
 export interface Workspace {
-  /** Explore-only layout, persisted in the sidecar and included in undo. */
-  exploreLayout?: Omit<StoredViewLayout, 'exploreLayout'> & { direction?: LayoutDirection; hiddenIds?: string[]; positionSpace?: 'parent-body' }
+  /** Zoom layout in parent-body coordinates; saved with the selected view. */
+  exploreLayout?: Omit<SavedViewLayout, 'exploreLayout'> & { direction?: LayoutDirection; hiddenIds?: string[]; positionSpace?: 'parent-body' }
+  /** Last loaded/carried layout. Present entries are overlaid on extraction;
+   * absent entries survive. An empty map still requests clearing the old file. */
+  savedLayout?: Record<string, SavedViewLayout>
   name?: string
   description?: string
   scope?: WorkspaceScope
@@ -344,19 +346,4 @@ export interface Workspace {
     deploymentViews: View[]
     configuration: ViewConfiguration
   }
-  /**
-   * Layout whose view is not in the workspace right now, kept verbatim.
-   *
-   * The sidecar is rewritten in full from memory on every save — it never
-   * merges — so a view that is missing for one save has its positions deleted
-   * from disk. Views go missing for ordinary reasons: a generated view stops
-   * being generated, an `!include` is temporarily unreadable. The layout
-   * behind them is not the user's to lose over it, so entries land here
-   * instead of being dropped, and are written back out until a view claims
-   * them again (TEA-342).
-   *
-   * In-memory only; it *is* the sidecar's own content, so it is never part of
-   * the DSL.
-   */
-  unmatchedLayout?: Record<string, StoredViewLayout>
 }

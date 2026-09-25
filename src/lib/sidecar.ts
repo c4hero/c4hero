@@ -1,8 +1,13 @@
-import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
-import { allViewsOf, viewLayoutOf } from '@/store/workspace-helpers'
+import type { Workspace, ElementStatus, LineStyle, SavedViewLayout } from '@/types/model'
+import { current, isDraft } from 'immer'
+import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
+
+function cloneZoomLayout(layout: NonNullable<Workspace['exploreLayout']>) {
+  return structuredClone(isDraft(layout) ? current(layout) : layout)
+}
 
 const VALID_STATUSES: ReadonlySet<string> = new Set<ElementStatus>(['Live', 'Planned', 'Deprecated', 'Removed'])
 const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
@@ -36,19 +41,12 @@ interface SidecarViewElement {
   y?: number
 }
 
-interface SidecarView {
-  exploreLayout?: Workspace['exploreLayout']
-  /** View-level layout lock (freezes Auto-arrange + dragging for the view). */
-  locked?: boolean
-  elements?: Record<string, SidecarViewElement>
-}
-
 export interface SidecarData {
   version: 1
   explore?: Workspace['exploreLayout']
   elements?: Record<string, SidecarElement>
   relationships?: Record<string, SidecarRelationship>
-  views?: Record<string, SidecarView>
+  views?: Record<string, SavedViewLayout>
 }
 
 function isSidecarElement(value: unknown): value is SidecarElement {
@@ -73,7 +71,7 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
   return true
 }
 
-function isSidecarView(value: unknown): value is SidecarView {
+function isSidecarView(value: unknown): value is SavedViewLayout {
   if (!isRecord(value)) return false
   if ('exploreLayout' in value && value.exploreLayout !== undefined && !isSidecarData({ version: 1, explore: value.exploreLayout })) return false
   if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
@@ -99,34 +97,48 @@ function isSidecarData(value: unknown): value is SidecarData {
 
 export function extractSidecar(workspace: Workspace): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
-  if (workspace.exploreLayout) sidecar.explore = structuredClone(workspace.exploreLayout)
+  if (workspace.exploreLayout) sidecar.explore = cloneZoomLayout(workspace.exploreLayout)
 
   // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
   // migration of existing sidecar files written by older versions of c4hero.
 
-  // Start from layout whose view is not here right now. This projection is the
-  // whole file — anything missing from it is deleted from disk — and a view can
-  // go absent for reasons that are none of the user's doing, so their positions
-  // are carried rather than dropped (TEA-342).
-  const views: Record<string, SidecarView> = { ...(workspace.unmatchedLayout ?? {}) }
-
   // Views: hand-placed and locked elements, plus the view-level layout lock.
-  // A lock is worth persisting on its own — it survives a re-layout, so it has
-  // to survive a reload. A present view with layout speaks for its own key and
-  // replaces anything carried under it; one without layout leaves the carried
-  // entry alone, since `unmatchedLayout` holds only entries whose view really
-  // is absent.
+  // A lock is worth persisting on its own — it survives a re-layout, so it
+  // has to survive a reload.
+  // Merge at element granularity: a missing view OR element is not evidence
+  // that its hand-placed layout was deleted. Clone to keep extraction pure,
+  // including when the workspace is frozen by Immer.
+  const views: Record<string, SavedViewLayout> = Object.fromEntries(
+    Object.entries(workspace.savedLayout ?? {}).map(([key, data]) =>
+      [key, { ...data, ...(data.exploreLayout ? { exploreLayout: cloneZoomLayout(data.exploreLayout) } : {}), ...(data.elements ? { elements: { ...data.elements } } : {}) }]),
+  )
   for (const view of allViewsOf(workspace)) {
-    const layout = viewLayoutOf(view)
-    if (layout) views[view.key] = layout
+    const viewElements: Record<string, SidecarViewElement> = { ...views[view.key]?.elements }
+    for (const el of view.elements) {
+      // A live element is authoritative, including an explicit layout reset.
+      delete viewElements[el.id]
+      if (el.pinned || el.locked) {
+        const entry: SidecarViewElement = {}
+        if (el.pinned) entry.pinned = true
+        if (el.locked) entry.locked = true
+        if (el.x !== undefined) entry.x = el.x
+        if (el.y !== undefined) entry.y = el.y
+        viewElements[el.id] = entry
+      }
+    }
+    const entry: SavedViewLayout = {}
+    if (view.exploreLayout) entry.exploreLayout = cloneZoomLayout(view.exploreLayout)
+    if (view.locked) {
+      entry.locked = true
+    }
+    if (Object.keys(viewElements).length > 0) entry.elements = viewElements
+    if (entry.locked || entry.elements || entry.exploreLayout) views[view.key] = entry
+    else delete views[view.key]
   }
-
-  // Layout is the only thing this projection writes, so "is there anything to
-  // save?" is exactly "is `views` empty". A contentless `{version:1}` is not
-  // worth a file: every caller gates on truthiness and would write one where it
-  // used to write none.
-  if (Object.keys(views).length === 0 && !sidecar.explore) return null
+  if (Object.keys(views).length === 0 && workspace.savedLayout === undefined && !sidecar.explore) return null
+  // Do not return null after clearing loaded layout: save callers must write
+  // the empty map, otherwise the old file resurrects positions on reopen.
   sidecar.views = views
   return sidecar
 }
@@ -135,7 +147,16 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
 
 export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   if (sidecar.version !== 1) return
-  if (sidecar.explore && isSidecarData({ version: 1, explore: sidecar.explore })) workspace.exploreLayout = structuredClone(sidecar.explore)
+  if (sidecar.explore && isSidecarData({ version: 1, explore: sidecar.explore })) workspace.exploreLayout = cloneZoomLayout(sidecar.explore)
+  workspace.savedLayout = Object.fromEntries(
+    Object.entries(sidecar.views ?? {}).map(([key, data]) => [key, {
+      ...data,
+      ...(data.exploreLayout ? { exploreLayout: cloneZoomLayout(data.exploreLayout) } : {}),
+      ...(data.elements ? { elements: Object.fromEntries(
+        Object.entries(data.elements).map(([id, el]) => [id, { ...el }]),
+      ) } : {}),
+    }]),
+  )
 
   // Elements — only apply known sidecar properties
   if (sidecar.elements) {
@@ -180,24 +201,24 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
 
   // Views: the view-level layout lock, plus hand-placed and locked elements
   if (sidecar.views) {
-    // Entries no view claims are kept rather than dropped, so the next save
-    // cannot delete layout just because its view is not here right now
-    // (TEA-342). Rebuilt, not merged: it has to hold exactly what this pass
-    // did not apply.
-    const claimed = new Set<string>()
-    for (const view of allViewsOf(workspace)) {
-      const key = sidecar.views[view.key] !== undefined ? view.key
-        : (view.originalKey && sidecar.views[view.originalKey] !== undefined ? view.originalKey : undefined)
-      if (key !== undefined) claimed.add(key)
-    }
-    const unclaimed = Object.entries(sidecar.views).filter(([key]) => !claimed.has(key))
-    workspace.unmatchedLayout = unclaimed.length > 0 ? Object.fromEntries(unclaimed) : undefined
-
     for (const view of allViewsOf(workspace)) {
       const viewData = sidecar.views[view.key]
         ?? (view.originalKey ? sidecar.views[view.originalKey] : undefined)
       if (!viewData) continue
-      if (viewData.exploreLayout) view.exploreLayout = structuredClone(viewData.exploreLayout)
+      // Migrate only the parser's explicit key normalization alias. Never
+      // infer ownership from key prefixes, declaration order or element overlap.
+      // Guarded: two views can share one originalKey (the same non-conformant
+      // authored key declared twice), and the first of them already moved the
+      // entry — without this the second would store `undefined` under its key
+      // and every later savedLayout walk would throw on it.
+      if (!Object.hasOwn(sidecar.views, view.key) && view.originalKey) {
+        const carried = workspace.savedLayout[view.originalKey]
+        if (carried !== undefined) {
+          workspace.savedLayout[view.key] = carried
+          delete workspace.savedLayout[view.originalKey]
+        }
+      }
+      if (viewData.exploreLayout) view.exploreLayout = cloneZoomLayout(viewData.exploreLayout)
       if (viewData.locked) view.locked = true
       if (!viewData.elements) continue
       for (const el of view.elements) {

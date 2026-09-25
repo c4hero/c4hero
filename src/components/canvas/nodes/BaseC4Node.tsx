@@ -105,7 +105,10 @@ export default function BaseC4Node({
     if (!card || !reportSize) return
     const measure = () => {
       const header = card.querySelector<HTMLElement>('.c4-node-header')!
-      reportSize(element.id, { width: card.offsetWidth, height: card.offsetHeight, headerHeight: header.offsetTop + header.offsetHeight + 12 })
+      // Computed border-box dimensions retain subpixel text layout. offsetHeight
+      // rounds to whole pixels, which becomes a visible error at deep zoom.
+      const box = getComputedStyle(card)
+      reportSize(element.id, { width: parseFloat(box.width) || card.offsetWidth, height: parseFloat(box.height) || card.offsetHeight, headerHeight: header.offsetTop + header.offsetHeight + 12 })
     }
     measure()
     const observer = new ResizeObserver(measure)

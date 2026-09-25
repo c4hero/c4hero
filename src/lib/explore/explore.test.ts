@@ -62,6 +62,18 @@ describe('Explore geometry and model isolation', () => {
     expect(data.connections.some(c => c.relationship.id === 'cycle')).toBe(true)
     expect(data.connections.some(c => c.relationship.id === 'deployment')).toBe(false)
   })
+  it('honors selected-view exclusions for nested relationships without deleting them from the model', () => {
+    const ws = createBigBankSample()
+    const map = buildLayout(ws)
+    const relationship = ws.model.relationships.find(r => map.byId.get(r.sourceId)?.parent || map.byId.get(r.destinationId)?.parent)!
+    expect(relationship).toBeDefined()
+    const view = ws.views.systemLandscapeViews[0]
+    const visible = connectionsFor(map, ws.model.relationships, view).connections
+    expect(visible.some(c => c.relationship.id === relationship.id)).toBe(true)
+    const filtered = connectionsFor(map, ws.model.relationships, { ...view, excludedRelationshipIds: [relationship.id] }).connections
+    expect(filtered.map(c => c.relationship.id)).toEqual(visible.filter(c => c.relationship.id !== relationship.id).map(c => c.relationship.id))
+    expect(ws.model.relationships).toContain(relationship)
+  })
   it('bundles direction and async styles separately with all underlying IDs intact', () => {
     const ws = createBigBankSample(), map = buildLayout(ws), [a, b] = map.roots
     const rels = [

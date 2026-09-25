@@ -1,11 +1,12 @@
 import type { StateCreator } from 'zustand'
-import type { Workspace, ElementInView, View, StoredViewLayout } from '@/types/model'
+import type { Workspace, ElementInView } from '@/types/model'
 import type { WorkspaceState } from '../workspace-types'
 import { validateScope } from '@/lib/scopeValidation'
 import { parseDSL } from '@/lib/dsl'
+import { applySidecar, extractSidecar } from '@/lib/sidecar'
 import { checkModelIntegrity } from '@/lib/modelIntegrity'
 import { pushUndoSnapshot } from '../internals'
-import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft, viewLayoutOf } from '../workspace-helpers'
+import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 import { hasIncludedFiles } from '@/lib/includeWriteback'
 import { restitchWorkspaceDocument } from '@/lib/workspaceDocument'
@@ -27,61 +28,18 @@ function elementNamesById(ws: Workspace): Map<string, string> {
  *  parser-generated id on every re-parse, so an unmatched id falls back to
  *  matching by element name (skipped when the name is ambiguous in that view). */
 function carryOverViewLayout(prev: Workspace, next: Workspace): void {
-  next.exploreLayout = prev.exploreLayout
+  // Use the same lossless persistence boundary for a code-pane reparse as
+  // for a disk reopen. The existing pass below also carries transient canvas
+  // positions and handles identifier-less elements within the current session.
+  const saved = extractSidecar(prev)
+  if (saved) applySidecar(next, saved)
   const prevViews = new Map(allViewsOf(prev).map((v) => [v.key, v]))
   const prevNames = elementNamesById(prev)
   const nextNames = elementNamesById(next)
-  const nextViews = allViewsOf(next)
-
-  // Layout can be waiting in two places. A view that survived the last parse
-  // still holds its positions; one that went absent had them parked. Offer
-  // both, so a view that comes back — a generated view that stopped being
-  // generated, an `!include` that briefly failed to read — finds its layout
-  // waiting instead of having been quietly dropped (TEA-342).
-  const parked = { ...prev.unmatchedLayout }
-  const claimedKey = (view: View): string | undefined =>
-    prevViews.has(view.key) || parked[view.key] !== undefined ? view.key
-    : (view.originalKey && (prevViews.has(view.originalKey) || parked[view.originalKey] !== undefined)
-        ? view.originalKey : undefined)
-
-  // Whatever nothing claims is parked — rebuilt from scratch each parse, so it
-  // holds exactly what this pass could not place and never accumulates.
-  const claimed = new Set(nextViews.map(claimedKey).filter((k): k is string => k !== undefined))
-  const nextParked: Record<string, StoredViewLayout> = {}
-  for (const [key, layout] of Object.entries(parked)) {
-    if (!claimed.has(key)) nextParked[key] = layout
-  }
-  for (const [key, view] of prevViews) {
-    if (claimed.has(key) || parked[key] !== undefined) continue
-    const layout = viewLayoutOf(view)
-    if (layout) nextParked[key] = layout
-  }
-  next.unmatchedLayout = Object.keys(nextParked).length > 0 ? nextParked : undefined
-
-  for (const view of nextViews) {
-    const key = claimedKey(view)
-    if (key === undefined) continue
-    // Parked first, then the previous view on top, so a live view's own
-    // positions win where it has them and the parked entry fills in where it
-    // does not. Parked layout keys elements by id with no names to fall back
-    // on, so an element the DSL never named — its id is regenerated every
-    // parse — cannot be re-found. That is the cost of the view's absence.
-    const stored = parked[key]
-    if (stored) {
-      view.exploreLayout = stored.exploreLayout
-      if (stored.locked) view.locked = true
-      for (const el of view.elements) {
-        const e = stored.elements?.[el.id]
-        if (!e) continue
-        if (e.x !== undefined) el.x = e.x
-        if (e.y !== undefined) el.y = e.y
-        if (e.pinned) el.pinned = true
-        if (e.locked) el.locked = true
-      }
-    }
-    const old = prevViews.get(key)
+  for (const view of allViewsOf(next)) {
+    const old = prevViews.get(view.key)
+      ?? (view.originalKey ? prevViews.get(view.originalKey) : undefined)
     if (!old) continue
-    view.exploreLayout = old.exploreLayout
     if (old.locked) view.locked = true
     const oldById = new Map(old.elements.map((el) => [el.id, el]))
     const oldByName = new Map<string, ElementInView | null>()
@@ -93,6 +51,9 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
     for (const el of view.elements) {
       let oldEl = oldById.get(el.id)
       if (!oldEl) {
+        // applySidecar already restored this exact ID, even if it was absent
+        // from the previous view. A name match cannot supersede that identity.
+        if (next.savedLayout?.[view.key]?.elements?.[el.id]) continue
         const name = nextNames.get(el.id)
         const byName = name !== undefined ? oldByName.get(name) : undefined
         // Only fall back when the old element's id no longer exists in the new
@@ -214,8 +175,8 @@ export const createLifecycleSlice: StateCreator<
   closeWorkspace: () =>
     set({
       workspace: null,
-      activeWorkspaceFilename: null,
       rendererMode: 'diagram',
+      activeWorkspaceFilename: null,
       activeViewKey: null,
       viewHistory: [],
       selectedElementIds: [],

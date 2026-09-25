@@ -166,7 +166,7 @@ describe('deleting a keyless view (issue #201, mode 2)', () => {
 })
 
 describe('reordering keyless views (issue #201, mode 3)', () => {
-  it('KNOWN LIMITATION: swaps their layout, and drops positions the receiving view has no element for', () => {
+  it('KNOWN LIMITATION: keyless views swap layout, but absent element positions are retained', () => {
     // Inherent, not an oversight. Two views of the same type over the same
     // scope with no key in the DSL are indistinguishable once parsed: a
     // reorder and "the user swapped the contents of these two views" produce
@@ -194,9 +194,9 @@ describe('reordering keyless views (issue #201, mode 3)', () => {
     // Both views still have layout — nothing is wholesale deleted, which is
     // the failure mode this issue was about...
     expect(Object.keys(after).sort()).toEqual(['Containers-payments', 'Containers-payments-2'])
-    // ...but the one-element view took the two-element view's entry, so `db`
-    // has nowhere to land.
-    expect(Object.keys(after['Containers-payments'])).toEqual(['api'])
+    // The keyless view still claims the same key, but main now retains the
+    // absent element's positions for restoration rather than deleting them.
+    expect(Object.keys(after['Containers-payments']).sort()).toEqual(['api', 'db'])
   })
 
   it('keeps both layouts when a view names itself in the DSL', () => {
@@ -529,14 +529,9 @@ describe('nothing is deleted just because it could not be matched', () => {
     expect(extractSidecar(workspace)).toBeNull()
   })
 
-  it('keeps a carried entry whose key a live view happens to own', () => {
-    // `unmatchedLayout` is rebuilt from scratch on every parse and holds only
-    // what a matcher declined to hand out, so a live view's key appearing
-    // there means the pairing was contested — not that the entry is stale.
-    // Clearing it on the view's behalf would delete the layout that declining
-    // was supposed to protect.
+  it('keeps loaded layout for the live view that owns its key', () => {
     const { workspace } = parseDSL(TWO_KEYLESS_VIEWS)
-    workspace.unmatchedLayout = { 'Containers-payments': { elements: { api: { pinned: true, x: 1, y: 2 } } } }
+    applySidecar(workspace, { version: 1, views: { 'Containers-payments': { elements: { api: { pinned: true, x: 1, y: 2 } } } } })
     expect(extractSidecar(workspace)?.views?.['Containers-payments'])
       .toEqual({ elements: { api: { pinned: true, x: 1, y: 2 } } })
   })
@@ -546,7 +541,7 @@ describe('nothing is deleted just because it could not be matched', () => {
     // view answering to it takes it. What matters is that the layout is not
     // dropped on the floor: it ends up on the view, and back on disk.
     const { workspace } = parseDSL(TWO_KEYLESS_VIEWS)
-    workspace.unmatchedLayout = { 'Containers-payments': { locked: true } }
+    applySidecar(workspace, { version: 1, views: { 'Containers-payments': { locked: true } } })
     st().loadWorkspace(workspace)
 
     expect(st().replaceWorkspaceFromDSL(serializeDSL(st().workspace!)).ok).toBe(true)
@@ -653,7 +648,7 @@ describe('a cold open cannot trust an exact key match either', () => {
     expect(at(0), 'first view lost its own layout').toBe(11)
     expect(at(1), 'second view lost its own layout').toBe(22)
     // The orphan is kept, not applied and not deleted.
-    expect(workspace.unmatchedLayout?.['Containers-payments-3']).toBeDefined()
+    expect(workspace.savedLayout?.['Containers-payments-3']).toBeDefined()
   })
 })
 
