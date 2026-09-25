@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Element lifecycle status is now an open vocabulary. `Live`, `Planned`,
+  `Deprecated` and `Removed` still ship as the built-ins and nothing changes for
+  workspaces that only use them, but a status c4hero does not know is no longer
+  inert: a `"c4hero.status"` property with any value now becomes a first-class
+  status on load — it gets a status dot, a filter in the highlighter bar, and an
+  entry in the inspector. Extra values can also be declared up front under
+  **Custom statuses** in canvas settings, so they can be chosen before any
+  element has one. Custom statuses take a colour derived from their own name;
+  the built-ins keep their themeable `--color-status-*` custom properties.
+
 ### Fixed
 
 - Exported PNG and SVG images now include relationship arrowheads (#207).
