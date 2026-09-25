@@ -26,10 +26,14 @@ async function select(page: Page, id: string, shift = false) {
   await page.mouse.click(p.x, p.y)
   if (shift) await page.keyboard.up('Shift')
 }
+async function enterExplore(page: Page) {
+  await page.getByRole('button', { name: 'Switch view' }).click()
+  await page.getByRole('button', { name: 'Explore workspace' }).click()
+}
 
 test.beforeEach(async ({ page, workspace }) => {
   await workspace.parseAndLoad(dsl)
-  await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await enterExplore(page)
   await expect(page.getByTestId('explore-canvas')).toHaveAttribute('data-camera', /zoom/)
 })
 

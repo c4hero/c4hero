@@ -3,11 +3,15 @@ import type { WorkspaceState } from '../../src/store/workspace-types'
 import type { ExploreController } from '../../src/lib/explore/controller'
 import { readFileSync, writeFileSync } from 'node:fs'
 const fixture = readFileSync(new URL('../fixtures/northstar-commerce.dsl', import.meta.url), 'utf8')
+async function enterExplore(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'Switch view' }).click()
+  await page.getByRole('button', { name: 'Explore workspace' }).click()
+}
 
 test('description lines remain stable across zoom and scale continuously', async ({ page, workspace }) => {
   await workspace.loadSample()
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await enterExplore(page)
   const canvas = page.getByTestId('explore-canvas')
   await canvas.evaluate(el => (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.focus('internetBanking'))
   await page.waitForTimeout(150)
@@ -34,7 +38,7 @@ test('description lines remain stable across zoom and scale continuously', async
 test('nested edge labels never overlap other captions or leaf cards', async ({ page, workspace }, testInfo) => {
   await workspace.loadSample()
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await enterExplore(page)
   const canvas = page.getByTestId('explore-canvas')
   await expect(canvas).toHaveAttribute('data-camera', /zoom/)
   const overview = await canvas.evaluate(el => (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.exportSVG('current'))
@@ -62,7 +66,7 @@ test('nested edge labels never overlap other captions or leaf cards', async ({ p
 test('leaf text grows with zoom and person descriptions fit inside rounded cards', async ({ page, workspace }, testInfo) => {
   await workspace.loadSample()
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await enterExplore(page)
   const canvas = page.getByTestId('explore-canvas')
   await canvas.evaluate(el => {
     const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore
@@ -85,7 +89,7 @@ test('leaf text grows with zoom and person descriptions fit inside rounded cards
 
 test('drag release glides, new input interrupts, and reduced motion stops immediately', async ({ page, workspace }) => {
   await workspace.loadSample()
-  await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await enterExplore(page)
   const canvas = page.getByTestId('explore-canvas')
   await expect(canvas).toHaveAttribute('data-camera', /zoom/)
   const readX = () => canvas.evaluate(el => (el as HTMLCanvasElement & { __explore: ExploreController }).__explore.state.camera.x)
@@ -111,7 +115,7 @@ test('Explore preserves authored state, supports focus through lock and restores
   await page.waitForTimeout(500)
   const before = await page.evaluate(() => { const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore(); return { workspace: JSON.stringify(s.workspace), undo: s.undoStack.length, view: s.activeViewKey } })
   const viewport = await page.locator('.react-flow__viewport').getAttribute('style')
-  await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await enterExplore(page)
   const canvas = page.getByTestId('explore-canvas')
   await expect(canvas).toBeVisible()
   await expect(page.getByText('Workspace architecture', { exact: true })).toBeVisible()
@@ -136,7 +140,8 @@ test('Explore preserves authored state, supports focus through lock and restores
     return engine.state.layout.byId.get(selected)!.width * engine.state.camera.zoom
   })
   expect(focusedWidth).toBeGreaterThan(120)
-  await page.getByRole('button', { name: 'Diagram', exact: true }).click()
+  await page.getByRole('button', { name: 'Switch view' }).click()
+  await page.getByRole('button', { name: 'System Landscape', exact: true }).click()
   await expect(page.locator('.react-flow')).toBeVisible(); await page.waitForTimeout(400)
   expect(await page.locator('.react-flow__viewport').getAttribute('style')).toBe(viewport)
   const after = await page.evaluate(() => { const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore(); return { workspace: JSON.stringify(s.workspace), undo: s.undoStack.length, view: s.activeViewKey } })
@@ -144,7 +149,7 @@ test('Explore preserves authored state, supports focus through lock and restores
 })
 
 test('partial reveal freezes on selection; idle completion and Escape never move camera', async ({ page, workspace }, testInfo) => {
-  await workspace.loadSample(); await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await workspace.loadSample(); await enterExplore(page)
   const canvas = page.getByTestId('explore-canvas')
   await page.waitForTimeout(800)
   await page.screenshot({ path: testInfo.outputPath('explore-big-bank-overview.png') })
@@ -184,7 +189,7 @@ test('partial reveal freezes on selection; idle completion and Escape never move
 test('Northstar portals, keyboard inspection, model reconciliation and screenshots', async ({ page, workspace }, testInfo) => {
   await workspace.parseAndLoad(fixture)
   await page.screenshot({ path: testInfo.outputPath('diagram-before.png') })
-  await page.getByRole('button', { name: 'Explore', exact: true }).click(); await page.waitForTimeout(750)
+  await enterExplore(page); await page.waitForTimeout(750)
   await page.screenshot({ path: testInfo.outputPath('explore-overview.png') })
   await page.getByRole('button', { name: 'Browse architecture' }).click()
   await page.getByRole('button', { name: 'Storefront · Software system', exact: true }).click(); await expect(page.getByText('Detail frozen · clear selection to resume', { exact: true })).toBeVisible(); await page.waitForTimeout(150)
@@ -213,7 +218,7 @@ test('Northstar portals, keyboard inspection, model reconciliation and screensho
 
 test('touch pinch, cancellation, reduced motion, resize and presentation retain Explore', async ({ page, workspace }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await workspace.loadSample(); await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await workspace.loadSample(); await enterExplore(page)
   const canvas = page.getByTestId('explore-canvas')
   await expect(canvas).toHaveAttribute('data-camera', /zoom/)
   const client = await page.context().newCDPSession(page)
@@ -227,7 +232,7 @@ test('touch pinch, cancellation, reduced motion, resize and presentation retain 
   await page.setViewportSize({ width: 1000, height: 800 })
   await canvas.focus(); await page.keyboard.press('0'); await page.keyboard.press('p')
   await expect(canvas).toBeVisible(); await expect(page.locator('.react-flow')).toHaveCount(0)
-  await page.keyboard.press('Escape'); await expect(page.getByRole('group', { name: 'Canvas mode' })).toBeVisible()
+  await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: 'Switch view' })).toBeVisible()
 })
 
 test('50-system / 500-element / 1000-relationship navigation benchmark', async ({ page, workspace, browser }, testInfo) => {
@@ -250,7 +255,7 @@ test('50-system / 500-element / 1000-relationship navigation benchmark', async (
     })
     s.loadWorkspace(ws)
   })
-  await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await enterExplore(page)
   const canvas = page.getByTestId('explore-canvas'); await page.waitForTimeout(1500)
   const traceClient = process.env.EXPLORE_TRACE ? await page.context().newCDPSession(page) : null
   if (traceClient) await traceClient.send('Tracing.start', { categories: 'devtools.timeline,v8.execute,disabled-by-default-devtools.timeline', transferMode: 'ReturnAsStream' })
@@ -292,7 +297,7 @@ test('50-system / 500-element / 1000-relationship navigation benchmark', async (
 
 test('Explore follows Diagram themes live without moving geometry or camera', async ({ page, workspace }, testInfo) => {
   await workspace.loadSample()
-  await page.getByRole('button', { name: 'Explore', exact: true }).click()
+  await enterExplore(page)
   await page.waitForTimeout(750)
   const result = await page.getByTestId('explore-canvas').evaluate(async el => {
     const engine = (el as HTMLCanvasElement & { __explore: ExploreController }).__explore

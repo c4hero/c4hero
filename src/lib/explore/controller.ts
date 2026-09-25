@@ -430,8 +430,9 @@ export class ExploreController implements ActiveCamera {
     const insets = getCanvasFitInsets(this.canvas.getBoundingClientRect())
     // Focus selects its destination when the flight completes. Reserve the
     // inspector before it mounts so that completion cannot cover the children.
-    // Presentation has no mode control or inspector and retains the full width.
-    const pendingInspector = this.focusTarget && document.querySelector('[aria-label="Canvas mode"]')
+    // Presentation hides the workspace chrome and inspector, retaining the full width.
+    const workspaceChrome = document.querySelector<HTMLElement>('[data-canvas-chrome="top-pill"]')
+    const pendingInspector = this.focusTarget && workspaceChrome?.getClientRects().length
       ? Math.min(360, this.width - 28) + 28 : 0
     const left = Math.max(insets.left, 30), right = Math.max(insets.right, pendingInspector, 30), top = Math.max(insets.top, 105), bottom = Math.max(insets.bottom, 65)
     const width = Math.max(100, this.width - left - right), height = Math.max(100, this.height - top - bottom)

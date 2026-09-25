@@ -1,7 +1,7 @@
 # Explore workspace architecture
 
-Use **Diagram / Explore** above the canvas to switch modes. Diagram remains the
-initial default. Explore shows **Workspace architecture**: every static person,
+Choose **Explore workspace** from the view dropdown. Authored Diagram views remain
+the initial default. Explore shows **Workspace architecture**: every static person,
 software system, container and component in the loaded workspace, including
 things excluded from the selected authored view. Groups do not add another C4
 level. Deployment instances and dynamic playback remain in Diagram.

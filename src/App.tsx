@@ -21,7 +21,6 @@ import ConfirmDeleteDialog from '@/components/shared/ConfirmDeleteDialog'
 import ZoomConfirmDialog from '@/components/shared/ZoomConfirmDialog'
 import Canvas from '@/components/canvas/Canvas'
 import ExploreCanvas from '@/components/explore/ExploreCanvas'
-import RendererModeControl from '@/components/layout/RendererModeControl'
 import CanvasHints from '@/components/canvas/CanvasHints'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import NotFound from '@/components/shared/NotFound'
@@ -98,7 +97,6 @@ export default function App() {
         <DiskConflictBar />
         <MultiSelectBar />
         <nav aria-label="Tools"><FloatingToolRail /></nav>
-        <RendererModeControl />
         <FloatingViewsPanel />
         <aside aria-label="Element inspector"><FloatingInspector /></aside>
         <BottomHighlighterBar />

@@ -135,7 +135,7 @@ The c4hero name, logo, domain, and product identity are not licensed under Apach
 
 ## Explore mode
 
-Switch from **Diagram** to **Explore** to navigate the whole workspace as a nested
+Choose **Explore workspace** from the view dropdown to navigate the whole workspace as a nested
 map. Zoom reveals containers and components in place. Selecting an element
 freezes detail while you follow its relationships; clearing selection resumes
 semantic zoom. Authored views and their layouts remain separate.
