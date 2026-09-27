@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   value set in an `!include`d file is not copied into the root and an override
   keeps its meaning. Unquoted keys and values are accepted, as in Structurizr,
   and a property that cannot be saved as written is reported like any other.
+- **Property blocks now keep their includes and overrides on save.** An
+  `!include` inside an element's or relationship's `properties { }` block was
+  dropped on save, and the included values were copied into the root file. The
+  include is now kept, and each line stays in its place around it. A custom
+  `structurizr.groupSeparator` is no longer replaced with `/` when groups are
+  nested, so `Group:` style tags keep matching. Editing a property whose value
+  came from a read-only include now writes the new value into the root file
+  instead of losing it (TEA-349).
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.
