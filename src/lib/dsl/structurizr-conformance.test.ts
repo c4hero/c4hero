@@ -233,6 +233,19 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect(saved.model.properties).toMatchObject({ team: rootLast ? 'root' : 'included' })
     })
 
+    it.each([false, true])('preserves element property includes (root last: %s) (TEA-349)', async (rootLast) => {
+        const block = rootLast ? '!include p.dsl\n"team" "root"' : '"team" "root"\n!include p.dsl'
+        const source = `workspace {\nmodel {\nu = person "U" {\nproperties {\n${block}\n}\n}\n}\nviews {\n}\n}`
+        const includes = { 'p.dsl': '"team" "included"\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['p.dsl'] })
+        expect(loaded.errors).toEqual([])
+        type Exported = { model: { people: { properties: object }[] } }
+        const original = exportModel(source, includes) as Exported
+        const saved = exportModel(serializeRoot(loaded.workspace), includes) as Exported
+        expect(saved.model.people[0].properties).toEqual(original.model.people[0].properties)
+        expect(saved.model.people[0].properties).toMatchObject({ team: rootLast ? 'root' : 'included' })
+    })
+
     const templates: [string, () => Workspace][] = [
         ['bigBank', createBigBankSample],
         ['microservices', createMicroservicesTemplate],

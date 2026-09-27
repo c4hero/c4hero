@@ -3,7 +3,7 @@
 import type { Relationship } from '@/types/model'
 import { isInteractionStyle, isLineStyle } from '@/types/model'
 import type { ContextAwareParser } from './parser'
-import { readPropertyEntries, setUserProperty } from './parser'
+import { attachPropertyLayout, readPropertyBlock, setUserProperty } from './parser'
 
 export function parseRelationship(p: ContextAwareParser): Relationship | null {
     // Both endpoints may be qualified paths (`mpng.gatewayApi`,
@@ -91,7 +91,7 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                 p.skipNewlines()
                 if (p.check('LBRACE')) {
                     p.advance()
-                    readPropertyEntries(p, (key, value) => setUserProperty(rel.properties, key, value))
+                    attachPropertyLayout(rel, readPropertyBlock(p, (key, value) => setUserProperty(rel.properties, key, value)))
                     if (p.check('RBRACE')) p.advance()
                 }
                 continue
