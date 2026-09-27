@@ -454,3 +454,12 @@ describe('retained layout ownership', () => {
     expect(workspace.savedLayout).toEqual(original.views)
   })
 })
+
+
+it('normalizes legacy sidecar statuses before adding them to the model', () => {
+  const ws = makeWorkspace()
+  const sidecar = parseSidecar(JSON.stringify({ version: 1, elements: { alice: { status: ' Live ' } } }))
+  expect(sidecar).not.toBeNull()
+  applySidecar(ws, sidecar!)
+  expect(ws.model.people[0].status).toBe('Live')
+})

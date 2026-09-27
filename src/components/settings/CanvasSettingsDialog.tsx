@@ -226,7 +226,11 @@ function CustomStatusesRow() {
         placeholder="e.g. Proposed, Under review"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur() } }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          // Escape dismisses DialogShell without firing blur on the removed input.
+          if (e.key === 'Escape') commit()
+        }}
         style={{
           marginTop: 8,
           width: '100%',

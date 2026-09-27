@@ -5,6 +5,7 @@ import {
   statusColor, parseCustomStatuses, statusesInWorkspace, elementStatusVocabulary,
 } from './elementStatus'
 import type { Workspace } from '@/types/model'
+import { parseDSL, serializeDSL } from '@/lib/dsl'
 
 function ws(statuses: (string | undefined)[]): Workspace {
   return {
@@ -120,5 +121,22 @@ describe('elementStatusVocabulary', () => {
   it('lists a declared status once even when the workspace also uses it', () => {
     expect(elementStatusVocabulary(['Beyond MVP'], ws(['Beyond MVP', 'Live'])))
       .toEqual(['Live', 'Planned', 'Deprecated', 'Removed', 'Beyond MVP'])
+  })
+})
+
+
+describe('DSL-safe status names', () => {
+  it.each(['Phase 2\\', '\\', 'Phase\\next', 'Phase\\   '])('refuses unrepresentable name %j', (status) => {
+    expect(isElementStatusValue(status)).toBe(false)
+    expect(normalizeElementStatus(status)).toBeUndefined()
+    expect(parseCustomStatuses(status)).toEqual([])
+  })
+
+  it.each(['Proposed', 'Phase\\review', 'Awaiting "approval"', 'Phase\\"review'])('preserves accepted name %j on save/load', (status) => {
+    expect(parseCustomStatuses(status)).toEqual([status])
+    const workspace = ws([status])
+    const reloaded = parseDSL(serializeDSL(workspace))
+    expect(reloaded.errors).toEqual([])
+    expect(reloaded.workspace.model.people[0].status).toBe(status)
   })
 })

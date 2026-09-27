@@ -524,3 +524,17 @@ describe('isWorkspaceShape edge cases', () => {
     expect(isWorkspaceShape(bad)).toBe(false)
   })
 })
+
+
+it('normalizes status whitespace when restoring crash recovery', async () => {
+  const { mock } = makeMockLocalStorage()
+  vi.stubGlobal('localStorage', mock)
+  const { saveToLocalStorage, loadFromLocalStorage } = await import('./fileIO')
+  const ws = makeWorkspace()
+  ws.model.people[0].status = ' Live '
+  ws.model.softwareSystems[0].status = ' Proposed '
+  saveToLocalStorage(ws)
+  const loaded = loadFromLocalStorage()!
+  expect(loaded.model.people[0].status).toBe('Live')
+  expect(loaded.model.softwareSystems[0].status).toBe('Proposed')
+})

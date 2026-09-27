@@ -1,7 +1,7 @@
 import type { DescribeResult, EditPlan, EditOp, ReviewResult, ReviewFinding, ReviewFixOption } from './types'
 import { isRecord, isStringArray } from '@/lib/guards'
 import { createLogger } from '@/lib/logger'
-import { MAX_STATUS_LENGTH, BUILT_IN_ELEMENT_STATUSES } from '@/lib/elementStatus'
+import { BUILT_IN_ELEMENT_STATUSES } from '@/lib/elementStatus'
 
 // JSON Schemas (for Anthropic structured outputs) plus runtime validators for the
 // two features that need machine-readable results. Validators are exported and
@@ -58,12 +58,12 @@ const opSchema = {
     external: { type: 'boolean' },
     location: { type: 'string', enum: ['Internal', 'External'] },
     // updateElement extras: category tags (added, not replaced), lifecycle status,
-    // and owner. The applier validates status against the enum and merges tags.
+    // and owner. The applier validates status shape and merges tags.
     tags: { type: 'array', items: { type: 'string' } },
     // Open vocabulary: the built-ins are the documented ones, but a workspace may
-    // use others, so the schema takes any bounded string rather than an enum and
-    // the sanitizer enforces the shape.
-    status: { type: 'string', maxLength: MAX_STATUS_LENGTH, description: `Lifecycle status. Usually one of ${BUILT_IN_ELEMENT_STATUSES.join(', ')}; a workspace may define others.` },
+    // use others. Keep length constraints in the sanitizer: Anthropic structured
+    // outputs reject maxLength in the transmitted schema.
+    status: { type: 'string', description: `Lifecycle status. Usually one of ${BUILT_IN_ELEMENT_STATUSES.join(', ')}; a workspace may define others.` },
     owner: { type: 'string' },
     // addView: the kind of diagram and its scope element.
     viewType: { type: 'string', enum: ['systemLandscape', 'systemContext', 'container', 'component'] },
@@ -72,10 +72,6 @@ const opSchema = {
   },
   required: ['op'],
 }
-
-/** Longest accepted status value. Re-exported from the status module so the AI
- *  sanitizer caps are all readable in one place. */
-export { MAX_STATUS_LENGTH }
 
 /** Valid view-type values (mirrors ViewType). */
 export const VIEW_TYPE_VALUES: ReadonlySet<string> = new Set(['systemLandscape', 'systemContext', 'container', 'component'])
@@ -136,7 +132,7 @@ function hasValidOpFieldTypes(value: Record<string, unknown>): boolean {
   }
   if (value.external !== undefined && typeof value.external !== 'boolean') return false
   // Only the TYPE is gated here (a malformed value drops the whole op); the
-  // status enum value is validated leniently in the applier so a slightly-off
+  // status shape is validated leniently in the applier so a slightly-off
   // status doesn't discard an otherwise-valid update.
   if (value.tags !== undefined && !isStringArray(value.tags)) return false
   if (value.location !== undefined && typeof value.location !== 'string') return false

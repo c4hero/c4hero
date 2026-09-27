@@ -1,5 +1,6 @@
 import type { ElementStatus, BuiltInElementStatus, Workspace } from '@/types/model'
 import { forEachElementHelper } from '@/store/workspace-helpers'
+import { representable } from '@/lib/dsl/encoding'
 
 // Single source of truth for the element-status vocabulary.
 //
@@ -39,6 +40,7 @@ export function isElementStatusValue(v: unknown): v is ElementStatus {
     && v.trim().length > 0
     && v.length <= MAX_STATUS_LENGTH
     && !/[\r\n]/.test(v)
+    && representable(v.trim()) === v.trim()
 }
 
 /** Trim to the canonical spelling, or undefined when unusable. Callers that

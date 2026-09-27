@@ -1,4 +1,5 @@
 import type { Workspace, View } from '@/types/model'
+import { useSettingsStore } from '@/store/settings'
 import type { AiProvider, DescribeResult, EditPlan, ReviewResult, ReviewFinding, AiChatTurn } from './types'
 import type { DocsContext } from './docsContext'
 import {
@@ -284,7 +285,7 @@ export async function suggestFieldValue(
 export async function planEdit(provider: AiProvider, ws: Workspace, instruction: string): Promise<EditPlan> {
   const raw = await provider.completeJson({
     system: editSystem(),
-    user: editUser(ws, instruction),
+    user: editUser(ws, instruction, useSettingsStore.getState().customStatuses),
     schema: editSchema,
     validate: isRecord,
     maxTokens: 4000,

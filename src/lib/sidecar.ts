@@ -3,13 +3,9 @@ import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
-import { isElementStatusValue } from '@/lib/elementStatus'
+import { isElementStatusValue, normalizeElementStatus } from '@/lib/elementStatus'
 
 const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
-
-// The status vocabulary is open, so a sidecar written against a vocabulary this
-// machine has not declared still reads back — the value shape is what's checked.
-const isValidStatus = isElementStatusValue
 
 function isValidLineStyle(v: unknown): v is LineStyle {
   return typeof v === 'string' && VALID_LINE_STYLES.has(v)
@@ -45,7 +41,7 @@ export interface SidecarData {
 
 function isSidecarElement(value: unknown): value is SidecarElement {
   if (!isRecord(value)) return false
-  if ('status' in value && value.status !== undefined && !isValidStatus(value.status)) return false
+  if ('status' in value && value.status !== undefined && !isElementStatusValue(value.status)) return false
   if ('owner' in value && value.owner !== undefined && typeof value.owner !== 'string') return false
   return true
 }
@@ -149,7 +145,8 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       // DSL is the authoritative source; sidecar is a migration fallback for files
       // written before status/owner were serialized in the DSL.
       const applyProps = (el: { status?: ElementStatus; owner?: string }) => {
-        if (el.status === undefined && isValidStatus(data.status)) el.status = data.status
+        const status = normalizeElementStatus(data.status)
+        if (el.status === undefined && status !== undefined) el.status = status
         if (el.owner === undefined && typeof data.owner === 'string') el.owner = data.owner
       }
       // People

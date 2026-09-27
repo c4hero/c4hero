@@ -1,3 +1,4 @@
+import { useSettingsStore } from '@/store/settings'
 import { describe, it, expect } from 'vitest'
 import type { AiProvider, AiJsonRequest } from './types'
 import {
@@ -362,3 +363,28 @@ describe('autoDescribe', () => {
   })
 })
 
+
+
+it('sends the open status vocabulary and an Anthropic-compatible schema to the edit provider', async () => {
+  const previous = useSettingsStore.getState().customStatuses
+  useSettingsStore.setState({ customStatuses: ['Under review'] })
+  try {
+    const ws = makeWorkspace()
+    ws.model.softwareSystems[0].status = 'Proposed'
+    const provider: AiProvider = {
+      async complete() { return '' },
+      async completeJson<T>(req: AiJsonRequest<T>): Promise<T> {
+        expect(req.user).toContain('"Under review"')
+        expect(req.user).toContain('"Proposed"')
+        expect(req.user).toContain('"Live"')
+        expect(req.system).not.toContain('exactly one of Live')
+        expect(req.system).toContain('Only introduce a new value')
+        expect(JSON.stringify(req.schema)).not.toContain('"maxLength"')
+        return { operations: [] } as T
+      },
+    }
+    await planEdit(provider, ws, 'Mark the system Under review')
+  } finally {
+    useSettingsStore.setState({ customStatuses: previous })
+  }
+})
