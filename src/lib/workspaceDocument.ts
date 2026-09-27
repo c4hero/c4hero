@@ -63,7 +63,7 @@ export function stitchWorkspaceDocument(
   resolved: ResolveIncludesResult,
   texts: Map<string, string>,
 ): WorkspaceDocumentResult {
-  const { workspace, errors: rawErrors, warnings: rawWarnings, declarationLines, viewLines, directiveLines, styleLines, themesLine } = parseDSL(resolved.content)
+  const { workspace, errors: rawErrors, warnings: rawWarnings, declarationLines, viewLines, directiveLines, styleLines, themesLine, workspacePropertyLines } = parseDSL(resolved.content)
   if (!workspace.name && input.fallbackName) workspace.name = input.fallbackName
 
   // Provenance: map every declaration back to the file it was read from.
@@ -98,6 +98,11 @@ export function stitchWorkspaceDocument(
     const p = fileOf(styleLines.get(style))
     if (p) style.sourcePath = p
   }
+  const propertySources = [...workspacePropertyLines].flatMap(([key, line]) => {
+    const path = fileOf(line)
+    return path ? [[key, path]] : []
+  })
+  if (propertySources.length) workspace.propertySourcePaths = Object.fromEntries(propertySources)
   const themesPath = fileOf(themesLine)
   if (themesPath) workspace.views.configuration.themesSourcePath = themesPath
 

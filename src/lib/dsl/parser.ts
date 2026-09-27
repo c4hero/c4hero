@@ -138,6 +138,8 @@ export interface ParseResult {
     /** Source line per style object and of the `themes` line. */
     styleLines: Map<object, number>
     themesLine: number | undefined
+    /** Source line of each effective workspace property, keyed by property name. */
+    workspacePropertyLines: Map<string, number>
     /** Non-fatal notes: the model loaded, but something was preserved rather
      *  than understood (e.g. an unresolved `!include`). */
     warnings: ParseError[]
@@ -179,6 +181,8 @@ export class ContextAwareParser {
     /** Source line per parsed style object and of the `themes` line. */
     styleLines = new Map<object, number>()
     themesLine: number | undefined
+    /** Source line of each effective workspace property, keyed by property name. */
+    workspacePropertyLines = new Map<string, number>()
     /** Last element / environment / group declared in the model block being
      *  parsed — the anchor a following `!` directive is re-emitted after.
      *  Reset on entering a group body (see parseModelBody). */
@@ -544,7 +548,7 @@ export class ContextAwareParser {
             if (this.check('KEYWORD', 'extends') || this.check('IDENTIFIER', 'extends')) {
                 this.skipToNextLine()
                 this.skipBraceBlock()
-                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine }
+                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine, workspacePropertyLines: this.workspacePropertyLines }
             }
 
             workspace.name = this.readOptionalString() || undefined
@@ -559,7 +563,7 @@ export class ContextAwareParser {
         }
 
         if (this.directives.length > 0) workspace.directives = this.directives
-        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine }
+        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine, workspacePropertyLines: this.workspacePropertyLines }
     }
 
     private createEmptyWorkspace(): Workspace {
@@ -629,7 +633,10 @@ export class ContextAwareParser {
                 } else if (kw === 'properties') {
                     this.advance()
                     this.skipNewlines()
-                    this.skipBraceBlock()
+                    if (this.match('LBRACE')) {
+                        this.parseWorkspaceProperties(workspace)
+                        this.expect('RBRACE')
+                    }
                 } else {
                     // Unknown workspace-level keyword (e.g. branding, terminology, !identifiers).
                     // Consume keyword + any inline string args, then skip a brace block if present.
@@ -641,6 +648,35 @@ export class ContextAwareParser {
             } else {
                 this.advance()
             }
+        }
+    }
+
+    private parseWorkspaceProperties(workspace: Workspace): void {
+        while (this.peekType() !== 'EOF') {
+            this.skipNewlines()
+            if (this.check('RBRACE') || this.peekType() === 'EOF') break
+            const token = this.peek()
+            if (token.type === 'COMMENT') { this.advance(); continue }
+            if (token.type === 'KEYWORD' && token.value.startsWith('!')) {
+                this.noteDirective(token.value, 'workspaceProperties', token)
+                this.advance()
+                this.skipToNextLine()
+                continue
+            }
+            const key = this.readOptionalString()
+            if (key === undefined) {
+                this.addError('Expected a workspace property name', token)
+                this.advance()
+                continue
+            }
+            const value = this.readOptionalString()
+            if (value === undefined) {
+                this.addError(`Expected a value for workspace property '${key}'`, token)
+                continue
+            }
+            workspace.properties ??= {}
+            setUserProperty(workspace.properties, key, value)
+            this.workspacePropertyLines.set(key, token.line)
         }
     }
 
@@ -785,5 +821,6 @@ export function parse(input: string): ParseResult {
         directiveLines: result.directiveLines,
         styleLines: result.styleLines,
         themesLine: result.themesLine,
+        workspacePropertyLines: result.workspacePropertyLines,
     }
 }

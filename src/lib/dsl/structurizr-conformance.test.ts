@@ -176,6 +176,21 @@ function hostileWorkspace(): Workspace {
 }
 
 describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
+    it('preserves workspace properties in the real parser export (#219)', () => {
+        const { workspace, errors } = parseDSL(`workspace "W" {
+            properties {
+                "team" "platform"
+                "c4hero.statuses" "Proposed, Under review"
+            }
+            model { s = softwareSystem "S" }
+            properties { "region" "eu" }
+        }`)
+        expect(errors).toEqual([])
+        const saved = serializeDSL(workspace)
+        expect(validate(saved)).toBeNull()
+        expect(exportModel(saved).properties).toMatchObject(workspace.properties!)
+    })
+
     const templates: [string, () => Workspace][] = [
         ['bigBank', createBigBankSample],
         ['microservices', createMicroservicesTemplate],

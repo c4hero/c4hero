@@ -290,7 +290,7 @@ export type WorkspaceScope = 'softwaresystem' | 'landscape' | 'none'
  *  Kept verbatim and re-emitted at the top of the block it came from, in
  *  original order. */
 export interface WorkspaceDirective {
-  scope: 'workspace' | 'model' | 'views'
+  scope: 'workspace' | 'workspaceProperties' | 'model' | 'views'
   /** The whole line as written, trimmed. */
   raw: string
   /** Model scope only: the group block the line was written in. */
@@ -331,6 +331,10 @@ export interface Workspace {
   name?: string
   description?: string
   scope?: WorkspaceScope
+  /** Workspace-level DSL properties, distinct from model/element properties. */
+  properties?: Record<string, string>
+  /** Included file owning each property; absent keys belong to the root file. */
+  propertySourcePaths?: Record<string, string>
   /** Preserved preprocessor directives (TEA-325 phase A). Absent when none. */
   directives?: WorkspaceDirective[]
   /** Files pulled in through `!include` when this workspace was loaded from a

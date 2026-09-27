@@ -76,6 +76,11 @@ function filterBySource(ws: Workspace, source: string | null): Workspace {
     const config = ws.views.configuration
     return {
         ...ws,
+        properties: ws.properties && Object.fromEntries(Object.entries(ws.properties).filter(([key]) => {
+            const sourcePath = ws.propertySourcePaths && Object.hasOwn(ws.propertySourcePaths, key)
+                ? ws.propertySourcePaths[key] : undefined
+            return owned({ sourcePath })
+        })),
         // Preserved `!` lines belong to the root document only, and only
         // the ones written there — not ones read from an included file.
         directives: source === null ? ws.directives?.filter(owned) : undefined,
@@ -494,7 +499,7 @@ class SerializerContext {
     }
 
     /** Emit a `properties { }` block for any user-defined key/value pairs. */
-    private serializeProperties(props: Record<string, string>): void {
+    private serializeProperties(props: Record<string, string>, directives: string[] = []): void {
         // Structurizr rejects `"key" ""` ("A property value must be specified")
         // and a nameless property, so entries that encode to nothing are
         // unrepresentable and skipped — the same rule as trailing backslashes.
@@ -502,9 +507,10 @@ class SerializerContext {
         const entries = Object.entries(props)
             .map(([key, val]) => [this.escapeString(key), this.escapeString(val)] as const)
             .filter(([key, val]) => key.length > 0 && val.length > 0)
-        if (entries.length === 0) return
+        if (entries.length === 0 && directives.length === 0) return
         this.emit('properties {')
         this.depth++
+        for (const raw of directives) this.emit(raw)
         for (const [key, val] of entries) {
             this.emit(`"${key}" "${val}"`)
         }
@@ -536,8 +542,20 @@ class SerializerContext {
         this.emit(parts.join(' ') + ' {')
         this.depth++
 
-        if (this.emitDirectives('workspace')) this.emitBlank()
-
+        // Keep workspace-level and properties-block includes in source order:
+        // moving one past another can change which property's value wins.
+        let propertyDirectives: string[] = []
+        for (const directive of ws.directives ?? []) {
+            if (directive.scope === 'workspaceProperties') {
+                propertyDirectives.push(directive.raw)
+            } else if (directive.scope === 'workspace') {
+                this.serializeProperties({}, propertyDirectives)
+                propertyDirectives = []
+                this.emit(directive.raw)
+                this.emitBlank()
+            }
+        }
+        this.serializeProperties(ws.properties ?? {}, propertyDirectives)
         this.emitBlank()
         this.serializeModel()
         this.emitBlank()
@@ -573,7 +591,7 @@ class SerializerContext {
      *  inside a group) are held back for `emitDirectivesAfter` /
      *  `emitGroupDirectives` so their single-pass ordering survives; the rest
      *  go ahead of any generated content. Returns true if any were written. */
-    private emitDirectives(scope: 'workspace' | 'model' | 'views'): boolean {
+    private emitDirectives(scope: 'model' | 'views'): boolean {
         let any = false
         for (const d of this.workspace.directives ?? []) {
             if (d.scope !== scope) continue

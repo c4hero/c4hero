@@ -418,10 +418,12 @@ export function isWorkspaceShape(obj: unknown): obj is Workspace {
   if (!isRecord(obj)) return false
   if ('name' in obj && obj.name !== undefined && typeof obj.name !== 'string') return false
   if ('description' in obj && obj.description !== undefined && typeof obj.description !== 'string') return false
+  if (obj.properties !== undefined && !isStringRecord(obj.properties)) return false
+  if (obj.propertySourcePaths !== undefined && !isStringRecord(obj.propertySourcePaths)) return false
   if ('scope' in obj && obj.scope !== undefined && !['softwaresystem', 'landscape', 'none'].includes(String(obj.scope))) return false
 
   if ('directives' in obj && obj.directives !== undefined && (!Array.isArray(obj.directives) || !obj.directives.every(d =>
-    isRecord(d) && typeof d.raw === 'string' && ['workspace', 'model', 'views'].includes(String(d.scope))
+    isRecord(d) && typeof d.raw === 'string' && ['workspace', 'workspaceProperties', 'model', 'views'].includes(String(d.scope))
   ))) return false
 
   if ('includedFiles' in obj && obj.includedFiles !== undefined && (!Array.isArray(obj.includedFiles) || !obj.includedFiles.every(f =>

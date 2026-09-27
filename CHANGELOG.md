@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve workspace-level DSL properties on save, including property provenance
+  for included files so their values are not copied into the root document (#219).
+
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.
