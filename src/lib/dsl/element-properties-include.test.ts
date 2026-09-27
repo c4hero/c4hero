@@ -3,6 +3,7 @@ import { parseDSL, serializeDSL } from './index'
 import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 import { planIncludedWrites, serializeRoot } from '@/lib/includeWriteback'
 import { isWorkspaceShape } from '@/lib/fileIO'
+import type { Workspace } from '@/types/model'
 
 // TEA-349: `!` lines inside an element's or relationship's `properties { }`
 // block must survive a save, and each root line must keep its place relative
@@ -86,5 +87,40 @@ describe('element and relationship properties blocks with ! lines (TEA-349)', ()
     expect(isWorkspaceShape(json)).toBe(true)
     json.model.people[0].propertyLayout.directives = [{ raw: 42 }]
     expect(isWorkspaceShape(json)).toBe(false)
+  })
+})
+
+describe('edits to a key last set by a read-only include (TEA-349)', () => {
+  const files = { 'p.dsl': '"a" "2"\n' }
+
+  it.each([
+    ['workspace', 'workspace {\nproperties {\n"a" "1"\n!include p.dsl\n}\nmodel {}\nviews {}\n}',
+      (ws: Workspace) => ws.properties!],
+    ['element', wrap('u = person "U" {\nproperties {\n"a" "1"\n!include p.dsl\n}\n}'),
+      (ws: Workspace) => ws.model.people[0].properties],
+  ])('writes the new %s value after the include', async (_label, content, holder) => {
+    const { loaded } = await roundTrip(content, files)
+    expect(holder(loaded.workspace).a).toBe('2')
+    holder(loaded.workspace).a = '3'
+    const root = serializeRoot(loaded.workspace)
+    expect(root).toMatch(/"a" "1"\s+!include p\.dsl\s+"a" "3"/)
+    const reopened = await loadWorkspaceDocument({ content: root, readInclude: async (p) => files[p as 'p.dsl'] ?? null })
+    expect(holder(reopened.workspace).a).toBe('3')
+    expect(serializeRoot(reopened.workspace)).toBe(root)
+  })
+
+  it('adds no line while the value is unchanged', async () => {
+    const { root } = await roundTrip(wrap('u = person "U" {\nproperties {\n"a" "1"\n!include p.dsl\n}\n}'), files)
+    expect(root.match(/"a"/g)).toHaveLength(1)
+  })
+
+  it('still writes the edit into a writable include', async () => {
+    const content = 'workspace {\nmodel {\n!include defaults.dsl\n}\nviews {}\n}'
+    const readInclude = async () => 'properties {\n"team" "platform"\n}\n'
+    const loaded = await loadWorkspaceDocument({ content, readInclude })
+    expect(loaded.workspace.includedFiles?.[0].writable).toBe(true)
+    loaded.workspace.model.properties!.team = 'edited'
+    expect(serializeRoot(loaded.workspace)).not.toContain('"team"')
+    expect(planIncludedWrites(loaded.workspace)[0].content).toContain('"team" "edited"')
   })
 })

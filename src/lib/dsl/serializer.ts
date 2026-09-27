@@ -120,13 +120,15 @@ function filterBySource(ws: Workspace, source: string | null): Workspace {
  * file is kept in place; the line that supplies a key's effective value takes
  * its current value, so an edit lands where the key was written, while an
  * earlier line another file overrides is written back unchanged. A key no line
- * supplies (added since load) goes at the end of the root; a key no longer in
- * `props` is removed with all its lines.
+ * supplies (added since load) goes at the end of the root, as does an edit to
+ * a key whose last line is in a `readOnly` file, since that file is never
+ * written; a key no longer in `props` is removed with all its lines.
  */
 function propertyLinesFor(
     props: Record<string, string> | undefined,
     declarations: PropertyDeclaration[] | undefined,
     source: string | null | undefined,
+    readOnly: ReadonlySet<string> = new Set(),
 ): PropertyDeclaration[] {
     if (!props) return []
     const last = new Map<string, PropertyDeclaration>()
@@ -153,7 +155,11 @@ function propertyLinesFor(
     }
     if (source == null) {
         for (const [key, value] of Object.entries(props)) {
-            if (!last.has(key)) lines.push({ key, value, slot: Number.POSITIVE_INFINITY })
+            const final = last.get(key)
+            const unwritable = source === null && final?.sourcePath !== undefined && readOnly.has(final.sourcePath)
+            if (!final || (unwritable && final.value !== value)) {
+                lines.push({ key, value, slot: Number.POSITIVE_INFINITY })
+            }
         }
     }
     return lines
@@ -182,16 +188,19 @@ class SerializerContext {
     private modelPropertyLines: PropertyDeclaration[]
     /** See SerializeOptions.source. */
     private source: string | null | undefined
+    /** Included files a save never writes. */
+    private readOnly: ReadonlySet<string>
 
     /** `idSource` supplies the identifier maps when `workspace` is a filtered
      *  view of a larger model, so cross-file references still resolve. */
     constructor(workspace: Workspace, idSource: Workspace = workspace, source?: string | null) {
         this.workspace = workspace
         this.source = source
+        this.readOnly = new Set((idSource.includedFiles ?? []).filter((f) => !f.writable).map((f) => f.path))
         // Ownership of a property line depends on every file's lines, so this
         // reads the unfiltered workspace.
-        this.workspacePropertyLines = propertyLinesFor(idSource.properties, idSource.propertyDeclarations, source)
-        this.modelPropertyLines = propertyLinesFor(idSource.model.properties, idSource.model.propertyDeclarations, source)
+        this.workspacePropertyLines = propertyLinesFor(idSource.properties, idSource.propertyDeclarations, source, this.readOnly)
+        this.modelPropertyLines = propertyLinesFor(idSource.model.properties, idSource.model.propertyDeclarations, source, this.readOnly)
         this.buildIdMaps(idSource)
         this.topLevelGroups = this.buildGroupScope(
             [...workspace.model.people, ...workspace.model.softwareSystems],
@@ -557,21 +566,7 @@ class SerializerContext {
 
     /** Emit a `properties { }` block for any user-defined key/value pairs. */
     private serializeProperties(props: Record<string, string>): void {
-        // Structurizr rejects `"key" ""` ("A property value must be specified")
-        // and a nameless property, so entries that encode to nothing are
-        // unrepresentable and skipped — the same rule as trailing backslashes.
-        // Found by the generated conformance corpus (TEA-63).
-        const entries = Object.entries(props)
-            .map(([key, val]) => [this.escapeString(key), this.escapeString(val)] as const)
-            .filter(([key, val]) => key.length > 0 && val.length > 0)
-        if (entries.length === 0) return
-        this.emit('properties {')
-        this.depth++
-        for (const [key, val] of entries) {
-            this.emit(`"${key}" "${val}"`)
-        }
-        this.depth--
-        this.emit('}')
+        this.emitPropertyLines(Object.entries(props).map(([key, value]) => ({ key, value, slot: 0 })), [], [])
     }
 
     /** Whether an element or relationship writes a `properties { }` block. */
@@ -593,7 +588,7 @@ class SerializerContext {
     private layoutLines(props: Record<string, string>, layout: PropertyLayout) {
         const source = this.source
         return {
-            lines: propertyLinesFor(props, layout.declarations, source),
+            lines: propertyLinesFor(props, layout.declarations, source, this.readOnly),
             directives: layout.directives.filter((d) => source === undefined || (d.sourcePath ?? null) === source),
         }
     }
@@ -677,8 +672,11 @@ class SerializerContext {
         for (let i = 0; i <= directives.length; i++) {
             for (const line of lines) {
                 if (Math.min(line.slot, directives.length) !== i) continue
-                // Structurizr rejects `"key" ""` and a nameless property; see
-                // serializeProperties.
+                // Structurizr rejects `"key" ""` ("A property value must be
+                // specified") and a nameless property, so entries that encode
+                // to nothing are unrepresentable and skipped — the same rule as
+                // trailing backslashes. Found by the generated conformance
+                // corpus (TEA-63).
                 const key = this.escapeString(line.key)
                 const value = this.escapeString(line.value)
                 if (key.length === 0 || value.length === 0) continue
