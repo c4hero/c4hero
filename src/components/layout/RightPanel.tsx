@@ -12,14 +12,23 @@ import GroupProperties from './right-panel/GroupProperties'
 import DeploymentElementProperties from './right-panel/DeploymentElementProperties'
 import { useAiProvider } from '@/store/ai-settings'
 import { suggestFieldValue, suggestTags } from '@/lib/ai'
+import { useSettingsStore } from '@/store/settings'
+import { elementStatusVocabulary, statusColor } from '@/lib/elementStatus'
 
-const STATUS_OPTIONS: { value: ElementStatus | undefined; label: string; color: string | null }[] = [
-  { value: undefined, label: 'Not set', color: null },
-  { value: 'Live', label: 'Live', color: 'var(--color-status-live)' },
-  { value: 'Planned', label: 'Planned', color: 'var(--color-status-planned)' },
-  { value: 'Deprecated', label: 'Deprecated', color: 'var(--color-status-deprecated)' },
-  { value: 'Removed', label: 'Removed', color: 'var(--color-status-removed)' },
-]
+interface StatusOption { value: ElementStatus | undefined; label: string; color: string | null }
+
+/** "Not set" is the absence of a status, not a member of the vocabulary — it is
+ *  the only option here that is not a status. Everything after it comes from the
+ *  open vocabulary: built-ins, the user's declared extras, then whatever the
+ *  loaded workspace turned out to be using. */
+function statusOptions(customStatuses: readonly ElementStatus[], workspace: Workspace | null): StatusOption[] {
+  return [
+    { value: undefined, label: 'Not set', color: null },
+    ...elementStatusVocabulary(customStatuses, workspace).map((status) => ({
+      value: status, label: status, color: statusColor(status),
+    })),
+  ]
+}
 
 const INTERACTION_STYLE_OPTIONS = [
   { value: undefined, label: 'Default', shortLabel: 'Auto' },
@@ -139,6 +148,8 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const customStatuses = useSettingsStore((s) => s.customStatuses)
+  const statusChoices = useMemo(() => statusOptions(customStatuses, workspace), [customStatuses, workspace])
   const isFocal = useMemo(
     () => workspace && activeViewKey ? isFocalScopeElement(workspace, activeViewKey, element.id) : false,
     [workspace, activeViewKey, element.id],
@@ -393,7 +404,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             <div>
               <FieldLabel>Status</FieldLabel>
               <div className="flex flex-wrap gap-1" data-testid="element-status">
-                {STATUS_OPTIONS.map((opt) => {
+                {statusChoices.map((opt) => {
                   const active = (element.status ?? undefined) === opt.value
                   return (
                     <button

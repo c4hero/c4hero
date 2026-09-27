@@ -3,7 +3,7 @@
 // helpers.
 
 import type { Workspace, Model, Group, Person, SoftwareSystem, Container, Component } from '@/types/model'
-import { isElementStatus } from '@/types/model'
+import { normalizeElementStatus } from '@/lib/elementStatus'
 import type { ContextAwareParser } from './parser'
 import { nextId, MAX_DEPTH, setUserProperty } from './parser'
 import { parseRelationship } from './parser-relationship'
@@ -49,10 +49,14 @@ function applyStructurizrConventions(element: Element): void {
     }
     const status = element.properties['c4hero.status']
     if (status !== undefined && element.status === undefined) {
-        // Only hoist valid enum members; anything else stays a plain property
-        // so no value is silently lost.
-        if (isElementStatus(status)) {
-            element.status = status
+        // The status vocabulary is open (see `@/lib/elementStatus`), so any
+        // usable value hoists to the field and becomes a first-class status on
+        // the canvas. Only a value that could not round-trip at all — blank,
+        // multi-line, or past the length cap — stays a plain property, so it is
+        // still not silently lost.
+        const normalized = normalizeElementStatus(status)
+        if (normalized !== undefined) {
+            element.status = normalized
             delete element.properties['c4hero.status']
         }
     }
@@ -641,8 +645,8 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
         p.sawLegacyKeyword = true
         const val = p.peek()
         if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD' || val.type === 'STRING') {
-            const s = p.advance().value
-            if (isElementStatus(s)) {
+            const s = normalizeElementStatus(p.advance().value)
+            if (s !== undefined) {
                 element.status = s
             }
         }

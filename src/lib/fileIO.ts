@@ -4,6 +4,8 @@ import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isNonEmptyString, isRecord, isStringArray, isStringRecord } from '@/lib/guards'
 import { sidecarName } from '@/lib/sidecar'
 import { safeSuggestedDslName } from '@/lib/filenames'
+import { isElementStatusValue, normalizeElementStatus } from '@/lib/elementStatus'
+import { forEachElementHelper } from '@/store/workspace-helpers'
 import { readJSON, writeJSON, writeString, removeKey } from '@/lib/safeStorage'
 import { recordSelfDslWrite, recordSelfSidecarWrite } from '@/lib/saveCoordinator'
 import type { WatchedSnapshot } from '@/lib/fileWatch'
@@ -315,7 +317,7 @@ function isBaseElementShape(value: unknown): value is Record<string, unknown> {
   if (!isStringRecord(value.properties)) return false
   if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
   if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
-  if ('status' in value && value.status !== undefined && !['Live', 'Planned', 'Deprecated', 'Removed'].includes(String(value.status))) return false
+  if ('status' in value && value.status !== undefined && !isElementStatusValue(value.status)) return false
   if ('owner' in value && value.owner !== undefined && typeof value.owner !== 'string') return false
   return true
 }
@@ -454,7 +456,13 @@ export function isWorkspaceShape(obj: unknown): obj is Workspace {
 
 /** Load workspace from localStorage crash recovery */
 export function loadFromLocalStorage(): Workspace | null {
-  return readJSON<Workspace>('c4hero_crash_recovery', isWorkspaceShape)
+  const workspace = readJSON<Workspace>('c4hero_crash_recovery', isWorkspaceShape)
+  if (workspace) {
+    forEachElementHelper(workspace, (element) => {
+      if (element.status !== undefined) element.status = normalizeElementStatus(element.status)
+    })
+  }
+  return workspace
 }
 
 /** Clear crash recovery data */

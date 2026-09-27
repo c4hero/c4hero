@@ -1,6 +1,7 @@
-import type { Workspace, View } from '@/types/model'
+import type { Workspace, View, ElementStatus } from '@/types/model'
 import { serializeContext, serializeViewContext, viewLabel } from './context'
 import type { DocsContext } from './docsContext'
+import { elementStatusVocabulary, MAX_STATUS_LENGTH } from '@/lib/elementStatus'
 
 // System/user prompt builders. Pure string assembly — kept out of the provider
 // and feature orchestration so prompt wording is reviewable and testable.
@@ -177,9 +178,12 @@ export function editSystem(): string {
     'updateElement can also set, on an existing element: "tags" (short category tags for styling,',
     'grouping and filtering, e.g. ["Database"], ["Gateway"], ["Critical"] — these are ADDED to the',
     'element; its existing tags are kept, so never re-list structural tags like "Element" or',
-    '"Container"), "status" (lifecycle, exactly one of Live, Planned, Deprecated, Removed), and',
+    '"Container"), "status" (an open lifecycle vocabulary), and',
     '"owner" (the team or person responsible). Use these only when the instruction or finding asks',
     'for categorising, marking lifecycle, or assigning ownership.',
+    'For status, preserve the exact spelling of an available value. Only introduce a new value',
+    'when the user explicitly requests it; do not invent synonyms for existing statuses.',
+    `Status values must be non-blank, single-line strings of at most ${MAX_STATUS_LENGTH} characters.`,
     'addView creates a new diagram: "viewType" is one of systemLandscape, systemContext, container,',
     'component; "scope" is the software system (for systemContext/container) or container (for',
     'component) the view is about, by real id or a ref (omit for systemLandscape, which spans the',
@@ -189,10 +193,11 @@ export function editSystem(): string {
   ].join('\n')
 }
 
-export function editUser(ws: Workspace, instruction: string): string {
+export function editUser(ws: Workspace, instruction: string, customStatuses: readonly ElementStatus[] = []): string {
   return [
     serializeContext(ws),
     '',
+    `Available lifecycle statuses: ${JSON.stringify(elementStatusVocabulary(customStatuses, ws))}`,
     `Instruction: ${instruction.trim()}`,
   ].join('\n')
 }
