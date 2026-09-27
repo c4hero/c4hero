@@ -281,6 +281,36 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect((exportModel(saved, includes) as Exported).model.people[0].properties).toMatchObject({ team: 'edited' })
     })
 
+    it('keeps nested property includes in their own files during full serialization', async () => {
+        const source = 'workspace {\nmodel {\nu = person "U" {\nproperties {\n!include outer.dsl\n"team" "root"\n}\n}\n}\nviews {\n}\n}'
+        const includes: Record<string, string> = { 'outer.dsl': '!include inner.dsl\n', 'inner.dsl': '"team" "inner"\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async p => includes[p] ?? null })
+        const saved = serializeDSL(loaded.workspace)
+        expect(saved).not.toContain('!include inner.dsl')
+        expect(saved).not.toContain('"team" "inner"')
+        type Exported = { model: { people: { properties: object }[] } }
+        expect((exportModel(saved, includes) as Exported).model.people[0].properties).toMatchObject({ team: 'root' })
+    })
+
+    it('keeps full-serialization edits to writable model properties', async () => {
+        const source = 'workspace {\nmodel {\n!include defaults.dsl\n}\nviews {\n}\n}'
+        const includes = { 'defaults.dsl': 'properties {\n"team" "original"\n}\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['defaults.dsl'] })
+        loaded.workspace.model.properties!.team = 'edited'
+        const saved = serializeDSL(loaded.workspace)
+        expect((exportModel(saved, includes) as { model: { properties: object } }).model.properties).toMatchObject({ team: 'edited' })
+    })
+
+    it('keeps a canvas location override after a read-only property include', async () => {
+        const source = 'workspace {\nmodel {\nu = person "U" {\nproperties {\n!include props.dsl\n}\n}\n}\nviews {\n}\n}'
+        const includes = { 'props.dsl': '"c4hero.location" "External"\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['props.dsl'] })
+        loaded.workspace.model.people[0].location = 'Internal'
+        const saved = serializeRoot(loaded.workspace)
+        type Exported = { model: { people: { properties: object }[] } }
+        expect((exportModel(saved, includes) as Exported).model.people[0].properties).toMatchObject({ 'c4hero.location': 'Internal' })
+    })
+
     const templates: [string, () => Workspace][] = [
         ['bigBank', createBigBankSample],
         ['microservices', createMicroservicesTemplate],

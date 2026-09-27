@@ -733,6 +733,8 @@ export function duplicateElementsInTree(
       const newRelId = freshId()
       ws.model.relationships.push({
         ...deepCloneMaybeDraft(rel),
+        propertyLayout: undefined,
+        sourcePath: undefined,
         id: newRelId,
         sourceId: newSourceId,
         destinationId: newDestId,
@@ -755,6 +757,9 @@ export function duplicateElementsInTree(
   // Provenance (TEA-325): a top-level copy is new root content; a nested copy
   // lives wherever its parent lives.
   const setSubtree = (el: ModelElement, path: string | undefined) => {
+    // Copies own snapshots of the effective properties, not the original's
+    // declarations or includes in another file.
+    delete el.propertyLayout
     if (path) el.sourcePath = path
     else delete el.sourcePath
     if (el.type === 'softwareSystem') for (const c of el.containers) setSubtree(c, path)

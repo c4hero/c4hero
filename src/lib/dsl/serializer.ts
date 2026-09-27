@@ -24,7 +24,8 @@ import type {
     WorkspaceDirective,
 } from '@/types/model'
 import { dslIdentifierForm } from '@/lib/identifier'
-import { representable } from './encoding'
+import { normalizeElementStatus } from '@/lib/elementStatus'
+import { representable, roundTripped } from './encoding'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
@@ -126,7 +127,7 @@ function filterBySource(ws: Workspace, source: string | null): Workspace {
  * file is kept in place; the line that supplies a key's effective value takes
  * its current value, so an edit lands where the key was written, while an
  * earlier line another file overrides is written back unchanged. A key no line
- * supplies (added since load) goes at the end of the root, as does an edit to
+ * supplies (added since load) goes at the end of its owning file, as does an edit to
  * a key whose last line is in a `readOnly` file, since that file is never
  * written; a key no longer in `props` is removed with all its lines.
  */
@@ -135,6 +136,8 @@ function propertyLinesFor(
     declarations: PropertyDeclaration[] | undefined,
     source: string | null | undefined,
     readOnly: ReadonlySet<string> = new Set(),
+    owner: string | null = null,
+    equivalent: (key: string, original: string, value: string) => boolean = (_key, a, b) => a === b,
 ): PropertyDeclaration[] {
     if (!props) return []
     const last = new Map<string, PropertyDeclaration>()
@@ -157,15 +160,15 @@ function propertyLinesFor(
         if (!Object.hasOwn(props, d.key)) continue
         const location = sourceLocation(d)
         if (source !== undefined && location !== undefined && finalOccurrence.get(location) !== d) continue
-        lines.push(last.get(d.key) === d ? { ...d, value: props[d.key] } : d)
+        lines.push(last.get(d.key) === d && !equivalent(d.key, d.value, props[d.key]) ? { ...d, value: props[d.key] } : d)
     }
-    if (source == null) {
+    if (source === undefined || source === owner) {
         for (const [key, value] of Object.entries(props)) {
             const final = last.get(key)
             // Full serialization (JSON import) also preserves includes, so an
             // edited included value must follow them there as well as on save.
-            const unwritable = final?.sourcePath !== undefined && readOnly.has(final.sourcePath)
-            if (!final || (unwritable && final.value !== value)) {
+            const unwritable = final?.sourcePath !== undefined && (source === undefined || readOnly.has(final.sourcePath))
+            if (!final || (unwritable && !equivalent(key, final.value, value))) {
                 lines.push({ key, value, slot: Number.POSITIVE_INFINITY })
             }
         }
@@ -198,12 +201,14 @@ class SerializerContext {
     private source: string | null | undefined
     /** Included files a save never writes. */
     private readOnly: ReadonlySet<string>
+    private included: ReadonlySet<string>
 
     /** `idSource` supplies the identifier maps when `workspace` is a filtered
      *  view of a larger model, so cross-file references still resolve. */
     constructor(workspace: Workspace, idSource: Workspace = workspace, source?: string | null) {
         this.workspace = workspace
         this.source = source
+        this.included = new Set((idSource.includedFiles ?? []).map(f => f.path))
         this.readOnly = new Set((idSource.includedFiles ?? []).filter((f) => !f.writable).map((f) => f.path))
         // Ownership of a property line depends on every file's lines, so this
         // reads the unfiltered workspace.
@@ -226,7 +231,10 @@ class SerializerContext {
             }
         }
         const configured = idSource.model.properties?.[GROUP_SEPARATOR_KEY]
-        this.groupSeparator = configured && this.escapeString(configured).length > 0 ? configured : GROUP_SEPARATOR
+        if (configured !== undefined && (configured.length === 0 || roundTripped(configured) !== configured)) {
+            throw new GroupSerializationError('Cannot export the configured group separator unchanged. Choose a non-empty separator that can be represented in DSL.')
+        }
+        this.groupSeparator = configured ?? GROUP_SEPARATOR
         if (this.hasNestedGroups) {
             const badName = workspace.model.groups.find(group => group.name.includes(this.groupSeparator))
             if (badName) {
@@ -510,10 +518,16 @@ class SerializerContext {
      * serialize → parse → serialize is byte-identical.
      */
     private elementProperties(
-        el: { owner?: string; status?: string; properties: Record<string, string> },
+        el: { owner?: string; status?: string; location?: string; propertyLayout?: PropertyLayout; properties: Record<string, string> },
     ): Record<string, string> {
         return this.mergeDerivedProperties(
-            [['owner', el.owner], ['c4hero.status', el.status]],
+            [
+                ['owner', el.owner],
+                ['c4hero.status', el.status],
+                // Native tags normally carry location. Preserve a property
+                // override when an include can supply the legacy property.
+                ['c4hero.location', el.propertyLayout?.declarations.some(d => d.key === 'c4hero.location') ? el.location : undefined],
+            ],
             el.properties,
         )
     }
@@ -581,14 +595,19 @@ class SerializerContext {
      *  null when it writes none. With a PropertyLayout, only the lines and `!`
      *  lines of the file being written, each in its recorded position; see
      *  PropertyLayout. */
-    private propertyBlock(props: Record<string, string>, layout: PropertyLayout | undefined): PropertyBlock | null {
+    private propertyBlock(props: Record<string, string>, layout: PropertyLayout | undefined, owner: string | null, element = false): PropertyBlock | null {
         if (!layout) {
             const lines = Object.entries(props).map(([key, value]) => ({ key, value, slot: 0 }))
             return lines.length > 0 ? { lines, directives: [] } : null
         }
-        const source = this.source
-        const lines = propertyLinesFor(props, layout.declarations, source, this.readOnly)
-        const directives = layout.directives.filter((d) => source === undefined || (d.sourcePath ?? null) === source)
+        // Full serialization keeps only this holder's own include directives.
+        // Included property text must not be emitted again with file-local slots.
+        const source = this.source === undefined ? owner : this.source
+        const equivalent = (key: string, original: string, value: string) =>
+            original === value || (element && key === 'c4hero.status' && normalizeElementStatus(original) === value)
+        const lines = propertyLinesFor(props, layout.declarations, source,
+            this.source === undefined ? this.included : this.readOnly, owner, equivalent)
+        const directives = layout.directives.filter((d) => (d.sourcePath ?? null) === source)
         return lines.length > 0 || directives.length > 0 ? { lines, directives } : null
     }
 
@@ -957,7 +976,7 @@ class SerializerContext {
         const varName = this.idToVar.get(person.id)
         const extraTags = this.locationAwareTags(person, ['Element', 'Person'])
         const props = this.elementProperties(person)
-        const propertyBlock = this.propertyBlock(props, person.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, person.propertyLayout, person.sourcePath ?? null, true)
         const hasProperties = propertyBlock !== null
         const hasBlock = !!person.url || hasProperties || !!person.directives?.length
 
@@ -988,7 +1007,7 @@ class SerializerContext {
         const varName = this.idToVar.get(sys.id)
         const extraTags = this.locationAwareTags(sys, ['Element', 'Software System'])
         const props = this.elementProperties(sys)
-        const propertyBlock = this.propertyBlock(props, sys.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, sys.propertyLayout, sys.sourcePath ?? null, true)
         const hasProperties = propertyBlock !== null
         const hasBody = sys.containers.length > 0 || !!sys.url || hasProperties || !!sys.directives?.length
 
@@ -1024,7 +1043,7 @@ class SerializerContext {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
         const props = this.elementProperties(container)
-        const propertyBlock = this.propertyBlock(props, container.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, container.propertyLayout, container.sourcePath ?? null, true)
         const hasProperties = propertyBlock !== null
         const hasBody = container.components.length > 0 || !!container.url || hasProperties || !!container.directives?.length
 
@@ -1062,7 +1081,7 @@ class SerializerContext {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
         const props = this.elementProperties(comp)
-        const propertyBlock = this.propertyBlock(props, comp.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, comp.propertyLayout, comp.sourcePath ?? null, true)
         const hasProperties = propertyBlock !== null
         const hasBlock = !!comp.url || hasProperties || !!comp.directives?.length
 
@@ -1105,7 +1124,7 @@ class SerializerContext {
 
         const extraTags = this.getExtraTags(rel.tags, ['Relationship'])
         const props = this.relationshipProperties(rel)
-        const propertyBlock = this.propertyBlock(props, rel.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, rel.propertyLayout, rel.sourcePath ?? null)
         const hasProperties = propertyBlock !== null
         const needsBlock = !!rel.url || hasProperties
 
