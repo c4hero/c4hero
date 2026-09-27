@@ -27,9 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keeps its meaning. Unquoted keys and values are accepted, as in Structurizr,
   and a property that cannot be saved as written is reported like any other.
 - **Property blocks now keep their includes and overrides on save.** An
-  `!include` inside an element's or relationship's `properties { }` block was
-  dropped on save, and the included values were copied into the root file. The
-  include is now kept, and each line stays in its place around it. A custom
+  `!include` inside the `properties { }` block of a person, software system,
+  container, component or relationship was dropped on save, and the included
+  values were copied into the root file. The include is now kept, and each line
+  stays in its place around it. Deployment nodes, infrastructure nodes and
+  instances are not covered yet. A custom
   `structurizr.groupSeparator` is no longer replaced with `/` when groups are
   nested, so `Group:` style tags keep matching. Editing a property whose value
   came from a read-only include now writes the new value into the root file
