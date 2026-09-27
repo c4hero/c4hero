@@ -1,4 +1,4 @@
-import type { IncludedFile, Workspace } from '@/types/model'
+import type { IncludedFile, PropertyDeclaration, Workspace, WorkspaceDirective } from '@/types/model'
 import { parseDSL, type ParseError } from '@/lib/dsl'
 import { applySidecar, parseSidecar } from '@/lib/sidecar'
 import {
@@ -46,7 +46,10 @@ export interface LoadWorkspaceDocumentInput extends WorkspaceDocumentInput {
  *  element) is shown read-only. */
 function classifyIncluded(path: string, text: string, scope: string | undefined): IncludedFile {
   if (scope !== 'model') {
-    return { path, writable: false, reason: scope === 'element' ? 'included inside an element block' : `included in the ${scope ?? 'workspace'} block`, text }
+    const reason = scope === 'element' ? 'included inside an element block'
+      : scope === 'properties' ? 'included inside a properties block'
+      : `included in the ${scope ?? 'workspace'} block`
+    return { path, writable: false, reason, text }
   }
   const code = text.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/\/\/.*$|#.*$/gm, '')
   if (/^\s*!/m.test(code)) return { path, writable: false, reason: 'contains its own ! directives', text }
@@ -63,7 +66,7 @@ export function stitchWorkspaceDocument(
   resolved: ResolveIncludesResult,
   texts: Map<string, string>,
 ): WorkspaceDocumentResult {
-  const { workspace, errors: rawErrors, warnings: rawWarnings, declarationLines, viewLines, directiveLines, styleLines, themesLine, workspacePropertyLines } = parseDSL(resolved.content)
+  const { workspace, errors: rawErrors, warnings: rawWarnings, declarationLines, viewLines, directiveLines, styleLines, themesLine, propertyLines } = parseDSL(resolved.content)
   if (!workspace.name && input.fallbackName) workspace.name = input.fallbackName
 
   // Provenance: map every declaration back to the file it was read from.
@@ -98,11 +101,20 @@ export function stitchWorkspaceDocument(
     const p = fileOf(styleLines.get(style))
     if (p) style.sourcePath = p
   }
-  const propertySources = [...workspacePropertyLines].flatMap(([key, line]) => {
-    const path = fileOf(line)
-    return path ? [[key, path]] : []
-  })
-  if (propertySources.length) workspace.propertySourcePaths = Object.fromEntries(propertySources)
+  // A property line belongs to its file, and its slot counts only that
+  // file's directives — the parser counted the included ones too.
+  const placeProperties = (declarations: PropertyDeclaration[] | undefined, scopes: WorkspaceDirective['scope'][]) => {
+    for (const decl of declarations ?? []) {
+      const line = propertyLines.get(decl)
+      if (line === undefined) continue
+      const p = fileOf(line)
+      if (p) decl.sourcePath = p
+      decl.slot = (workspace.directives ?? []).filter((d, i) =>
+        scopes.includes(d.scope) && d.sourcePath === decl.sourcePath && directiveLines[i] < line).length
+    }
+  }
+  placeProperties(workspace.propertyDeclarations, ['workspace', 'workspaceProperties'])
+  placeProperties(workspace.model.propertyDeclarations, ['modelProperties'])
   const themesPath = fileOf(themesLine)
   if (themesPath) workspace.views.configuration.themesSourcePath = themesPath
 

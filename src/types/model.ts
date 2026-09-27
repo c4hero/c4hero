@@ -279,6 +279,29 @@ export interface Model {
   relationships: Relationship[]
   groups: Group[]
   deploymentEnvironments: DeploymentEnvironment[]
+  /** Model-level DSL properties (`model { properties { } }`). */
+  properties?: Record<string, string>
+  /** Where each model-level property line was written. See PropertyDeclaration. */
+  propertyDeclarations?: PropertyDeclaration[]
+}
+
+/** One `"key" "value"` line of a workspace- or model-level `properties`
+ *  block, in source order and across every file. The owning `properties`
+ *  record holds the effective values (the last line per key wins, as in
+ *  Structurizr) and is what edits change; this list only records where each
+ *  line was written, so a save puts a value back into its own file and
+ *  position, and a line another file later overrides is not lost. */
+export interface PropertyDeclaration {
+  key: string
+  /** The value as written on this line. */
+  value: string
+  /** How many preserved directives of the same block kind precede this line
+   *  in its file (workspace: `workspace` + `workspaceProperties` scope;
+   *  model: `modelProperties` scope). The serializer re-emits the line at
+   *  that position, so an override keeps its meaning. */
+  slot: number
+  /** Set when the line came from an `!include`d file. */
+  sourcePath?: string
 }
 
 // ─── Workspace ───────────────────────────────────────────────────────
@@ -290,7 +313,9 @@ export type WorkspaceScope = 'softwaresystem' | 'landscape' | 'none'
  *  Kept verbatim and re-emitted at the top of the block it came from, in
  *  original order. */
 export interface WorkspaceDirective {
-  scope: 'workspace' | 'workspaceProperties' | 'model' | 'views'
+  /** `workspaceProperties` / `modelProperties`: written inside that block's
+   *  `properties { }`. */
+  scope: 'workspace' | 'workspaceProperties' | 'model' | 'modelProperties' | 'views'
   /** The whole line as written, trimmed. */
   raw: string
   /** Model scope only: the group block the line was written in. */
@@ -333,8 +358,8 @@ export interface Workspace {
   scope?: WorkspaceScope
   /** Workspace-level DSL properties, distinct from model/element properties. */
   properties?: Record<string, string>
-  /** Included file owning each property; absent keys belong to the root file. */
-  propertySourcePaths?: Record<string, string>
+  /** Where each workspace-level property line was written. */
+  propertyDeclarations?: PropertyDeclaration[]
   /** Preserved preprocessor directives (TEA-325 phase A). Absent when none. */
   directives?: WorkspaceDirective[]
   /** Files pulled in through `!include` when this workspace was loaded from a

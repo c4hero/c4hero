@@ -239,8 +239,10 @@ export function findSerializationLoss(ws: Workspace): SerializationLoss[] {
   const wsCarrier: Carrier = { label: 'This workspace' }
   c.field(wsCarrier, 'name', ws.name)
   c.field(wsCarrier, 'description', ws.description)
+  c.properties(wsCarrier, ws.properties)
 
   const model = ws.model
+  c.properties({ label: 'The model' }, model?.properties)
   const elementCarrier = (kind: string, e: { id?: string; name?: string }): Carrier =>
     ({ label: describe(kind, e.name, e.id), elementId: e.id })
 

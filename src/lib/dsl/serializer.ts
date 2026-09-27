@@ -19,12 +19,15 @@ import type {
     DeploymentEnvironment,
     DeploymentNode,
     InfrastructureNode,
+    PropertyDeclaration,
+    WorkspaceDirective,
 } from '@/types/model'
 import { dslIdentifierForm } from '@/lib/identifier'
 import { representable } from './encoding'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
+const GROUP_SEPARATOR_KEY = 'structurizr.groupSeparator'
 
 interface ScopedGroup<T extends ModelElement> {
     group: Group
@@ -65,7 +68,7 @@ export interface SerializeOptions {
 export function serialize(workspace: Workspace, opts: SerializeOptions = {}): string {
     if (opts.source === undefined) return new SerializerContext(workspace).serialize()
     const filtered = filterBySource(workspace, opts.source)
-    const ctx = new SerializerContext(filtered, workspace)
+    const ctx = new SerializerContext(filtered, workspace, opts.source)
     return opts.source === null ? ctx.serialize() : ctx.serializeFragment()
 }
 
@@ -76,11 +79,6 @@ function filterBySource(ws: Workspace, source: string | null): Workspace {
     const config = ws.views.configuration
     return {
         ...ws,
-        properties: ws.properties && Object.fromEntries(Object.entries(ws.properties).filter(([key]) => {
-            const sourcePath = ws.propertySourcePaths && Object.hasOwn(ws.propertySourcePaths, key)
-                ? ws.propertySourcePaths[key] : undefined
-            return owned({ sourcePath })
-        })),
         // Preserved `!` lines belong to the root document only, and only
         // the ones written there — not ones read from an included file.
         directives: source === null ? ws.directives?.filter(owned) : undefined,
@@ -115,6 +113,37 @@ function filterBySource(ws: Workspace, source: string | null): Workspace {
     }
 }
 
+/**
+ * The workspace- or model-level property lines to write for `source`
+ * (`undefined` = every file, `null` = the root). Each line recorded for that
+ * file is kept in place; the line that supplies a key's effective value takes
+ * its current value, so an edit lands where the key was written, while an
+ * earlier line another file overrides is written back unchanged. A key no line
+ * supplies (added since load) goes at the end of the root; a key no longer in
+ * `props` is removed with all its lines.
+ */
+function propertyLinesFor(
+    props: Record<string, string> | undefined,
+    declarations: PropertyDeclaration[] | undefined,
+    source: string | null | undefined,
+): PropertyDeclaration[] {
+    if (!props) return []
+    const last = new Map<string, PropertyDeclaration>()
+    for (const d of declarations ?? []) last.set(d.key, d)
+    const lines: PropertyDeclaration[] = []
+    for (const d of declarations ?? []) {
+        if (source !== undefined && (d.sourcePath ?? null) !== source) continue
+        if (!Object.hasOwn(props, d.key)) continue
+        lines.push(last.get(d.key) === d ? { ...d, value: props[d.key] } : d)
+    }
+    if (source == null) {
+        for (const [key, value] of Object.entries(props)) {
+            if (!last.has(key)) lines.push({ key, value, slot: Number.POSITIVE_INFINITY })
+        }
+    }
+    return lines
+}
+
 // ─── Serializer Context ─────────────────────────────────────────────
 
 class SerializerContext {
@@ -132,11 +161,17 @@ class SerializerContext {
     private containerGroups = new Map<string, GroupScope<Container>>()
     private componentGroups = new Map<string, GroupScope<Component>>()
     private hasNestedGroups = false
+    private workspacePropertyLines: PropertyDeclaration[]
+    private modelPropertyLines: PropertyDeclaration[]
 
     /** `idSource` supplies the identifier maps when `workspace` is a filtered
      *  view of a larger model, so cross-file references still resolve. */
-    constructor(workspace: Workspace, idSource: Workspace = workspace) {
+    constructor(workspace: Workspace, idSource: Workspace = workspace, source?: string | null) {
         this.workspace = workspace
+        // Ownership of a property line depends on every file's lines, so this
+        // reads the unfiltered workspace.
+        this.workspacePropertyLines = propertyLinesFor(idSource.properties, idSource.propertyDeclarations, source)
+        this.modelPropertyLines = propertyLinesFor(idSource.model.properties, idSource.model.propertyDeclarations, source)
         this.buildIdMaps(idSource)
         this.topLevelGroups = this.buildGroupScope(
             [...workspace.model.people, ...workspace.model.softwareSystems],
@@ -499,7 +534,7 @@ class SerializerContext {
     }
 
     /** Emit a `properties { }` block for any user-defined key/value pairs. */
-    private serializeProperties(props: Record<string, string>, directives: string[] = []): void {
+    private serializeProperties(props: Record<string, string>): void {
         // Structurizr rejects `"key" ""` ("A property value must be specified")
         // and a nameless property, so entries that encode to nothing are
         // unrepresentable and skipped — the same rule as trailing backslashes.
@@ -507,10 +542,9 @@ class SerializerContext {
         const entries = Object.entries(props)
             .map(([key, val]) => [this.escapeString(key), this.escapeString(val)] as const)
             .filter(([key, val]) => key.length > 0 && val.length > 0)
-        if (entries.length === 0 && directives.length === 0) return
+        if (entries.length === 0) return
         this.emit('properties {')
         this.depth++
-        for (const raw of directives) this.emit(raw)
         for (const [key, val] of entries) {
             this.emit(`"${key}" "${val}"`)
         }
@@ -542,20 +576,8 @@ class SerializerContext {
         this.emit(parts.join(' ') + ' {')
         this.depth++
 
-        // Keep workspace-level and properties-block includes in source order:
-        // moving one past another can change which property's value wins.
-        let propertyDirectives: string[] = []
-        for (const directive of ws.directives ?? []) {
-            if (directive.scope === 'workspaceProperties') {
-                propertyDirectives.push(directive.raw)
-            } else if (directive.scope === 'workspace') {
-                this.serializeProperties({}, propertyDirectives)
-                propertyDirectives = []
-                this.emit(directive.raw)
-                this.emitBlank()
-            }
-        }
-        this.serializeProperties(ws.properties ?? {}, propertyDirectives)
+        if (this.emitPropertyLines(this.workspacePropertyLines, ['workspace', 'workspaceProperties'])) this.emitBlank()
+
         this.emitBlank()
         this.serializeModel()
         this.emitBlank()
@@ -585,6 +607,45 @@ class SerializerContext {
     }
 
     // ─── Model ──────────────────────────────────────────────────────
+
+    /**
+     * Write workspace- or model-level property lines interleaved with that
+     * block kind's preserved directives, each line at its recorded `slot`, so
+     * an `!include` that sets a property keeps its place relative to the
+     * lines it overrides or is overridden by. Directives of the `…Properties`
+     * scope go inside a `properties { }` block, the rest outside it; adjacent
+     * lines share one block. Returns true if anything was written.
+     */
+    private emitPropertyLines(lines: PropertyDeclaration[], scopes: WorkspaceDirective['scope'][]): boolean {
+        const directives = (this.workspace.directives ?? []).filter((d) => scopes.includes(d.scope))
+        let open = false
+        let any = false
+        const setOpen = (want: boolean) => {
+            if (want === open) return
+            if (want) { this.emit('properties {'); this.depth++ } else { this.depth--; this.emit('}') }
+            open = want
+        }
+        for (let i = 0; i <= directives.length; i++) {
+            for (const line of lines) {
+                if (Math.min(line.slot, directives.length) !== i) continue
+                // Structurizr rejects `"key" ""` and a nameless property; see
+                // serializeProperties.
+                const key = this.escapeString(line.key)
+                const value = this.escapeString(line.value)
+                if (key.length === 0 || value.length === 0) continue
+                setOpen(true)
+                this.emit(`"${key}" "${value}"`)
+                any = true
+            }
+            const directive = directives[i]
+            if (!directive) break
+            setOpen(directive.scope.endsWith('Properties'))
+            this.emit(directive.raw)
+            any = true
+        }
+        setOpen(false)
+        return any
+    }
 
     /** Re-emit preserved `!` lines for one block, verbatim and in original
      *  order. Model-scope lines that were written after a declaration (or
@@ -627,10 +688,15 @@ class SerializerContext {
 
         if (this.emitDirectives('model')) this.emitBlank()
 
-        if (this.hasNestedGroups) {
-            this.serializeProperties({ 'structurizr.groupSeparator': GROUP_SEPARATOR })
-            this.emitBlank()
-        }
+        // Nested groups are written as `a/b` names, so the separator has to be
+        // ours whatever the file said; it goes last so it wins.
+        const modelLines = this.hasNestedGroups
+            ? [
+                ...this.modelPropertyLines.filter((l) => l.key !== GROUP_SEPARATOR_KEY),
+                { key: GROUP_SEPARATOR_KEY, value: GROUP_SEPARATOR, slot: Number.POSITIVE_INFINITY },
+            ]
+            : this.modelPropertyLines
+        if (this.emitPropertyLines(modelLines, ['modelProperties'])) this.emitBlank()
 
         this.serializeGroupScope(this.topLevelGroups, element => {
             this.serializeModelElement(element)

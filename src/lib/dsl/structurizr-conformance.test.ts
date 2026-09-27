@@ -191,6 +191,27 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect(exportModel(saved).properties).toMatchObject(workspace.properties!)
     })
 
+    it('preserves unquoted and model-level properties in the real parser export', () => {
+        const { workspace, errors } = parseDSL(`workspace "W" {
+            properties {
+                team platform
+                "port" 8080
+            }
+            model {
+                properties {
+                    owner architecture
+                }
+                s = softwareSystem "S"
+            }
+        }`)
+        expect(errors).toEqual([])
+        const saved = serializeDSL(workspace)
+        expect(validate(saved)).toBeNull()
+        const exported = exportModel(saved) as { properties?: object; model?: { properties?: object } }
+        expect(exported.properties).toMatchObject({ team: 'platform', port: '8080' })
+        expect(exported.model?.properties).toMatchObject({ owner: 'architecture' })
+    })
+
     const templates: [string, () => Workspace][] = [
         ['bigBank', createBigBankSample],
         ['microservices', createMicroservicesTemplate],
