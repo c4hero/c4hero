@@ -319,8 +319,8 @@ export interface PropertyDirective {
   sourcePath?: string
 }
 
-/** Where each line of an element's or relationship's `properties { }` block
- *  was written, recorded only when the block holds `!` lines. Those lines
+/** Where each line of an element's or relationship's `properties { }` blocks
+ *  was written, recorded when any of those blocks holds `!` lines. Those lines
  *  are kept, and each property line keeps its position relative to them
  *  (`slot` counts the directives before it in its file), so an included
  *  value is neither lost nor copied into the root. Without `!` lines the

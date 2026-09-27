@@ -257,6 +257,30 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect(saved.model.people[0].properties).toMatchObject({ team: rootLast ? 'root' : 'included' })
     })
 
+    it.each([false, true])('keeps a separate plain property block (root last: %s)', async (rootLast) => {
+        const plain = 'properties {\n"team" "same"\n}'
+        const include = 'properties {\n!include p.dsl\n}'
+        const blocks = rootLast ? `${include}\n${plain}` : `${plain}\n${include}`
+        const source = `workspace {\nmodel {\nu = person "U" {\n${blocks}\n}\n}\nviews {\n}\n}`
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => '"team" "same"\n' })
+        const includes = { 'p.dsl': '"team" "changed"\n' }
+        type Exported = { model: { people: { properties: object }[] } }
+        const original = exportModel(source, includes) as Exported
+        const saved = exportModel(serializeRoot(loaded.workspace), includes) as Exported
+        expect(saved.model.people[0].properties).toEqual(original.model.people[0].properties)
+        expect(saved.model.people[0].properties).toMatchObject({ team: rootLast ? 'same' : 'changed' })
+    })
+
+    it('keeps edited included properties when converting JSON to DSL', async () => {
+        const source = 'workspace {\nmodel {\nu = person "U" {\nproperties {\n!include p.dsl\n}\n}\n}\nviews {\n}\n}'
+        const includes = { 'p.dsl': '"team" "original"\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['p.dsl'] })
+        loaded.workspace.model.people[0].properties.team = 'edited'
+        const saved = serializeDSL(JSON.parse(JSON.stringify(loaded.workspace)))
+        type Exported = { model: { people: { properties: object }[] } }
+        expect((exportModel(saved, includes) as Exported).model.people[0].properties).toMatchObject({ team: 'edited' })
+    })
+
     const templates: [string, () => Workspace][] = [
         ['bigBank', createBigBankSample],
         ['microservices', createMicroservicesTemplate],

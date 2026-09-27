@@ -124,3 +124,54 @@ describe('edits to a key last set by a read-only include (TEA-349)', () => {
     expect(planIncludedWrites(loaded.workspace)[0].content).toContain('"team" "edited"')
   })
 })
+
+describe('property precedence across serialization paths', () => {
+  const holders = [
+    {
+      name: 'element',
+      model: (blocks: string) => `u = person "U" {\n${blocks}\n}`,
+      properties: (ws: Workspace) => ws.model.people[0].properties,
+    },
+    {
+      name: 'relationship',
+      model: (blocks: string) => `a = person "A"\nb = softwareSystem "B"\na -> b "Uses" {\n${blocks}\n}`,
+      properties: (ws: Workspace) => ws.model.relationships[0].properties,
+    },
+  ]
+
+  for (const holder of holders) {
+    it(`keeps an edited included ${holder.name} property through JSON-to-DSL serialization`, async () => {
+      const readInclude = async () => '"team" "original"\n'
+      const loaded = await loadWorkspaceDocument({
+        content: wrap(holder.model('properties {\n!include p.dsl\n}')),
+        readInclude,
+      })
+      holder.properties(loaded.workspace).team = 'edited'
+      // WelcomeScreen's JSON import serializes the complete workspace.
+      const json: Workspace = JSON.parse(JSON.stringify(loaded.workspace))
+      expect(isWorkspaceShape(json)).toBe(true)
+      const saved = serializeDSL(json)
+      const reopened = await loadWorkspaceDocument({ content: saved, readInclude })
+      expect(reopened.errors).toEqual([])
+      expect(holder.properties(reopened.workspace).team).toBe('edited')
+    })
+
+    it.each([false, true])(`keeps plain blocks around an included ${holder.name} block (root last: %s)`, async (rootLast) => {
+      let included = '"team" "same"\n'
+      const readInclude = async () => included
+      const plain = 'properties {\n"team" "same"\n}'
+      const directive = 'properties {\n!include p.dsl\n}'
+      const content = wrap(holder.model(rootLast ? `${directive}\n${plain}` : `${plain}\n${directive}`))
+      const loaded = await loadWorkspaceDocument({ content, readInclude })
+      expect(loaded.errors).toEqual([])
+      const saved = serializeRoot(loaded.workspace)
+      expect(saved).toMatch(rootLast ? /!include p\.dsl\s+"team" "same"/ : /"team" "same"\s+!include p\.dsl/)
+      // Equal values at load time must not erase an explicitly authored override.
+      included = '"team" "changed"\n'
+      const reopened = await loadWorkspaceDocument({ content: saved, readInclude })
+      expect(reopened.errors).toEqual([])
+      expect(holder.properties(reopened.workspace).team).toBe(rootLast ? 'same' : 'changed')
+      expect(serializeRoot(reopened.workspace)).toBe(saved)
+    })
+  }
+})

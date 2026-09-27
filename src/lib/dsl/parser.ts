@@ -224,44 +224,37 @@ export function readPropertyEntries(
     }
 }
 
-/**
- * Read an element's or relationship's `properties { }` block, passing each
- * entry to `onEntry`. Returns the block's PropertyLayout when it holds `!`
- * lines, so they and the order around them survive a save; undefined
- * otherwise.
- */
+/** Read and accumulate every properties block on a holder. Keep the layout
+ * on the model only once a directive appears, including earlier plain blocks. */
 export function readPropertyBlock(
     p: ContextAwareParser,
+    holder: { propertyLayout?: PropertyLayout },
     onEntry: (key: string, value: string) => void,
-): PropertyLayout | undefined {
-    const layout: PropertyLayout = { declarations: [], directives: [] }
+): void {
+    let pending = p.propertyLayouts.get(holder)
+    if (!pending) {
+        pending = { layout: { declarations: [], directives: [] }, lines: [] }
+        p.propertyLayouts.set(holder, pending)
+    }
+    const { layout, lines } = pending
     readPropertyEntries(p, (key, value, token) => {
         onEntry(key, value)
         const declaration: PropertyDeclaration = {
             key, value, slot: layout.directives.length, sourceLine: token.line, sourceColumn: token.column,
         }
         layout.declarations.push(declaration)
-        p.propertyLines.set(declaration, token.line)
+        lines.push([declaration, token.line])
     }, {
         onDirective: (token) => {
             const directive: PropertyDirective = { raw: token.value.trim() }
             layout.directives.push(directive)
-            p.propertyLines.set(directive, token.line)
+            lines.push([directive, token.line])
         },
     })
-    return layout.directives.length > 0 ? layout : undefined
-}
-
-/** Record a block's layout on its element or relationship, appending to the
- *  layout of an earlier `properties { }` block of the same holder. */
-export function attachPropertyLayout(holder: { propertyLayout?: PropertyLayout }, layout: PropertyLayout | undefined): void {
-    if (!layout) return
-    const existing = holder.propertyLayout
-    if (!existing) { holder.propertyLayout = layout; return }
-    const offset = existing.directives.length
-    for (const declaration of layout.declarations) declaration.slot += offset
-    existing.declarations.push(...layout.declarations)
-    existing.directives.push(...layout.directives)
+    if (layout.directives.length === 0) return
+    holder.propertyLayout = layout
+    for (const [item, line] of lines) p.propertyLines.set(item, line)
+    lines.length = 0
 }
 
 export class ContextAwareParser {
@@ -280,6 +273,11 @@ export class ContextAwareParser {
     themesLine: number | undefined
     /** See ParseResult.propertyLines. */
     propertyLines = new Map<PropertyDeclaration | PropertyDirective, number>()
+    /** Parse-only history: plain blocks may precede a block with directives. */
+    propertyLayouts = new WeakMap<object, {
+        layout: PropertyLayout
+        lines: [PropertyDeclaration | PropertyDirective, number][]
+    }>()
     /** Last element / environment / group declared in the model block being
      *  parsed — the anchor a following `!` directive is re-emitted after.
      *  Reset on entering a group body (see parseModelBody). */

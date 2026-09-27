@@ -5,7 +5,7 @@
 import type { Workspace, Model, Group, Person, SoftwareSystem, Container, Component } from '@/types/model'
 import { normalizeElementStatus } from '@/lib/elementStatus'
 import type { ContextAwareParser } from './parser'
-import { nextId, MAX_DEPTH, attachPropertyLayout, readPropertyBlock, setUserProperty } from './parser'
+import { nextId, MAX_DEPTH, readPropertyBlock, setUserProperty } from './parser'
 import { parseRelationship } from './parser-relationship'
 import { parseDeploymentEnvironment } from './parser-deployment'
 
@@ -684,7 +684,7 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
 /** Parse a `properties { "key" "value" ... }` block and attach known
  *  keys to the element. Recognizes `c4hero.location` for Person/SoftwareSystem. */
 function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
-    const layout = readPropertyBlock(p, (key, val) => {
+    readPropertyBlock(p, element, (key, val) => {
         // Recognized: c4hero.location → element.location for persons/systems.
         // Hoist only a valid, hoistable value into a still-unset field; any
         // other combination stays a plain property so no value is silently
@@ -698,7 +698,6 @@ function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
             setUserProperty(element.properties, key, val)
         }
     })
-    attachPropertyLayout(element, layout)
 }
 
 // Re-export Workspace for type compatibility with parseModelBody calls

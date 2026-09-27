@@ -30,6 +30,12 @@ const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
 const GROUP_SEPARATOR_KEY = 'structurizr.groupSeparator'
 
+/** The lines of an element's or relationship's `properties { }` block. */
+interface PropertyBlock {
+    lines: PropertyDeclaration[]
+    directives: readonly { raw: string }[]
+}
+
 interface ScopedGroup<T extends ModelElement> {
     group: Group
     globalMemberIds: Set<string>
@@ -156,7 +162,9 @@ function propertyLinesFor(
     if (source == null) {
         for (const [key, value] of Object.entries(props)) {
             const final = last.get(key)
-            const unwritable = source === null && final?.sourcePath !== undefined && readOnly.has(final.sourcePath)
+            // Full serialization (JSON import) also preserves includes, so an
+            // edited included value must follow them there as well as on save.
+            const unwritable = final?.sourcePath !== undefined && readOnly.has(final.sourcePath)
             if (!final || (unwritable && final.value !== value)) {
                 lines.push({ key, value, slot: Number.POSITIVE_INFINITY })
             }
@@ -569,28 +577,24 @@ class SerializerContext {
         this.emitPropertyLines(Object.entries(props).map(([key, value]) => ({ key, value, slot: 0 })), [], [])
     }
 
-    /** Whether an element or relationship writes a `properties { }` block. */
-    private hasPropertyBlock(props: Record<string, string>, layout: PropertyLayout | undefined): boolean {
-        if (!layout) return Object.keys(props).length > 0
-        const { lines, directives } = this.layoutLines(props, layout)
-        return directives.length > 0 || lines.length > 0
-    }
-
-    /** Write an element's or relationship's `properties { }` block. With a
-     *  PropertyLayout, only the lines and `!` lines of the file being written,
-     *  each in its recorded position; see PropertyLayout. */
-    private serializePropertyBlock(props: Record<string, string>, layout: PropertyLayout | undefined): void {
-        if (!layout) { this.serializeProperties(props); return }
-        const { lines, directives } = this.layoutLines(props, layout)
-        this.emitPropertyLines(lines, [], directives)
-    }
-
-    private layoutLines(props: Record<string, string>, layout: PropertyLayout) {
-        const source = this.source
-        return {
-            lines: propertyLinesFor(props, layout.declarations, source, this.readOnly),
-            directives: layout.directives.filter((d) => source === undefined || (d.sourcePath ?? null) === source),
+    /** The lines of an element's or relationship's `properties { }` block, or
+     *  null when it writes none. With a PropertyLayout, only the lines and `!`
+     *  lines of the file being written, each in its recorded position; see
+     *  PropertyLayout. */
+    private propertyBlock(props: Record<string, string>, layout: PropertyLayout | undefined): PropertyBlock | null {
+        if (!layout) {
+            const lines = Object.entries(props).map(([key, value]) => ({ key, value, slot: 0 }))
+            return lines.length > 0 ? { lines, directives: [] } : null
         }
+        const source = this.source
+        const lines = propertyLinesFor(props, layout.declarations, source, this.readOnly)
+        const directives = layout.directives.filter((d) => source === undefined || (d.sourcePath ?? null) === source)
+        return lines.length > 0 || directives.length > 0 ? { lines, directives } : null
+    }
+
+    /** Write a block from propertyBlock(). */
+    private serializePropertyBlock(block: PropertyBlock): void {
+        this.emitPropertyLines(block.lines, [], block.directives)
     }
 
     // ─── Main Serialize ─────────────────────────────────────────────
@@ -953,7 +957,8 @@ class SerializerContext {
         const varName = this.idToVar.get(person.id)
         const extraTags = this.locationAwareTags(person, ['Element', 'Person'])
         const props = this.elementProperties(person)
-        const hasProperties = this.hasPropertyBlock(props, person.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, person.propertyLayout)
+        const hasProperties = propertyBlock !== null
         const hasBlock = !!person.url || hasProperties || !!person.directives?.length
 
         const parts: string[] = []
@@ -971,7 +976,7 @@ class SerializerContext {
             this.depth++
             for (const d of person.directives ?? []) this.emit(d)
             if (person.url) this.emit(`url "${this.escapeString(person.url)}"`)
-            if (hasProperties) this.serializePropertyBlock(props, person.propertyLayout)
+            if (propertyBlock) this.serializePropertyBlock(propertyBlock)
             this.depth--
             this.emit('}')
         } else {
@@ -983,7 +988,8 @@ class SerializerContext {
         const varName = this.idToVar.get(sys.id)
         const extraTags = this.locationAwareTags(sys, ['Element', 'Software System'])
         const props = this.elementProperties(sys)
-        const hasProperties = this.hasPropertyBlock(props, sys.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, sys.propertyLayout)
+        const hasProperties = propertyBlock !== null
         const hasBody = sys.containers.length > 0 || !!sys.url || hasProperties || !!sys.directives?.length
 
         const parts: string[] = []
@@ -1002,7 +1008,7 @@ class SerializerContext {
 
             for (const d of sys.directives ?? []) this.emit(d)
             if (sys.url) this.emit(`url "${this.escapeString(sys.url)}"`)
-            if (hasProperties) this.serializePropertyBlock(props, sys.propertyLayout)
+            if (propertyBlock) this.serializePropertyBlock(propertyBlock)
 
             const scope = this.containerGroups.get(sys.id)
             if (scope) this.serializeGroupScope(scope, container => this.serializeContainer(container))
@@ -1018,7 +1024,8 @@ class SerializerContext {
         const varName = this.idToVar.get(container.id)
         const extraTags = this.getExtraTags(container.tags, ['Element', 'Container'])
         const props = this.elementProperties(container)
-        const hasProperties = this.hasPropertyBlock(props, container.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, container.propertyLayout)
+        const hasProperties = propertyBlock !== null
         const hasBody = container.components.length > 0 || !!container.url || hasProperties || !!container.directives?.length
 
         const parts: string[] = []
@@ -1040,7 +1047,7 @@ class SerializerContext {
 
             for (const d of container.directives ?? []) this.emit(d)
             if (container.url) this.emit(`url "${this.escapeString(container.url)}"`)
-            if (hasProperties) this.serializePropertyBlock(props, container.propertyLayout)
+            if (propertyBlock) this.serializePropertyBlock(propertyBlock)
             const scope = this.componentGroups.get(container.id)
             if (scope) this.serializeGroupScope(scope, comp => this.serializeComponent(comp))
 
@@ -1055,7 +1062,8 @@ class SerializerContext {
         const varName = this.idToVar.get(comp.id)
         const extraTags = this.getExtraTags(comp.tags, ['Element', 'Component'])
         const props = this.elementProperties(comp)
-        const hasProperties = this.hasPropertyBlock(props, comp.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, comp.propertyLayout)
+        const hasProperties = propertyBlock !== null
         const hasBlock = !!comp.url || hasProperties || !!comp.directives?.length
 
         const parts: string[] = []
@@ -1076,7 +1084,7 @@ class SerializerContext {
             this.depth++
             for (const d of comp.directives ?? []) this.emit(d)
             if (comp.url) this.emit(`url "${this.escapeString(comp.url)}"`)
-            if (hasProperties) this.serializePropertyBlock(props, comp.propertyLayout)
+            if (propertyBlock) this.serializePropertyBlock(propertyBlock)
             this.depth--
             this.emit('}')
         } else {
@@ -1097,7 +1105,8 @@ class SerializerContext {
 
         const extraTags = this.getExtraTags(rel.tags, ['Relationship'])
         const props = this.relationshipProperties(rel)
-        const hasProperties = this.hasPropertyBlock(props, rel.propertyLayout)
+        const propertyBlock = this.propertyBlock(props, rel.propertyLayout)
+        const hasProperties = propertyBlock !== null
         const needsBlock = !!rel.url || hasProperties
 
         if (needsBlock) {
@@ -1106,7 +1115,7 @@ class SerializerContext {
             this.emit(`${parts.join(' ')} {`)
             this.depth++
             if (rel.url) this.emit(`url "${this.escapeString(rel.url)}"`)
-            if (hasProperties) this.serializePropertyBlock(props, rel.propertyLayout)
+            if (propertyBlock) this.serializePropertyBlock(propertyBlock)
             if (extraTags) this.emit(`tags "${extraTags}"`)
             this.depth--
             this.emit('}')
