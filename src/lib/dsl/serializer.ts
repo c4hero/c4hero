@@ -154,21 +154,23 @@ function propertyLinesFor(
         const location = sourceLocation(d)
         if (location !== undefined) finalOccurrence.set(location, d)
     }
+    // Full serialization (JSON import) also preserves includes, so an edited
+    // included value must follow them there as well as on save.
+    const unwritable = (d: PropertyDeclaration) =>
+        d.sourcePath !== undefined && (source === undefined || readOnly.has(d.sourcePath))
     const lines: PropertyDeclaration[] = []
     for (const d of declarations ?? []) {
         if (source !== undefined && (d.sourcePath ?? null) !== source) continue
         if (!Object.hasOwn(props, d.key)) continue
         const location = sourceLocation(d)
         if (source !== undefined && location !== undefined && finalOccurrence.get(location) !== d) continue
-        lines.push(last.get(d.key) === d && !equivalent(d.key, d.value, props[d.key]) ? { ...d, value: props[d.key] } : d)
+        const edited = last.get(d.key) === d && !unwritable(d) && !equivalent(d.key, d.value, props[d.key])
+        lines.push(edited ? { ...d, value: props[d.key] } : d)
     }
     if (source === undefined || source === owner) {
         for (const [key, value] of Object.entries(props)) {
             const final = last.get(key)
-            // Full serialization (JSON import) also preserves includes, so an
-            // edited included value must follow them there as well as on save.
-            const unwritable = final?.sourcePath !== undefined && (source === undefined || readOnly.has(final.sourcePath))
-            if (!final || (unwritable && !equivalent(key, final.value, value))) {
+            if (!final || (unwritable(final) && !equivalent(key, final.value, value))) {
                 lines.push({ key, value, slot: Number.POSITIVE_INFINITY })
             }
         }
@@ -231,11 +233,12 @@ class SerializerContext {
             }
         }
         const configured = idSource.model.properties?.[GROUP_SEPARATOR_KEY]
-        if (configured !== undefined && (configured.length === 0 || roundTripped(configured) !== configured)) {
-            throw new GroupSerializationError('Cannot export the configured group separator unchanged. Choose a non-empty separator that can be represented in DSL.')
-        }
         this.groupSeparator = configured ?? GROUP_SEPARATOR
         if (this.hasNestedGroups) {
+            // Only nested groups write the separator, so only they need it intact.
+            if (configured !== undefined && (configured.length === 0 || roundTripped(configured) !== configured)) {
+                throw new GroupSerializationError('Cannot export the configured group separator unchanged. Choose a non-empty separator that can be represented in DSL.')
+            }
             const badName = workspace.model.groups.find(group => group.name.includes(this.groupSeparator))
             if (badName) {
                 throw new GroupSerializationError(
@@ -605,8 +608,11 @@ class SerializerContext {
         const source = this.source === undefined ? owner : this.source
         const equivalent = (key: string, original: string, value: string) =>
             original === value || (element && key === 'c4hero.status' && normalizeElementStatus(original) === value)
-        const lines = propertyLinesFor(props, layout.declarations, source,
-            this.source === undefined ? this.included : this.readOnly, owner, equivalent)
+        // Full serialization writes the owner's own lines inline, so only the
+        // files it reaches through `!include` are left unwritten.
+        const unwritten = this.source === undefined
+            ? new Set([...this.included].filter((path) => path !== owner)) : this.readOnly
+        const lines = propertyLinesFor(props, layout.declarations, source, unwritten, owner, equivalent)
         const directives = layout.directives.filter((d) => (d.sourcePath ?? null) === source)
         return lines.length > 0 || directives.length > 0 ? { lines, directives } : null
     }

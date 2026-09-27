@@ -109,3 +109,32 @@ it('an intentional normalized status edit overrides a read-only include', async 
   const reopened = await loadWorkspaceDocument({ content: serializeRoot(workspace), readInclude })
   expect(reopened.workspace.model.people[0].status).toBe('Planned')
 })
+
+it('saves an unrepresentable group separator when no groups are nested', async () => {
+  const { workspace: ws } = await loadWorkspaceDocument({ content: wrap('properties {\n"structurizr.groupSeparator" ""\n}\ngroup "G" {\nu = person "U"\n}') })
+  expect(() => serializeDSL(ws)).not.toThrow()
+  expect(() => serializeRoot(ws)).not.toThrow()
+})
+
+it('full serialization writes an edited element property from its own included file once', async () => {
+  const files: Record<string, string> = { 'a.dsl': person('"b" "1"\n!include p.dsl'), 'p.dsl': '"c" "2"\n' }
+  const readInclude = async (p: string) => files[p] ?? null
+  const { workspace: ws } = await loadWorkspaceDocument({ content: wrap('!include a.dsl'), readInclude })
+  ws.model.people[0].properties.b = '9'
+  const saved = serializeDSL(ws)
+  expect(saved).toMatch(/"b" "9"\s*!include p\.dsl/)
+  expect(saved.match(/"b" "9"/g)).toHaveLength(1)
+})
+
+it('full serialization writes an edited workspace property once', async () => {
+  const readInclude = async () => '"a" "2"\n'
+  const { workspace: ws } = await loadWorkspaceDocument({
+    content: 'workspace {\nproperties {\n"a" "1"\n!include w.dsl\n}\nmodel {\n}\n}',
+    readInclude,
+  })
+  ws.properties!.a = '3'
+  const saved = serializeDSL(ws)
+  expect(saved.match(/"a" "3"/g)).toHaveLength(1)
+  const reopened = await loadWorkspaceDocument({ content: saved, readInclude })
+  expect(reopened.workspace.properties!.a).toBe('3')
+})
