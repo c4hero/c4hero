@@ -176,6 +176,8 @@ class SerializerContext {
     private containerGroups = new Map<string, GroupScope<Container>>()
     private componentGroups = new Map<string, GroupScope<Component>>()
     private hasNestedGroups = false
+    /** The model's own `structurizr.groupSeparator`, else ours. */
+    private groupSeparator: string
     private workspacePropertyLines: PropertyDeclaration[]
     private modelPropertyLines: PropertyDeclaration[]
     /** See SerializeOptions.source. */
@@ -206,12 +208,14 @@ class SerializerContext {
                 this.hasNestedGroups ||= components.nested
             }
         }
+        const configured = idSource.model.properties?.[GROUP_SEPARATOR_KEY]
+        this.groupSeparator = configured && this.escapeString(configured).length > 0 ? configured : GROUP_SEPARATOR
         if (this.hasNestedGroups) {
-            const badName = workspace.model.groups.find(group => group.name.includes(GROUP_SEPARATOR))
+            const badName = workspace.model.groups.find(group => group.name.includes(this.groupSeparator))
             if (badName) {
                 throw new GroupSerializationError(
                     `Cannot export nested group "${badName.name}": group names may not contain `
-                    + `the configured separator "${GROUP_SEPARATOR}". Rename the group first.`,
+                    + `the configured separator "${this.groupSeparator}". Rename the group first.`,
                 )
             }
         }
@@ -755,10 +759,10 @@ class SerializerContext {
         if (this.emitPropertyLines(initialLines, [])) this.emitBlank()
         if (this.emitDirectives('model')) this.emitBlank()
 
-        // Nested group names use our separator, overriding the source value
-        // before emitting any groups.
+        // Nested groups need the separator set before any group is written;
+        // the model's own value is kept, as Group: style tags depend on it.
         if (this.hasNestedGroups) {
-            this.serializeProperties({ [GROUP_SEPARATOR_KEY]: GROUP_SEPARATOR })
+            this.serializeProperties({ [GROUP_SEPARATOR_KEY]: this.groupSeparator })
             this.emitBlank()
         }
 

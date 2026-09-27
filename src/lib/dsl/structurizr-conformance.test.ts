@@ -233,6 +233,17 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect(saved.model.properties).toMatchObject({ team: rootLast ? 'root' : 'included' })
     })
 
+    it('keeps a custom group separator so Group: tags still match (TEA-349)', () => {
+        const source = `workspace {\nmodel {\nproperties {\n"structurizr.groupSeparator" "|"\n}\n`
+            + `group "Outer" {\ngroup "Inner" {\ns = softwareSystem "S"\n}\n}\n}\nviews {\n}\n}`
+        const saved = serializeDSL(parseDSL(source).workspace)
+        expect(validate(saved)).toBeNull()
+        type Exported = { model: { softwareSystems: { group?: string }[] } }
+        const groupOf = (dsl: string) => (exportModel(dsl) as Exported).model.softwareSystems[0].group
+        expect(groupOf(saved)).toBe(groupOf(source))
+        expect(groupOf(saved)).toBe('Outer|Inner')
+    })
+
     it.each([false, true])('preserves element property includes (root last: %s) (TEA-349)', async (rootLast) => {
         const block = rootLast ? '!include p.dsl\n"team" "root"' : '"team" "root"\n!include p.dsl'
         const source = `workspace {\nmodel {\nu = person "U" {\nproperties {\n${block}\n}\n}\n}\nviews {\n}\n}`
