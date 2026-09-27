@@ -11,6 +11,8 @@ test('workspace properties survive editing, DSL export and reopening (#219)', as
     properties {
       "team" "platform"
       "c4hero.statuses" "Proposed, Under review"
+      api.version 1.2
+      123 numeric
     }
     model {
       s = softwareSystem "System"
@@ -37,6 +39,8 @@ test('workspace properties survive editing, DSL export and reopening (#219)', as
   const saved = await exportDsl()
   expect(saved).toContain('"team" "platform"')
   expect(saved).toContain('"c4hero.statuses" "Proposed, Under review"')
+  expect(saved).toContain('"api.version" "1.2"')
+  expect(saved).toContain('"123" "numeric"')
   expect(saved).toContain('Edited System')
   await workspace.parseAndLoad(saved)
   expect(await exportDsl()).toBe(saved)

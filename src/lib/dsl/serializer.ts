@@ -130,10 +130,24 @@ function propertyLinesFor(
     if (!props) return []
     const last = new Map<string, PropertyDeclaration>()
     for (const d of declarations ?? []) last.set(d.key, d)
+    // Include expansion may visit the same physical property line more than
+    // once. Write that line only once, using its final occurrence so edits to
+    // the effective value still reach the correct file. Distinct duplicate
+    // lines in the original file must remain distinct.
+    const sourceLocation = (d: PropertyDeclaration): string | undefined =>
+        d.sourceLine !== undefined && d.sourceColumn !== undefined
+            ? JSON.stringify([d.sourcePath ?? null, d.sourceLine, d.sourceColumn]) : undefined
+    const finalOccurrence = new Map<string, PropertyDeclaration>()
+    for (const d of declarations ?? []) {
+        const location = sourceLocation(d)
+        if (location !== undefined) finalOccurrence.set(location, d)
+    }
     const lines: PropertyDeclaration[] = []
     for (const d of declarations ?? []) {
         if (source !== undefined && (d.sourcePath ?? null) !== source) continue
         if (!Object.hasOwn(props, d.key)) continue
+        const location = sourceLocation(d)
+        if (source !== undefined && location !== undefined && finalOccurrence.get(location) !== d) continue
         lines.push(last.get(d.key) === d ? { ...d, value: props[d.key] } : d)
     }
     if (source == null) {
@@ -616,8 +630,10 @@ class SerializerContext {
      * scope go inside a `properties { }` block, the rest outside it; adjacent
      * lines share one block. Returns true if anything was written.
      */
-    private emitPropertyLines(lines: PropertyDeclaration[], scopes: WorkspaceDirective['scope'][]): boolean {
-        const directives = (this.workspace.directives ?? []).filter((d) => scopes.includes(d.scope))
+    private emitPropertyLines(
+        lines: PropertyDeclaration[], scopes: WorkspaceDirective['scope'][],
+        directives = (this.workspace.directives ?? []).filter((d) => scopes.includes(d.scope)),
+    ): boolean {
         let open = false
         let any = false
         const setOpen = (want: boolean) => {
@@ -655,9 +671,10 @@ class SerializerContext {
     private emitDirectives(scope: 'model' | 'views'): boolean {
         let any = false
         for (const d of this.workspace.directives ?? []) {
-            if (d.scope !== scope) continue
+            if (d.scope !== scope && !(scope === 'model' && d.scope === 'modelProperties')) continue
             if (scope === 'model' && (d.after || d.groupId)) continue
-            this.emit(d.raw)
+            if (scope === 'model') this.emitModelDirective(d)
+            else this.emit(d.raw)
             any = true
         }
         return any
@@ -667,7 +684,7 @@ class SerializerContext {
      *  environment or group that has just been emitted). */
     private emitDirectivesAfter(id: string): void {
         for (const d of this.workspace.directives ?? []) {
-            if (d.scope === 'model' && d.after === id) this.emit(d.raw)
+            if ((d.scope === 'model' || d.scope === 'modelProperties') && d.after === id) this.emitModelDirective(d)
         }
     }
 
@@ -675,9 +692,21 @@ class SerializerContext {
     private emitGroupDirectives(groupId: string): boolean {
         let any = false
         for (const d of this.workspace.directives ?? []) {
-            if (d.scope === 'model' && d.groupId === groupId && !d.after) { this.emit(d.raw); any = true }
+            if ((d.scope === 'model' || d.scope === 'modelProperties') && d.groupId === groupId && !d.after) { this.emitModelDirective(d); any = true }
         }
         return any
+    }
+
+    /** Model includes can be anchored after an element/group. Emit each
+     *  property's slot immediately after its preceding directive at that
+     *  anchor, rather than moving every property to the model's beginning. */
+    private emitModelDirective(directive: WorkspaceDirective): void {
+        const directives = (this.workspace.directives ?? []).filter(d => d.scope === 'model' || d.scope === 'modelProperties')
+        const slot = directives.indexOf(directive) + 1
+        const lines = this.modelPropertyLines
+            .filter(line => Math.min(line.slot, directives.length) === slot)
+            .map(line => ({ ...line, slot: 1 }))
+        this.emitPropertyLines(lines, [], [directive])
     }
 
     private serializeModel(): void {
@@ -686,17 +715,22 @@ class SerializerContext {
 
         const model = this.workspace.model
 
+        if (this.hasNestedGroups) {
+            this.modelPropertyLines = this.modelPropertyLines.filter(line => line.key !== GROUP_SEPARATOR_KEY)
+        }
+        const directives = (this.workspace.directives ?? []).filter(d => d.scope === 'model' || d.scope === 'modelProperties')
+        const initialLines = this.modelPropertyLines
+            .filter(line => Math.min(line.slot, directives.length) === 0)
+            .map(line => ({ ...line, slot: 0 }))
+        if (this.emitPropertyLines(initialLines, [])) this.emitBlank()
         if (this.emitDirectives('model')) this.emitBlank()
 
-        // Nested groups are written as `a/b` names, so the separator has to be
-        // ours whatever the file said; it goes last so it wins.
-        const modelLines = this.hasNestedGroups
-            ? [
-                ...this.modelPropertyLines.filter((l) => l.key !== GROUP_SEPARATOR_KEY),
-                { key: GROUP_SEPARATOR_KEY, value: GROUP_SEPARATOR, slot: Number.POSITIVE_INFINITY },
-            ]
-            : this.modelPropertyLines
-        if (this.emitPropertyLines(modelLines, ['modelProperties'])) this.emitBlank()
+        // Nested group names use our separator, overriding the source value
+        // before emitting any groups.
+        if (this.hasNestedGroups) {
+            this.serializeProperties({ [GROUP_SEPARATOR_KEY]: GROUP_SEPARATOR })
+            this.emitBlank()
+        }
 
         this.serializeGroupScope(this.topLevelGroups, element => {
             this.serializeModelElement(element)

@@ -37,6 +37,8 @@ import type { Workspace } from '@/types/model'
 import { generateWorkspace, type RelaxOptions } from './fuzz/generateWorkspace'
 import { representable } from './encoding'
 import { validateForStructurizr } from '@/lib/structurizrValidation'
+import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
+import { planIncludedWrites, serializeRoot } from '@/lib/includeWriteback'
 
 const CLI = process.env.STRUCTURIZR_CLI ?? join(process.cwd(), '.structurizr-cli', 'structurizr.sh')
 const CLI_AVAILABLE = existsSync(CLI)
@@ -66,8 +68,9 @@ function validate(dsl: string): string | null {
 }
 
 /** Parse with the real parser and return the model it actually built. */
-function exportModel(dsl: string): Record<string, never> | Record<string, unknown> {
+function exportModel(dsl: string, includes: Record<string, string> = {}): Record<string, never> | Record<string, unknown> {
     return withTempDsl(dsl, (dir, file) => {
+        for (const [name, text] of Object.entries(includes)) writeFileSync(join(dir, name), text, 'utf8')
         const out = join(dir, 'out')
         execFileSync(CLI, ['export', '-w', file, '-f', 'json', '-o', out], { stdio: 'pipe' })
         const json = readdirSync(out).find(f => f.endsWith('.json'))
@@ -196,6 +199,8 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
             properties {
                 team platform
                 "port" 8080
+                api.version 1.2
+                123 numeric
             }
             model {
                 properties {
@@ -208,8 +213,24 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         const saved = serializeDSL(workspace)
         expect(validate(saved)).toBeNull()
         const exported = exportModel(saved) as { properties?: object; model?: { properties?: object } }
-        expect(exported.properties).toMatchObject({ team: 'platform', port: '8080' })
+        expect(exported.properties).toMatchObject({ team: 'platform', port: '8080', 'api.version': '1.2', '123': 'numeric' })
         expect(exported.model?.properties).toMatchObject({ owner: 'architecture' })
+    })
+
+    it.each([false, true])('preserves model overrides against real includes (root last: %s)', async (rootLast) => {
+        const properties = 'properties {\n"team" "root"\n}'
+        const body = rootLast
+            ? `s = softwareSystem "S"\n!include defaults.dsl\n${properties}`
+            : `${properties}\n!include defaults.dsl\ns = softwareSystem "S"`
+        const source = `workspace {\nmodel {\n${body}\n}\nviews {\n}\n}`
+        const includes = { 'defaults.dsl': 'properties {\n"team" "included"\n}\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['defaults.dsl'] })
+        expect(loaded.errors).toEqual([])
+        const savedIncludes = Object.fromEntries(planIncludedWrites(loaded.workspace).map(write => [write.path, write.content]))
+        const original = exportModel(source, includes) as { model: { properties: object } }
+        const saved = exportModel(serializeRoot(loaded.workspace), savedIncludes) as { model: { properties: object } }
+        expect(saved.model.properties).toEqual(original.model.properties)
+        expect(saved.model.properties).toMatchObject({ team: rootLast ? 'root' : 'included' })
     })
 
     const templates: [string, () => Workspace][] = [

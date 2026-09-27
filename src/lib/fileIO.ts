@@ -421,6 +421,8 @@ function isScopedPropertiesShape(holder: Record<string, unknown>): boolean {
     isRecord(d) && typeof d.key === 'string' && typeof d.value === 'string'
     && Number.isInteger(d.slot) && Number(d.slot) >= 0
     && (d.sourcePath === undefined || typeof d.sourcePath === 'string')
+    && (d.sourceLine === undefined || (Number.isInteger(d.sourceLine) && Number(d.sourceLine) > 0))
+    && (d.sourceColumn === undefined || (Number.isInteger(d.sourceColumn) && Number(d.sourceColumn) > 0))
   ))
 }
 

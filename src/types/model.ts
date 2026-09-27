@@ -297,9 +297,12 @@ export interface PropertyDeclaration {
   value: string
   /** How many preserved directives of the same block kind precede this line
    *  in its file (workspace: `workspace` + `workspaceProperties` scope;
-   *  model: `modelProperties` scope). The serializer re-emits the line at
+   *  model: `model` + `modelProperties` scope). The serializer re-emits the line at
    *  that position, so an override keeps its meaning. */
   slot: number
+  /** Original file location, used to coalesce repeated inclusion of the same line. */
+  sourceLine?: number
+  sourceColumn?: number
   /** Set when the line came from an `!include`d file. */
   sourcePath?: string
 }

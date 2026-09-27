@@ -315,3 +315,95 @@ describe('workspace and model properties (PR #220 review)', () => {
     expect(parseDSL(saved).errors).toEqual([])
   })
 })
+
+it.each([
+  ['root before include', 'properties { "team" "root" }\n!include model.dsl', 'included'],
+  ['root after anchored include', 's = softwareSystem "S"\n!include model.dsl\nproperties { "team" "root" }', 'root'],
+])('preserves model override: %s', async (_label, body, expected) => {
+  const loaded = await loadWorkspaceDocument({
+    content: `workspace {\nmodel {\n${body}\n}\nviews {}\n}`,
+    readInclude: async () => 'properties { "team" "included" }\n',
+  })
+  expect(loaded.errors).toEqual([])
+  expect(loaded.workspace.model.properties?.team).toBe(expected)
+  const root = serializeRoot(loaded.workspace)
+  const writes = new Map(planIncludedWrites(loaded.workspace).map(w => [w.path, w.content]))
+  const reopened = await loadWorkspaceDocument({ content: root, readInclude: async p => writes.get(p) ?? null })
+  expect(reopened.errors).toEqual([])
+  expect(reopened.workspace.model.properties?.team).toBe(expected)
+})
+
+it('accepts valid unquoted dotted workspace property keys', () => {
+  const result = parseDSL('workspace {\nproperties {\nstructurizr.foo "value"\n}\nmodel {}\nviews {}\n}')
+  expect(result.errors).toEqual([])
+  expect(result.workspace.properties).toEqual({ 'structurizr.foo': 'value' })
+})
+
+it('keeps numeric workspace property keys', () => {
+  const result = parseDSL('workspace {\nproperties {\n123 "value"\n}\nmodel {}\nviews {}\n}')
+  expect(result.errors).toEqual([])
+  expect(result.workspace.properties).toEqual({ '123': 'value' })
+})
+
+it('keeps workspace slots when multiple files are flattened', async () => {
+  const loaded = await loadWorkspaceDocument({
+    content: 'workspace {\n!include a.dsl\nproperties { "team" "root" }\n!include b.dsl\nmodel {}\nviews {}\n}',
+    readInclude: async p => p === 'a.dsl' ? 'properties { "team" "a" }' : 'properties { "team" "b" }',
+  })
+  expect(loaded.errors).toEqual([])
+  const reopened = restitchWorkspaceDocument(serializeRoot(loaded.workspace), loaded.workspace)
+  expect(reopened.workspace.properties).toEqual(loaded.workspace.properties)
+})
+
+it('does not multiply declarations when a properties-only model fragment is included twice', async () => {
+  const root = 'workspace {\nmodel {\n!include defaults.dsl\n!include defaults.dsl\n}\nviews {}\n}'
+  const loaded = await loadWorkspaceDocument({ content: root, readInclude: async () => 'properties {\n"team" "platform"\n}\n' })
+  expect(loaded.errors).toEqual([])
+  const firstWrite = planIncludedWrites(loaded.workspace)[0]
+  expect(firstWrite).toBeDefined()
+  const reopened = await loadWorkspaceDocument({ content: serializeRoot(loaded.workspace), readInclude: async () => firstWrite.content })
+  expect(reopened.errors).toEqual([])
+  expect(planIncludedWrites(reopened.workspace)[0].content).toBe(firstWrite.content)
+})
+
+it('keeps distinct duplicate source lines when deduplicating repeated includes', async () => {
+  const content = 'workspace {\nmodel {\n!include defaults.dsl\n!include defaults.dsl\n}\nviews {}\n}'
+  const loaded = await loadWorkspaceDocument({
+    content, readInclude: async () => 'properties {\n"team" "first"\n"team" "last"\n}\n',
+  })
+  loaded.workspace.model.properties!.team = 'edited'
+  const [write] = planIncludedWrites(loaded.workspace)
+  expect(write.content.match(/"team"/g)).toHaveLength(2)
+  expect(write.content).toContain('"team" "first"')
+  expect(write.content).toContain('"team" "edited"')
+  const reopened = await loadWorkspaceDocument({ content: serializeRoot(loaded.workspace), readInclude: async () => write.content })
+  expect(reopened.workspace.model.properties?.team).toBe('edited')
+  expect(planIncludedWrites(reopened.workspace)[0].content).toBe(write.content)
+})
+
+it('reads contiguous bare property words consistently in every shared-reader scope', () => {
+  const properties = 'properties {\napi.version 1.2\n123 456\n}'
+  const parsed = parseDSL(`workspace {\n${properties}\nmodel {\n${properties}\np = person "P" {\n${properties}\n}\ns = softwareSystem "S"\np -> s {\n${properties}\n}\n}\n}`)
+  expect(parsed.errors).toEqual([])
+  for (const values of [parsed.workspace.properties, parsed.workspace.model.properties,
+    parsed.workspace.model.people[0].properties, parsed.workspace.model.relationships[0].properties]) {
+    expect(values).toEqual({ 'api.version': '1.2', '123': '456' })
+  }
+})
+
+it('does not anchor a parent property include to an element inside a child file', async () => {
+  const files: Record<string, string> = {
+    'model.dsl': 's = softwareSystem "S"\n',
+    'props.dsl': '"team" "platform"\n',
+  }
+  const loaded = await loadWorkspaceDocument({
+    content: 'workspace {\nmodel {\n!include model.dsl\nproperties {\n!include props.dsl\n}\n}\nviews {}\n}',
+    readInclude: async path => files[path] ?? null,
+  })
+  expect(loaded.errors).toEqual([])
+  const root = serializeRoot(loaded.workspace)
+  expect(root).toMatch(/!include model\.dsl\s+properties \{\s*!include props\.dsl/)
+  const reopened = restitchWorkspaceDocument(root, loaded.workspace)
+  expect(reopened.errors).toEqual([])
+  expect(reopened.workspace.model.properties).toEqual({ team: 'platform' })
+})

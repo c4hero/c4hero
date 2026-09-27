@@ -97,6 +97,17 @@ export function stitchWorkspaceDocument(
     const p = fileOf(directiveLines[i])
     if (p) d.sourcePath = p
   })
+  // Expansion can leave the parser's last declaration pointing into an
+  // included file. A subsequent directive in the parent belongs after the
+  // parent's include, not after a child element omitted from root writeback.
+  const previousModelDirective = new Map<string | undefined, WorkspaceDirective>()
+  for (const directive of workspace.directives ?? []) {
+    if (directive.scope !== 'model' && directive.scope !== 'modelProperties') continue
+    if (directive.after && fileOf(declarationLines.get(directive.after)) !== directive.sourcePath) {
+      directive.after = previousModelDirective.get(directive.sourcePath)?.after
+    }
+    previousModelDirective.set(directive.sourcePath, directive)
+  }
   for (const style of [...workspace.views.configuration.styles.elements, ...workspace.views.configuration.styles.relationships]) {
     const p = fileOf(styleLines.get(style))
     if (p) style.sourcePath = p
@@ -107,14 +118,15 @@ export function stitchWorkspaceDocument(
     for (const decl of declarations ?? []) {
       const line = propertyLines.get(decl)
       if (line === undefined) continue
-      const p = fileOf(line)
-      if (p) decl.sourcePath = p
+      const location = locateLine(resolved.segments, line)
+      if (location.path) decl.sourcePath = location.path
+      decl.sourceLine = location.line
       decl.slot = (workspace.directives ?? []).filter((d, i) =>
         scopes.includes(d.scope) && d.sourcePath === decl.sourcePath && directiveLines[i] < line).length
     }
   }
   placeProperties(workspace.propertyDeclarations, ['workspace', 'workspaceProperties'])
-  placeProperties(workspace.model.propertyDeclarations, ['modelProperties'])
+  placeProperties(workspace.model.propertyDeclarations, ['model', 'modelProperties'])
   const themesPath = fileOf(themesLine)
   if (themesPath) workspace.views.configuration.themesSourcePath = themesPath
 

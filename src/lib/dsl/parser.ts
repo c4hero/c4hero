@@ -184,8 +184,24 @@ export function readPropertyEntries(
         onMissingValue?: (key: string, token: Token) => void
     } = {},
 ): void {
-    const isWord = (t: Token) => t.type === 'STRING' || t.type === 'IDENTIFIER'
+    const isBarePart = (t: Token) => t.type === 'IDENTIFIER' || t.type === 'NUMBER'
+        || t.type === 'DOT' || t.type === 'EQUALS' || t.type === 'STAR' || t.type === 'ARROW'
         || (t.type === 'KEYWORD' && !t.value.startsWith('!'))
+    // The lexer splits qualified refs and numbers for other DSL contexts.
+    // Here contiguous bare tokens form one property word; whitespace separates
+    // the key from its value. Quoted strings are already decoded by the lexer.
+    const readWord = (): string | undefined => {
+        if (p.peekType() === 'STRING') return p.advance().value
+        if (!isBarePart(p.peek())) return undefined
+        let previous = p.advance()
+        let value = previous.value
+        while (isBarePart(p.peek()) && p.peek().line === previous.line
+            && p.peek().column === previous.column + previous.value.length) {
+            previous = p.advance()
+            value += previous.value
+        }
+        return value
+    }
     while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
         p.skipNewlines()
         if (p.check('RBRACE') || p.peekType() === 'EOF') break
@@ -199,10 +215,10 @@ export function readPropertyEntries(
             }
             continue
         }
-        if (!isWord(token)) { p.advance(); continue }
-        const key = p.advance().value
-        const valTok = p.peek()
-        if (isWord(valTok) || valTok.type === 'NUMBER') onEntry(key, p.advance().value, token)
+        const key = readWord()
+        if (key === undefined) { p.advance(); continue }
+        const value = readWord()
+        if (value !== undefined) onEntry(key, value, token)
         else opts.onMissingValue?.(key, token)
     }
 }
@@ -467,7 +483,7 @@ export class ContextAwareParser {
         const raw = value.trim()
         if (/^!identifiers\b/.test(raw)) return
         const directive: WorkspaceDirective = { scope, raw }
-        if (scope === 'model') {
+        if (scope === 'model' || scope === 'modelProperties') {
             if (this.currentGroupId) directive.groupId = this.currentGroupId
             if (this.lastModelDeclId) directive.after = this.lastModelDeclId
         }
@@ -696,12 +712,13 @@ export class ContextAwareParser {
      *  `holder.properties`, recording each line's position among the block
      *  kind's directives (see PropertyDeclaration.slot). */
     parseScopedProperties(holder: Workspace | Model, scope: 'workspaceProperties' | 'modelProperties'): void {
-        const slotScopes: WorkspaceDirective['scope'][] = scope === 'workspaceProperties' ? ['workspace', scope] : [scope]
+        const slotScopes: WorkspaceDirective['scope'][] = scope === 'workspaceProperties' ? ['workspace', scope] : ['model', scope]
         readPropertyEntries(this, (key, value, token) => {
             holder.properties ??= {}
             setUserProperty(holder.properties, key, value)
             const declaration: PropertyDeclaration = {
                 key, value, slot: this.directives.filter((d) => slotScopes.includes(d.scope)).length,
+                sourceLine: token.line, sourceColumn: token.column,
             }
             ;(holder.propertyDeclarations ??= []).push(declaration)
             this.propertyLines.set(declaration, token.line)
