@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Workspace- and model-level `properties { }` blocks are no longer discarded
+  on save (#219). Each line is written back to its own file and position, so a
+  value set in an `!include`d file is not copied into the root and an override
+  keeps its meaning. Unquoted keys and values are accepted, as in Structurizr,
+  and a property that cannot be saved as written is reported like any other.
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.

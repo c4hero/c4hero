@@ -413,15 +413,29 @@ function isRelationshipStyleShape(value: unknown): boolean {
   })
 }
 
+/** Workspace- or model-level `properties` plus their line provenance. */
+function isScopedPropertiesShape(holder: Record<string, unknown>): boolean {
+  if (holder.properties !== undefined && !isStringRecord(holder.properties)) return false
+  const decls = holder.propertyDeclarations
+  return decls === undefined || (Array.isArray(decls) && decls.every(d =>
+    isRecord(d) && typeof d.key === 'string' && typeof d.value === 'string'
+    && Number.isInteger(d.slot) && Number(d.slot) >= 0
+    && (d.sourcePath === undefined || typeof d.sourcePath === 'string')
+    && (d.sourceLine === undefined || (Number.isInteger(d.sourceLine) && Number(d.sourceLine) > 0))
+    && (d.sourceColumn === undefined || (Number.isInteger(d.sourceColumn) && Number(d.sourceColumn) > 0))
+  ))
+}
+
 /** Runtime schema check for imported workspace JSON. */
 export function isWorkspaceShape(obj: unknown): obj is Workspace {
   if (!isRecord(obj)) return false
   if ('name' in obj && obj.name !== undefined && typeof obj.name !== 'string') return false
   if ('description' in obj && obj.description !== undefined && typeof obj.description !== 'string') return false
+  if (!isScopedPropertiesShape(obj)) return false
   if ('scope' in obj && obj.scope !== undefined && !['softwaresystem', 'landscape', 'none'].includes(String(obj.scope))) return false
 
   if ('directives' in obj && obj.directives !== undefined && (!Array.isArray(obj.directives) || !obj.directives.every(d =>
-    isRecord(d) && typeof d.raw === 'string' && ['workspace', 'model', 'views'].includes(String(d.scope))
+    isRecord(d) && typeof d.raw === 'string' && ['workspace', 'workspaceProperties', 'model', 'modelProperties', 'views'].includes(String(d.scope))
   ))) return false
 
   if ('includedFiles' in obj && obj.includedFiles !== undefined && (!Array.isArray(obj.includedFiles) || !obj.includedFiles.every(f =>
@@ -430,6 +444,7 @@ export function isWorkspaceShape(obj: unknown): obj is Workspace {
 
   const { model, views } = obj
   if (!isRecord(model) || !isRecord(views)) return false
+  if (!isScopedPropertiesShape(model)) return false
   if (!Array.isArray(model.people) || !model.people.every(isPersonShape)) return false
   if (!Array.isArray(model.softwareSystems) || !model.softwareSystems.every(isSoftwareSystemShape)) return false
   if (!Array.isArray(model.relationships) || !model.relationships.every(isRelationshipShape)) return false

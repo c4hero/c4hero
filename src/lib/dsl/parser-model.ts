@@ -5,7 +5,7 @@
 import type { Workspace, Model, Group, Person, SoftwareSystem, Container, Component } from '@/types/model'
 import { normalizeElementStatus } from '@/lib/elementStatus'
 import type { ContextAwareParser } from './parser'
-import { nextId, MAX_DEPTH, setUserProperty } from './parser'
+import { nextId, MAX_DEPTH, readPropertyEntries, setUserProperty } from './parser'
 import { parseRelationship } from './parser-relationship'
 import { parseDeploymentEnvironment } from './parser-deployment'
 
@@ -160,7 +160,11 @@ export function parseModelBody(
             if (kw === 'properties') {
                 p.advance()
                 p.skipNewlines()
-                p.skipBraceBlock()
+                if (p.match('LBRACE')) {
+                    p.parseScopedProperties(model, 'modelProperties')
+                    p.skipNewlines()
+                    p.expect('RBRACE')
+                }
                 continue
             }
 
@@ -680,19 +684,7 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
 /** Parse a `properties { "key" "value" ... }` block and attach known
  *  keys to the element. Recognizes `c4hero.location` for Person/SoftwareSystem. */
 function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
-    while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
-        p.skipNewlines()
-        if (p.check('RBRACE') || p.peekType() === 'EOF') break
-        const token = p.peek()
-        if (token.type === 'COMMENT') { p.advance(); continue }
-        if (token.type !== 'STRING' && token.type !== 'IDENTIFIER') { p.advance(); continue }
-        const key = p.advance().value
-        const valTok = p.peek()
-        let val: string | undefined
-        if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-            val = p.advance().value
-        }
-        if (val === undefined) continue
+    readPropertyEntries(p, (key, val) => {
         // Recognized: c4hero.location → element.location for persons/systems.
         // Hoist only a valid, hoistable value into a still-unset field; any
         // other combination stays a plain property so no value is silently
@@ -705,7 +697,7 @@ function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
         } else {
             setUserProperty(element.properties, key, val)
         }
-    }
+    })
 }
 
 // Re-export Workspace for type compatibility with parseModelBody calls
