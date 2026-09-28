@@ -17,6 +17,7 @@ import {
   readTextFileAt,
   writeTextFileAt,
 } from './folderIO'
+import { makeCountingDirHandle } from './testing/countingDirHandle'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -65,36 +66,6 @@ function makeDirHandle(files: Record<string, string> = {}): FileSystemDirectoryH
   } as unknown as FileSystemDirectoryHandle
 }
 
-/** A directory whose files remember their content and count how many times a
- *  writable was opened on them, so a test can assert that a write did NOT
- *  happen rather than only that the end state looks right. */
-function makeCountingDirHandle(files: Record<string, string> = {}) {
-  const content: Record<string, string> = { ...files }
-  const opened: Record<string, number> = {}
-  const handleFor = (name: string) => ({
-    kind: 'file' as const,
-    name,
-    getFile: async () => new File([content[name] ?? ''], name, { type: 'text/plain' }),
-    createWritable: async () => {
-      opened[name] = (opened[name] ?? 0) + 1
-      let buf = ''
-      return { write: (d: string) => { buf += d }, close: async () => { content[name] = buf } }
-    },
-  })
-  const dir = {
-    kind: 'directory',
-    name: 'testfolder',
-    entries: async function* () { for (const n of Object.keys(content)) yield [n, handleFor(n)] },
-    getFileHandle: async (name: string, opts?: { create?: boolean }) => {
-      if (name in content) return handleFor(name)
-      if (opts?.create) { content[name] = ''; return handleFor(name) }
-      throw new DOMException('Not found', 'NotFoundError')
-    },
-    queryPermission: async () => 'granted' as PermissionState,
-  } as unknown as FileSystemDirectoryHandle
-  return { dir, content, opened }
-}
-
 describe('writers skip content that is already on disk', () => {
   // Writing bytes a file already holds is never necessary and is not free: it
   // bumps mtime and wakes every watcher on the folder. Because the whole
@@ -136,6 +107,37 @@ describe('writers skip content that is already on disk', () => {
     const moved = JSON.stringify({ version: 1, views: { Ctx: { elements: { a: { x: 10, y: 20 } } } } })
     expect(await writeSidecarFile('w.dsl', moved)).toBe(true)
     expect(opened['w.c4hero.json']).toBe(1)
+  })
+
+  it('does not skip a write by comparing against a file an earlier write is still replacing', async () => {
+    // A File System Access write lands only on close(). Hold the first write
+    // open, start a second that restores the original text, then let the
+    // first land: the file must end on the second write's text.
+    const { dir, content } = makeCountingDirHandle({ 'w.dsl': 'A' })
+    let release!: () => void
+    const held = new Promise<void>((r) => { release = r })
+    const slow = {
+      ...dir,
+      getFileHandle: async (name: string, opts?: { create?: boolean }) => {
+        const h = await dir.getFileHandle(name, opts)
+        return {
+          ...h,
+          getFile: () => h.getFile(),
+          createWritable: async () => {
+            const w = await h.createWritable()
+            return { write: (d: string) => w.write(d), close: async () => { await held; await w.close() } }
+          },
+        }
+      },
+    } as unknown as FileSystemDirectoryHandle
+    await setDirHandle(slow)
+    const first = writeDSLFile('w.dsl', 'B')
+    const second = writeDSLFile('w.dsl', 'A')
+    await new Promise((r) => setTimeout(r, 0))
+    release()
+    expect(await first).toBe(true)
+    expect(await second).toBe(true)
+    expect(content['w.dsl']).toBe('A')
   })
 
   it('writes when the existing file cannot be read, rather than assuming it matches', async () => {

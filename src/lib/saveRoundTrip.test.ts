@@ -19,14 +19,15 @@
  * The first property is why the byte comparison exists; the second is why it
  * has to live at the file level rather than in a dirtiness flag.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setDirHandle, writeDSLFile, writeSidecarFile } from './folderIO'
-import { fileAlreadyHas, openDSLFile, writeToCurrentHandle } from './fileIO'
+import { MAX_FILE_SIZE, fileAlreadyHas, openDSLFile, saveDSLFile, writeToCurrentHandle } from './fileIO'
 import { writeLinkedWorkspace } from './workspaceSave'
 import { isSelfWrite, resetSaveCoordinator } from './saveCoordinator'
 import { hashContent } from './fileWatch'
 import { parseDSL } from './dsl'
 import type { Workspace } from '@/types/model'
+import { makeCountingDirHandle } from './testing/countingDirHandle'
 
 const DSL = `workspace "Shop" {
   model {
@@ -41,35 +42,6 @@ const DSL = `workspace "Shop" {
   }
 }`
 
-/** Files that remember their content and count how many times a writable was
- *  opened on them, so a test can assert a write did NOT happen. */
-function makeCountingDirHandle(files: Record<string, string> = {}) {
-  const content: Record<string, string> = { ...files }
-  const opened: Record<string, number> = {}
-  const handleFor = (name: string) => ({
-    kind: 'file' as const,
-    name,
-    getFile: async () => new File([content[name] ?? ''], name, { type: 'text/plain' }),
-    createWritable: async () => {
-      opened[name] = (opened[name] ?? 0) + 1
-      let buf = ''
-      return { write: (d: string) => { buf += d }, close: async () => { content[name] = buf } }
-    },
-  })
-  const dir = {
-    kind: 'directory',
-    name: 'arch',
-    entries: async function* () { for (const n of Object.keys(content)) yield [n, handleFor(n)] },
-    getFileHandle: async (name: string, opts?: { create?: boolean }) => {
-      if (name in content) return handleFor(name)
-      if (opts?.create) { content[name] = ''; return handleFor(name) }
-      throw new DOMException('Not found', 'NotFoundError')
-    },
-    queryPermission: async () => 'granted' as PermissionState,
-  } as unknown as FileSystemDirectoryHandle
-  return { dir, content, opened }
-}
-
 /** Move one node in the first system-context view, the way a drag does. */
 function moveFirstNode(workspace: Workspace, x: number, y: number): void {
   const view = workspace.views.systemContextViews[0]
@@ -83,8 +55,12 @@ let rig: ReturnType<typeof makeCountingDirHandle>
 
 beforeEach(async () => {
   resetSaveCoordinator()
-  rig = makeCountingDirHandle()
+  rig = makeCountingDirHandle({}, 'arch')
   await setDirHandle(rig.dir)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('saving the same workspace twice', () => {
@@ -97,12 +73,6 @@ describe('saving the same workspace twice', () => {
 
     expect(await writeLinkedWorkspace(workspace, 'shop.dsl')).toBe(true)
     expect(rig.opened).toEqual(afterFirst)
-  })
-
-  it('reports success when it skips, so the caller still marks the workspace saved', async () => {
-    const workspace = parseDSL(DSL).workspace
-    await writeLinkedWorkspace(workspace, 'shop.dsl')
-    expect(await writeLinkedWorkspace(workspace, 'shop.dsl')).toBe(true)
   })
 })
 
@@ -219,6 +189,14 @@ describe('single-file mode, the other half of the patch', () => {
     expect(state.opened).toBe(0)
   })
 
+  it('skips the explicit Save command path too when the open file already holds the text', async () => {
+    const state = await openSingleFile('workspace "S" {}')
+    expect(await saveDSLFile('workspace "S" {}')).toBe(true)
+    expect(state.opened).toBe(0)
+    expect(await saveDSLFile('workspace "T" {}')).toBe(true)
+    expect(state.opened).toBe(1)
+  })
+
   it('writes when the open file differs', async () => {
     const state = await openSingleFile('workspace "S" {}')
     expect(await writeToCurrentHandle('workspace "T" {}')).toBe(true)
@@ -232,12 +210,15 @@ describe('the comparison is size-capped like every other read', () => {
   // skip a write would be a worse bug than the one being fixed. Past the cap
   // the read throws, and the throw means WRITE — never skip on a failed check.
   it('reports "not already has" for a file past the limit, so the write proceeds', async () => {
+    // Same size and same bytes as the candidate, so only the cap can say no.
+    const big = 'a'.repeat(MAX_FILE_SIZE + 1)
     const tooBig = {
-      size: 20 * 1024 * 1024,
-      text: async () => 'never reached',
+      size: big.length,
+      text: async () => big,
+      arrayBuffer: async () => new TextEncoder().encode(big).buffer,
     } as unknown as File
     const handle = { getFile: async () => tooBig } as unknown as FileSystemFileHandle
-    expect(await fileAlreadyHas(handle, 'never reached')).toBe(false)
+    expect(await fileAlreadyHas(handle, big)).toBe(false)
   })
 
   it('still compares normally under the limit', async () => {

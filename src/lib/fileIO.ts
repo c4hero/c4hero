@@ -135,12 +135,15 @@ export async function readCurrentFile(): Promise<WatchedSnapshot | null> {
 }
 
 /**
- * True when the file already holds exactly this text.
+ * True when the file already holds exactly the UTF-8 bytes of this text.
  *
  * Writing bytes that are already on disk is never necessary and is not free.
  * It bumps mtime, wakes every watcher on the folder, and — because the whole
  * workspace is serialised on any change to it — turns "open a diagram" into an
  * edit of the file that diagram came from. Comparing first costs one read.
+ *
+ * Bytes, not decoded text: decoding maps malformed UTF-8 to U+FFFD, so a
+ * decoded comparison can call two different files equal.
  *
  * Size-capped like every other read in this module: a file past the limit
  * throws rather than being pulled into memory, and the throw lands in the
@@ -153,19 +156,38 @@ export async function readCurrentFile(): Promise<WatchedSnapshot | null> {
 export async function fileAlreadyHas(handle: FileSystemFileHandle, content: string): Promise<boolean> {
   try {
     const existing = await handle.getFile()
-    // Cheap reject before any decode: text of a different byte length cannot be
-    // the same text. Most real comparisons end here.
-    //
-    // Encode rather than using `content.length`. That counts UTF-16 code units,
-    // not bytes, so any workspace containing a non-ASCII character — an em
-    // dash, a name with an accent — would never match its own file, and the
-    // skip would silently never engage for exactly the documents that have
-    // them. saveRoundTrip.test.ts guards this; do not "simplify" it away.
-    if (existing.size !== new TextEncoder().encode(content).byteLength) return false
-    return (await readTextFileWithLimit(existing, 'Existing file')) === content
+    // Cheap reject before reading: a different byte length cannot be the same
+    // bytes. Most real comparisons end here. `content.length` counts UTF-16
+    // code units, not bytes, so it would never match any non-ASCII workspace;
+    // saveRoundTrip.test.ts guards this.
+    const expected = new TextEncoder().encode(content)
+    if (existing.size !== expected.byteLength) return false
+    assertFileSize(existing, 'Existing file')
+    const actual = new Uint8Array(await existing.arrayBuffer())
+    for (let i = 0; i < expected.length; i++) if (actual[i] !== expected[i]) return false
+    return true
   } catch {
     return false
   }
+}
+
+/** Every check-then-write runs through this one queue. A File System Access
+ *  write only lands on close(), so a comparison that overlapped an earlier,
+ *  still-open write would read the bytes that write is about to replace —
+ *  and could skip a save that was needed (autosave overlapping Ctrl+S, or a
+ *  fire-and-forget `!include` write-back overlapping the next save). */
+let writeQueue: Promise<unknown> = Promise.resolve()
+
+/** Write `content` to `handle` unless the file already holds exactly it. */
+export function writeFileIfChanged(handle: FileSystemFileHandle, content: string): Promise<void> {
+  const run = writeQueue.then(async () => {
+    if (await fileAlreadyHas(handle, content)) return
+    const writable = await handle.createWritable()
+    await writable.write(content)
+    await writable.close()
+  })
+  writeQueue = run.catch(() => {})
+  return run
 }
 
 /** Write DSL content to the current file handle (for auto-save) */
@@ -173,10 +195,7 @@ export async function writeToCurrentHandle(content: string): Promise<boolean> {
   if (!currentFileHandle || !hasFileSystemAccess()) return false
   try {
     recordSelfDslWrite(content)
-    if (await fileAlreadyHas(currentFileHandle, content)) return true
-    const writable = await currentFileHandle.createWritable()
-    await writable.write(content)
-    await writable.close()
+    await writeFileIfChanged(currentFileHandle, content)
     return true
   } catch (err) {
     log.error('Failed to write to current file handle', err)
@@ -191,10 +210,7 @@ export async function writeSidecarToHandle(json: string): Promise<boolean> {
     recordSelfSidecarWrite(json)
     // If we have an existing sidecar handle, write to it
     if (currentSidecarHandle) {
-      if (await fileAlreadyHas(currentSidecarHandle, json)) return true
-      const writable = await currentSidecarHandle.createWritable()
-      await writable.write(json)
-      await writable.close()
+      await writeFileIfChanged(currentSidecarHandle, json)
       return true
     }
     // Otherwise try to create one in the same directory as the DSL file
@@ -204,9 +220,7 @@ export async function writeSidecarToHandle(json: string): Promise<boolean> {
         const dslFile = await currentFileHandle.getFile()
         const sidecarFileName = sidecarName(dslFile.name)
         currentSidecarHandle = await dirHandle.getFileHandle(sidecarFileName, { create: true })
-        const writable = await currentSidecarHandle.createWritable()
-        await writable.write(json)
-        await writable.close()
+        await writeFileIfChanged(currentSidecarHandle, json)
         return true
       }
     }
@@ -308,9 +322,7 @@ export async function saveDSLFile(content: string, suggestedName?: string): Prom
         })
       }
       recordSelfDslWrite(content)
-      const writable = await currentFileHandle.createWritable()
-      await writable.write(content)
-      await writable.close()
+      await writeFileIfChanged(currentFileHandle, content)
       return true
     } catch {
       // User cancelled save picker — not an error
