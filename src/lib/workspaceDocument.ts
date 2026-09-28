@@ -1,4 +1,4 @@
-import type { IncludedFile, PropertyDeclaration, Workspace, WorkspaceDirective } from '@/types/model'
+import type { IncludedFile, PropertyDeclaration, PropertyLayout, Workspace, WorkspaceDirective } from '@/types/model'
 import { parseDSL, type ParseError } from '@/lib/dsl'
 import { applySidecar, parseSidecar } from '@/lib/sidecar'
 import {
@@ -127,6 +127,33 @@ export function stitchWorkspaceDocument(
   }
   placeProperties(workspace.propertyDeclarations, ['workspace', 'workspaceProperties'])
   placeProperties(workspace.model.propertyDeclarations, ['model', 'modelProperties'])
+  // Same for element and relationship properties blocks that hold `!` lines.
+  const placeLayout = (layout: PropertyLayout | undefined) => {
+    if (!layout) return
+    const directiveLines = layout.directives.map((d) => {
+      const line = propertyLines.get(d)
+      const p = fileOf(line)
+      if (p) d.sourcePath = p
+      return line ?? 0
+    })
+    for (const decl of layout.declarations) {
+      const line = propertyLines.get(decl)
+      if (line === undefined) continue
+      const location = locateLine(resolved.segments, line)
+      if (location.path) decl.sourcePath = location.path
+      decl.sourceLine = location.line
+      decl.slot = layout.directives.filter((d, i) => d.sourcePath === decl.sourcePath && directiveLines[i] < line).length
+    }
+  }
+  for (const person of workspace.model.people) placeLayout(person.propertyLayout)
+  for (const sys of workspace.model.softwareSystems) {
+    placeLayout(sys.propertyLayout)
+    for (const c of sys.containers) {
+      placeLayout(c.propertyLayout)
+      for (const comp of c.components) placeLayout(comp.propertyLayout)
+    }
+  }
+  for (const rel of workspace.model.relationships) placeLayout(rel.propertyLayout)
   const themesPath = fileOf(themesLine)
   if (themesPath) workspace.views.configuration.themesSourcePath = themesPath
 
