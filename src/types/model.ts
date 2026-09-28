@@ -44,6 +44,8 @@ export interface BaseElement {
   /** `!` directive lines written inside this element's block (e.g. an
    *  `!include` of its containers). Preserved verbatim, re-emitted first. */
   directives?: string[]
+  /** See PropertyLayout. */
+  propertyLayout?: PropertyLayout
   /** Path (relative to the root workspace file) of the included file that
    *  declared this element. Absent for root-owned content. Never serialized
    *  into DSL; used to route writes and to mark read-only sources (TEA-325). */
@@ -152,6 +154,8 @@ export interface Relationship {
   url?: string
   tags: string[]
   properties: Record<string, string>
+  /** See PropertyLayout. */
+  propertyLayout?: PropertyLayout
   /** See BaseElement.sourcePath. */
   sourcePath?: string
 }
@@ -305,6 +309,25 @@ export interface PropertyDeclaration {
   sourceColumn?: number
   /** Set when the line came from an `!include`d file. */
   sourcePath?: string
+}
+
+/** A `!` line (e.g. `!include shared-props.dsl`) written inside an element's
+ *  or relationship's `properties { }` block. */
+export interface PropertyDirective {
+  raw: string
+  /** Set when the line came from an `!include`d file. */
+  sourcePath?: string
+}
+
+/** Where each line of an element's or relationship's `properties { }` blocks
+ *  was written, recorded when any of those blocks holds `!` lines. Those lines
+ *  are kept, and each property line keeps its position relative to them
+ *  (`slot` counts the directives before it in its file), so an included
+ *  value is neither lost nor copied into the root. Without `!` lines the
+ *  block is written from `properties` alone. */
+export interface PropertyLayout {
+  declarations: PropertyDeclaration[]
+  directives: PropertyDirective[]
 }
 
 // ─── Workspace ───────────────────────────────────────────────────────

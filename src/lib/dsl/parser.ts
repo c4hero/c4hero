@@ -5,6 +5,8 @@ import type {
     Workspace,
     WorkspaceDirective,
     PropertyDeclaration,
+    PropertyDirective,
+    PropertyLayout,
     Model,
     View,
     ElementInView,
@@ -139,8 +141,9 @@ export interface ParseResult {
     /** Source line per style object and of the `themes` line. */
     styleLines: Map<object, number>
     themesLine: number | undefined
-    /** Source line of each workspace- and model-level property declaration. */
-    propertyLines: Map<PropertyDeclaration, number>
+    /** Source line of each property declaration and properties-block
+     *  directive (workspace, model, element and relationship blocks). */
+    propertyLines: Map<PropertyDeclaration | PropertyDirective, number>
     /** Non-fatal notes: the model loaded, but something was preserved rather
      *  than understood (e.g. an unresolved `!include`). */
     warnings: ParseError[]
@@ -172,17 +175,17 @@ export function setUserProperty(props: Record<string, string>, key: string, valu
  * Read the entries of a `properties { }` block, stopping at its closing brace.
  * Keys and values may be quoted strings or bare words, as in Structurizr.
  * Every properties-block parser goes through this so the token rules cannot
- * drift apart. A `!` line inside the block goes to `onDirective`, or is
- * skipped without one; a key with no value goes to `onMissingValue`, or is
- * skipped without one.
+ * drift apart. A `!` line inside the block goes to `onDirective`, which is
+ * required so no caller can drop one unnoticed; a key with no value goes to
+ * `onMissingValue`, or is skipped without one.
  */
 export function readPropertyEntries(
     p: ContextAwareParser,
     onEntry: (key: string, value: string, token: Token) => void,
     opts: {
-        onDirective?: (token: Token) => void
+        onDirective: (token: Token) => void
         onMissingValue?: (key: string, token: Token) => void
-    } = {},
+    },
 ): void {
     const isBarePart = (t: Token) => t.type === 'IDENTIFIER' || t.type === 'NUMBER'
         || t.type === 'DOT' || t.type === 'EQUALS' || t.type === 'STAR' || t.type === 'ARROW'
@@ -209,10 +212,8 @@ export function readPropertyEntries(
         if (token.type === 'COMMENT') { p.advance(); continue }
         if (token.type === 'KEYWORD' && token.value.startsWith('!')) {
             p.advance()
-            if (opts.onDirective) {
-                opts.onDirective(token)
-                p.skipToNextLine()
-            }
+            opts.onDirective(token)
+            p.skipToNextLine()
             continue
         }
         const key = readWord()
@@ -221,6 +222,39 @@ export function readPropertyEntries(
         if (value !== undefined) onEntry(key, value, token)
         else opts.onMissingValue?.(key, token)
     }
+}
+
+/** Read and accumulate every properties block on a holder. Keep the layout
+ * on the model only once a directive appears, including earlier plain blocks. */
+export function readPropertyBlock(
+    p: ContextAwareParser,
+    holder: { propertyLayout?: PropertyLayout },
+    onEntry: (key: string, value: string) => void,
+): void {
+    let pending = p.propertyLayouts.get(holder)
+    if (!pending) {
+        pending = { layout: { declarations: [], directives: [] }, lines: [] }
+        p.propertyLayouts.set(holder, pending)
+    }
+    const { layout, lines } = pending
+    readPropertyEntries(p, (key, value, token) => {
+        onEntry(key, value)
+        const declaration: PropertyDeclaration = {
+            key, value, slot: layout.directives.length, sourceLine: token.line, sourceColumn: token.column,
+        }
+        layout.declarations.push(declaration)
+        lines.push([declaration, token.line])
+    }, {
+        onDirective: (token) => {
+            const directive: PropertyDirective = { raw: token.value.trim() }
+            layout.directives.push(directive)
+            lines.push([directive, token.line])
+        },
+    })
+    if (layout.directives.length === 0) return
+    holder.propertyLayout = layout
+    for (const [item, line] of lines) p.propertyLines.set(item, line)
+    lines.length = 0
 }
 
 export class ContextAwareParser {
@@ -237,8 +271,13 @@ export class ContextAwareParser {
     /** Source line per parsed style object and of the `themes` line. */
     styleLines = new Map<object, number>()
     themesLine: number | undefined
-    /** Source line of each workspace- and model-level property declaration. */
-    propertyLines = new Map<PropertyDeclaration, number>()
+    /** See ParseResult.propertyLines. */
+    propertyLines = new Map<PropertyDeclaration | PropertyDirective, number>()
+    /** Parse-only history: plain blocks may precede a block with directives. */
+    propertyLayouts = new WeakMap<object, {
+        layout: PropertyLayout
+        lines: [PropertyDeclaration | PropertyDirective, number][]
+    }>()
     /** Last element / environment / group declared in the model block being
      *  parsed — the anchor a following `!` directive is re-emitted after.
      *  Reset on entering a group body (see parseModelBody). */

@@ -319,7 +319,7 @@ function isBaseElementShape(value: unknown): value is Record<string, unknown> {
   if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
   if ('status' in value && value.status !== undefined && !isElementStatusValue(value.status)) return false
   if ('owner' in value && value.owner !== undefined && typeof value.owner !== 'string') return false
-  return true
+  return isPropertyLayoutShape(value)
 }
 
 function isComponentShape(value: unknown): boolean {
@@ -357,7 +357,7 @@ function isRelationshipShape(value: unknown): boolean {
   if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
   if ('interactionStyle' in value && value.interactionStyle !== undefined && !['Synchronous', 'Asynchronous'].includes(String(value.interactionStyle))) return false
   if ('lineStyle' in value && value.lineStyle !== undefined && !['Curved', 'Straight', 'Orthogonal'].includes(String(value.lineStyle))) return false
-  return true
+  return isPropertyLayoutShape(value)
 }
 
 function isViewElementShape(value: unknown): boolean {
@@ -413,17 +413,29 @@ function isRelationshipStyleShape(value: unknown): boolean {
   })
 }
 
-/** Workspace- or model-level `properties` plus their line provenance. */
-function isScopedPropertiesShape(holder: Record<string, unknown>): boolean {
-  if (holder.properties !== undefined && !isStringRecord(holder.properties)) return false
-  const decls = holder.propertyDeclarations
-  return decls === undefined || (Array.isArray(decls) && decls.every(d =>
+function isPropertyDeclarationsShape(decls: unknown): boolean {
+  return Array.isArray(decls) && decls.every(d =>
     isRecord(d) && typeof d.key === 'string' && typeof d.value === 'string'
     && Number.isInteger(d.slot) && Number(d.slot) >= 0
     && (d.sourcePath === undefined || typeof d.sourcePath === 'string')
     && (d.sourceLine === undefined || (Number.isInteger(d.sourceLine) && Number(d.sourceLine) > 0))
     && (d.sourceColumn === undefined || (Number.isInteger(d.sourceColumn) && Number(d.sourceColumn) > 0))
-  ))
+  )
+}
+
+/** Workspace- or model-level `properties` plus their line provenance. */
+function isScopedPropertiesShape(holder: Record<string, unknown>): boolean {
+  if (holder.properties !== undefined && !isStringRecord(holder.properties)) return false
+  return holder.propertyDeclarations === undefined || isPropertyDeclarationsShape(holder.propertyDeclarations)
+}
+
+/** An element's or relationship's optional PropertyLayout. */
+function isPropertyLayoutShape(value: Record<string, unknown>): boolean {
+  const layout = value.propertyLayout
+  if (layout === undefined) return true
+  return isRecord(layout) && isPropertyDeclarationsShape(layout.declarations)
+    && Array.isArray(layout.directives) && layout.directives.every(d =>
+      isRecord(d) && typeof d.raw === 'string' && (d.sourcePath === undefined || typeof d.sourcePath === 'string'))
 }
 
 /** Runtime schema check for imported workspace JSON. */

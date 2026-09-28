@@ -314,6 +314,35 @@ describe('workspace and model properties (PR #220 review)', () => {
     expect(saved).toContain('"team" "platform"')
     expect(parseDSL(saved).errors).toEqual([])
   })
+
+  const nested = (separator: string, inner = 'B') => `workspace {
+      model {
+        properties {
+          "structurizr.groupSeparator" "${separator}"
+        }
+        group "A" {
+          group "${inner}" {
+            s = softwareSystem "S"
+          }
+        }
+      }
+      views {}
+    }`
+
+  it('keeps a custom group separator with nested groups (TEA-349)', () => {
+    const workspace = parseDSL(nested('|')).workspace
+    const saved = serializeDSL(workspace)
+    expect(saved.match(/structurizr\.groupSeparator/g)).toHaveLength(1)
+    expect(saved).toContain('"structurizr.groupSeparator" "|"')
+    expect(serializeDSL(parseDSL(saved).workspace)).toBe(saved)
+  })
+
+  it('rejects a nested group name containing the custom separator (TEA-349)', () => {
+    const { workspace } = parseDSL(nested('|', 'B|C'))
+    expect(() => serializeDSL(workspace)).toThrow(/separator "\|"/)
+    // The default separator is no longer the one in force.
+    expect(() => serializeDSL(parseDSL(nested('|', 'B/C')).workspace)).not.toThrow()
+  })
 })
 
 it.each([
