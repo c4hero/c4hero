@@ -65,6 +65,99 @@ function makeDirHandle(files: Record<string, string> = {}): FileSystemDirectoryH
   } as unknown as FileSystemDirectoryHandle
 }
 
+/** A directory whose files remember their content and count how many times a
+ *  writable was opened on them, so a test can assert that a write did NOT
+ *  happen rather than only that the end state looks right. */
+function makeCountingDirHandle(files: Record<string, string> = {}) {
+  const content: Record<string, string> = { ...files }
+  const opened: Record<string, number> = {}
+  const handleFor = (name: string) => ({
+    kind: 'file' as const,
+    name,
+    getFile: async () => new File([content[name] ?? ''], name, { type: 'text/plain' }),
+    createWritable: async () => {
+      opened[name] = (opened[name] ?? 0) + 1
+      let buf = ''
+      return { write: (d: string) => { buf += d }, close: async () => { content[name] = buf } }
+    },
+  })
+  const dir = {
+    kind: 'directory',
+    name: 'testfolder',
+    entries: async function* () { for (const n of Object.keys(content)) yield [n, handleFor(n)] },
+    getFileHandle: async (name: string, opts?: { create?: boolean }) => {
+      if (name in content) return handleFor(name)
+      if (opts?.create) { content[name] = ''; return handleFor(name) }
+      throw new DOMException('Not found', 'NotFoundError')
+    },
+    queryPermission: async () => 'granted' as PermissionState,
+  } as unknown as FileSystemDirectoryHandle
+  return { dir, content, opened }
+}
+
+describe('writers skip content that is already on disk', () => {
+  // Writing bytes a file already holds is never necessary and is not free: it
+  // bumps mtime and wakes every watcher on the folder. Because the whole
+  // workspace is re-serialised whenever the workspace object changes — which
+  // includes merely LOADING one — an ungated writer turns "open a diagram"
+  // into an edit of the file that diagram came from. That is what makes two
+  // c4hero tabs on one folder two writers instead of one writer and a reader.
+
+  it('does not open a writable when the DSL file already holds exactly this text', async () => {
+    const { dir, opened } = makeCountingDirHandle({ 'w.dsl': 'workspace "W" {}' })
+    await setDirHandle(dir)
+    expect(await writeDSLFile('w.dsl', 'workspace "W" {}')).toBe(true)
+    expect(opened['w.dsl']).toBeUndefined()
+  })
+
+  it('still writes when the DSL differs by a single character', async () => {
+    const { dir, opened, content } = makeCountingDirHandle({ 'w.dsl': 'workspace "W" {}' })
+    await setDirHandle(dir)
+    expect(await writeDSLFile('w.dsl', 'workspace "X" {}')).toBe(true)
+    expect(opened['w.dsl']).toBe(1)
+    expect(content['w.dsl']).toBe('workspace "X" {}')
+  })
+
+  it('writes a DSL file that does not exist yet', async () => {
+    const { dir, opened, content } = makeCountingDirHandle()
+    await setDirHandle(dir)
+    expect(await writeDSLFile('new.dsl', 'workspace "N" {}')).toBe(true)
+    expect(opened['new.dsl']).toBe(1)
+    expect(content['new.dsl']).toBe('workspace "N" {}')
+  })
+
+  it('skips an unchanged sidecar but writes a changed one — the layout half of a save', async () => {
+    const same = JSON.stringify({ version: 1, views: {} })
+    const { dir, opened } = makeCountingDirHandle({ 'w.c4hero.json': same })
+    await setDirHandle(dir)
+    expect(await writeSidecarFile('w.dsl', same)).toBe(true)
+    expect(opened['w.c4hero.json']).toBeUndefined()
+
+    const moved = JSON.stringify({ version: 1, views: { Ctx: { elements: { a: { x: 10, y: 20 } } } } })
+    expect(await writeSidecarFile('w.dsl', moved)).toBe(true)
+    expect(opened['w.c4hero.json']).toBe(1)
+  })
+
+  it('writes when the existing file cannot be read, rather than assuming it matches', async () => {
+    const { dir, opened } = makeCountingDirHandle({ 'w.dsl': 'x' })
+    const broken = {
+      ...dir,
+      getFileHandle: async (name: string) => ({
+        kind: 'file' as const,
+        name,
+        getFile: async () => { throw new Error('unreadable') },
+        createWritable: async () => {
+          opened[name] = (opened[name] ?? 0) + 1
+          return { write: vi.fn(), close: vi.fn() }
+        },
+      }),
+    } as unknown as FileSystemDirectoryHandle
+    await setDirHandle(broken)
+    expect(await writeDSLFile('w.dsl', 'anything')).toBe(true)
+    expect(opened['w.dsl']).toBe(1)
+  })
+})
+
 // ─── hasFolderAccess ─────────────────────────────────────────────────
 
 describe('hasFolderAccess()', () => {

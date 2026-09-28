@@ -1,6 +1,6 @@
 import { sidecarName } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
-import { readTextFileWithLimit } from '@/lib/fileIO'
+import { fileAlreadyHas, readTextFileWithLimit } from '@/lib/fileIO'
 import { isRecord } from '@/lib/guards'
 import { recordSelfDslWrite, recordSelfSidecarWrite } from '@/lib/saveCoordinator'
 import type { WatchedSnapshot } from '@/lib/fileWatch'
@@ -159,6 +159,7 @@ export async function writeDSLFileAt(relPath: string, content: string): Promise<
     const handle = await resolveFileHandle(relPath, false)
     if (!handle) return false
     recordSelfDslWrite(content)
+    if (await fileAlreadyHas(handle, content)) return true
     const writable = await handle.createWritable()
     await writable.write(content)
     await writable.close()
@@ -305,6 +306,7 @@ export async function writeDSLFile(filename: string, content: string): Promise<b
   try {
     recordSelfDslWrite(content)
     const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true })
+    if (await fileAlreadyHas(fileHandle, content)) return true
     const writable = await fileHandle.createWritable()
     await writable.write(content)
     await writable.close()
@@ -322,6 +324,7 @@ export async function writeSidecarFile(dslFilename: string, json: string): Promi
     const filename = sidecarName(dslFilename)
     recordSelfSidecarWrite(json)
     const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true })
+    if (await fileAlreadyHas(fileHandle, json)) return true
     const writable = await fileHandle.createWritable()
     await writable.write(json)
     await writable.close()
@@ -366,6 +369,7 @@ export async function writeTextFileAt(relPath: string, content: string): Promise
   try {
     const handle = await resolveFileHandle(relPath, true)
     if (!handle) return false
+    if (await fileAlreadyHas(handle, content)) return true
     const writable = await handle.createWritable()
     await writable.write(content)
     await writable.close()

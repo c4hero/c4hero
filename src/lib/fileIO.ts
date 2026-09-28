@@ -134,11 +134,46 @@ export async function readCurrentFile(): Promise<WatchedSnapshot | null> {
   return { content, sidecarJson }
 }
 
+/**
+ * True when the file already holds exactly this text.
+ *
+ * Writing bytes that are already on disk is never necessary and is not free.
+ * It bumps mtime, wakes every watcher on the folder, and — because the whole
+ * workspace is serialised on any change to it — turns "open a diagram" into an
+ * edit of the file that diagram came from. Comparing first costs one read.
+ *
+ * Size-capped like every other read in this module: a file past the limit
+ * throws rather than being pulled into memory, and the throw lands in the
+ * catch below.
+ *
+ * Any failure reading falls through to writing. Never skip a write because a
+ * check went wrong — a redundant write costs an mtime, a wrongly skipped one
+ * costs the edit.
+ */
+export async function fileAlreadyHas(handle: FileSystemFileHandle, content: string): Promise<boolean> {
+  try {
+    const existing = await handle.getFile()
+    // Cheap reject before any decode: text of a different byte length cannot be
+    // the same text. Most real comparisons end here.
+    //
+    // Encode rather than using `content.length`. That counts UTF-16 code units,
+    // not bytes, so any workspace containing a non-ASCII character — an em
+    // dash, a name with an accent — would never match its own file, and the
+    // skip would silently never engage for exactly the documents that have
+    // them. saveRoundTrip.test.ts guards this; do not "simplify" it away.
+    if (existing.size !== new TextEncoder().encode(content).byteLength) return false
+    return (await readTextFileWithLimit(existing, 'Existing file')) === content
+  } catch {
+    return false
+  }
+}
+
 /** Write DSL content to the current file handle (for auto-save) */
 export async function writeToCurrentHandle(content: string): Promise<boolean> {
   if (!currentFileHandle || !hasFileSystemAccess()) return false
   try {
     recordSelfDslWrite(content)
+    if (await fileAlreadyHas(currentFileHandle, content)) return true
     const writable = await currentFileHandle.createWritable()
     await writable.write(content)
     await writable.close()
@@ -156,6 +191,7 @@ export async function writeSidecarToHandle(json: string): Promise<boolean> {
     recordSelfSidecarWrite(json)
     // If we have an existing sidecar handle, write to it
     if (currentSidecarHandle) {
+      if (await fileAlreadyHas(currentSidecarHandle, json)) return true
       const writable = await currentSidecarHandle.createWritable()
       await writable.write(json)
       await writable.close()
