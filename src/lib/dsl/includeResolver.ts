@@ -45,7 +45,7 @@ export interface ResolveIncludesResult {
   /** Every included file, in first-inclusion order (root excluded). */
   files: string[]
   /** For each included file: the block scope it was included into. */
-  scopes: Map<string, 'workspace' | 'model' | 'views' | 'element'>
+  scopes: Map<string, IncludeScope>
   segments: SourceSegment[]
   errors: ResolveError[]
   /** `!include` lines left in place because they point at something out of
@@ -85,9 +85,13 @@ function dirOf(path: string): string {
   return i === -1 ? '' : path.slice(0, i)
 }
 
+/** The block an `!include` line sits in. `properties` is any `properties { }`
+ *  block; `element` is any other nested block. */
+export type IncludeScope = 'workspace' | 'model' | 'views' | 'properties' | 'element'
+
 /** Track which block an `!include` sits in by counting braces on the lines
  *  before it. Good enough for the well-formed files Structurizr accepts. */
-function scopeAt(lines: string[], upto: number): 'workspace' | 'model' | 'views' | 'element' {
+function scopeAt(lines: string[], upto: number): IncludeScope {
   const stack: string[] = []
   const opener = /^\s*(?:[A-Za-z_][\w.]*\s*=\s*)?([A-Za-z!][\w]*)\b[^{]*\{\s*$/
   for (let i = 0; i < upto; i++) {
@@ -106,6 +110,7 @@ function scopeAt(lines: string[], upto: number): 'workspace' | 'model' | 'views'
   if (top === 'workspace' || stack.length === 0) return 'workspace'
   if (top === 'model') return 'model'
   if (top === 'views') return 'views'
+  if (top === 'properties') return 'properties'
   return 'element'
 }
 
@@ -181,7 +186,7 @@ export function resolveIncludesSync(root: string, opts: ResolveIncludesSyncOptio
   const errors: ResolveError[] = []
   const unresolved: ResolveIncludesResult['unresolved'] = []
   const files: string[] = []
-  const scopes = new Map<string, 'workspace' | 'model' | 'views' | 'element'>()
+  const scopes = new Map<string, IncludeScope>()
   let totalBytes = root.length
   let budgetBlown = false
 

@@ -32,7 +32,7 @@ A more detailed reference for what c4hero ships. The README is the elevator pitc
 
 ## Editing UX
 
-- **Inspector** (right panel) for element and relationship properties: name, description, technology, owner (with autocomplete from existing teams), URL, status, tags.
+- **Inspector** (right panel) for element and relationship properties: name, description, technology, owner (with autocomplete from existing teams), URL, status, tags. Status offers the four built-in lifecycle values (`Live`, `Planned`, `Deprecated`, `Removed`) plus any extras declared under **Custom statuses** in canvas settings and any the open workspace already uses — c4hero's status axis is its own (neither C4 nor Structurizr has a lifecycle concept), so the vocabulary is not closed.
 - **Add Element panel** (left): quick-create new elements or pull existing-but-out-of-view elements onto the canvas. Auto-wires relationships from the model on add.
 - **Multi-select** mode (M) for batch operations: group, delete, duplicate.
 - **Removal impact** — before you delete anything, see exactly what goes with it:

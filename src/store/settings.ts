@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { isRecord } from '@/lib/guards'
 import { readJSON, writeJSON } from '@/lib/safeStorage'
+import { parseCustomStatuses } from '@/lib/elementStatus'
+import type { ElementStatus } from '@/types/model'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -26,6 +28,14 @@ export interface AppSettings {
   snapToGrid: boolean
   colorTheme: ColorTheme
   canvasGuideDismissed: boolean
+  /** Lifecycle statuses this user added to the four built-ins, in the order they
+   *  should appear. c4hero's status axis is its own — not C4's, not
+   *  Structurizr's — and the built-ins cannot express every lifecycle position a
+   *  team needs, so the vocabulary is user-extensible. Stored here rather than in
+   *  the workspace because it is a vocabulary preference, not model content; a
+   *  status a *file* uses is picked up from the file itself (see
+   *  `elementStatusVocabulary`), so nothing depends on this list being right. */
+  customStatuses: ElementStatus[]
 }
 
 const DEFAULTS: AppSettings = {
@@ -36,6 +46,7 @@ const DEFAULTS: AppSettings = {
   snapToGrid: false,
   colorTheme: 'readability',
   canvasGuideDismissed: false,
+  customStatuses: [],
 }
 
 const STORAGE_KEY = 'c4hero.json'
@@ -77,6 +88,11 @@ function normalizeSettings(value: unknown): AppSettings {
     snapToGrid: readBoolean(source, 'snapToGrid', DEFAULTS.snapToGrid),
     colorTheme: isColorTheme(source.colorTheme) ? source.colorTheme : DEFAULTS.colorTheme,
     canvasGuideDismissed: readBoolean(source, 'canvasGuideDismissed', DEFAULTS.canvasGuideDismissed),
+    // Re-normalize on read: persisted storage is untrusted input, and this
+    // drops blanks, built-in duplicates and anything over the length cap.
+    customStatuses: Array.isArray(source.customStatuses)
+      ? parseCustomStatuses(source.customStatuses.filter((v): v is string => typeof v === 'string').join('\n'))
+      : DEFAULTS.customStatuses,
   }
 }
 

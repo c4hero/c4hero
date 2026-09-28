@@ -1,7 +1,7 @@
 import type { Workspace, ElementStatus, ViewType } from '@/types/model'
 import type { EditOp, EditPlan } from './types'
 import { elementNameMap, flattenElements } from './context'
-import { ELEMENT_STATUS_VALUES } from './schema'
+import { normalizeElementStatus } from '@/lib/elementStatus'
 
 // Apply an AI-produced EditPlan against the workspace store. The applier is
 // decoupled from zustand via the EditActions interface so it can be unit-tested
@@ -64,10 +64,11 @@ function optStr(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined
 }
 
-/** Validate an AI-proposed status against the enum, dropping anything invalid so
- *  a bogus value never reaches the store. */
+/** Validate an AI-proposed status, dropping anything unusable so a bogus value
+ *  never reaches the store. The vocabulary is open, so this bounds the shape
+ *  (non-blank, single-line, capped) rather than checking membership. */
 function optStatus(v: unknown): ElementStatus | undefined {
-  return typeof v === 'string' && ELEMENT_STATUS_VALUES.has(v) ? (v as ElementStatus) : undefined
+  return normalizeElementStatus(v)
 }
 
 /** Merge AI-proposed category tags into an element's existing tags. Additive by

@@ -102,6 +102,7 @@ describe('useSettingsStore', () => {
       snapToGrid: true,
       colorTheme: 'structurizr',
       canvasGuideDismissed: true,
+      customStatuses: ['Beyond MVP'],
     }))
 
     const freshStore = await importFreshSettingsStore()
@@ -112,6 +113,7 @@ describe('useSettingsStore', () => {
       snapToGrid: true,
       colorTheme: 'structurizr',
       canvasGuideDismissed: true,
+      customStatuses: ['Beyond MVP'],
     })
   })
 
@@ -140,5 +142,19 @@ describe('useSettingsStore', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(['not', 'settings']))
     const freshStore = await importFreshSettingsStore()
     expect(freshStore.getState()).toMatchObject(RESET_DEFAULTS)
+  })
+
+  it('normalizes persisted customStatuses, dropping blanks and built-ins', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      customStatuses: ['Beyond MVP', '', 'Live', 'Beyond MVP', 42, 'Someday / maybe'],
+    }))
+    const freshStore = await importFreshSettingsStore()
+    expect(freshStore.getState().customStatuses).toEqual(['Beyond MVP', 'Someday / maybe'])
+  })
+
+  it('defaults customStatuses to empty when persisted storage has the wrong shape', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ customStatuses: 'Beyond MVP' }))
+    const freshStore = await importFreshSettingsStore()
+    expect(freshStore.getState().customStatuses).toEqual([])
   })
 })

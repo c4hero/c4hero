@@ -4,17 +4,13 @@ import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
+import { isElementStatusValue, normalizeElementStatus } from '@/lib/elementStatus'
 
 function cloneZoomLayout(layout: NonNullable<Workspace['exploreLayout']>) {
   return structuredClone(isDraft(layout) ? current(layout) : layout)
 }
 
-const VALID_STATUSES: ReadonlySet<string> = new Set<ElementStatus>(['Live', 'Planned', 'Deprecated', 'Removed'])
 const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
-
-function isValidStatus(v: unknown): v is ElementStatus {
-  return typeof v === 'string' && VALID_STATUSES.has(v)
-}
 
 function isValidLineStyle(v: unknown): v is LineStyle {
   return typeof v === 'string' && VALID_LINE_STYLES.has(v)
@@ -51,7 +47,7 @@ export interface SidecarData {
 
 function isSidecarElement(value: unknown): value is SidecarElement {
   if (!isRecord(value)) return false
-  if ('status' in value && value.status !== undefined && !isValidStatus(value.status)) return false
+  if ('status' in value && value.status !== undefined && !isElementStatusValue(value.status)) return false
   if ('owner' in value && value.owner !== undefined && typeof value.owner !== 'string') return false
   return true
 }
@@ -166,7 +162,8 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       // DSL is the authoritative source; sidecar is a migration fallback for files
       // written before status/owner were serialized in the DSL.
       const applyProps = (el: { status?: ElementStatus; owner?: string }) => {
-        if (el.status === undefined && isValidStatus(data.status)) el.status = data.status
+        const status = normalizeElementStatus(data.status)
+        if (el.status === undefined && status !== undefined) el.status = status
         if (el.owner === undefined && typeof data.owner === 'string') el.owner = data.owner
       }
       // People

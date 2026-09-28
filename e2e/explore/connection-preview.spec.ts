@@ -15,9 +15,11 @@ for (const [parent, from, to] of [
       await page.getByRole('button', { name: 'Zoom', exact: true }).click()
       await page.locator('[data-semantic-zoom="true"]').evaluate((el, id) => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.focus(id), parent)
     }
-    await page.waitForTimeout(400)
     const source = page.locator(`.react-flow__node[data-id="${from}"] [data-handleid="bottom-b-source"]`)
     const target = page.locator(`.react-flow__node[data-id="${to}"] [data-handleid="top-b-target"]`)
+    // Wait for the source to be stable and receive pointer events before
+    // measuring the focused layout; a fixed delay can capture stale positions.
+    await source.hover()
     const a = (await source.boundingBox())!, b = (await target.boundingBox())!
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
     await page.mouse.down()

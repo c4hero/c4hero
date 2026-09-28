@@ -19,12 +19,15 @@ import type {
     DeploymentEnvironment,
     DeploymentNode,
     InfrastructureNode,
+    PropertyDeclaration,
+    WorkspaceDirective,
 } from '@/types/model'
 import { dslIdentifierForm } from '@/lib/identifier'
 import { representable } from './encoding'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
+const GROUP_SEPARATOR_KEY = 'structurizr.groupSeparator'
 
 interface ScopedGroup<T extends ModelElement> {
     group: Group
@@ -65,7 +68,7 @@ export interface SerializeOptions {
 export function serialize(workspace: Workspace, opts: SerializeOptions = {}): string {
     if (opts.source === undefined) return new SerializerContext(workspace).serialize()
     const filtered = filterBySource(workspace, opts.source)
-    const ctx = new SerializerContext(filtered, workspace)
+    const ctx = new SerializerContext(filtered, workspace, opts.source)
     return opts.source === null ? ctx.serialize() : ctx.serializeFragment()
 }
 
@@ -110,6 +113,51 @@ function filterBySource(ws: Workspace, source: string | null): Workspace {
     }
 }
 
+/**
+ * The workspace- or model-level property lines to write for `source`
+ * (`undefined` = every file, `null` = the root). Each line recorded for that
+ * file is kept in place; the line that supplies a key's effective value takes
+ * its current value, so an edit lands where the key was written, while an
+ * earlier line another file overrides is written back unchanged. A key no line
+ * supplies (added since load) goes at the end of the root; a key no longer in
+ * `props` is removed with all its lines.
+ */
+function propertyLinesFor(
+    props: Record<string, string> | undefined,
+    declarations: PropertyDeclaration[] | undefined,
+    source: string | null | undefined,
+): PropertyDeclaration[] {
+    if (!props) return []
+    const last = new Map<string, PropertyDeclaration>()
+    for (const d of declarations ?? []) last.set(d.key, d)
+    // Include expansion may visit the same physical property line more than
+    // once. Write that line only once, using its final occurrence so edits to
+    // the effective value still reach the correct file. Distinct duplicate
+    // lines in the original file must remain distinct.
+    const sourceLocation = (d: PropertyDeclaration): string | undefined =>
+        d.sourceLine !== undefined && d.sourceColumn !== undefined
+            ? JSON.stringify([d.sourcePath ?? null, d.sourceLine, d.sourceColumn]) : undefined
+    const finalOccurrence = new Map<string, PropertyDeclaration>()
+    for (const d of declarations ?? []) {
+        const location = sourceLocation(d)
+        if (location !== undefined) finalOccurrence.set(location, d)
+    }
+    const lines: PropertyDeclaration[] = []
+    for (const d of declarations ?? []) {
+        if (source !== undefined && (d.sourcePath ?? null) !== source) continue
+        if (!Object.hasOwn(props, d.key)) continue
+        const location = sourceLocation(d)
+        if (source !== undefined && location !== undefined && finalOccurrence.get(location) !== d) continue
+        lines.push(last.get(d.key) === d ? { ...d, value: props[d.key] } : d)
+    }
+    if (source == null) {
+        for (const [key, value] of Object.entries(props)) {
+            if (!last.has(key)) lines.push({ key, value, slot: Number.POSITIVE_INFINITY })
+        }
+    }
+    return lines
+}
+
 // ─── Serializer Context ─────────────────────────────────────────────
 
 class SerializerContext {
@@ -127,11 +175,17 @@ class SerializerContext {
     private containerGroups = new Map<string, GroupScope<Container>>()
     private componentGroups = new Map<string, GroupScope<Component>>()
     private hasNestedGroups = false
+    private workspacePropertyLines: PropertyDeclaration[]
+    private modelPropertyLines: PropertyDeclaration[]
 
     /** `idSource` supplies the identifier maps when `workspace` is a filtered
      *  view of a larger model, so cross-file references still resolve. */
-    constructor(workspace: Workspace, idSource: Workspace = workspace) {
+    constructor(workspace: Workspace, idSource: Workspace = workspace, source?: string | null) {
         this.workspace = workspace
+        // Ownership of a property line depends on every file's lines, so this
+        // reads the unfiltered workspace.
+        this.workspacePropertyLines = propertyLinesFor(idSource.properties, idSource.propertyDeclarations, source)
+        this.modelPropertyLines = propertyLinesFor(idSource.model.properties, idSource.model.propertyDeclarations, source)
         this.buildIdMaps(idSource)
         this.topLevelGroups = this.buildGroupScope(
             [...workspace.model.people, ...workspace.model.softwareSystems],
@@ -536,7 +590,7 @@ class SerializerContext {
         this.emit(parts.join(' ') + ' {')
         this.depth++
 
-        if (this.emitDirectives('workspace')) this.emitBlank()
+        if (this.emitPropertyLines(this.workspacePropertyLines, ['workspace', 'workspaceProperties'])) this.emitBlank()
 
         this.emitBlank()
         this.serializeModel()
@@ -568,17 +622,59 @@ class SerializerContext {
 
     // ─── Model ──────────────────────────────────────────────────────
 
+    /**
+     * Write workspace- or model-level property lines interleaved with that
+     * block kind's preserved directives, each line at its recorded `slot`, so
+     * an `!include` that sets a property keeps its place relative to the
+     * lines it overrides or is overridden by. Directives of the `…Properties`
+     * scope go inside a `properties { }` block, the rest outside it; adjacent
+     * lines share one block. Returns true if anything was written.
+     */
+    private emitPropertyLines(
+        lines: PropertyDeclaration[], scopes: WorkspaceDirective['scope'][],
+        directives = (this.workspace.directives ?? []).filter((d) => scopes.includes(d.scope)),
+    ): boolean {
+        let open = false
+        let any = false
+        const setOpen = (want: boolean) => {
+            if (want === open) return
+            if (want) { this.emit('properties {'); this.depth++ } else { this.depth--; this.emit('}') }
+            open = want
+        }
+        for (let i = 0; i <= directives.length; i++) {
+            for (const line of lines) {
+                if (Math.min(line.slot, directives.length) !== i) continue
+                // Structurizr rejects `"key" ""` and a nameless property; see
+                // serializeProperties.
+                const key = this.escapeString(line.key)
+                const value = this.escapeString(line.value)
+                if (key.length === 0 || value.length === 0) continue
+                setOpen(true)
+                this.emit(`"${key}" "${value}"`)
+                any = true
+            }
+            const directive = directives[i]
+            if (!directive) break
+            setOpen(directive.scope.endsWith('Properties'))
+            this.emit(directive.raw)
+            any = true
+        }
+        setOpen(false)
+        return any
+    }
+
     /** Re-emit preserved `!` lines for one block, verbatim and in original
      *  order. Model-scope lines that were written after a declaration (or
      *  inside a group) are held back for `emitDirectivesAfter` /
      *  `emitGroupDirectives` so their single-pass ordering survives; the rest
      *  go ahead of any generated content. Returns true if any were written. */
-    private emitDirectives(scope: 'workspace' | 'model' | 'views'): boolean {
+    private emitDirectives(scope: 'model' | 'views'): boolean {
         let any = false
         for (const d of this.workspace.directives ?? []) {
-            if (d.scope !== scope) continue
+            if (d.scope !== scope && !(scope === 'model' && d.scope === 'modelProperties')) continue
             if (scope === 'model' && (d.after || d.groupId)) continue
-            this.emit(d.raw)
+            if (scope === 'model') this.emitModelDirective(d)
+            else this.emit(d.raw)
             any = true
         }
         return any
@@ -588,7 +684,7 @@ class SerializerContext {
      *  environment or group that has just been emitted). */
     private emitDirectivesAfter(id: string): void {
         for (const d of this.workspace.directives ?? []) {
-            if (d.scope === 'model' && d.after === id) this.emit(d.raw)
+            if ((d.scope === 'model' || d.scope === 'modelProperties') && d.after === id) this.emitModelDirective(d)
         }
     }
 
@@ -596,9 +692,21 @@ class SerializerContext {
     private emitGroupDirectives(groupId: string): boolean {
         let any = false
         for (const d of this.workspace.directives ?? []) {
-            if (d.scope === 'model' && d.groupId === groupId && !d.after) { this.emit(d.raw); any = true }
+            if ((d.scope === 'model' || d.scope === 'modelProperties') && d.groupId === groupId && !d.after) { this.emitModelDirective(d); any = true }
         }
         return any
+    }
+
+    /** Model includes can be anchored after an element/group. Emit each
+     *  property's slot immediately after its preceding directive at that
+     *  anchor, rather than moving every property to the model's beginning. */
+    private emitModelDirective(directive: WorkspaceDirective): void {
+        const directives = (this.workspace.directives ?? []).filter(d => d.scope === 'model' || d.scope === 'modelProperties')
+        const slot = directives.indexOf(directive) + 1
+        const lines = this.modelPropertyLines
+            .filter(line => Math.min(line.slot, directives.length) === slot)
+            .map(line => ({ ...line, slot: 1 }))
+        this.emitPropertyLines(lines, [], [directive])
     }
 
     private serializeModel(): void {
@@ -607,10 +715,20 @@ class SerializerContext {
 
         const model = this.workspace.model
 
+        if (this.hasNestedGroups) {
+            this.modelPropertyLines = this.modelPropertyLines.filter(line => line.key !== GROUP_SEPARATOR_KEY)
+        }
+        const directives = (this.workspace.directives ?? []).filter(d => d.scope === 'model' || d.scope === 'modelProperties')
+        const initialLines = this.modelPropertyLines
+            .filter(line => Math.min(line.slot, directives.length) === 0)
+            .map(line => ({ ...line, slot: 0 }))
+        if (this.emitPropertyLines(initialLines, [])) this.emitBlank()
         if (this.emitDirectives('model')) this.emitBlank()
 
+        // Nested group names use our separator, overriding the source value
+        // before emitting any groups.
         if (this.hasNestedGroups) {
-            this.serializeProperties({ 'structurizr.groupSeparator': GROUP_SEPARATOR })
+            this.serializeProperties({ [GROUP_SEPARATOR_KEY]: GROUP_SEPARATOR })
             this.emitBlank()
         }
 

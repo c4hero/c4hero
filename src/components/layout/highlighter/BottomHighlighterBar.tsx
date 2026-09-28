@@ -7,13 +7,8 @@ import { useWorkspaceStore, getActiveView, buildElementMap } from '@/store/works
 import type { ElementStatus } from '@/types/model'
 import type { HighlighterFacet } from '@/store/workspace-types'
 import TagManagerDialog from './TagManagerDialog'
-
-const STATUS_COLORS: Record<ElementStatus, string> = {
-  Live: 'var(--color-status-live)',
-  Planned: 'var(--color-status-planned)',
-  Deprecated: 'var(--color-status-deprecated)',
-  Removed: 'var(--color-status-removed)',
-}
+import { useSettingsStore } from '@/store/settings'
+import { elementStatusVocabulary, statusColor } from '@/lib/elementStatus'
 
 const DEFAULT_BUILTIN_TAGS = ['Person', 'Software System', 'Container', 'Component', 'Element', 'Relationship',
   'Web Application', 'Service', 'Database', 'Queue', 'Mobile App', 'File System']
@@ -38,6 +33,7 @@ const FACETS: FacetDescriptor[] = [
  *  a workspace is loaded. */
 export default function BottomHighlighterBar() {
   const workspace = useWorkspaceStore((s) => s.workspace)
+  const customStatuses = useSettingsStore((s) => s.customStatuses)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const openFacet = useWorkspaceStore((s) => s.highlighterOpenFacet)
   const setOpenFacet = useWorkspaceStore((s) => s.setHighlighterOpenFacet)
@@ -117,9 +113,11 @@ export default function BottomHighlighterBar() {
   }, [view, elementMap])
 
   const viewTags = useMemo(() => Array.from(tagCounts.keys()).sort(), [tagCounts])
+  // Vocabulary order, not first-seen order, so the bar reads the same way on
+  // every view: built-ins, then the user's declared extras, then the rest.
   const viewStatuses = useMemo<ElementStatus[]>(
-    () => (['Live', 'Planned', 'Deprecated', 'Removed'] as ElementStatus[]).filter((s) => statusCounts.has(s)),
-    [statusCounts],
+    () => elementStatusVocabulary(customStatuses, workspace).filter((s) => statusCounts.has(s)),
+    [statusCounts, customStatuses, workspace],
   )
   const viewTechs = useMemo(() => Array.from(techCounts.keys()).sort((a, b) => a.localeCompare(b)), [techCounts])
   const viewTeams = useMemo(() => Array.from(teamCounts.keys()).sort((a, b) => a.localeCompare(b)), [teamCounts])
@@ -197,7 +195,7 @@ export default function BottomHighlighterBar() {
           setMode: setStatusMode,
           onToggle: (v: string) => toggleStatus(v as ElementStatus),
           onClear: () => setStatuses([]),
-          colorFor: (v: string) => STATUS_COLORS[v as ElementStatus],
+          colorFor: (v: string) => statusColor(v),
           label: 'statuses',
           title: 'Status',
           placeholder: 'Search status…',
