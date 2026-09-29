@@ -322,6 +322,9 @@ export function renameElementId(ws: Workspace, oldId: string, newId: string): { 
   // IDs in retained layout participate in the same atomic rename, including
   // entries belonging to views that are temporarily absent.
   for (const layout of Object.values(ws.savedLayout ?? {})) {
+    // The scope an entry records is part of how it finds its view again.
+    if (layout.view?.softwareSystemId === oldId) layout.view.softwareSystemId = newId
+    if (layout.view?.containerId === oldId) layout.view.containerId = newId
     if (layout.elements && Object.hasOwn(layout.elements, oldId)) {
       layout.elements[newId] = layout.elements[oldId]
       delete layout.elements[oldId]

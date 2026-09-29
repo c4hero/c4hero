@@ -368,9 +368,28 @@ export interface IncludedFile {
   text?: string
 }
 
+/** What a stored layout entry is *for*, written alongside it so the entry
+ * never has to be re-identified from the key it happens to be filed under
+ * (TEA-345). A derived view key is numbered by declaration order, so it moves
+ * when a same-scope sibling comes or goes; the view's type and scope do not.
+ *
+ * `key` is present only when the DSL author wrote the key. A name someone
+ * chose is part of what the view is, so an unnamed view showing the same
+ * scope is a different view, not that one renumbered. */
+export interface StoredViewIdentity {
+  key?: string
+  type: ViewType
+  softwareSystemId?: string
+  containerId?: string
+  environment?: string
+}
+
 /** Layout retained independently of whether a view or element is currently visible.
  * Uses the version-1 sidecar shape; no on-disk migration is needed. */
 export interface SavedViewLayout {
+  /** The view this layout belongs to. Absent in entries written before
+   *  TEA-345, which are matched by key instead. */
+  view?: StoredViewIdentity
   locked?: boolean
   elements?: Record<string, Pick<ElementInView, 'x' | 'y' | 'pinned' | 'locked'>>
 }

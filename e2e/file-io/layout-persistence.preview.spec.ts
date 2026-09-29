@@ -73,6 +73,57 @@ async function arrange(page: Page) {
   await page.keyboard.press('Control+Shift+l')
 }
 
+test('keyless layouts follow reordered and surviving views through real save/reopen', async ({ page }, testInfo) => {
+  const wide = 'container payments {\n include *\n }'
+  const narrow = 'container payments {\n include api\n }'
+  const dsl = (views: string) => `workspace "Preview" {
+    model {
+      payments = softwareSystem "Payments" {
+        api = container "API"
+        db = container "Database"
+      }
+    }
+    views {
+      ${views}
+    }
+  }`
+  const identity = { type: 'container' as const, softwareSystemId: 'payments' }
+  const wideLayout = { view: identity, elements: {
+    api: { pinned: true, x: 100, y: 200 },
+    db: { pinned: true, x: 400, y: 200 },
+  } }
+  const narrowLayout = { view: identity, locked: true, elements: { api: retained } }
+  await seed(page, dsl(`${wide}\n${narrow}`), { version: 1, views: {
+    'Containers-payments': wideLayout,
+    'Containers-payments-2': narrowLayout,
+  } })
+  await expect(node(page, 'db')).toBeVisible()
+  await editDSL(page, dsl(`${narrow}\n${wide}`))
+  await expect(node(page, 'db')).toHaveCount(0)
+  await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+    .toBe('translate(800px, 450px)')
+  await save(page)
+  expect((await readSidecar(page)).views).toEqual({
+    'Containers-payments': narrowLayout,
+    'Containers-payments-2': wideLayout,
+  })
+  await reopen(page)
+  await expect(node(page, 'db')).toHaveCount(0)
+  await editDSL(page, dsl(`${wide}\n${narrow}`))
+  await expect(node(page, 'db')).toBeVisible()
+  await editDSL(page, dsl(narrow))
+  await expect(node(page, 'db')).toHaveCount(0)
+  await save(page)
+  await reopen(page)
+  await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+    .toBe('translate(800px, 450px)')
+  await save(page)
+  const saved = (await readSidecar(page)).views!
+  expect(saved['Containers-payments']).toEqual(narrowLayout)
+  expect(Object.values(saved)).toContainEqual(wideLayout)
+  await page.screenshot({ path: testInfo.outputPath('keyless-survivor.png') })
+})
+
 test('dynamic restoration, reset, undo/redo and real save/reopen', async ({ page }) => {
   await seed(page, `workspace "Preview" {
     model {
@@ -142,7 +193,9 @@ test('same-name elements keep exact retained positions through DSL edits and reo
       }
     }
   }`
-  const original = { version: 1 as const, views: { View: { elements: {
+  const original = { version: 1 as const, views: { View: {
+    view: { type: 'container' as const, key: 'View', softwareSystemId: 'payments' },
+    elements: {
     a: { pinned: true, locked: true, x: 100, y: 200 },
     b: { pinned: true, x: 800, y: 900 },
   } } } }
