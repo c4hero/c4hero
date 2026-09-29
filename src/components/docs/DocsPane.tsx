@@ -3,7 +3,7 @@ import { ArrowLeft, BookOpen, FilePlus2, Scale } from 'lucide-react'
 import type { Workspace } from '@/types/model'
 import type { DocConcept, DocsKind } from '@/lib/docs/bundle'
 import { selectElementDocs, selectWorkspaceDocs, useDocsStore, type ScopedDocs } from '@/store/docs'
-import { getCurrentDirHandle } from '@/lib/folderIO'
+import { hasOpenFolder } from '@/lib/host'
 import { findElementHelper } from '@/store/workspace-helpers'
 import { announce } from '@/lib/announce'
 import Markdown from './Markdown'
@@ -47,7 +47,7 @@ export default function DocsPane({ workspace, elementId }: DocsPaneProps) {
   // Selection follows the scope: switching element closes the reader.
   useEffect(() => { setOpenPath(null); setCreating(null) }, [elementId])
 
-  const folderOpen = !!getCurrentDirHandle()
+  const folderOpen = !!hasOpenFolder()
   const all = useMemo(() => [...scoped.docs, ...scoped.adrs], [scoped])
   // Structurizr accepts `!docs` / `!adrs` in workspace, softwareSystem,
   // container and component blocks — not in a person's — so never offer to

@@ -2,8 +2,9 @@ import { useRef, useState } from 'react'
 import { Save } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeRoot } from '@/lib/includeWriteback'
-import { saveDSLFile, hasFileSystemAccess } from '@/lib/fileIO'
+import { saveDSLFile, hasFileSystemAccess, isVsCodeHost } from '@/lib/host'
 import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
+import { useHostStatus } from '@/lib/host/status'
 import { announce } from '@/lib/announce'
 
 export default function SaveIndicator() {
@@ -12,6 +13,7 @@ export default function SaveIndicator() {
   // component out of the inspector-typing re-render fanout.
   const activeFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
   const currentUndoLength = useWorkspaceStore((s) => s.undoStack.length)
+  const hostDirty = useHostStatus(s => s.dirty)
   const isDirty = currentUndoLength > 0
   const lastSavedUndoLength = useWorkspaceStore((s) => s.lastSavedUndoLength)
   const watchDisk = useWorkspaceStore((s) => s.watchDisk)
@@ -20,7 +22,7 @@ export default function SaveIndicator() {
   const [savedUndoLength, setSavedUndoLength] = useState(lastSavedUndoLength)
   const savedFlashTimer = useRef<ReturnType<typeof setTimeout>>(null)
   const hasFileHandle = isWorkspaceLinked(activeFilename)
-  const canLinkFiles = hasFileSystemAccess()
+  const canLinkFiles = isVsCodeHost() || hasFileSystemAccess()
 
   async function handleSave() {
     // Read the current workspace at click time rather than subscribing to it;
@@ -52,7 +54,7 @@ export default function SaveIndicator() {
     }
   }
 
-  const isFileDirty = isDirty && currentUndoLength !== savedUndoLength && currentUndoLength !== lastSavedUndoLength
+  const isFileDirty = isVsCodeHost() ? hostDirty : isDirty && currentUndoLength !== savedUndoLength && currentUndoLength !== lastSavedUndoLength
   const dotColor =
     saveStatus === 'saving' ? 'var(--color-info)'
     : saveStatus === 'saved' ? 'var(--color-success)'

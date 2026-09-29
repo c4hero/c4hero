@@ -8,8 +8,10 @@ import { readFileSync } from 'fs'
 
 const commitHash = execSync('git rev-parse --short HEAD').toString().trim()
 const appVersion = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')).version
+const vscodeBuild = process.env.VITE_HOST === 'vscode'
 
 export default defineConfig({
+  base: vscodeBuild ? './' : undefined,
   plugins: [
     react(),
     tailwindcss(),
@@ -24,6 +26,7 @@ export default defineConfig({
       transformIndexHtml: {
         order: 'pre' as const,
         handler(html: string, ctx: { server?: unknown }) {
+          if (vscodeBuild) return html.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*\/>/, '')
           if (ctx.server) return html // dev — leave CSP loose for HMR
           return html
             .replace(" 'unsafe-eval'", '')
@@ -31,7 +34,7 @@ export default defineConfig({
         },
       },
     },
-    VitePWA({
+    ...(!vscodeBuild ? [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['c4-logo.png', 'apple-touch-icon.png'],
       manifest: {
@@ -54,18 +57,22 @@ export default defineConfig({
         globIgnores: ['**/c4-logo.svg', '**/favicon.svg'],
       },
       devOptions: { enabled: false },
-    }),
+    })] : []),
   ],
   define: {
     __COMMIT_HASH__: JSON.stringify(commitHash),
     __APP_VERSION__: JSON.stringify(appVersion),
+    __VSCODE_HOST__: JSON.stringify(vscodeBuild),
   },
   resolve: {
     alias: {
+      ...(vscodeBuild ? { '@/lib/observability/sentry': path.resolve(__dirname, './src/lib/observability/sentry.noop.ts') } : {}),
       '@': path.resolve(__dirname, './src'),
     },
   },
   build: {
+    outDir: vscodeBuild ? 'extension/media' : 'dist',
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks(id: string) {

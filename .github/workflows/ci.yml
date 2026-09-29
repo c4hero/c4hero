@@ -139,6 +139,28 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  vscode-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            extension/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix extension
+      - run: npm run build --prefix extension
+      - run: npm run package --prefix extension
+      - run: xvfb-run -a npm test --prefix extension
+      - uses: actions/upload-artifact@v7
+        with:
+          name: c4hero-vsix
+          path: extension/c4hero.vsix
+          retention-days: 14
+
   security:
     runs-on: ubuntu-latest
     steps:

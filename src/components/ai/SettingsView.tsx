@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { X, KeyRound, ExternalLink, ArrowRight, ArrowLeft, Check, ShieldCheck, Activity, RefreshCw } from 'lucide-react'
 import { useAiSettingsStore } from '@/store/ai-settings'
+import { isVsCodeHost } from '@/lib/host'
 import { useAiModelsStore } from '@/store/ai-models'
 import { AI_PROVIDER_META, AI_PROVIDER_IDS, type AiProviderId } from '@/lib/ai/providerMeta'
 import { pickerOptions } from '@/lib/ai/modelCatalog'
@@ -56,7 +57,7 @@ export function ByokWelcome({ onClose }: { onClose: () => void }) {
           <KeyRound size={34} color={C.accent} style={{ position: 'relative' }} />
         </div>
         <h2 style={{ margin: '14px 0 0', fontSize: 20, fontWeight: 700, letterSpacing: '-.01em', color: C.text }}>Bring your own key</h2>
-        <p style={{ margin: '9px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 400 }}>AI features run on your own provider key. It stays in this browser and is sent only to the provider — c4hero has no server and never sees it.</p>
+        <p style={{ margin: '9px 0 0', fontSize: 13, lineHeight: 1.55, color: C.muted2, maxWidth: 400 }}>AI features run on your own provider key. It stays in {isVsCodeHost() ? 'VS Code SecretStorage' : 'this browser'} and is sent only to the provider — c4hero has no server and never sees it.</p>
         <div style={{ width: '100%', maxWidth: 420, marginTop: 22, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={fieldLabel}>Provider</div>
@@ -312,7 +313,7 @@ function SecurityNote({ style }: { style?: CSSProperties }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)', ...style }}>
       <ShieldCheck size={14} color={C.accent} style={{ flex: 'none', marginTop: 1 }} />
-      <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Your key stays in this browser and is sent only to the provider. Anyone with access to this profile can read it.</span>
+      <span style={{ fontSize: 11.5, lineHeight: 1.45, color: C.text2 }}>Your key stays in {isVsCodeHost() ? 'VS Code SecretStorage' : 'this browser'} and is sent only to the provider. Anyone with access to this profile can read it.</span>
     </div>
   )
 }

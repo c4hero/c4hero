@@ -8,7 +8,8 @@ const listFilesIn = vi.fn<(dir: unknown, dirs: readonly string[]) => Promise<str
 const removeFilesIn = vi.fn<(dir: unknown, paths: readonly string[]) => Promise<string[]>>()
 
 vi.mock('@/lib/exportUtils', () => ({ downloadBlob: (...args: unknown[]) => downloadBlob(...args) }))
-vi.mock('@/lib/folderIO', () => ({
+vi.mock('@/lib/host', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/host')>()),
   writeFilesInto: (...args: unknown[]) => writeFilesInto(...args),
   readFileIn: (dir: unknown, path: string) => readFileIn(dir, path),
   listFilesIn: (dir: unknown, dirs: readonly string[]) => listFilesIn(dir, dirs),
