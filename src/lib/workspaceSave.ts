@@ -1,9 +1,10 @@
 import type { Workspace } from '@/types/model'
-import { getCurrentFileHandle, writeToCurrentHandle, writeSidecarToHandle } from '@/lib/fileIO'
-import { getCurrentDirHandle, writeDSLFile, writeSidecarFile, writeDSLFileAt } from '@/lib/folderIO'
+import { getCurrentFileHandle, writeToCurrentHandle, writeSidecarToHandle } from '@/lib/host'
+import { getCurrentDirHandle, writeDSLFile, writeSidecarFile, writeDSLFileAt } from '@/lib/host'
 import { serializeRoot, planIncludedWrites } from '@/lib/includeWriteback'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
+import { isVsCodeHost, saveVsCodeDocument } from '@/lib/host'
 
 const log = createLogger('workspaceSave')
 
@@ -19,6 +20,7 @@ const log = createLogger('workspaceSave')
  *  - A single-file handle is open (file-picker mode), OR
  *  - A folder handle is open AND an active filename is set (collection mode). */
 export function isWorkspaceLinked(activeFilename: string | null): boolean {
+  if (isVsCodeHost()) return true
   if (getCurrentFileHandle() !== null) return true
   if (getCurrentDirHandle() !== null && activeFilename) return true
   return false
@@ -35,6 +37,10 @@ let lastIncludedWritesFor: string | null = null
  *  the workspace is not linked or the write failed. Throws when the
  *  workspace cannot be serialized — callers decide how loud to be. */
 export async function writeLinkedWorkspace(workspace: Workspace, activeFilename: string | null): Promise<boolean> {
+  if (isVsCodeHost()) {
+    await saveVsCodeDocument()
+    return true
+  }
   const hasSingleFile = !!getCurrentFileHandle()
   const dirHandle = getCurrentDirHandle()
   if (!hasSingleFile && !(dirHandle && activeFilename)) return false

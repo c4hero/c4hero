@@ -136,3 +136,9 @@ To report a security issue, see [`SECURITY.md`](SECURITY.md).
 Released under the [Apache License 2.0](LICENSE).
 
 The c4hero name, logo, domain, and product identity are not licensed under Apache-2.0. See [TRADEMARKS.md](TRADEMARKS.md) for the brand-use boundary.
+
+## VS Code
+
+The same canvas can open `.dsl` files in VS Code. See the
+[extension guide](extension/README.md) for installing a CI-built VSIX, native
+save and undo behavior, folder workflows, and local development.

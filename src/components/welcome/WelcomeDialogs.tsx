@@ -8,7 +8,7 @@ import {
   createMonolithTemplate,
   createEventDrivenTemplate,
 } from '@/lib/templates'
-import { slugifyName } from '@/lib/folderIO'
+import { slugifyName } from '@/lib/host'
 import type { Workspace } from '@/types/model'
 
 // ─── Template Dialog ─────────────────────────────────────────────────────────

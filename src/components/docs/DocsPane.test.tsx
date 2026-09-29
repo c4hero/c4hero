@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 let folderOpen = true
-vi.mock('@/lib/folderIO', () => ({
-  getCurrentDirHandle: () => (folderOpen ? { name: 'shop' } : null),
+vi.mock('@/lib/host', () => ({
+  hasOpenFolder: () => folderOpen,
 }))
 vi.mock('@/lib/announce', () => ({ announce: vi.fn() }))
 

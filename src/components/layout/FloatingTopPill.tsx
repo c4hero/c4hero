@@ -1,3 +1,5 @@
+import { isVsCodeHost, runVsCodeHistoryCommand, openVsCodeDocument } from '@/lib/host'
+import { reportHostError } from '@/lib/host/status'
 import { lazy, Suspense, useEffect, useState, useCallback } from 'react'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import LoadingDot from '@/components/shared/LoadingDot'
@@ -6,7 +8,7 @@ import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyC
 import { serializeDSL } from '@/lib/dsl'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { createBlankWorkspace } from '@/lib/templates'
-import { saveDSLFile } from '@/lib/fileIO'
+import { saveDSLFile } from '@/lib/host'
 import { announce } from '@/lib/announce'
 import SaveIndicator from '@/components/layout/SaveIndicator'
 import ViewSwitcher, { ViewSwitcherPanel } from '@/components/layout/ViewSwitcher'
@@ -29,7 +31,7 @@ import {
 import { useSettingsStore } from '@/store/settings'
 import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
 
-import { listDSLFiles, readDSLFile, readDSLFileAt, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/folderIO'
+import { listDSLFiles, readDSLFile, readDSLFileAt, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/host'
 import { parseDSL } from '@/lib/dsl'
 import { useNavigate } from 'react-router-dom'
 import { WorkspaceTile } from '@/components/welcome/WelcomeLeaves'
@@ -53,10 +55,12 @@ const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDial
 export default function FloatingTopPill() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
-  const undo = useWorkspaceStore((s) => s.undo)
-  const redo = useWorkspaceStore((s) => s.redo)
-  const canUndo = useWorkspaceStore((s) => s.undoStack.length > 0)
-  const canRedo = useWorkspaceStore((s) => s.redoStack.length > 0)
+  const storeUndo = useWorkspaceStore((s) => s.undo)
+  const undo = () => isVsCodeHost() ? void runVsCodeHistoryCommand('undo').catch(reportHostError) : storeUndo()
+  const storeRedo = useWorkspaceStore((s) => s.redo)
+  const redo = () => isVsCodeHost() ? void runVsCodeHistoryCommand('redo').catch(reportHostError) : storeRedo()
+  const canUndo = useWorkspaceStore((s) => s.undoStack.length > 0) || isVsCodeHost()
+  const canRedo = useWorkspaceStore((s) => s.redoStack.length > 0) || isVsCodeHost()
 
   const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen)
   const showUndoRedo = useSettingsStore((s) => s.showUndoRedo)
@@ -81,6 +85,7 @@ export default function FloatingTopPill() {
   const importDialogOpen = useWorkspaceStore((s) => s.importDialogOpen)
 
   const openWsPicker = useCallback(async () => {
+    if (isVsCodeHost()) { await openVsCodeDocument(); return }
     const filenames = await listDSLFiles()
     setWsPickerOpen(true)
     setViewDropdownOpen(false)
@@ -269,7 +274,7 @@ export default function FloatingTopPill() {
       >
         {/* Logo — click to go home */}
         <button
-          onClick={() => { useWorkspaceStore.getState().closeWorkspace(); navigate('/', { replace: true }) }}
+          onClick={() => { if (isVsCodeHost()) { void openVsCodeDocument().catch(reportHostError); return }; useWorkspaceStore.getState().closeWorkspace(); navigate('/', { replace: true }) }}
           title="Close workspace"
           aria-label="Close workspace"
           className="hover-subtle"

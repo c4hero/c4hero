@@ -1,5 +1,5 @@
 import { FolderOpen, FileText, Plus, ChevronRight, X, FileInput } from 'lucide-react'
-import { hasFolderAccess } from '@/lib/folderIO'
+import { hasFolderAccess } from '@/lib/host'
 import RowMenu from './RowMenu'
 import {
   C4Mark,

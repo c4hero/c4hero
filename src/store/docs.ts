@@ -21,7 +21,7 @@ import {
   type DocsScope,
   type NewDocInput,
 } from '@/lib/docs/bundle'
-import { getCurrentDirHandle, listFilesAt, readTextFileAt, writeTextFileAt } from '@/lib/folderIO'
+import { hasOpenFolder, listFilesAt, readTextFileAt, writeTextFileAt } from '@/lib/host'
 import { findElementHelper } from '@/store/workspace-helpers'
 import { useWorkspaceStore } from '@/store/workspace'
 import { createLogger } from '@/lib/logger'
@@ -70,7 +70,7 @@ export const useDocsStore = create<DocsState>((set, get) => ({
   load: async (ws) => {
     const ticket = ++loadTicket
     const refs = allDocsDirs(ws)
-    if (!getCurrentDirHandle() || refs.length === 0) {
+    if (!hasOpenFolder() || refs.length === 0) {
       set({ bundles: {}, loaded: true })
       return
     }
@@ -103,7 +103,7 @@ export const useDocsStore = create<DocsState>((set, get) => ({
   create: async (kind, scope, input) => {
     const wsStore = useWorkspaceStore.getState()
     const ws = wsStore.workspace
-    if (!ws || !getCurrentDirHandle()) return null
+    if (!ws || !hasOpenFolder()) return null
 
     const element = scope.elementId ? findElementHelper(ws, scope.elementId) : undefined
     const existingScope: DocsScope = element ? elementDocsScope(element) : workspaceDocsScope(ws)

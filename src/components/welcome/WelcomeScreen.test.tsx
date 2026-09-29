@@ -24,9 +24,9 @@ vi.mock('lucide-react', () => ({
   X: () => null,
 }))
 
-// Mock fileIO — hasFileSystemAccess returns false so saveDSLFile won't be called on blank workspace
-vi.mock('@/lib/fileIO', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@/lib/fileIO')>()
+// Mock the browser host — file and folder pickers are unavailable in jsdom.
+vi.mock('@/lib/host', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/host')>()
   return {
     ...mod,
     hasFileSystemAccess: () => false,
@@ -34,14 +34,6 @@ vi.mock('@/lib/fileIO', async (importOriginal) => {
     saveDSLFile: vi.fn().mockResolvedValue(true),
     getRecentFolders: () => [],
     addRecentFolder: vi.fn(),
-  }
-})
-
-// Mock folderIO — hasFolderAccess returns false (jsdom has no showDirectoryPicker)
-vi.mock('@/lib/folderIO', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@/lib/folderIO')>()
-  return {
-    ...mod,
     hasFolderAccess: () => false,
     getCurrentDirHandle: () => null,
     openFolder: vi.fn().mockResolvedValue(null),

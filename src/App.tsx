@@ -1,3 +1,4 @@
+import VsCodeStatus from '@/components/layout/VsCodeStatus'
 import { lazy, Suspense, useEffect, useState, useRef } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import LoadingDot from '@/components/shared/LoadingDot'
@@ -6,6 +7,7 @@ import { useWorkspaceStore } from '@/store/workspace'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useAutoSave } from '@/hooks/useAutoSave'
 import { useDiskWatch } from '@/hooks/useDiskWatch'
+import { useVsCodeHost } from '@/hooks/useVsCodeHost'
 import { useRouteSync, useRefreshRedirect } from '@/hooks/useRouteSync'
 import FloatingTopPill from '@/components/layout/FloatingTopPill'
 import WhatsNewPill from '@/components/whatsnew/WhatsNewPill'
@@ -23,8 +25,8 @@ import Canvas from '@/components/canvas/Canvas'
 import CanvasHints from '@/components/canvas/CanvasHints'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import NotFound from '@/components/shared/NotFound'
-import { loadFromLocalStorage } from '@/lib/fileIO'
-import { restoreDirHandle, getCurrentDirHandle } from '@/lib/folderIO'
+import { isVsCodeHost, loadFromLocalStorage } from '@/lib/host'
+import { restoreDirHandle, getCurrentDirHandle } from '@/lib/host'
 import { isCanvasRoute } from '@/lib/routes'
 
 const SearchDialog = lazy(() => import('@/components/search/SearchDialog'))
@@ -52,6 +54,7 @@ export default function App() {
   const location = useLocation()
 
   useKeyboardShortcuts()
+  useVsCodeHost()
   useAutoSave()
   useDiskWatch()
   useRouteSync()
@@ -59,11 +62,13 @@ export default function App() {
 
   // Restore persisted dir handle on mount
   useEffect(() => {
+    if (isVsCodeHost()) return
     restoreDirHandle().catch(() => {})
   }, [])
 
   // Crash recovery: landing on /workspace/* with no in-memory workspace
   useEffect(() => {
+    if (isVsCodeHost()) return
     if (!location.pathname.startsWith('/workspace')) return
     const recovered = loadFromLocalStorage()
     if (recovered && !workspace) loadWorkspace(recovered)
@@ -138,6 +143,7 @@ export default function App() {
 
   return (
     <>
+      <VsCodeStatus />
       <Routes>
         {/* Startup — no collection open */}
         <Route path="/" element={

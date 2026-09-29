@@ -1,15 +1,14 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './components/shared/ErrorBoundary'
 import { createLogger, addTransport, type LogEntry } from './lib/logger'
-import { initCloudflareAnalytics } from './lib/observability/cloudflareAnalytics'
-import { initSentry } from './lib/observability/sentry'
 import { normalizeRemoteLogEndpoint } from './lib/remoteLogEndpoint'
 import { useWorkspaceStore } from './store/workspace'
 import { setTestFileSource } from './lib/testFileSource'
+import { isVsCodeHost } from './lib/host'
 import {
   createBigBankSample,
   createBlankWorkspace,
@@ -20,8 +19,13 @@ import {
 
 const log = createLogger('global')
 
-initSentry()
-initCloudflareAnalytics()
+if (!__VSCODE_HOST__) {
+  // Keep hosted-only telemetry out of the extension bundle entirely. A static
+  // import would still pull both SDKs into the webview even if initialization
+  // were skipped at runtime.
+  void import('@/lib/observability/sentry').then(({ initSentry }) => initSentry())
+  void import('@/lib/observability/cloudflareAnalytics').then(({ initCloudflareAnalytics }) => initCloudflareAnalytics())
+}
 
 // Test helpers — only exposed in dev mode for E2E tests
 if (import.meta.env.DEV) {
@@ -133,7 +137,7 @@ window.addEventListener('unhandledrejection', (e) => {
 // at build time. Batches warn/error entries and flushes via sendBeacon so errors
 // survive page unload. Entries include the session correlation ID from the logger.
 const remoteEndpoint = normalizeRemoteLogEndpoint(import.meta.env.VITE_LOG_ENDPOINT as string | undefined)
-if (remoteEndpoint) {
+if (!__VSCODE_HOST__ && remoteEndpoint) {
   const buffer: LogEntry[] = []
   const flush = () => {
     if (buffer.length === 0) return
@@ -153,9 +157,11 @@ createRoot(document.getElementById('root')!).render(
       label="Something went wrong"
       onReset={() => window.location.reload()}
     >
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      {isVsCodeHost() ? (
+        <MemoryRouter initialEntries={['/collection/vscode/document']}><App /></MemoryRouter>
+      ) : (
+        <BrowserRouter><App /></BrowserRouter>
+      )}
     </ErrorBoundary>
   </StrictMode>,
 )
@@ -163,4 +169,4 @@ createRoot(document.getElementById('root')!).render(
 // Report Core Web Vitals through the structured logger so any configured
 // remote transport gets perf telemetry too. Cloudflare Web Analytics collects
 // aggregate page-load metrics separately when enabled for the hosted app.
-import('./lib/webVitals').then(({ reportWebVitals }) => reportWebVitals())
+if (!__VSCODE_HOST__) import('./lib/webVitals').then(({ reportWebVitals }) => reportWebVitals())

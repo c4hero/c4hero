@@ -29,6 +29,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:vscode": "npm run build --prefix extension",
+    "package:vscode": "npm run build:vscode && npm run package --prefix extension",
+    "test:vscode": "npm test --prefix extension",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -92,7 +95,7 @@
     "@rollup/plugin-terser": "^1.0.0",
     "postcss": "^8.5.18",
     "serialize-javascript": "^7.0.5",
-    "undici": "^7.29.0",
+    "undici": "^7.29.1",
     "react-router": "8.3.0"
   }
 }

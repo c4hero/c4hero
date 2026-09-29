@@ -8,6 +8,7 @@ import {
 } from '@/lib/ai/providerMeta'
 import { resolveCuratedModel } from '@/lib/ai/modelCatalog'
 import { useAiModelsStore } from './ai-models'
+import { isVsCodeHost, setVsCodeSecret } from '@/lib/host'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -120,11 +121,14 @@ export function isAiReady(settings: AiSettings): boolean {
 
 function load(): AiSettings {
   const raw = readJSON<unknown>(STORAGE_KEY, (v): v is unknown => v !== null && v !== undefined)
-  return normalizeAiSettings(raw)
+  const settings = normalizeAiSettings(raw)
+  // Keys in the extension are hydrated from SecretStorage by useVsCodeHost.
+  // Never trust or migrate a key out of webview localStorage.
+  return isVsCodeHost() ? { ...settings, apiKeys: emptyKeys() } : settings
 }
 
 function persist(settings: AiSettings) {
-  writeJSON(STORAGE_KEY, settings)
+  writeJSON(STORAGE_KEY, isVsCodeHost() ? { ...settings, apiKeys: emptyKeys() } : settings)
 }
 
 // ─── Store ──────────────────────────────────────────────────────────
@@ -148,6 +152,7 @@ export const useAiSettingsStore = create<AiSettingsState>((set, get) => ({
   setApiKey: (key) => {
     const s = get()
     set({ apiKeys: { ...s.apiKeys, [s.provider]: key } })
+    if (isVsCodeHost()) setVsCodeSecret(s.provider, key)
     persistFrom(get)
   },
 

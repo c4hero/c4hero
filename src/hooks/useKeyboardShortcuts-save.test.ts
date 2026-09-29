@@ -4,10 +4,11 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { useKeyboardShortcuts } from './useKeyboardShortcuts'
 import { useWorkspaceStore } from '@/store/workspace'
 import { parseDSL } from '@/lib/dsl'
-import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { saveDSLFile, writeSidecarToHandle } from '@/lib/host'
 
 vi.mock('@xyflow/react', () => ({ useReactFlow: () => { throw new Error('not in flow') } }))
-vi.mock('@/lib/fileIO', () => ({
+vi.mock('@/lib/host', () => ({
+  isVsCodeHost: () => false,
   saveDSLFile: vi.fn(), writeSidecarToHandle: vi.fn().mockResolvedValue(true), openDSLFile: vi.fn(),
 }))
 vi.mock('@/lib/workspaceSave', () => ({ isWorkspaceLinked: () => false, writeLinkedWorkspace: vi.fn() }))
