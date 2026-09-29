@@ -37,6 +37,8 @@ import type { Workspace } from '@/types/model'
 import { generateWorkspace, type RelaxOptions } from './fuzz/generateWorkspace'
 import { representable } from './encoding'
 import { validateForStructurizr } from '@/lib/structurizrValidation'
+import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
+import { planIncludedWrites, serializeRoot } from '@/lib/includeWriteback'
 
 const CLI = process.env.STRUCTURIZR_CLI ?? join(process.cwd(), '.structurizr-cli', 'structurizr.sh')
 const CLI_AVAILABLE = existsSync(CLI)
@@ -66,8 +68,9 @@ function validate(dsl: string): string | null {
 }
 
 /** Parse with the real parser and return the model it actually built. */
-function exportModel(dsl: string): Record<string, never> | Record<string, unknown> {
+function exportModel(dsl: string, includes: Record<string, string> = {}): Record<string, never> | Record<string, unknown> {
     return withTempDsl(dsl, (dir, file) => {
+        for (const [name, text] of Object.entries(includes)) writeFileSync(join(dir, name), text, 'utf8')
         const out = join(dir, 'out')
         execFileSync(CLI, ['export', '-w', file, '-f', 'json', '-o', out], { stdio: 'pipe' })
         const json = readdirSync(out).find(f => f.endsWith('.json'))
@@ -176,6 +179,138 @@ function hostileWorkspace(): Workspace {
 }
 
 describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
+    it('preserves workspace properties in the real parser export (#219)', () => {
+        const { workspace, errors } = parseDSL(`workspace "W" {
+            properties {
+                "team" "platform"
+                "c4hero.statuses" "Proposed, Under review"
+            }
+            model { s = softwareSystem "S" }
+            properties { "region" "eu" }
+        }`)
+        expect(errors).toEqual([])
+        const saved = serializeDSL(workspace)
+        expect(validate(saved)).toBeNull()
+        expect(exportModel(saved).properties).toMatchObject(workspace.properties!)
+    })
+
+    it('preserves unquoted and model-level properties in the real parser export', () => {
+        const { workspace, errors } = parseDSL(`workspace "W" {
+            properties {
+                team platform
+                "port" 8080
+                api.version 1.2
+                123 numeric
+            }
+            model {
+                properties {
+                    owner architecture
+                }
+                s = softwareSystem "S"
+            }
+        }`)
+        expect(errors).toEqual([])
+        const saved = serializeDSL(workspace)
+        expect(validate(saved)).toBeNull()
+        const exported = exportModel(saved) as { properties?: object; model?: { properties?: object } }
+        expect(exported.properties).toMatchObject({ team: 'platform', port: '8080', 'api.version': '1.2', '123': 'numeric' })
+        expect(exported.model?.properties).toMatchObject({ owner: 'architecture' })
+    })
+
+    it.each([false, true])('preserves model overrides against real includes (root last: %s)', async (rootLast) => {
+        const properties = 'properties {\n"team" "root"\n}'
+        const body = rootLast
+            ? `s = softwareSystem "S"\n!include defaults.dsl\n${properties}`
+            : `${properties}\n!include defaults.dsl\ns = softwareSystem "S"`
+        const source = `workspace {\nmodel {\n${body}\n}\nviews {\n}\n}`
+        const includes = { 'defaults.dsl': 'properties {\n"team" "included"\n}\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['defaults.dsl'] })
+        expect(loaded.errors).toEqual([])
+        const savedIncludes = Object.fromEntries(planIncludedWrites(loaded.workspace).map(write => [write.path, write.content]))
+        const original = exportModel(source, includes) as { model: { properties: object } }
+        const saved = exportModel(serializeRoot(loaded.workspace), savedIncludes) as { model: { properties: object } }
+        expect(saved.model.properties).toEqual(original.model.properties)
+        expect(saved.model.properties).toMatchObject({ team: rootLast ? 'root' : 'included' })
+    })
+
+    it('keeps a custom group separator so Group: tags still match (TEA-349)', () => {
+        const source = `workspace {\nmodel {\nproperties {\n"structurizr.groupSeparator" "|"\n}\n`
+            + `group "Outer" {\ngroup "Inner" {\ns = softwareSystem "S"\n}\n}\n}\nviews {\n}\n}`
+        const saved = serializeDSL(parseDSL(source).workspace)
+        expect(validate(saved)).toBeNull()
+        type Exported = { model: { softwareSystems: { group?: string }[] } }
+        const groupOf = (dsl: string) => (exportModel(dsl) as Exported).model.softwareSystems[0].group
+        expect(groupOf(saved)).toBe(groupOf(source))
+        expect(groupOf(saved)).toBe('Outer|Inner')
+    })
+
+    it.each([false, true])('preserves element property includes (root last: %s) (TEA-349)', async (rootLast) => {
+        const block = rootLast ? '!include p.dsl\n"team" "root"' : '"team" "root"\n!include p.dsl'
+        const source = `workspace {\nmodel {\nu = person "U" {\nproperties {\n${block}\n}\n}\n}\nviews {\n}\n}`
+        const includes = { 'p.dsl': '"team" "included"\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['p.dsl'] })
+        expect(loaded.errors).toEqual([])
+        type Exported = { model: { people: { properties: object }[] } }
+        const original = exportModel(source, includes) as Exported
+        const saved = exportModel(serializeRoot(loaded.workspace), includes) as Exported
+        expect(saved.model.people[0].properties).toEqual(original.model.people[0].properties)
+        expect(saved.model.people[0].properties).toMatchObject({ team: rootLast ? 'root' : 'included' })
+    })
+
+    it.each([false, true])('keeps a separate plain property block (root last: %s)', async (rootLast) => {
+        const plain = 'properties {\n"team" "same"\n}'
+        const include = 'properties {\n!include p.dsl\n}'
+        const blocks = rootLast ? `${include}\n${plain}` : `${plain}\n${include}`
+        const source = `workspace {\nmodel {\nu = person "U" {\n${blocks}\n}\n}\nviews {\n}\n}`
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => '"team" "same"\n' })
+        const includes = { 'p.dsl': '"team" "changed"\n' }
+        type Exported = { model: { people: { properties: object }[] } }
+        const original = exportModel(source, includes) as Exported
+        const saved = exportModel(serializeRoot(loaded.workspace), includes) as Exported
+        expect(saved.model.people[0].properties).toEqual(original.model.people[0].properties)
+        expect(saved.model.people[0].properties).toMatchObject({ team: rootLast ? 'same' : 'changed' })
+    })
+
+    it('keeps edited included properties when converting JSON to DSL', async () => {
+        const source = 'workspace {\nmodel {\nu = person "U" {\nproperties {\n!include p.dsl\n}\n}\n}\nviews {\n}\n}'
+        const includes = { 'p.dsl': '"team" "original"\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['p.dsl'] })
+        loaded.workspace.model.people[0].properties.team = 'edited'
+        const saved = serializeDSL(JSON.parse(JSON.stringify(loaded.workspace)))
+        type Exported = { model: { people: { properties: object }[] } }
+        expect((exportModel(saved, includes) as Exported).model.people[0].properties).toMatchObject({ team: 'edited' })
+    })
+
+    it('keeps nested property includes in their own files during full serialization', async () => {
+        const source = 'workspace {\nmodel {\nu = person "U" {\nproperties {\n!include outer.dsl\n"team" "root"\n}\n}\n}\nviews {\n}\n}'
+        const includes: Record<string, string> = { 'outer.dsl': '!include inner.dsl\n', 'inner.dsl': '"team" "inner"\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async p => includes[p] ?? null })
+        const saved = serializeDSL(loaded.workspace)
+        expect(saved).not.toContain('!include inner.dsl')
+        expect(saved).not.toContain('"team" "inner"')
+        type Exported = { model: { people: { properties: object }[] } }
+        expect((exportModel(saved, includes) as Exported).model.people[0].properties).toMatchObject({ team: 'root' })
+    })
+
+    it('keeps full-serialization edits to writable model properties', async () => {
+        const source = 'workspace {\nmodel {\n!include defaults.dsl\n}\nviews {\n}\n}'
+        const includes = { 'defaults.dsl': 'properties {\n"team" "original"\n}\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['defaults.dsl'] })
+        loaded.workspace.model.properties!.team = 'edited'
+        const saved = serializeDSL(loaded.workspace)
+        expect((exportModel(saved, includes) as { model: { properties: object } }).model.properties).toMatchObject({ team: 'edited' })
+    })
+
+    it('keeps a canvas location override after a read-only property include', async () => {
+        const source = 'workspace {\nmodel {\nu = person "U" {\nproperties {\n!include props.dsl\n}\n}\n}\nviews {\n}\n}'
+        const includes = { 'props.dsl': '"c4hero.location" "External"\n' }
+        const loaded = await loadWorkspaceDocument({ content: source, readInclude: async () => includes['props.dsl'] })
+        loaded.workspace.model.people[0].location = 'Internal'
+        const saved = serializeRoot(loaded.workspace)
+        type Exported = { model: { people: { properties: object }[] } }
+        expect((exportModel(saved, includes) as Exported).model.people[0].properties).toMatchObject({ 'c4hero.location': 'Internal' })
+    })
+
     const templates: [string, () => Workspace][] = [
         ['bigBank', createBigBankSample],
         ['microservices', createMicroservicesTemplate],

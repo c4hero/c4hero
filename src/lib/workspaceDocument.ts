@@ -1,4 +1,4 @@
-import type { IncludedFile, Workspace } from '@/types/model'
+import type { IncludedFile, PropertyDeclaration, PropertyLayout, Workspace, WorkspaceDirective } from '@/types/model'
 import { parseDSL, type ParseError } from '@/lib/dsl'
 import { applySidecar, parseSidecar } from '@/lib/sidecar'
 import {
@@ -46,7 +46,10 @@ export interface LoadWorkspaceDocumentInput extends WorkspaceDocumentInput {
  *  element) is shown read-only. */
 function classifyIncluded(path: string, text: string, scope: string | undefined): IncludedFile {
   if (scope !== 'model') {
-    return { path, writable: false, reason: scope === 'element' ? 'included inside an element block' : `included in the ${scope ?? 'workspace'} block`, text }
+    const reason = scope === 'element' ? 'included inside an element block'
+      : scope === 'properties' ? 'included inside a properties block'
+      : `included in the ${scope ?? 'workspace'} block`
+    return { path, writable: false, reason, text }
   }
   const code = text.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/\/\/.*$|#.*$/gm, '')
   if (/^\s*!/m.test(code)) return { path, writable: false, reason: 'contains its own ! directives', text }
@@ -63,7 +66,7 @@ export function stitchWorkspaceDocument(
   resolved: ResolveIncludesResult,
   texts: Map<string, string>,
 ): WorkspaceDocumentResult {
-  const { workspace, errors: rawErrors, warnings: rawWarnings, declarationLines, viewLines, directiveLines, styleLines, themesLine } = parseDSL(resolved.content)
+  const { workspace, errors: rawErrors, warnings: rawWarnings, declarationLines, viewLines, directiveLines, styleLines, themesLine, propertyLines } = parseDSL(resolved.content)
   if (!workspace.name && input.fallbackName) workspace.name = input.fallbackName
 
   // Provenance: map every declaration back to the file it was read from.
@@ -94,10 +97,63 @@ export function stitchWorkspaceDocument(
     const p = fileOf(directiveLines[i])
     if (p) d.sourcePath = p
   })
+  // Expansion can leave the parser's last declaration pointing into an
+  // included file. A subsequent directive in the parent belongs after the
+  // parent's include, not after a child element omitted from root writeback.
+  const previousModelDirective = new Map<string | undefined, WorkspaceDirective>()
+  for (const directive of workspace.directives ?? []) {
+    if (directive.scope !== 'model' && directive.scope !== 'modelProperties') continue
+    if (directive.after && fileOf(declarationLines.get(directive.after)) !== directive.sourcePath) {
+      directive.after = previousModelDirective.get(directive.sourcePath)?.after
+    }
+    previousModelDirective.set(directive.sourcePath, directive)
+  }
   for (const style of [...workspace.views.configuration.styles.elements, ...workspace.views.configuration.styles.relationships]) {
     const p = fileOf(styleLines.get(style))
     if (p) style.sourcePath = p
   }
+  // A property line belongs to its file, and its slot counts only that
+  // file's directives — the parser counted the included ones too.
+  const placeProperties = (declarations: PropertyDeclaration[] | undefined, scopes: WorkspaceDirective['scope'][]) => {
+    for (const decl of declarations ?? []) {
+      const line = propertyLines.get(decl)
+      if (line === undefined) continue
+      const location = locateLine(resolved.segments, line)
+      if (location.path) decl.sourcePath = location.path
+      decl.sourceLine = location.line
+      decl.slot = (workspace.directives ?? []).filter((d, i) =>
+        scopes.includes(d.scope) && d.sourcePath === decl.sourcePath && directiveLines[i] < line).length
+    }
+  }
+  placeProperties(workspace.propertyDeclarations, ['workspace', 'workspaceProperties'])
+  placeProperties(workspace.model.propertyDeclarations, ['model', 'modelProperties'])
+  // Same for element and relationship properties blocks that hold `!` lines.
+  const placeLayout = (layout: PropertyLayout | undefined) => {
+    if (!layout) return
+    const directiveLines = layout.directives.map((d) => {
+      const line = propertyLines.get(d)
+      const p = fileOf(line)
+      if (p) d.sourcePath = p
+      return line ?? 0
+    })
+    for (const decl of layout.declarations) {
+      const line = propertyLines.get(decl)
+      if (line === undefined) continue
+      const location = locateLine(resolved.segments, line)
+      if (location.path) decl.sourcePath = location.path
+      decl.sourceLine = location.line
+      decl.slot = layout.directives.filter((d, i) => d.sourcePath === decl.sourcePath && directiveLines[i] < line).length
+    }
+  }
+  for (const person of workspace.model.people) placeLayout(person.propertyLayout)
+  for (const sys of workspace.model.softwareSystems) {
+    placeLayout(sys.propertyLayout)
+    for (const c of sys.containers) {
+      placeLayout(c.propertyLayout)
+      for (const comp of c.components) placeLayout(comp.propertyLayout)
+    }
+  }
+  for (const rel of workspace.model.relationships) placeLayout(rel.propertyLayout)
   const themesPath = fileOf(themesLine)
   if (themesPath) workspace.views.configuration.themesSourcePath = themesPath
 

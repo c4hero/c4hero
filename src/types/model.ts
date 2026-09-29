@@ -3,15 +3,21 @@
 export type Location = 'Internal' | 'External' | 'Unspecified'
 export type InteractionStyle = 'Synchronous' | 'Asynchronous'
 export type LayoutDirection = 'TB' | 'BT' | 'LR' | 'RL'
-export type ElementStatus = 'Live' | 'Planned' | 'Deprecated' | 'Removed'
+/** The lifecycle statuses c4hero ships with. */
+export type BuiltInElementStatus = 'Live' | 'Planned' | 'Deprecated' | 'Removed'
+/** An element's lifecycle status. Open on purpose: the built-ins cannot express
+ *  every lifecycle position a team needs, and a value c4hero does not know must
+ *  never be silently dropped. `string & {}` keeps editor completion on the
+ *  built-ins while accepting a user-declared or file-discovered status.
+ *  See `@/lib/elementStatus` for the vocabulary and validation rules. */
+export type ElementStatus = BuiltInElementStatus | (string & {})
 export type LineStyle = 'Curved' | 'Straight' | 'Orthogonal'
 
 // Runtime guards for the unions above. The DSL parser validates untrusted
 // input against these in two places each (legacy bare keyword + property
 // hoist), so they live next to the type to keep the lists from diverging.
-export function isElementStatus(v: string): v is ElementStatus {
-  return v === 'Live' || v === 'Planned' || v === 'Deprecated' || v === 'Removed'
-}
+// ElementStatus is open, so its guard lives in `@/lib/elementStatus`
+// (`normalizeElementStatus`) next to the vocabulary rules it shares.
 export function isInteractionStyle(v: string): v is InteractionStyle {
   return v === 'Synchronous' || v === 'Asynchronous'
 }
@@ -38,6 +44,8 @@ export interface BaseElement {
   /** `!` directive lines written inside this element's block (e.g. an
    *  `!include` of its containers). Preserved verbatim, re-emitted first. */
   directives?: string[]
+  /** See PropertyLayout. */
+  propertyLayout?: PropertyLayout
   /** Path (relative to the root workspace file) of the included file that
    *  declared this element. Absent for root-owned content. Never serialized
    *  into DSL; used to route writes and to mark read-only sources (TEA-325). */
@@ -146,6 +154,8 @@ export interface Relationship {
   url?: string
   tags: string[]
   properties: Record<string, string>
+  /** See PropertyLayout. */
+  propertyLayout?: PropertyLayout
   /** See BaseElement.sourcePath. */
   sourcePath?: string
 }
@@ -273,6 +283,51 @@ export interface Model {
   relationships: Relationship[]
   groups: Group[]
   deploymentEnvironments: DeploymentEnvironment[]
+  /** Model-level DSL properties (`model { properties { } }`). */
+  properties?: Record<string, string>
+  /** Where each model-level property line was written. See PropertyDeclaration. */
+  propertyDeclarations?: PropertyDeclaration[]
+}
+
+/** One `"key" "value"` line of a workspace- or model-level `properties`
+ *  block, in source order and across every file. The owning `properties`
+ *  record holds the effective values (the last line per key wins, as in
+ *  Structurizr) and is what edits change; this list only records where each
+ *  line was written, so a save puts a value back into its own file and
+ *  position, and a line another file later overrides is not lost. */
+export interface PropertyDeclaration {
+  key: string
+  /** The value as written on this line. */
+  value: string
+  /** How many preserved directives of the same block kind precede this line
+   *  in its file (workspace: `workspace` + `workspaceProperties` scope;
+   *  model: `model` + `modelProperties` scope). The serializer re-emits the line at
+   *  that position, so an override keeps its meaning. */
+  slot: number
+  /** Original file location, used to coalesce repeated inclusion of the same line. */
+  sourceLine?: number
+  sourceColumn?: number
+  /** Set when the line came from an `!include`d file. */
+  sourcePath?: string
+}
+
+/** A `!` line (e.g. `!include shared-props.dsl`) written inside an element's
+ *  or relationship's `properties { }` block. */
+export interface PropertyDirective {
+  raw: string
+  /** Set when the line came from an `!include`d file. */
+  sourcePath?: string
+}
+
+/** Where each line of an element's or relationship's `properties { }` blocks
+ *  was written, recorded when any of those blocks holds `!` lines. Those lines
+ *  are kept, and each property line keeps its position relative to them
+ *  (`slot` counts the directives before it in its file), so an included
+ *  value is neither lost nor copied into the root. Without `!` lines the
+ *  block is written from `properties` alone. */
+export interface PropertyLayout {
+  declarations: PropertyDeclaration[]
+  directives: PropertyDirective[]
 }
 
 // ─── Workspace ───────────────────────────────────────────────────────
@@ -284,7 +339,9 @@ export type WorkspaceScope = 'softwaresystem' | 'landscape' | 'none'
  *  Kept verbatim and re-emitted at the top of the block it came from, in
  *  original order. */
 export interface WorkspaceDirective {
-  scope: 'workspace' | 'model' | 'views'
+  /** `workspaceProperties` / `modelProperties`: written inside that block's
+   *  `properties { }`. */
+  scope: 'workspace' | 'workspaceProperties' | 'model' | 'modelProperties' | 'views'
   /** The whole line as written, trimmed. */
   raw: string
   /** Model scope only: the group block the line was written in. */
@@ -325,6 +382,10 @@ export interface Workspace {
   name?: string
   description?: string
   scope?: WorkspaceScope
+  /** Workspace-level DSL properties, distinct from model/element properties. */
+  properties?: Record<string, string>
+  /** Where each workspace-level property line was written. */
+  propertyDeclarations?: PropertyDeclaration[]
   /** Preserved preprocessor directives (TEA-325 phase A). Absent when none. */
   directives?: WorkspaceDirective[]
   /** Files pulled in through `!include` when this workspace was loaded from a

@@ -3,7 +3,7 @@
 import type { Relationship } from '@/types/model'
 import { isInteractionStyle, isLineStyle } from '@/types/model'
 import type { ContextAwareParser } from './parser'
-import { setUserProperty } from './parser'
+import { readPropertyBlock, setUserProperty } from './parser'
 
 export function parseRelationship(p: ContextAwareParser): Relationship | null {
     // Both endpoints may be qualified paths (`mpng.gatewayApi`,
@@ -91,17 +91,7 @@ export function parseRelationship(p: ContextAwareParser): Relationship | null {
                 p.skipNewlines()
                 if (p.check('LBRACE')) {
                     p.advance()
-                    while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
-                        p.skipNewlines()
-                        if (p.check('RBRACE') || p.peekType() === 'EOF') break
-                        if (p.peekType() === 'COMMENT') { p.advance(); continue }
-                        if (p.peek().type !== 'STRING' && p.peek().type !== 'IDENTIFIER') { p.advance(); continue }
-                        const key = p.advance().value
-                        const valTok = p.peek()
-                        if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-                            setUserProperty(rel.properties, key, p.advance().value)
-                        }
-                    }
+                    readPropertyBlock(p, rel, (key, value) => setUserProperty(rel.properties, key, value))
                     if (p.check('RBRACE')) p.advance()
                 }
                 continue

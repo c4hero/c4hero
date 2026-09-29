@@ -4,6 +4,8 @@ import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isNonEmptyString, isRecord, isStringArray, isStringRecord } from '@/lib/guards'
 import { sidecarName } from '@/lib/sidecar'
 import { safeSuggestedDslName } from '@/lib/filenames'
+import { isElementStatusValue, normalizeElementStatus } from '@/lib/elementStatus'
+import { forEachElementHelper } from '@/store/workspace-helpers'
 import { readJSON, writeJSON, writeString, removeKey } from '@/lib/safeStorage'
 import { recordSelfDslWrite, recordSelfSidecarWrite } from '@/lib/saveCoordinator'
 import type { WatchedSnapshot } from '@/lib/fileWatch'
@@ -363,9 +365,9 @@ function isBaseElementShape(value: unknown): value is Record<string, unknown> {
   if (!isStringRecord(value.properties)) return false
   if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
   if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
-  if ('status' in value && value.status !== undefined && !['Live', 'Planned', 'Deprecated', 'Removed'].includes(String(value.status))) return false
+  if ('status' in value && value.status !== undefined && !isElementStatusValue(value.status)) return false
   if ('owner' in value && value.owner !== undefined && typeof value.owner !== 'string') return false
-  return true
+  return isPropertyLayoutShape(value)
 }
 
 function isComponentShape(value: unknown): boolean {
@@ -403,7 +405,7 @@ function isRelationshipShape(value: unknown): boolean {
   if ('url' in value && value.url !== undefined && typeof value.url !== 'string') return false
   if ('interactionStyle' in value && value.interactionStyle !== undefined && !['Synchronous', 'Asynchronous'].includes(String(value.interactionStyle))) return false
   if ('lineStyle' in value && value.lineStyle !== undefined && !['Curved', 'Straight', 'Orthogonal'].includes(String(value.lineStyle))) return false
-  return true
+  return isPropertyLayoutShape(value)
 }
 
 function isViewElementShape(value: unknown): boolean {
@@ -459,15 +461,41 @@ function isRelationshipStyleShape(value: unknown): boolean {
   })
 }
 
+function isPropertyDeclarationsShape(decls: unknown): boolean {
+  return Array.isArray(decls) && decls.every(d =>
+    isRecord(d) && typeof d.key === 'string' && typeof d.value === 'string'
+    && Number.isInteger(d.slot) && Number(d.slot) >= 0
+    && (d.sourcePath === undefined || typeof d.sourcePath === 'string')
+    && (d.sourceLine === undefined || (Number.isInteger(d.sourceLine) && Number(d.sourceLine) > 0))
+    && (d.sourceColumn === undefined || (Number.isInteger(d.sourceColumn) && Number(d.sourceColumn) > 0))
+  )
+}
+
+/** Workspace- or model-level `properties` plus their line provenance. */
+function isScopedPropertiesShape(holder: Record<string, unknown>): boolean {
+  if (holder.properties !== undefined && !isStringRecord(holder.properties)) return false
+  return holder.propertyDeclarations === undefined || isPropertyDeclarationsShape(holder.propertyDeclarations)
+}
+
+/** An element's or relationship's optional PropertyLayout. */
+function isPropertyLayoutShape(value: Record<string, unknown>): boolean {
+  const layout = value.propertyLayout
+  if (layout === undefined) return true
+  return isRecord(layout) && isPropertyDeclarationsShape(layout.declarations)
+    && Array.isArray(layout.directives) && layout.directives.every(d =>
+      isRecord(d) && typeof d.raw === 'string' && (d.sourcePath === undefined || typeof d.sourcePath === 'string'))
+}
+
 /** Runtime schema check for imported workspace JSON. */
 export function isWorkspaceShape(obj: unknown): obj is Workspace {
   if (!isRecord(obj)) return false
   if ('name' in obj && obj.name !== undefined && typeof obj.name !== 'string') return false
   if ('description' in obj && obj.description !== undefined && typeof obj.description !== 'string') return false
+  if (!isScopedPropertiesShape(obj)) return false
   if ('scope' in obj && obj.scope !== undefined && !['softwaresystem', 'landscape', 'none'].includes(String(obj.scope))) return false
 
   if ('directives' in obj && obj.directives !== undefined && (!Array.isArray(obj.directives) || !obj.directives.every(d =>
-    isRecord(d) && typeof d.raw === 'string' && ['workspace', 'model', 'views'].includes(String(d.scope))
+    isRecord(d) && typeof d.raw === 'string' && ['workspace', 'workspaceProperties', 'model', 'modelProperties', 'views'].includes(String(d.scope))
   ))) return false
 
   if ('includedFiles' in obj && obj.includedFiles !== undefined && (!Array.isArray(obj.includedFiles) || !obj.includedFiles.every(f =>
@@ -476,6 +504,7 @@ export function isWorkspaceShape(obj: unknown): obj is Workspace {
 
   const { model, views } = obj
   if (!isRecord(model) || !isRecord(views)) return false
+  if (!isScopedPropertiesShape(model)) return false
   if (!Array.isArray(model.people) || !model.people.every(isPersonShape)) return false
   if (!Array.isArray(model.softwareSystems) || !model.softwareSystems.every(isSoftwareSystemShape)) return false
   if (!Array.isArray(model.relationships) || !model.relationships.every(isRelationshipShape)) return false
@@ -502,7 +531,13 @@ export function isWorkspaceShape(obj: unknown): obj is Workspace {
 
 /** Load workspace from localStorage crash recovery */
 export function loadFromLocalStorage(): Workspace | null {
-  return readJSON<Workspace>('c4hero_crash_recovery', isWorkspaceShape)
+  const workspace = readJSON<Workspace>('c4hero_crash_recovery', isWorkspaceShape)
+  if (workspace) {
+    forEachElementHelper(workspace, (element) => {
+      if (element.status !== undefined) element.status = normalizeElementStatus(element.status)
+    })
+  }
+  return workspace
 }
 
 /** Clear crash recovery data */

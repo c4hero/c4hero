@@ -44,12 +44,32 @@ workspace {
     }
   })
 
-  it('ignores unknown status values without error', () => {
+  it('accepts a status outside the built-in set without error', () => {
+    // The vocabulary is open, so a value c4hero does not ship with is a status,
+    // not an error — it becomes first-class on the canvas.
     const dsl = `
 workspace {
   model {
     sys = softwareSystem "App" {
-      status UnknownValue
+      status "Beyond MVP"
+    }
+  }
+  views {}
+}
+`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    expect(workspace.model.softwareSystems[0].status).toBe('Beyond MVP')
+  })
+
+  it('ignores a status value that could not round-trip', () => {
+    // A blank value is unrepresentable in the DSL (Structurizr rejects
+    // `"key" ""`), so it must not become a status.
+    const dsl = `
+workspace {
+  model {
+    sys = softwareSystem "App" {
+      status ""
     }
   }
   views {}
@@ -335,14 +355,28 @@ describe('reserved property key collisions', () => {
     expect(serializeDSL(parsed)).toBe(dsl1)
   })
 
-  it('idempotence: a user property `c4hero.status` with no status field round-trips byte-identical', () => {
-    // 'UserValue' is not a valid status enum member, so the parser must leave
-    // it as a plain property rather than hoist (and then drop) it.
+  it('idempotence: a user property `c4hero.status` hoists to the status field and round-trips byte-identical', () => {
+    // The vocabulary is open, so the parser hoists 'UserValue' into the status
+    // field. The serializer writes the field back to the same property, so the
+    // text is unchanged — the value is now a first-class status rather than an
+    // inert property, and a second pass is a fixed point.
     const dsl1 = serializeDSL(sysWs({ properties: { 'c4hero.status': 'UserValue' } }))
     expect(dsl1).toContain('"c4hero.status" "UserValue"')
     const { workspace: parsed, errors } = parseDSL(dsl1)
     expect(errors).toHaveLength(0)
+    expect(parsed.model.softwareSystems[0].status).toBe('UserValue')
+    expect(parsed.model.softwareSystems[0].properties['c4hero.status']).toBeUndefined()
+    expect(serializeDSL(parsed)).toBe(dsl1)
+  })
+
+  it('idempotence: an unrepresentable `c4hero.status` value stays a plain property', () => {
+    // A multi-line value cannot be a status (it would not survive the DSL), so
+    // it must stay where it was rather than be hoisted and lost.
+    const dsl1 = serializeDSL(sysWs({ properties: { 'c4hero.status': 'one\ntwo' } }))
+    const { workspace: parsed, errors } = parseDSL(dsl1)
+    expect(errors).toHaveLength(0)
     expect(parsed.model.softwareSystems[0].status).toBeUndefined()
+    expect(parsed.model.softwareSystems[0].properties['c4hero.status']).toBe('one\ntwo')
     expect(serializeDSL(parsed)).toBe(dsl1)
   })
 

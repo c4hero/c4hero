@@ -155,7 +155,9 @@ export function generateWorkspace(seed: number, opts: GenerateOptions = {}): Wor
     tags: tags(defaults),
     properties: props(),
     url: maybe(0.2, () => (relax.invalidUrls && chance(0.5) ? pick(BAD_URLS) : pick(URLS))),
-    status: maybe(0.3, () => pick(['Live', 'Planned', 'Deprecated', 'Removed'] as ElementStatus[])),
+    // Includes a custom value: the vocabulary is open, so round-trip has to hold
+    // for a status c4hero does not ship with.
+    status: maybe(0.3, () => pick(['Live', 'Planned', 'Deprecated', 'Removed', 'Awaiting sign-off'] as ElementStatus[])),
     owner: maybe(0.3, () => pick(OWNERS)),
   })
 

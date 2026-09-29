@@ -1,5 +1,5 @@
-import type { Workspace, ElementInView, ModelElement } from '@/types/model'
-import { sanitizeViewKey } from './viewKey'
+import type { Workspace, ElementInView, ModelElement, ViewType } from '@/types/model'
+import { derivedViewKeyBase } from './viewKey'
 
 /** Generate sensible default views for a workspace that has none.
  *
@@ -25,12 +25,13 @@ export function generateDefaultViews(ws: Workspace): void {
     const findElement = (id: string): ModelElement | undefined => allElements.get(id)
 
     const usedKeys = new Set<string>()
-    /** Reserve a unique key derived from `base`. The base is sanitized because
-     *  it embeds an element id, and a key Structurizr rejects must never
-     *  originate here (TEA-166) — element ids are conformant today, and this
-     *  keeps that from being a rule the id rules have to keep honouring. */
-    const claim = (base: string): string => {
-        let candidate = sanitizeViewKey(base) || 'View'
+    /** Reserve a unique key derived from the view's type and scope. The base
+     *  comes from the parser's own builder, which sanitizes the embedded
+     *  element id — a key Structurizr rejects must never originate here
+     *  (TEA-166), and a generated key must be the one the parser would derive
+     *  for the same view (TEA-344). */
+    const claim = (type: ViewType, scopeId?: string): string => {
+        let candidate = derivedViewKeyBase(type, scopeId)
         const root = candidate
         let suffix = 2
         while (usedKeys.has(candidate)) candidate = `${root}-${suffix++}`
@@ -46,7 +47,7 @@ export function generateDefaultViews(ws: Workspace): void {
         ]
         ws.views.systemLandscapeViews.push({
             type: 'systemLandscape',
-            key: claim('SystemLandscape'),
+            key: claim('systemLandscape'),
             autoView: true,
             autoKey: true,
             title: 'System Landscape',
@@ -68,7 +69,7 @@ export function generateDefaultViews(ws: Workspace): void {
         ]
         ws.views.systemContextViews.push({
             type: 'systemContext',
-            key: claim(`SystemContext-${sys.id}`),
+            key: claim('systemContext', sys.id),
             autoView: true,
             autoKey: true,
             title: `${sys.name} - System Context`,
@@ -93,7 +94,7 @@ export function generateDefaultViews(ws: Workspace): void {
         ]
         ws.views.containerViews.push({
             type: 'container',
-            key: claim(`Containers-${sys.id}`),
+            key: claim('container', sys.id),
             autoView: true,
             autoKey: true,
             title: `${sys.name} - Containers`,
@@ -118,7 +119,7 @@ export function generateDefaultViews(ws: Workspace): void {
             ]
             ws.views.componentViews.push({
                 type: 'component',
-                key: claim(`Components-${container.id}`),
+                key: claim('component', container.id),
                 autoView: true,
                 autoKey: true,
                 title: `${container.name} - Components`,

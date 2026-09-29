@@ -3,9 +3,9 @@
 // helpers.
 
 import type { Workspace, Model, Group, Person, SoftwareSystem, Container, Component } from '@/types/model'
-import { isElementStatus } from '@/types/model'
+import { normalizeElementStatus } from '@/lib/elementStatus'
 import type { ContextAwareParser } from './parser'
-import { nextId, MAX_DEPTH, setUserProperty } from './parser'
+import { nextId, MAX_DEPTH, readPropertyBlock, setUserProperty } from './parser'
 import { parseRelationship } from './parser-relationship'
 import { parseDeploymentEnvironment } from './parser-deployment'
 
@@ -26,6 +26,11 @@ type Element = Person | SoftwareSystem | Container | Component
  */
 function applyStructurizrConventions(element: Element): void {
     if (element.type === 'person' || element.type === 'softwareSystem') {
+        const location = element.properties['c4hero.location']
+        if (element.location === undefined && (location === 'External' || location === 'Internal')) {
+            element.location = location
+            delete element.properties['c4hero.location']
+        }
         const i = element.tags.indexOf('External')
         // Like every hoist below, only fill an unset field: an explicit legacy
         // `location Internal` line wins over an External tag, which is kept in
@@ -49,10 +54,14 @@ function applyStructurizrConventions(element: Element): void {
     }
     const status = element.properties['c4hero.status']
     if (status !== undefined && element.status === undefined) {
-        // Only hoist valid enum members; anything else stays a plain property
-        // so no value is silently lost.
-        if (isElementStatus(status)) {
-            element.status = status
+        // The status vocabulary is open (see `@/lib/elementStatus`), so any
+        // usable value hoists to the field and becomes a first-class status on
+        // the canvas. Only a value that could not round-trip at all — blank,
+        // multi-line, or past the length cap — stays a plain property, so it is
+        // still not silently lost.
+        const normalized = normalizeElementStatus(status)
+        if (normalized !== undefined) {
+            element.status = normalized
             delete element.properties['c4hero.status']
         }
     }
@@ -156,7 +165,11 @@ export function parseModelBody(
             if (kw === 'properties') {
                 p.advance()
                 p.skipNewlines()
-                p.skipBraceBlock()
+                if (p.match('LBRACE')) {
+                    p.parseScopedProperties(model, 'modelProperties')
+                    p.skipNewlines()
+                    p.expect('RBRACE')
+                }
                 continue
             }
 
@@ -641,8 +654,8 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
         p.sawLegacyKeyword = true
         const val = p.peek()
         if (val.type === 'IDENTIFIER' || val.type === 'KEYWORD' || val.type === 'STRING') {
-            const s = p.advance().value
-            if (isElementStatus(s)) {
+            const s = normalizeElementStatus(p.advance().value)
+            if (s !== undefined) {
                 element.status = s
             }
         }
@@ -676,32 +689,9 @@ function parseElementPropertyOnElement(p: ContextAwareParser, element: Element, 
 /** Parse a `properties { "key" "value" ... }` block and attach known
  *  keys to the element. Recognizes `c4hero.location` for Person/SoftwareSystem. */
 function parsePropertiesBlock(p: ContextAwareParser, element: Element): void {
-    while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
-        p.skipNewlines()
-        if (p.check('RBRACE') || p.peekType() === 'EOF') break
-        const token = p.peek()
-        if (token.type === 'COMMENT') { p.advance(); continue }
-        if (token.type !== 'STRING' && token.type !== 'IDENTIFIER') { p.advance(); continue }
-        const key = p.advance().value
-        const valTok = p.peek()
-        let val: string | undefined
-        if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-            val = p.advance().value
-        }
-        if (val === undefined) continue
-        // Recognized: c4hero.location → element.location for persons/systems.
-        // Hoist only a valid, hoistable value into a still-unset field; any
-        // other combination stays a plain property so no value is silently
-        // lost (same rule as the c4hero.status hoist).
-        if (key === 'c4hero.location'
-            && (element.type === 'person' || element.type === 'softwareSystem')
-            && (val === 'External' || val === 'Internal')
-            && (element as Person | SoftwareSystem).location === undefined) {
-            (element as Person | SoftwareSystem).location = val
-        } else {
-            setUserProperty(element.properties, key, val)
-        }
-    }
+    // Resolve special properties only after every block has supplied its
+    // values, so a root override after an include takes precedence.
+    readPropertyBlock(p, element, (key, val) => setUserProperty(element.properties, key, val))
 }
 
 // Re-export Workspace for type compatibility with parseModelBody calls

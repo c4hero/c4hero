@@ -4,6 +4,9 @@
 import type {
     Workspace,
     WorkspaceDirective,
+    PropertyDeclaration,
+    PropertyDirective,
+    PropertyLayout,
     Model,
     View,
     ElementInView,
@@ -138,6 +141,9 @@ export interface ParseResult {
     /** Source line per style object and of the `themes` line. */
     styleLines: Map<object, number>
     themesLine: number | undefined
+    /** Source line of each property declaration and properties-block
+     *  directive (workspace, model, element and relationship blocks). */
+    propertyLines: Map<PropertyDeclaration | PropertyDirective, number>
     /** Non-fatal notes: the model loaded, but something was preserved rather
      *  than understood (e.g. an unresolved `!include`). */
     warnings: ParseError[]
@@ -165,6 +171,92 @@ export function setUserProperty(props: Record<string, string>, key: string, valu
     Object.defineProperty(props, key, { value, enumerable: true, writable: true, configurable: true })
 }
 
+/**
+ * Read the entries of a `properties { }` block, stopping at its closing brace.
+ * Keys and values may be quoted strings or bare words, as in Structurizr.
+ * Every properties-block parser goes through this so the token rules cannot
+ * drift apart. A `!` line inside the block goes to `onDirective`, which is
+ * required so no caller can drop one unnoticed; a key with no value goes to
+ * `onMissingValue`, or is skipped without one.
+ */
+export function readPropertyEntries(
+    p: ContextAwareParser,
+    onEntry: (key: string, value: string, token: Token) => void,
+    opts: {
+        onDirective: (token: Token) => void
+        onMissingValue?: (key: string, token: Token) => void
+    },
+): void {
+    const isBarePart = (t: Token) => t.type === 'IDENTIFIER' || t.type === 'NUMBER'
+        || t.type === 'DOT' || t.type === 'EQUALS' || t.type === 'STAR' || t.type === 'ARROW'
+        || (t.type === 'KEYWORD' && !t.value.startsWith('!'))
+    // The lexer splits qualified refs and numbers for other DSL contexts.
+    // Here contiguous bare tokens form one property word; whitespace separates
+    // the key from its value. Quoted strings are already decoded by the lexer.
+    const readWord = (): string | undefined => {
+        if (p.peekType() === 'STRING') return p.advance().value
+        if (!isBarePart(p.peek())) return undefined
+        let previous = p.advance()
+        let value = previous.value
+        while (isBarePart(p.peek()) && p.peek().line === previous.line
+            && p.peek().column === previous.column + previous.value.length) {
+            previous = p.advance()
+            value += previous.value
+        }
+        return value
+    }
+    while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
+        p.skipNewlines()
+        if (p.check('RBRACE') || p.peekType() === 'EOF') break
+        const token = p.peek()
+        if (token.type === 'COMMENT') { p.advance(); continue }
+        if (token.type === 'KEYWORD' && token.value.startsWith('!')) {
+            p.advance()
+            opts.onDirective(token)
+            p.skipToNextLine()
+            continue
+        }
+        const key = readWord()
+        if (key === undefined) { p.advance(); continue }
+        const value = readWord()
+        if (value !== undefined) onEntry(key, value, token)
+        else opts.onMissingValue?.(key, token)
+    }
+}
+
+/** Read and accumulate every properties block on a holder. Keep the layout
+ * on the model only once a directive appears, including earlier plain blocks. */
+export function readPropertyBlock(
+    p: ContextAwareParser,
+    holder: { propertyLayout?: PropertyLayout },
+    onEntry: (key: string, value: string) => void,
+): void {
+    let pending = p.propertyLayouts.get(holder)
+    if (!pending) {
+        pending = { layout: { declarations: [], directives: [] }, lines: [] }
+        p.propertyLayouts.set(holder, pending)
+    }
+    const { layout, lines } = pending
+    readPropertyEntries(p, (key, value, token) => {
+        onEntry(key, value)
+        const declaration: PropertyDeclaration = {
+            key, value, slot: layout.directives.length, sourceLine: token.line, sourceColumn: token.column,
+        }
+        layout.declarations.push(declaration)
+        lines.push([declaration, token.line])
+    }, {
+        onDirective: (token) => {
+            const directive: PropertyDirective = { raw: token.value.trim() }
+            layout.directives.push(directive)
+            lines.push([directive, token.line])
+        },
+    })
+    if (layout.directives.length === 0) return
+    holder.propertyLayout = layout
+    for (const [item, line] of lines) p.propertyLines.set(item, line)
+    lines.length = 0
+}
+
 export class ContextAwareParser {
     tokens: Token[]
     pos = 0
@@ -179,6 +271,13 @@ export class ContextAwareParser {
     /** Source line per parsed style object and of the `themes` line. */
     styleLines = new Map<object, number>()
     themesLine: number | undefined
+    /** See ParseResult.propertyLines. */
+    propertyLines = new Map<PropertyDeclaration | PropertyDirective, number>()
+    /** Parse-only history: plain blocks may precede a block with directives. */
+    propertyLayouts = new WeakMap<object, {
+        layout: PropertyLayout
+        lines: [PropertyDeclaration | PropertyDirective, number][]
+    }>()
     /** Last element / environment / group declared in the model block being
      *  parsed — the anchor a following `!` directive is re-emitted after.
      *  Reset on entering a group body (see parseModelBody). */
@@ -423,7 +522,7 @@ export class ContextAwareParser {
         const raw = value.trim()
         if (/^!identifiers\b/.test(raw)) return
         const directive: WorkspaceDirective = { scope, raw }
-        if (scope === 'model') {
+        if (scope === 'model' || scope === 'modelProperties') {
             if (this.currentGroupId) directive.groupId = this.currentGroupId
             if (this.lastModelDeclId) directive.after = this.lastModelDeclId
         }
@@ -544,7 +643,7 @@ export class ContextAwareParser {
             if (this.check('KEYWORD', 'extends') || this.check('IDENTIFIER', 'extends')) {
                 this.skipToNextLine()
                 this.skipBraceBlock()
-                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine }
+                return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine, propertyLines: this.propertyLines }
             }
 
             workspace.name = this.readOptionalString() || undefined
@@ -559,7 +658,7 @@ export class ContextAwareParser {
         }
 
         if (this.directives.length > 0) workspace.directives = this.directives
-        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine }
+        return { workspace, errors: this.errors, warnings: this.warnings, declarationLines: this.declarationLines, viewLines: this.viewLines, directiveLines: this.directiveLines, styleLines: this.styleLines, themesLine: this.themesLine, propertyLines: this.propertyLines }
     }
 
     private createEmptyWorkspace(): Workspace {
@@ -629,7 +728,11 @@ export class ContextAwareParser {
                 } else if (kw === 'properties') {
                     this.advance()
                     this.skipNewlines()
-                    this.skipBraceBlock()
+                    if (this.match('LBRACE')) {
+                        this.parseScopedProperties(workspace, 'workspaceProperties')
+                        this.skipNewlines()
+                        this.expect('RBRACE')
+                    }
                 } else {
                     // Unknown workspace-level keyword (e.g. branding, terminology, !identifiers).
                     // Consume keyword + any inline string args, then skip a brace block if present.
@@ -642,6 +745,26 @@ export class ContextAwareParser {
                 this.advance()
             }
         }
+    }
+
+    /** Parse a workspace- or model-level `properties { }` block into
+     *  `holder.properties`, recording each line's position among the block
+     *  kind's directives (see PropertyDeclaration.slot). */
+    parseScopedProperties(holder: Workspace | Model, scope: 'workspaceProperties' | 'modelProperties'): void {
+        const slotScopes: WorkspaceDirective['scope'][] = scope === 'workspaceProperties' ? ['workspace', scope] : ['model', scope]
+        readPropertyEntries(this, (key, value, token) => {
+            holder.properties ??= {}
+            setUserProperty(holder.properties, key, value)
+            const declaration: PropertyDeclaration = {
+                key, value, slot: this.directives.filter((d) => slotScopes.includes(d.scope)).length,
+                sourceLine: token.line, sourceColumn: token.column,
+            }
+            ;(holder.propertyDeclarations ??= []).push(declaration)
+            this.propertyLines.set(declaration, token.line)
+        }, {
+            onDirective: (token) => this.noteDirective(token.value, scope, token),
+            onMissingValue: (key, token) => this.addError(`Expected a value for property '${key}'`, token),
+        })
     }
 
     private parseWorkspaceConfiguration(workspace: Workspace): void {
@@ -785,5 +908,6 @@ export function parse(input: string): ParseResult {
         directiveLines: result.directiveLines,
         styleLines: result.styleLines,
         themesLine: result.themesLine,
+        propertyLines: result.propertyLines,
     }
 }
