@@ -91,7 +91,20 @@ export function initSentry(): boolean {
     dsn,
     environment: getEnvironment(),
     release: getRelease(),
-    sendDefaultPii: false,
+    // Sentry v11 replaced `sendDefaultPii: false` with per-category opt-outs
+    // whose defaults are all permissive, so each one is switched off here.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+    },
     tracesSampleRate: 0,
     beforeSend: scrubSentryEvent,
     ignoreErrors: [/ResizeObserver loop/i],
