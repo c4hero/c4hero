@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { useWorkspaceStore, isFocalScopeElement, getActiveView, buildRelationshipMap } from '@/store/workspace'
+import { useWorkspaceStore, isFocalScopeElement, buildRelationshipMap } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
+import { getActiveCamera } from '@/lib/activeCamera'
+import { editingView } from '@/lib/explore/editing'
 import {
   AlignStartVertical,
   AlignCenterVertical,
@@ -54,6 +56,7 @@ function quotedAttributeValue(value: string): string {
 }
 
 export default function MultiSelectBar() {
+  const rendererMode = useWorkspaceStore(s => s.rendererMode)
   const selectedElementIds = useWorkspaceStore((s) => s.selectedElementIds)
   const addGroup = useWorkspaceStore((s) => s.addGroup)
   const selectGroup = useWorkspaceStore((s) => s.selectGroup)
@@ -70,14 +73,14 @@ export default function MultiSelectBar() {
 
   const lockedIds = useMemo(() => {
     if (!workspace || !activeViewKey || selectedElementIds.length === 0) return new Set<string>()
-    const view = getActiveView(workspace, activeViewKey)
+    const view = editingView(workspace, activeViewKey, rendererMode)
     if (!view) return new Set<string>()
     // A locked view freezes the whole selection: Align/Distribute/Straighten
     // have nothing they may move.
     if (view.locked) return new Set(selectedElementIds)
     const selected = new Set(selectedElementIds)
     return new Set(view.elements.filter((el) => selected.has(el.id) && el.locked).map((el) => el.id))
-  }, [workspace, activeViewKey, selectedElementIds])
+  }, [workspace, activeViewKey, selectedElementIds, rendererMode])
 
   // One button, two jobs: lock the selection unless it's already all locked,
   // in which case the obvious next action is to release it.
@@ -111,8 +114,9 @@ export default function MultiSelectBar() {
   }, [count, primaryPointerDown])
 
   const pos = useMemo(() => {
-    if (count < 2) return null
-    const nodes = reactFlow.getNodes().filter(n => selectedElementIds.includes(n.id))
+    if (count < 2 || !workspace) return null
+    const camera = rendererMode === 'explore' ? getActiveCamera() : null
+    const nodes = (camera?.getNodes?.() ?? reactFlow.getNodes()).filter(n => selectedElementIds.includes(n.id))
     if (nodes.length === 0) return null
 
     const minX = Math.min(...nodes.map(n => n.position.x))
@@ -122,8 +126,8 @@ export default function MultiSelectBar() {
     const centerFlowX = (minX + maxX) / 2
     const topFlowY = minY
 
-    return reactFlow.flowToScreenPosition({ x: centerFlowX, y: topFlowY })
-  }, [selectedElementIds, count, reactFlow])
+    return (camera?.flowToScreenPosition?.({ x: centerFlowX, y: topFlowY }) ?? reactFlow.flowToScreenPosition({ x: centerFlowX, y: topFlowY }))
+  }, [selectedElementIds, count, reactFlow, rendererMode, workspace])
 
   if (count < 2 || !pos || primaryPointerDown) return null
 
@@ -145,14 +149,15 @@ export default function MultiSelectBar() {
     // Locked nodes are excluded outright — they don't participate in the
     // alignment/distribution math and applyLayoutPositions never learns
     // their id, so it can't force their on-screen position either.
-    const rfNodes = reactFlow.getNodes().filter(n => selectedElementIds.includes(n.id) && !lockedIds.has(n.id))
-    const zoom = reactFlow.getZoom() || 1
+    const camera = rendererMode === 'explore' ? getActiveCamera() : null
+    const rfNodes = (camera?.getNodes?.() ?? reactFlow.getNodes()).filter(n => selectedElementIds.includes(n.id) && !lockedIds.has(n.id))
+    const zoom = (camera?.getZoom?.() ?? reactFlow.getZoom()) || 1
     return rfNodes.map(n => ({
       id: n.id,
       x: n.position.x,
       y: n.position.y,
       ...(() => {
-        const element = document.querySelector<HTMLElement>(`.react-flow__node[data-id="${quotedAttributeValue(n.id)}"]`)
+        const element = rendererMode === 'explore' ? null : document.querySelector<HTMLElement>(`.react-flow__node[data-id="${quotedAttributeValue(n.id)}"]`)
         const rect = element?.getBoundingClientRect()
         const renderedWidth = rect && rect.width > 0 ? rect.width / zoom : undefined
         const renderedHeight = rect && rect.height > 0 ? rect.height / zoom : undefined
@@ -165,6 +170,7 @@ export default function MultiSelectBar() {
   }
 
   function applyLayoutPositions(positions: Array<{ id: string; x: number; y: number }>) {
+    if (rendererMode === 'explore') { getActiveCamera()?.moveNodes?.(positions); setAlignOpen(false); return }
     const byId = new Map(positions.map((p) => [p.id, p]))
     reactFlow.setNodes((nodes) => nodes.map((n) => {
       const next = byId.get(n.id)
@@ -218,7 +224,7 @@ export default function MultiSelectBar() {
     // by the preserved axis and push later nodes forward by their own
     // size + a gap whenever they would overlap a predecessor's bbox.
     // Order is preserved so this feels like a stable nudge, not a shuffle.
-    const GAP = 24
+    const GAP = rendererMode === 'explore' ? 24 * Math.min(...positions.map(p => p.w / 200)) : 24
     const horizontal = mode === 'top' || mode === 'bottom' || mode === 'center-y'
     const sorted = [...aligned].sort((a, b) => horizontal ? a.x - b.x : a.y - b.y)
     for (let i = 1; i < sorted.length; i++) {
@@ -247,7 +253,7 @@ export default function MultiSelectBar() {
       const last = sorted[sorted.length - 1]
       const totalWidth = sorted.reduce((sum, p) => sum + p.w, 0)
       const span = (last.x + last.w) - first.x
-      const gap = Math.max(MIN_DISTRIBUTE_GAP, (span - totalWidth) / (sorted.length - 1))
+      const gap = Math.max(rendererMode === 'explore' ? MIN_DISTRIBUTE_GAP * Math.min(...positions.map(p => p.w / 200)) : MIN_DISTRIBUTE_GAP, (span - totalWidth) / (sorted.length - 1))
       let cursor = first.x
       const distributed = sorted.map((p) => {
         const x = cursor
@@ -262,7 +268,7 @@ export default function MultiSelectBar() {
     const last = sorted[sorted.length - 1]
     const totalHeight = sorted.reduce((sum, p) => sum + p.h, 0)
     const span = (last.y + last.h) - first.y
-    const gap = Math.max(MIN_DISTRIBUTE_GAP, (span - totalHeight) / (sorted.length - 1))
+    const gap = Math.max(rendererMode === 'explore' ? MIN_DISTRIBUTE_GAP * Math.min(...positions.map(p => p.w / 200)) : MIN_DISTRIBUTE_GAP, (span - totalHeight) / (sorted.length - 1))
     let cursor = first.y
     const distributed = sorted.map((p) => {
       const y = cursor
@@ -274,7 +280,7 @@ export default function MultiSelectBar() {
 
   function getRelationshipPathOrder(): string[] | null {
     if (!workspace || !activeViewKey) return null
-    const activeView = getActiveView(workspace, activeViewKey)
+    const activeView = editingView(workspace, activeViewKey, rendererMode)
     if (!activeView) return null
 
     const selected = new Set(selectedElementIds)
@@ -327,7 +333,7 @@ export default function MultiSelectBar() {
       const minY = Math.min(...positions.map((p) => p.y))
       const maxY = Math.max(...positions.map((p) => p.y + p.h))
       const totalWidth = ordered.reduce((sum, p) => sum + p.w, 0)
-      const gap = Math.max(MIN_PATH_GAP, ((maxX - minX) - totalWidth) / (ordered.length - 1))
+      const gap = Math.max(rendererMode === 'explore' ? MIN_PATH_GAP * Math.min(...positions.map(p => p.w / 200)) : MIN_PATH_GAP, ((maxX - minX) - totalWidth) / (ordered.length - 1))
       const totalSpan = totalWidth + gap * (ordered.length - 1)
       const targetCenterY = (minY + maxY) / 2
       let cursor = (minX + maxX) / 2 - totalSpan / 2
@@ -345,7 +351,7 @@ export default function MultiSelectBar() {
     const minY = Math.min(...positions.map((p) => p.y))
     const maxY = Math.max(...positions.map((p) => p.y + p.h))
     const totalHeight = ordered.reduce((sum, p) => sum + p.h, 0)
-    const gap = Math.max(MIN_PATH_GAP, ((maxY - minY) - totalHeight) / (ordered.length - 1))
+    const gap = Math.max(rendererMode === 'explore' ? MIN_PATH_GAP * Math.min(...positions.map(p => p.w / 200)) : MIN_PATH_GAP, ((maxY - minY) - totalHeight) / (ordered.length - 1))
     const totalSpan = totalHeight + gap * (ordered.length - 1)
     const targetCenterX = (minX + maxX) / 2
     let cursor = (minY + maxY) / 2 - totalSpan / 2
@@ -504,7 +510,7 @@ export default function MultiSelectBar() {
           onClick={() => {
             if (!workspace || !activeViewKey) return
             const ids = selectedElementIds.filter(
-              (id) => !isFocalScopeElement(workspace, activeViewKey, id),
+              (id) => rendererMode === 'explore' || !isFocalScopeElement(workspace, activeViewKey, id),
             )
             if (ids.length === 0) return
             const impact = computeCascadeImpact(workspace, ids)

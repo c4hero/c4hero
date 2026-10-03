@@ -457,3 +457,24 @@ it('rejects a scope rename that would overwrite a retained view key, and derived
   expect(layout()['Containers-billing']).toEqual(retained)
   expect(layout()['Containers-billing2']).toEqual(before['Containers-payments'])
 })
+
+
+describe('Zoom layout across persistence boundaries', () => {
+  it('restores per-view child coordinates, hidden nodes and locks after absent views return', () => {
+    load()
+    const zoom = { positionSpace: 'parent-body' as const, direction: 'LR' as const, hiddenIds: ['db'], elements: { api: { x: .3, y: .7, pinned: true, locked: true } } }
+    state().setActiveView('Wide')
+    state().updateExploreLayout(zoom)
+    place()
+    const before = layout()
+    reopen()
+    expect(view(state().workspace!).exploreLayout).toEqual(zoom)
+    expect(state().replaceWorkspaceFromDSL(dsl(narrow)).ok).toBe(true)
+    cycles()
+    expect(layout().Wide.exploreLayout).toEqual(zoom)
+    expect(state().replaceWorkspaceFromDSL(dsl()).ok).toBe(true)
+    cycles()
+    expect(view(state().workspace!).exploreLayout).toEqual(zoom)
+    expect(layout()).toEqual(before)
+  })
+})

@@ -1,6 +1,8 @@
+import { creatableTypes, editingView } from '@/lib/explore/editing'
+import { getActiveCamera } from '@/lib/activeCamera'
 import { useEffect } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { useWorkspaceStore, getCreatableTypes, getActiveView, isFocalScopeElement } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
@@ -62,7 +64,7 @@ function backspaceLikeHandler(destructive: boolean): KeyHandler {
     const ws = store.workspace
     const viewKey = store.activeViewKey
     const ids = store.selectedElementIds.filter(
-      (id) => !isFocalScopeElement(ws, viewKey, id),
+      (id) => store.rendererMode === 'explore' || !isFocalScopeElement(ws, viewKey, id),
     )
     if (ids.length === 0) return // selection was *only* focal scope — no-op
 
@@ -85,8 +87,9 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.selectedElementIds.length > 0) store.duplicateElements(store.selectedElementIds)
   },
   'mod+a': (store) => {
+    if (store.rendererMode === 'explore') { store.selectElements(getActiveCamera()?.getNodes?.().map(n => n.id) ?? []); return }
     if (store.workspace && store.activeViewKey) {
-      const view = getActiveView(store.workspace, store.activeViewKey)
+      const view = editingView(store.workspace, store.activeViewKey, store.rendererMode)
       if (view) store.selectElements(view.elements.map(el => el.id))
     }
   },
@@ -145,22 +148,22 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   },
   'shift+P': (store) => {
     if (!store.workspace) return
-    const ct = getCreatableTypes(store.workspace, store.activeViewKey)
+    const ct = creatableTypes(store.workspace, store.activeViewKey, store.rendererMode, store.selectedElementIds)
     if (ct.canCreatePerson) store.addPerson('New Person')
   },
   'shift+S': (store) => {
     if (!store.workspace) return
-    const ct = getCreatableTypes(store.workspace, store.activeViewKey)
+    const ct = creatableTypes(store.workspace, store.activeViewKey, store.rendererMode, store.selectedElementIds)
     if (ct.canCreateSystem) store.addSoftwareSystem('New System')
   },
   'shift+C': (store) => {
     if (!store.workspace) return
-    const ct = getCreatableTypes(store.workspace, store.activeViewKey)
+    const ct = creatableTypes(store.workspace, store.activeViewKey, store.rendererMode, store.selectedElementIds)
     if (ct.canCreateContainer) store.addContainer(ct.canCreateContainer, 'New Container')
   },
   'shift+O': (store) => {
     if (!store.workspace) return
-    const ct = getCreatableTypes(store.workspace, store.activeViewKey)
+    const ct = creatableTypes(store.workspace, store.activeViewKey, store.rendererMode, store.selectedElementIds)
     if (ct.canCreateComponent) store.addComponent(ct.canCreateComponent, 'New Component')
   },
   'a': (store) => {
@@ -193,10 +196,10 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.workspace && store.activeViewKey) store.resetAndRelayout(store.activeViewKey)
   },
   '?': (store) => store.setCommandPaletteOpen(true),
-  '=': (_store, rf) => rf?.zoomIn({ duration: 200 }),
-  '+': (_store, rf) => rf?.zoomIn({ duration: 200 }),
-  '-': (_store, rf) => rf?.zoomOut({ duration: 200 }),
-  '0': (_store, rf) => fitContentNodesToViewport(rf),
+  '=': (_store, rf) => getActiveCamera() ? getActiveCamera()!.zoomBy(1.25) : rf?.zoomIn({ duration: 200 }),
+  '+': (_store, rf) => getActiveCamera() ? getActiveCamera()!.zoomBy(1.25) : rf?.zoomIn({ duration: 200 }),
+  '-': (_store, rf) => getActiveCamera() ? getActiveCamera()!.zoomBy(1 / 1.25) : rf?.zoomOut({ duration: 200 }),
+  '0': (_store, rf) => getActiveCamera() ? getActiveCamera()!.fit() : fitContentNodesToViewport(rf),
 }
 
 function getKeyCombo(e: KeyboardEvent): string {
@@ -268,6 +271,18 @@ export function useKeyboardShortcuts() {
           e.preventDefault()
         }
         return
+      }
+
+      if (store.rendererMode === 'explore') {
+        if ((e.key === 'Enter' || e.key === ' ') && target.closest('button, summary, [role=button]')) return
+        const camera = getActiveCamera()
+        const navigation: Record<string, () => void> = {
+          '+': () => camera?.zoomBy(1.25), '=': () => camera?.zoomBy(1.25), '-': () => camera?.zoomBy(1 / 1.25), '0': () => camera?.fit(),
+          ArrowLeft: () => camera?.pan(80, 0), ArrowRight: () => camera?.pan(-80, 0), ArrowUp: () => camera?.pan(0, 80), ArrowDown: () => camera?.pan(0, -80),
+          Enter: () => { if (store.selectedElementIds[0]) camera?.focus(store.selectedElementIds[0]) },
+          Escape: () => { if (store.presentationMode) store.setPresentationMode(false); else camera?.escape() },
+        }
+        if (!store.searchOpen && !store.commandPaletteOpen && navigation[e.key]) { e.preventDefault(); navigation[e.key](); return }
       }
 
       // Global shortcuts
