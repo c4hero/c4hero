@@ -307,7 +307,7 @@ describe('layout migration for normalized view keys', () => {
         expect(view.elements.find(el => el.id === 'sys1')).toMatchObject(saved.elements.sys1)
         const migrated = extractSidecar(workspace)!
         expect(migrated.views?.[key]).toBeUndefined()
-        expect(migrated.views?.[view.key]).toEqual(saved)
+        expect(migrated.views?.[view.key]).toEqual({ ...saved, view: expect.objectContaining({ type: 'systemContext' }) })
         const reloaded = parseDSL(serializeDSL(workspace)).workspace
         applySidecar(reloaded, migrated)
         expect(reloaded.views.systemContextViews[0].locked).toBe(true)

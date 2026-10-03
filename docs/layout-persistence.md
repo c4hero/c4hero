@@ -8,8 +8,12 @@ Absence alone must not delete that content on the next save.
 ## Rules
 
 - `applySidecar` retains the loaded layout in `Workspace.savedLayout` and
-  applies entries to current views using their keys (or the parser's explicit
-  key-normalization alias).
+  matches entries by their recorded view identity. Authored keys identify
+  named views; unnamed views use their type and scope (including deployment
+  environment). The parser's original, pre-normalization key is an alias.
+  Within a shared identity, element overlap must pick a unique best match
+  from both sides. Unmatched entries are parked outside live view keys so
+  the next save cannot overwrite or merge them into another view's layout.
 - `extractSidecar` merges current layout into that record at element granularity.
   Live elements and view locks are authoritative; absent elements and views
   retain their saved entries. Extraction does not mutate either input.
@@ -38,20 +42,27 @@ Absence alone must not delete that content on the next save.
   view-less DSL would delete every generated diagram at the next parse.
   Structurizr's implicit-views convention is all-or-nothing.
 
-The sidecar stays at version 1. Existing files need no migration, and this
-change does not rewrite DSL view keys.
+The sidecar stays at version 1. Each saved view entry gains an optional `view`
+object containing `type`, scope fields and, only for named views, `key`.
+Existing files need no migration: entries without identity use exact key or
+the parser's original-key alias and gain identity on the next save. Malformed
+identity is treated as absent without rejecting the layout. This change does
+not rewrite DSL view keys.
 
 ## Boundary of this fix
 
-Preservation is separate from identity. Keyless views still derive their keys
-from scope and declaration order. Reordering them can apply a saved entry to
-the wrong diagram. Generated diagrams are still hidden when a DSL authored
-elsewhere declares explicit views. Their retained layout remains in the
-sidecar, including element entries that the current diagram cannot display.
+Keyless views still derive their keys from scope and declaration order, but
+recorded identity lets distinguishable layouts follow their views when those
+keys change. A tie declines rather than selecting an owner by key or order.
+For an unchanged number of indistinguishable views and entries, existing keys
+remain the only correspondence: reordering two views of the same type, scope
+and elements can still swap their layouts. Explicit, unique DSL view keys
+resolve this limitation. Legacy entries cannot recover identity from a key
+that was already renumbered before their first save with this version.
 
-Use explicit, unique DSL view keys for stable ownership today. Reliable identity
-for keyless views needs a separate design; prefix/overlap matching cannot prove
-which view owns an entry. Do not add such guesses to persistence.
+Generated diagrams are still hidden when a DSL authored elsewhere declares
+explicit views. Their retained layout remains in the sidecar, including
+element entries that the current diagram cannot display.
 
 Entries removed through DSL edits are retained because the application cannot
 distinguish intentional removal from temporary absence. When that recovery
@@ -66,14 +77,17 @@ does not touch layout belonging to a current view.
 and sidecar together through repeated save/reopen cycles. It covers all three
 reported failure modes, missing elements, recovery, intentional deletion/reset,
 ID renaming, duplication, locks, undo/redo, and workspace isolation.
+`src/lib/layoutIdentity.test.ts` covers two-sided ambiguity, authored identities,
+scope separation, normalized-key aliases and legacy fallback. The explicitly
+indistinguishable reorder remains asserted as a known limitation.
 Restoration regressions also cover dynamic/context/deployment UI paths and
 same-name elements with distinct retained IDs through undo/redo and save/reopen.
 `src/lib/workspaceSave.test.ts` checks the actual JSON passed to file/folder
 writers, including clearing the last layout without reopening first.
 
 For browser validation against the production build, run `npm run build`, then
-`npx playwright test --config playwright.preview.config.ts`. The four preview
-checks cover dynamic/context/deployment restoration, same-name collisions,
+`npx playwright test --config playwright.preview.config.ts`. The preview
+checks cover dynamic/context/deployment restoration, keyless view identity, same-name collisions,
 reset, undo/redo, and saves/reopens. They use native Chromium file handles in
 its origin-private filesystem, with only the directory chooser substituted.
 Reopening clears application state and crash recovery before reading the saved
