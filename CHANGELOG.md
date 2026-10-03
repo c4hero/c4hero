@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nested, so `Group:` style tags keep matching. Editing a property whose value
   came from a read-only include now writes the new value into the root file
   instead of losing it (TEA-349).
+- **Opening a workspace no longer rewrites its files.** Autosave fired on open
+  as well as on edit, so just looking at a diagram wrote the DSL and layout
+  files back to disk, and two tabs on one folder could overwrite each other's
+  work. A file is now only written when its bytes would actually change, which
+  keeps version-control diffs clean and stops an open canvas from clobbering
+  edits made by an agent or another editor (#222, TEA-356).
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.

@@ -17,6 +17,7 @@ import {
   readTextFileAt,
   writeTextFileAt,
 } from './folderIO'
+import { makeCountingDirHandle } from './testing/countingDirHandle'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -64,6 +65,100 @@ function makeDirHandle(files: Record<string, string> = {}): FileSystemDirectoryH
     queryPermission: async () => 'granted' as PermissionState,
   } as unknown as FileSystemDirectoryHandle
 }
+
+describe('writers skip content that is already on disk', () => {
+  // Writing bytes a file already holds is never necessary and is not free: it
+  // bumps mtime and wakes every watcher on the folder. Because the whole
+  // workspace is re-serialised whenever the workspace object changes — which
+  // includes merely LOADING one — an ungated writer turns "open a diagram"
+  // into an edit of the file that diagram came from. That is what makes two
+  // c4hero tabs on one folder two writers instead of one writer and a reader.
+
+  it('does not open a writable when the DSL file already holds exactly this text', async () => {
+    const { dir, opened } = makeCountingDirHandle({ 'w.dsl': 'workspace "W" {}' })
+    await setDirHandle(dir)
+    expect(await writeDSLFile('w.dsl', 'workspace "W" {}')).toBe(true)
+    expect(opened['w.dsl']).toBeUndefined()
+  })
+
+  it('still writes when the DSL differs by a single character', async () => {
+    const { dir, opened, content } = makeCountingDirHandle({ 'w.dsl': 'workspace "W" {}' })
+    await setDirHandle(dir)
+    expect(await writeDSLFile('w.dsl', 'workspace "X" {}')).toBe(true)
+    expect(opened['w.dsl']).toBe(1)
+    expect(content['w.dsl']).toBe('workspace "X" {}')
+  })
+
+  it('writes a DSL file that does not exist yet', async () => {
+    const { dir, opened, content } = makeCountingDirHandle()
+    await setDirHandle(dir)
+    expect(await writeDSLFile('new.dsl', 'workspace "N" {}')).toBe(true)
+    expect(opened['new.dsl']).toBe(1)
+    expect(content['new.dsl']).toBe('workspace "N" {}')
+  })
+
+  it('skips an unchanged sidecar but writes a changed one — the layout half of a save', async () => {
+    const same = JSON.stringify({ version: 1, views: {} })
+    const { dir, opened } = makeCountingDirHandle({ 'w.c4hero.json': same })
+    await setDirHandle(dir)
+    expect(await writeSidecarFile('w.dsl', same)).toBe(true)
+    expect(opened['w.c4hero.json']).toBeUndefined()
+
+    const moved = JSON.stringify({ version: 1, views: { Ctx: { elements: { a: { x: 10, y: 20 } } } } })
+    expect(await writeSidecarFile('w.dsl', moved)).toBe(true)
+    expect(opened['w.c4hero.json']).toBe(1)
+  })
+
+  it('does not skip a write by comparing against a file an earlier write is still replacing', async () => {
+    // A File System Access write lands only on close(). Hold the first write
+    // open, start a second that restores the original text, then let the
+    // first land: the file must end on the second write's text.
+    const { dir, content } = makeCountingDirHandle({ 'w.dsl': 'A' })
+    let release!: () => void
+    const held = new Promise<void>((r) => { release = r })
+    const slow = {
+      ...dir,
+      getFileHandle: async (name: string, opts?: { create?: boolean }) => {
+        const h = await dir.getFileHandle(name, opts)
+        return {
+          ...h,
+          getFile: () => h.getFile(),
+          createWritable: async () => {
+            const w = await h.createWritable()
+            return { write: (d: string) => w.write(d), close: async () => { await held; await w.close() } }
+          },
+        }
+      },
+    } as unknown as FileSystemDirectoryHandle
+    await setDirHandle(slow)
+    const first = writeDSLFile('w.dsl', 'B')
+    const second = writeDSLFile('w.dsl', 'A')
+    await new Promise((r) => setTimeout(r, 0))
+    release()
+    expect(await first).toBe(true)
+    expect(await second).toBe(true)
+    expect(content['w.dsl']).toBe('A')
+  })
+
+  it('writes when the existing file cannot be read, rather than assuming it matches', async () => {
+    const { dir, opened } = makeCountingDirHandle({ 'w.dsl': 'x' })
+    const broken = {
+      ...dir,
+      getFileHandle: async (name: string) => ({
+        kind: 'file' as const,
+        name,
+        getFile: async () => { throw new Error('unreadable') },
+        createWritable: async () => {
+          opened[name] = (opened[name] ?? 0) + 1
+          return { write: vi.fn(), close: vi.fn() }
+        },
+      }),
+    } as unknown as FileSystemDirectoryHandle
+    await setDirHandle(broken)
+    expect(await writeDSLFile('w.dsl', 'anything')).toBe(true)
+    expect(opened['w.dsl']).toBe(1)
+  })
+})
 
 // ─── hasFolderAccess ─────────────────────────────────────────────────
 
