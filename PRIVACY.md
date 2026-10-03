@@ -36,7 +36,7 @@ data the app handles, where it lives, and what is sent over the network.
   Cloudflare SPA route tracking is disabled so collection, workspace, and view
   slugs are not sent through the Web Analytics beacon.
 - The hosted app may use Sentry for client-side error reports. The integration
-  is configured with `sendDefaultPii: false`, no session replay, no performance
+  is configured with every default data-collection category switched off, no session replay, no performance
   tracing, and route scrubbing that replaces collection/workspace/view slugs
   with placeholders before an error report is sent.
 - Cloudflare analytics and Sentry initialization both respect Global Privacy
