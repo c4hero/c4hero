@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useWorkspaceStore } from './workspace'
 import type { DeploymentNode, View, Workspace } from '@/types/model'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 const DSL = `workspace {
     model {
@@ -306,5 +307,131 @@ describe('include * deployment views in the store (#230)', () => {
     expect(names(ws(), 'LiveAll')).toEqual(['AWS', 'Load Balancer', 'Web Server', 'Web instance'])
     expect(lines(save(), 'LiveAll')).toEqual(['include *', 'exclude dc', 'exclude dbServer'])
     expectReopenMatchesCanvas()
+  })
+})
+
+describe('relationship exclude lines in the store (#230)', () => {
+  // `* -> *` and `user -> *` hide the implied arrows the views would draw as
+  // well as the relationships they match, in Structurizr and on the canvas.
+  const EXCLUDES_DSL = `workspace {
+    model {
+        user = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web" {
+                ctrl = component "Controller"
+            }
+            db = container "Database"
+        }
+        b = softwareSystem "System B" {
+            api = container "B API"
+        }
+        x = softwareSystem "System X"
+        user -> ctrl "Uses"
+        web -> db "Reads from"
+        web -> api "Calls"
+    }
+    views {
+        container a "CAll" {
+            include *
+            exclude "* -> *"
+        }
+        systemContext a "XUser" {
+            include *
+            exclude "user -> *"
+        }
+        dynamic a "Dynamic" {
+            web -> db "Reads from"
+        }
+    }
+}
+`
+
+  /** Every arrow view `key` draws, listed or implied, sorted. */
+  function arrows(w: Workspace, key: string): string[] {
+    const byId = new Map<string, string>()
+    for (const p of w.model.people) byId.set(p.id, p.name)
+    for (const sys of w.model.softwareSystems) {
+      byId.set(sys.id, sys.name)
+      for (const c of sys.containers) {
+        byId.set(c.id, c.name)
+        for (const comp of c.components) byId.set(comp.id, comp.name)
+      }
+    }
+    const view = viewsOf(w).find(v => v.key === key)!
+    const label = (sourceId: string, destinationId: string, description?: string) =>
+      `${byId.get(sourceId)} -> ${byId.get(destinationId)} '${description ?? ''}'`
+    return [
+      ...view.relationships.map(r => w.model.relationships.find(m => m.id === r.id)!)
+        .map(r => label(r.sourceId, r.destinationId, r.description)),
+      ...wildcardImpliedRelationships(w.model, view).map(r => label(r.sourceId, r.destinationId, r.relationship.description)),
+    ].sort()
+  }
+
+  /** Saving and reopening draws every static view's arrows as the canvas does now. */
+  function expectReopenDrawsSameArrows(): void {
+    const { workspace: reopened, errors } = parseDSL(save())
+    expect(errors).toEqual([])
+    for (const key of ['CAll', 'XUser']) expect([key, arrows(reopened, key)]).toEqual([key, arrows(ws(), key)])
+  }
+
+  const relationship = (description: string) => ws().model.relationships.find(r => r.description === description)!
+
+  beforeEach(() => {
+    store().loadWorkspace(parseDSL(EXCLUDES_DSL).workspace)
+  })
+
+  it('draws no arrow a line hides', () => {
+    expect(arrows(ws(), 'CAll')).toEqual([])
+    expect(arrows(ws(), 'XUser')).toEqual(["System A -> System B 'Calls'"])
+    expectReopenDrawsSameArrows()
+  })
+
+  it('hides a new relationship a line covers, as a reload would', () => {
+    store().addRelationship('user', 'db', 'Queries')
+    store().addRelationship('user', 'x', 'Visits')
+    expect(arrows(ws(), 'CAll')).toEqual([])
+    expect(arrows(ws(), 'XUser')).toEqual(["System A -> System B 'Calls'"])
+    expect(lines(save(), 'CAll')).toEqual(['include *', 'exclude "* -> *"'])
+    expect(lines(save(), 'XUser')).toEqual(['include *', 'exclude "user -> *"'])
+    expectReopenDrawsSameArrows()
+  })
+
+  it('hides a relationship created by a dynamic step or a duplicate where a line covers it', () => {
+    store().addDynamicStep('Dynamic', 'web', 'x', 'Calls X')
+    expect(names(ws(), 'CAll')).toContain('System X')
+    expect(arrows(ws(), 'CAll')).toEqual([])
+
+    store().setActiveView('CAll')
+    store().duplicateElements(['web', 'db'])
+    expect(arrows(ws(), 'CAll')).toEqual([])
+    expect(lines(save(), 'CAll')).toEqual(['include *', 'exclude "* -> *"'])
+    expectReopenDrawsSameArrows()
+  })
+
+  it('shows a restored relationship and keeps hiding the other arrows its line hid', () => {
+    // DSL cannot except one pair from `* -> *`: the line goes, and each
+    // other arrow it hid between the view's elements gets a line instead.
+    store().restoreRelationshipToView('CAll', relationship('Reads from').id)
+    expect(arrows(ws(), 'CAll')).toEqual(["Web -> Database 'Reads from'"])
+    expect(lines(save(), 'CAll')).toEqual([
+      'include *',
+      'exclude "user -> web"',
+      'exclude "web -> b"',
+      'exclude "user -> ctrl"',
+      'exclude "web -> api"',
+    ])
+    expectReopenDrawsSameArrows()
+  })
+
+  it('follows an element through a rename and forgets its lines on delete', () => {
+    expect(store().updateElementId('user', 'customer')).toBeNull()
+    expect(lines(save(), 'XUser')).toEqual(['include *', 'exclude "customer -> *"'])
+    expectReopenDrawsSameArrows()
+
+    store().deleteElements(['customer'])
+    expect(viewsOf(ws()).find(v => v.key === 'XUser')!.excludedRelationshipExpressions).toBeUndefined()
+    expect(lines(save(), 'XUser')).toEqual(['include *'])
+    expect(lines(save(), 'CAll')).toEqual(['include *', 'exclude "* -> *"'])
+    expectReopenDrawsSameArrows()
   })
 })

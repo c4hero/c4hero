@@ -39,6 +39,8 @@ import { representable } from './encoding'
 import { validateForStructurizr } from '@/lib/structurizrValidation'
 import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 import { planIncludedWrites, serializeRoot } from '@/lib/includeWriteback'
+import { wildcardImpliedRelationships } from './wildcard'
+import { useWorkspaceStore } from '@/store/workspace'
 
 const CLI = process.env.STRUCTURIZR_CLI ?? join(process.cwd(), '.structurizr-cli', 'structurizr.sh')
 const CLI_AVAILABLE = existsSync(CLI)
@@ -703,6 +705,170 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
             expect(original.elements).toContain('User')
             expect(exportedView(exportModel(saved), 'ContainersA')).toEqual(original)
         }, 30_000)
+
+        /** The arrows the real parser draws in view `key`, each as
+         *  `Source -> Destination 'description'`, sorted. Implied
+         *  relationships are model relationships of their own in its export. */
+        function exportedArrows(exported: Record<string, unknown>, key: string): string[] {
+            interface Rel { id: string; sourceId: string; destinationId: string; description?: string }
+            interface El { id: string; name?: string; relationships?: Rel[]; containers?: El[]; components?: El[] }
+            const m = exported.model as { people?: El[]; softwareSystems?: El[] }
+            const names = new Map<string, string>()
+            const rels = new Map<string, Rel>()
+            const walk = (elements: El[] | undefined): void => {
+                for (const e of elements ?? []) {
+                    names.set(e.id, e.name ?? e.id)
+                    for (const r of e.relationships ?? []) rels.set(r.id, r)
+                    walk(e.containers)
+                    walk(e.components)
+                }
+            }
+            walk(m.people)
+            walk(m.softwareSystems)
+            const view = Object.values(exported.views as Record<string, unknown>)
+                .flatMap(v => (Array.isArray(v) ? v as { key: string; relationships?: { id: string }[] }[] : []))
+                .find(v => v.key === key)
+            expect(view).toBeDefined()
+            return (view?.relationships ?? []).map(({ id }) => rels.get(id)!)
+                .map(r => `${names.get(r.sourceId)} -> ${names.get(r.destinationId)} '${r.description ?? ''}'`)
+                .sort()
+        }
+
+        /** The arrows c4hero draws in static view `key`: the relationships it
+         *  lists and the implied ones, as exportedArrows writes them. */
+        function canvasArrows(ws: Workspace, key: string): string[] {
+            const names = new Map<string, string>()
+            for (const p of ws.model.people) names.set(p.id, p.name)
+            for (const sys of ws.model.softwareSystems) {
+                names.set(sys.id, sys.name)
+                for (const c of sys.containers) {
+                    names.set(c.id, c.name)
+                    for (const comp of c.components) names.set(comp.id, comp.name)
+                }
+            }
+            const view = [...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews].find(v => v.key === key)!
+            const label = (sourceId: string, destinationId: string, description?: string) =>
+                `${names.get(sourceId)} -> ${names.get(destinationId)} '${description ?? ''}'`
+            return [
+                ...view.relationships.map(r => ws.model.relationships.find(m => m.id === r.id)!)
+                    .map(r => label(r.sourceId, r.destinationId, r.description)),
+                ...wildcardImpliedRelationships(ws.model, view)
+                    .map(r => label(r.sourceId, r.destinationId, r.relationship.description)),
+            ].sort()
+        }
+
+        // Relationship excludes next to `include *`: each hides implied
+        // relationships too, `*` matches any element and each end matches
+        // exactly. The component views include their own scope, which
+        // Structurizr ignores.
+        const EXCLUDES_DSL = `workspace {
+    model {
+        user = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web" {
+                ctrl = component "Controller"
+                svc = component "Service"
+            }
+            db = container "Database"
+        }
+        b = softwareSystem "System B" {
+            api = container "B API"
+        }
+        user -> ctrl "Uses"
+        svc -> db "Service reads"
+        web -> db "Web reads"
+        web -> api "Calls"
+        user -> b "Direct"
+    }
+    views {
+        systemContext a "XAll" {
+            include *
+            exclude "* -> *"
+        }
+        container a "CAll" {
+            include *
+            exclude "* -> *"
+        }
+        systemContext a "XUser" {
+            include *
+            exclude "user -> *"
+        }
+        systemContext a "XAB" {
+            include *
+            exclude "a -> b"
+        }
+        systemContext a "XUserCtrl" {
+            include *
+            exclude "user -> ctrl"
+        }
+        container a "CWebB" {
+            include *
+            exclude "web -> b"
+        }
+        container a "CStarB" {
+            include *
+            exclude "* -> b"
+        }
+        container a "CWebDb" {
+            include *
+            exclude "web -> db"
+        }
+        container a "CUserWeb" {
+            include *
+            exclude "user -> web"
+        }
+        container a "CAB" {
+            include *
+            exclude "a -> b"
+        }
+        systemContext a "Listed" {
+            include user a b
+            exclude "* -> *"
+        }
+        component web "CompSystem" {
+            include *
+            include a
+        }
+        component web "CompContainer" {
+            include web
+            include *
+        }
+    }
+}`
+        const EXCLUDE_KEYS = ['XAll', 'CAll', 'XUser', 'XAB', 'XUserCtrl', 'CWebB', 'CStarB', 'CWebDb', 'CUserWeb', 'CAB', 'Listed', 'CompSystem', 'CompContainer']
+
+        it('relationship excludes hide implied arrows as Structurizr does, and are saved as written', () => {
+            const { workspace, errors } = parseDSL(EXCLUDES_DSL)
+            expect(errors).toEqual([])
+            const original = exportModel(EXCLUDES_DSL)
+            const resaved = exportModel(serializeDSL(workspace))
+            for (const key of EXCLUDE_KEYS) {
+                expect([key, canvasArrows(workspace, key)]).toEqual([key, exportedArrows(original, key)])
+                expect([key, exportedArrows(resaved, key)]).toEqual([key, exportedArrows(original, key)])
+            }
+            expect(exportedArrows(original, 'CAll')).toEqual([])
+            for (const key of ['CompSystem', 'CompContainer']) {
+                expect(shownNames(workspace, key)).toEqual(exportedView(original, key).elements)
+            }
+        }, 60_000)
+
+        it('canvas edits next to a * -> * line reach Structurizr as the canvas shows them', () => {
+            const store = useWorkspaceStore.getState
+            store().loadWorkspace(parseDSL(EXCLUDES_DSL).workspace)
+            const id = (description: string) => store().workspace!.model.relationships.find(r => r.description === description)!.id
+            // A relationship drawn on the canvas stays hidden, as the line
+            // hides it; one restored to the view replaces the line with one
+            // per arrow it still hides.
+            store().addRelationship('user', 'db', 'Queries')
+            store().restoreRelationshipToView('CAll', id('Web reads'))
+            const ws = store().workspace!
+            expect(canvasArrows(ws, 'CAll')).toEqual(["Web -> Database 'Service reads'", "Web -> Database 'Web reads'"])
+            const saved = exportModel(serializeDSL(ws))
+            for (const key of EXCLUDE_KEYS) {
+                expect([key, exportedArrows(saved, key)]).toEqual([key, canvasArrows(ws, key)])
+            }
+            store().closeWorkspace()
+        }, 60_000)
 
         it('a deployment view wildcard keeps its elements and relationships through a save', () => {
             // Only a relationship between deployment elements: whether

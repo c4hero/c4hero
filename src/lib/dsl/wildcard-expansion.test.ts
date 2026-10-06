@@ -811,3 +811,76 @@ workspace {
     expect(views('bctl -> ctrl "Uses"').containers).toEqual(['Database', 'System B', 'Web', 'Worker'])
   })
 })
+
+describe('include * next to an include of the view\'s own scope (#230)', () => {
+  // Structurizr ignores the line, wherever it sits: checked against the CLI
+  // export, which shows [User, Controller] in each component view and the
+  // issue's four elements in the container view.
+  const DSL = `workspace {
+    model {
+        user = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web" {
+                ctrl = component "Controller"
+            }
+            db = container "Database"
+        }
+        b = softwareSystem "System B" {
+            api = container "B API"
+        }
+        user -> ctrl "Uses"
+        web -> db "Reads from"
+        web -> api "Calls"
+    }
+    views {
+        component web "CompSystem" {
+            include *
+            include a
+        }
+        component web "CompSystemFirst" {
+            include a
+            include *
+        }
+        component web "CompContainer" {
+            include *
+            include web
+        }
+        container a "ContSystem" {
+            include *
+            include a
+        }
+    }
+}`
+
+  function shown(ws: Workspace, key: string): string[] {
+    const byId = new Map<string, string>()
+    for (const p of ws.model.people) byId.set(p.id, p.name)
+    for (const sys of ws.model.softwareSystems) {
+      byId.set(sys.id, sys.name)
+      for (const c of sys.containers) {
+        byId.set(c.id, c.name)
+        for (const comp of c.components) byId.set(comp.id, comp.name)
+      }
+    }
+    const view = [...ws.views.containerViews, ...ws.views.componentViews].find(v => v.key === key)!
+    return view.elements.map(e => byId.get(e.id) ?? e.id).sort()
+  }
+
+  it('leaves the scope out of the view', () => {
+    const { workspace, errors } = parseDSL(DSL)
+    expect(errors).toEqual([])
+    for (const key of ['CompSystem', 'CompSystemFirst', 'CompContainer']) {
+      expect(shown(workspace, key)).toEqual(['Controller', 'User'])
+    }
+    expect(shown(workspace, 'ContSystem')).toEqual(['Database', 'System B', 'User', 'Web'])
+  })
+
+  it('saves the view as Structurizr reads it', () => {
+    const { workspace } = parseDSL(DSL)
+    const saved = parseDSL(serializeDSL(workspace))
+    expect(saved.errors).toEqual([])
+    for (const key of ['CompSystem', 'CompSystemFirst', 'CompContainer', 'ContSystem']) {
+      expect(shown(saved.workspace, key)).toEqual(shown(workspace, key))
+    }
+  })
+})

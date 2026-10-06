@@ -6,7 +6,8 @@
  */
 import { describe, it, expect } from 'vitest'
 import { parseDSL } from '@/lib/dsl'
-import { wildcardImpliedRelationships } from './wildcard'
+import { modelImpliedRelationships, wildcardImpliedRelationships } from './wildcard'
+import { serialize } from './serializer'
 import type { View, Workspace } from '@/types/model'
 
 /** The DSL from #230: relationships declared below the level the views show. */
@@ -270,5 +271,215 @@ workspace {
     const ids = wildcardImpliedRelationships(ws.model, view).map(r => r.id)
     expect(ids).toHaveLength(1)
     expect(ws.model.relationships.map(r => r.id)).not.toContain(ids[0])
+  })
+})
+
+/** The model of the review fixture: two relationships below the level the
+ *  context and container views show, a component next to its container's
+ *  own relationship to the same container, and a person-to-system one. */
+function excludesWorkspace(views: string): Workspace {
+  return load(`
+workspace {
+  model {
+    user = person "User"
+    a = softwareSystem "System A" {
+      web = container "Web" {
+        ctrl = component "Controller"
+        svc = component "Service"
+      }
+      db = container "Database"
+    }
+    b = softwareSystem "System B" {
+      api = container "B API"
+    }
+    user -> ctrl "Uses"
+    svc -> db "Service reads"
+    web -> db "Web reads"
+    web -> api "Calls"
+    user -> b "Direct"
+  }
+  views {${views}
+  }
+}`)
+}
+
+/** Every arrow view `key` draws: the relationships it lists, then the
+ *  implied ones, each as `Source -> Destination 'description'`, sorted. */
+function arrows(ws: Workspace, key: string): string[] {
+  const view = viewOf(ws, key)
+  const listed = view.relationships.map(r => ws.model.relationships.find(m => m.id === r.id)!)
+    .map(r => `${nameOf(ws, r.sourceId)} -> ${nameOf(ws, r.destinationId)} '${r.description ?? ''}'`)
+  return [...listed, ...implied(ws, key)].sort()
+}
+
+/** The trimmed `exclude` lines of the view whose header names `key`. */
+function excludeLines(dsl: string, key: string): string[] {
+  const lines = dsl.split('\n').map(l => l.trim())
+  const start = lines.findIndex(l => l.includes(`"${key}"`) && l.endsWith('{'))
+  return lines.slice(start + 1, lines.indexOf('}', start)).filter(l => l.startsWith('exclude '))
+}
+
+describe('relationship excludes in include * views (#230)', () => {
+  // Each expectation is what the Structurizr CLI's JSON export lists for the
+  // same view: an `exclude "a -> b"` line applies to implied relationships
+  // too, `*` stands for any element, and each end must match exactly.
+  const VIEWS = `
+    systemContext a "XAll" {
+      include *
+      exclude "* -> *"
+    }
+    container a "CAll" {
+      include *
+      exclude "* -> *"
+    }
+    systemContext a "XUser" {
+      include *
+      exclude "user -> *"
+    }
+    systemContext a "XAB" {
+      include *
+      exclude "a -> b"
+    }
+    systemContext a "XUserCtrl" {
+      include *
+      exclude "user -> ctrl"
+    }
+    container a "CWebB" {
+      include *
+      exclude "web -> b"
+    }
+    container a "CStarB" {
+      include *
+      exclude "* -> b"
+    }
+    container a "CWebDb" {
+      include *
+      exclude "web -> db"
+    }
+    container a "CUserWeb" {
+      include *
+      exclude "user -> web"
+    }
+    container a "CAB" {
+      include *
+      exclude "a -> b"
+    }`
+
+  it('hides every arrow with * -> *, implied ones included', () => {
+    const ws = excludesWorkspace(VIEWS)
+    expect(arrows(ws, 'XAll')).toEqual([])
+    expect(arrows(ws, 'CAll')).toEqual([])
+  })
+
+  it('hides what a wildcard end matches, and nothing else', () => {
+    const ws = excludesWorkspace(VIEWS)
+    expect(arrows(ws, 'XUser')).toEqual(["System A -> System B 'Calls'"])
+    expect(arrows(ws, 'CStarB')).toEqual([
+      "User -> Web 'Uses'",
+      "Web -> Database 'Service reads'",
+      "Web -> Database 'Web reads'",
+    ])
+  })
+
+  it('hides an implied pair that no model relationship has', () => {
+    const ws = excludesWorkspace(VIEWS)
+    expect(arrows(ws, 'XAB')).toEqual(["User -> System A 'Uses'", "User -> System B 'Direct'"])
+    expect(arrows(ws, 'CWebB')).toEqual([
+      "User -> System B 'Direct'",
+      "User -> Web 'Uses'",
+      "Web -> Database 'Service reads'",
+      "Web -> Database 'Web reads'",
+    ])
+    expect(arrows(ws, 'CUserWeb')).toEqual([
+      "User -> System B 'Direct'",
+      "Web -> Database 'Service reads'",
+      "Web -> Database 'Web reads'",
+      "Web -> System B 'Calls'",
+    ])
+  })
+
+  it('hides an implied relationship next to the explicit one between the same pair', () => {
+    const ws = excludesWorkspace(VIEWS)
+    expect(arrows(ws, 'CWebDb')).toEqual([
+      "User -> System B 'Direct'",
+      "User -> Web 'Uses'",
+      "Web -> System B 'Calls'",
+    ])
+  })
+
+  it('matches each end exactly, not an element inside it', () => {
+    const ws = excludesWorkspace(VIEWS)
+    // Neither hides the arrows that `user -> ctrl` or `web -> api` imply.
+    expect(arrows(ws, 'XUserCtrl')).toEqual([
+      "System A -> System B 'Calls'",
+      "User -> System A 'Uses'",
+      "User -> System B 'Direct'",
+    ])
+    expect(arrows(ws, 'CAB')).toContain("Web -> System B 'Calls'")
+  })
+
+  it('saves each line as written', () => {
+    const ws = excludesWorkspace(VIEWS)
+    const saved = serialize(ws)
+    expect(excludeLines(saved, 'XAll')).toEqual(['exclude "* -> *"'])
+    expect(excludeLines(saved, 'CAll')).toEqual(['exclude "* -> *"'])
+    expect(excludeLines(saved, 'XUser')).toEqual(['exclude "user -> *"'])
+    expect(excludeLines(saved, 'XAB')).toEqual(['exclude "a -> b"'])
+    expect(excludeLines(saved, 'CWebB')).toEqual(['exclude "web -> b"'])
+    expect(excludeLines(saved, 'CStarB')).toEqual(['exclude "* -> b"'])
+    expect(excludeLines(saved, 'CUserWeb')).toEqual(['exclude "user -> web"'])
+
+    const reloaded = load(saved)
+    for (const key of ['XAll', 'CAll', 'XUser', 'XAB', 'XUserCtrl', 'CWebB', 'CStarB', 'CWebDb', 'CUserWeb', 'CAB']) {
+      expect(arrows(reloaded, key)).toEqual(arrows(ws, key))
+    }
+  })
+
+  it('saves a relationship hidden on the canvas next to the view\'s lines, once', () => {
+    const ws = excludesWorkspace(VIEWS)
+    const direct = ws.model.relationships.find(r => r.description === 'Direct')!
+    // Hidden on the canvas, as removeRelationshipFromView records it.
+    for (const key of ['XAB', 'CStarB']) {
+      const view = viewOf(ws, key)
+      view.relationships = view.relationships.filter(r => r.id !== direct.id)
+      view.excludedRelationshipIds = [...new Set([...view.excludedRelationshipIds ?? [], direct.id])]
+    }
+    const saved = serialize(ws)
+    expect(excludeLines(saved, 'XAB')).toEqual(['exclude "a -> b"', 'exclude "user -> b"'])
+    // `* -> b` already hides it, so it gets no line of its own.
+    expect(excludeLines(saved, 'CStarB')).toEqual(['exclude "* -> b"'])
+  })
+
+  it('keeps a line in a view with its own include list', () => {
+    const ws = excludesWorkspace(`
+    systemContext a "Listed" {
+      include user a b
+      exclude "* -> *"
+    }`)
+    expect(arrows(ws, 'Listed')).toEqual([])
+    expect(excludeLines(serialize(ws), 'Listed')).toEqual(['exclude "* -> *"'])
+  })
+})
+
+describe('modelImpliedRelationships', () => {
+  it('works the implied relationships out once per model', () => {
+    const ws = twoSystems('    web -> api "Calls"')
+    const first = modelImpliedRelationships(ws.model)
+    expect(modelImpliedRelationships(ws.model)).toBe(first)
+    // A store edit replaces the relationship list…
+    const edited = { ...ws.model, relationships: [...ws.model.relationships] }
+    expect(modelImpliedRelationships(edited)).not.toBe(first)
+    expect(modelImpliedRelationships(edited)).toEqual(first)
+    // …or the software systems, when the hierarchy changes.
+    const moved = { ...ws.model, softwareSystems: [...ws.model.softwareSystems] }
+    expect(modelImpliedRelationships(moved)).not.toBe(first)
+  })
+
+  it('notices a relationship pushed in place', () => {
+    const ws = twoSystems('    web -> api "Calls"')
+    // web -> api implies Web -> System B, System A -> B API and System A -> System B.
+    expect(modelImpliedRelationships(ws.model)).toHaveLength(3)
+    ws.model.relationships.push({ id: 'back', sourceId: 'api', destinationId: 'web', description: 'Back', tags: ['Relationship'], properties: {} })
+    expect(modelImpliedRelationships(ws.model)).toHaveLength(6)
   })
 })

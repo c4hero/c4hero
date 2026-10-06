@@ -3,7 +3,10 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import type { WorkspaceState } from '../workspace-types'
 import type { Relationship, View, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { allViewsOf, elementExists, forEachView, closeAiSurfaces, restoreViewElement, showWildcardArrivals } from '../workspace-helpers'
+import {
+  allViewsOf, elementExists, forEachView, closeAiSurfaces, restoreViewElement, showWildcardArrivals,
+  excludePair, viewExcludesPair,
+} from '../workspace-helpers'
 
 /** Drop every step of `relId` from a dynamic view and recompute the view's
  *  derived element membership from the surviving steps. Dynamic membership
@@ -20,27 +23,6 @@ function dropDynamicSteps(ws: Workspace, v: View, relId: string): void {
     endpoints.add(step.destinationId ?? stepRel?.destinationId ?? '')
   }
   v.elements = v.elements.filter(e => endpoints.has(e.id))
-}
-
-/** Structurizr persists relationship exclusions by directed endpoint pair, not
- * by relationship ID. Keep the live workspace on that same footing so adding
- * or reconnecting a parallel relationship cannot make it appear until reload. */
-function viewExcludesPair(ws: Workspace, view: View, sourceId: string, destinationId: string): boolean {
-  const excludedIds = new Set(view.excludedRelationshipIds ?? [])
-  return ws.model.relationships.some(
-    (rel) => excludedIds.has(rel.id) && rel.sourceId === sourceId && rel.destinationId === destinationId,
-  )
-}
-
-function excludePair(ws: Workspace, view: View, sourceId: string, destinationId: string): void {
-  const pairIds = new Set(ws.model.relationships
-    .filter((rel) => rel.sourceId === sourceId && rel.destinationId === destinationId)
-    .map((rel) => rel.id))
-  view.relationships = view.relationships.filter((rel) => !pairIds.has(rel.id))
-  const excludedIds = (view.excludedRelationshipIds ??= [])
-  for (const id of pairIds) {
-    if (!excludedIds.includes(id)) excludedIds.push(id)
-  }
 }
 
 export type RelationshipSlice = Pick<WorkspaceState,

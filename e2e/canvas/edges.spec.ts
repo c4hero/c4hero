@@ -62,4 +62,13 @@ test.describe('Canvas Edges', () => {
     await workspace.page.keyboard.press('Backspace')
     await expect(edges).toHaveCount(3)
   })
+
+  test('an include * view draws no arrow its exclude "* -> *" line hides (#230)', async ({ workspace }) => {
+    await workspace.parseAndLoad(IMPLIED_DSL.replace('include *\n', 'include *\n      exclude "* -> *"\n'))
+    await workspace.setView('ContainersA')
+
+    // Structurizr hides the implied User -> Web and Web -> System B too.
+    await expect(workspace.page.locator('.react-flow__node').filter({ hasText: 'System B' })).toHaveCount(1)
+    await expect(workspace.page.locator('.react-flow__edge')).toHaveCount(0)
+  })
 })

@@ -29,15 +29,19 @@ export default function CanvasHints() {
   const elementCount = useWorkspaceStore((s) =>
     s.workspace && activeViewKey ? (getActiveView(s.workspace, activeViewKey)?.elements.length ?? 0) : 0,
   )
-  // An `include *` view also draws arrows it does not list: the
-  // relationships Structurizr implies between the elements it shows (#230).
-  const relationshipCount = useWorkspaceStore((s) => {
-    const view = s.workspace && activeViewKey ? getActiveView(s.workspace, activeViewKey) : undefined
-    if (!s.workspace || !view) return 0
-    return view.relationships.length || wildcardImpliedRelationships(s.workspace.model, view).length
-  })
   const selectionCount = useWorkspaceStore((s) => s.selectedElementIds.length)
   const [dismissed, setDismissed] = useState(getDismissed)
+  const connectHintPossible = elementCount >= 2 && !dismissed.has('connect-hint')
+  // An `include *` view also draws arrows it does not list: the
+  // relationships Structurizr implies between the elements it shows (#230).
+  // The selector runs on every store update, so they are only looked for
+  // while the hint could show.
+  const drawsArrows = useWorkspaceStore((s) => {
+    if (!connectHintPossible) return true
+    const view = s.workspace && activeViewKey ? getActiveView(s.workspace, activeViewKey) : undefined
+    if (!s.workspace || !view) return false
+    return view.relationships.length > 0 || wildcardImpliedRelationships(s.workspace.model, view).length > 0
+  })
 
   function handleDismiss(id: string) {
     dismiss(id)
@@ -47,7 +51,7 @@ export default function CanvasHints() {
   if (!activeViewKey) return null
 
   // First element added — connection hint
-  if (elementCount >= 2 && relationshipCount === 0 && !dismissed.has('connect-hint')) {
+  if (connectHintPossible && !drawsArrows) {
     return (
       <Hint id="connect-hint" onDismiss={handleDismiss}>
         Drag from a node edge to another node to create a connection

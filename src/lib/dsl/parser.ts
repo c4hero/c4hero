@@ -787,10 +787,16 @@ export function parse(input: string): ParseResult {
         // back as written.
         const wildcardAt = view.elements.findIndex(e => e.id === '*')
         const includeAll = wildcardAt >= 0
+        // Structurizr ignores an `include` of the view's own scope (a
+        // container view's software system, a component view's container or
+        // its system), so it is left out here too: shown, it would sit next
+        // to its own containers or components and draw implied arrows
+        // Structurizr does not (#230).
+        const outOfScope = includeAll ? hierarchyGuard(ws.model, view).isScope : () => false
         if (includeAll) {
             view.includeAll = true
-            const included = parser.viewExplicitIncludes.get(view) ?? []
-            if (included.length > 0) view.includedElementIds = [...included]
+            const included = (parser.viewExplicitIncludes.get(view) ?? []).filter(id => !outOfScope(id))
+            if (included.length > 0) view.includedElementIds = included
         }
         const expanded = includeAll ? wildcardElements(ws.model, view) : []
         // Statements apply in order, as in Structurizr: an `exclude` removes
@@ -817,7 +823,7 @@ export function parse(input: string): ParseResult {
         view.elements.forEach((entry, i) => {
             applyExcludes(i)
             for (const e of entry.id === '*' ? expanded : [entry]) {
-                if (seen.has(e.id) || guard?.clashes(e.id)) continue
+                if (seen.has(e.id) || outOfScope(e.id) || guard?.clashes(e.id)) continue
                 elements.push(e)
                 seen.add(e.id)
                 guard?.add(e.id)

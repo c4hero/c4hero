@@ -6,7 +6,9 @@ import { nanoid, pushUndoSnapshot } from '../internals'
 import {
   findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews, orphanedLayoutViewKeys,
   idsEnteringView, idsLeavingView, makeRoomInWildcardView, noteHiddenFromView, noteShownInView, showWildcardArrivals,
+  dropCoveringExclusions,
 } from '../workspace-helpers'
+import { viewExpressionsExclude } from '@/lib/dsl/wildcard'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 import { defaultViewTitle, uniqueViewTitle } from '../workspace-helpers'
 
@@ -279,7 +281,10 @@ export const createViewSlice: StateCreator<
       .map((r) => r.id))
     const wasExcluded = view.excludedRelationshipIds?.some((id) => pairIds.has(id)) ?? false
     const wasMissing = [...pairIds].some((id) => !view.relationships.some((r) => r.id === id))
-    if (!wasExcluded && !wasMissing) return
+    // An `exclude "a -> b"` line of the view's own that hides the pair would
+    // hide it again on reload, so it goes too (#230).
+    const lineHides = viewExpressionsExclude(view, rel.sourceId, rel.destinationId)
+    if (!wasExcluded && !wasMissing && !lineHides) return
     pushUndoSnapshot(s)
     if (wasMissing) {
       const presentIds = new Set(view.relationships.map((r) => r.id))
@@ -289,6 +294,7 @@ export const createViewSlice: StateCreator<
       view.excludedRelationshipIds = view.excludedRelationshipIds!.filter((id) => !pairIds.has(id))
       if (view.excludedRelationshipIds.length === 0) delete view.excludedRelationshipIds
     }
+    if (lineHides) dropCoveringExclusions(s.workspace, view, rel.sourceId, rel.destinationId)
   }),
 
   toggleElementInView: (viewKey, elementId) => set((s) => {

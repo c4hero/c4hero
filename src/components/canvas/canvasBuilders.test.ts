@@ -330,6 +330,21 @@ describe('buildEdges implied relationships in include * views (#230)', () => {
     ])
   })
 
+  it('draws no arrow an exclude line hides, implied ones included', () => {
+    // Structurizr draws nothing in either view: `* -> *` matches every
+    // relationship, and `user -> *` the implied User -> Web.
+    const ws = parsed(issueDsl('include *\n      exclude "user -> *"', '', `
+    systemContext a "ContextNone" {
+      include *
+      exclude "* -> *"
+    }`))
+    expect(edgeLabels(ws, 'ContextNone')).toEqual([])
+    expect(edgeLabels(ws, 'ContainersA')).toEqual([
+      "Web -> Database 'Reads from'",
+      "Web -> System B 'Calls'",
+    ])
+  })
+
   it('leaves a view with its own include list as it was', () => {
     // Structurizr draws User -> Web and Web -> System B here too; views with
     // their own include lists keep drawing only what they list, for now.

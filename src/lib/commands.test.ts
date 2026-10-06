@@ -5,6 +5,7 @@ import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import type { ReactFlowInstance } from '@xyflow/react'
 import type { Workspace } from '@/types/model'
+import { parseDSL } from '@/lib/dsl'
 
 vi.mock('@/lib/fileIO', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/fileIO')>()
@@ -233,6 +234,39 @@ describe('edit commands', () => {
     command('delete-selected').execute()
     expect(store().pendingDelete).toBeNull()
     expect(store().workspace!.model.softwareSystems).toHaveLength(1)
+  })
+
+  it('remove-selected-from-view hides a relationship the view lists', () => {
+    store().setActiveView('landscape')
+    store().selectRelationship('r1')
+    const cmd = command('remove-selected-from-view')
+    expect(cmd.when!()).toBe(true)
+    cmd.execute()
+    expect(store().workspace!.views.systemLandscapeViews[0].relationships).toEqual([])
+  })
+
+  it('remove-selected-from-view is not offered for an arrow an include * view implies (#230)', () => {
+    // The view draws `user -> ctrl` as User -> Web; it lists no relationship
+    // to hide.
+    store().loadWorkspace(parseDSL(`workspace {
+      model {
+        user = person "User"
+        a = softwareSystem "System A" {
+          web = container "Web" {
+            ctrl = component "Controller"
+          }
+        }
+        user -> ctrl "Uses"
+      }
+      views {
+        container a "Containers" {
+          include *
+        }
+      }
+    }`).workspace)
+    store().setActiveView('Containers')
+    store().selectRelationship(store().workspace!.model.relationships[0].id)
+    expect(command('remove-selected-from-view').when!()).toBe(false)
   })
 
   it('select-all selects every element of the active view', () => {

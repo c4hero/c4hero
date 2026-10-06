@@ -688,6 +688,19 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
                                     if (!excludedRelationships.includes(id)) excludedRelationships.push(id)
                                 }
                             }
+                            // The line itself is kept as written: it also
+                            // hides implied relationships, which no id
+                            // above names, and later ones that match (#230).
+                            const end = (ref: string) =>
+                                ref === '*' ? '*' : p.resolveRef(ref) ?? (p.elementsById.has(ref) ? ref : undefined)
+                            const source = end(sourceRef)
+                            const destination = end(destinationRef)
+                            if (source !== undefined && destination !== undefined) {
+                                const expressions = (view.excludedRelationshipExpressions ??= [])
+                                if (!expressions.some(x => x.sourceId === source && x.destinationId === destination)) {
+                                    expressions.push({ sourceId: source, destinationId: destination })
+                                }
+                            }
                             continue
                         }
                     }

@@ -4,7 +4,7 @@
 // plus the implied relationships such a view draws between the elements it
 // shows (the canvas and the exports), #230.
 
-import type { Model, View, ElementInView, Relationship } from '@/types/model'
+import type { Model, View, ElementInView, Relationship, RelationshipExclusion } from '@/types/model'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
 
 /** Each container's software system and each component's container. */
@@ -157,30 +157,51 @@ export interface ImpliedRelationship {
     relationship: Relationship
 }
 
+/** An implied relationship of the whole model: see ImpliedRelationship. */
+export type ModelImpliedRelationship = Omit<ImpliedRelationship, 'id'>
+
 const pairKey = (sourceId: string, destinationId: string) => `${sourceId}\u0000${destinationId}`
+
+/** Whether an `exclude "source -> destination"` line hides a relationship
+ *  from `sourceId` to `destinationId`. Structurizr matches each end exactly,
+ *  never an element's parent or child, and `*` matches any element. */
+export function exclusionMatches(exclusion: RelationshipExclusion, sourceId: string, destinationId: string): boolean {
+    return (exclusion.sourceId === '*' || exclusion.sourceId === sourceId)
+        && (exclusion.destinationId === '*' || exclusion.destinationId === destinationId)
+}
+
+/** Whether one of `view`'s `exclude "source -> destination"` lines hides a
+ *  relationship from `sourceId` to `destinationId`. */
+export function viewExpressionsExclude(view: View, sourceId: string, destinationId: string): boolean {
+    return view.excludedRelationshipExpressions?.some(x => exclusionMatches(x, sourceId, destinationId)) ?? false
+}
 
 /**
  * Structurizr's default implied relationships (the DSL uses
  * CreateImpliedRelationshipsUnlessAnyRelationshipExistsStrategy): creating
  * `a -> b` also creates one from `a` or any of its ancestors to `b` or any
  * of its ancestors, with the same description and technology, for each such
- * pair that is not an element and its own parent or child and has no
- * relationship from that source to that destination yet. Relationships are
- * created in model order (the order a save writes them), so the first one
- * to imply a pair names it, and an explicit relationship between that pair
- * written later is added next to it rather than replacing it. Checked
- * against the Structurizr CLI export.
+ * pair that is not an element and one of its ancestors or descendants and
+ * has no relationship from that source to that destination yet.
+ * Relationships are created in model order (the order a save writes them),
+ * so the first one to imply a pair names it, and an explicit relationship
+ * between that pair written later is added next to it rather than replacing
+ * it. Checked against the Structurizr CLI export.
  */
-function impliedRelationships(model: Model): Omit<ImpliedRelationship, 'id'>[] {
+function computeImpliedRelationships(model: Model): ModelImpliedRelationship[] {
     const parents = parentMap(model)
+    const lineages = new Map<string, string[]>()
     const lineage = (id: string): string[] => {
-        const out = [id]
+        let out = lineages.get(id)
+        if (out) return out
+        out = [id]
         for (let p = parents.get(id); p !== undefined; p = parents.get(p)) out.push(p)
+        lineages.set(id, out)
         return out
     }
     const related = (a: string, b: string) => lineage(a).includes(b) || lineage(b).includes(a)
     const connected = new Set<string>()
-    const implied: Omit<ImpliedRelationship, 'id'>[] = []
+    const implied: ModelImpliedRelationship[] = []
     for (const relationship of model.relationships) {
         // Structurizr refuses a relationship between an element and its own
         // parent or child, so that one implies nothing.
@@ -198,6 +219,32 @@ function impliedRelationships(model: Model): Omit<ImpliedRelationship, 'id'>[] {
     return implied
 }
 
+/** The model's implied relationships, worked out once per model. The canvas
+ *  asks for them on every render of a view, and the walk covers every
+ *  relationship and its ancestors. A store edit replaces the relationship
+ *  list, or the software systems when the hierarchy changes, so either
+ *  identity changing, or the list growing in place (as it does while a model
+ *  is built), means the cached list is stale. */
+const impliedCache = new WeakMap<readonly Relationship[], {
+    softwareSystems: Model['softwareSystems']
+    count: number
+    implied: readonly ModelImpliedRelationship[]
+}>()
+
+export function modelImpliedRelationships(model: Model): readonly ModelImpliedRelationship[] {
+    const cached = impliedCache.get(model.relationships)
+    if (cached && cached.softwareSystems === model.softwareSystems && cached.count === model.relationships.length) {
+        return cached.implied
+    }
+    const implied = computeImpliedRelationships(model)
+    impliedCache.set(model.relationships, {
+        softwareSystems: model.softwareSystems,
+        count: model.relationships.length,
+        implied,
+    })
+    return implied
+}
+
 const IMPLIED_VIEW_TYPES = new Set<View['type']>(['systemLandscape', 'systemContext', 'container', 'component'])
 
 /**
@@ -208,14 +255,18 @@ const IMPLIED_VIEW_TYPES = new Set<View['type']>(['systemLandscape', 'systemCont
  * from the model on demand and never stored on the view, so a save writes
  * nothing for them and Structurizr derives the same ones from the file.
  *
- * Structurizr's `exclude "a -> b"` removes every relationship from a to b,
- * implied ones included. The view keeps that line as the ids of the model
- * relationships from a to b, so an implied one between the pair is left out
- * too. Excluding the relationship an implied one comes from does not hide
- * it, in Structurizr or here.
+ * Structurizr's `exclude "a -> b"` removes every relationship from a to b
+ * the view would draw, implied ones included, and `*` stands for any
+ * element, so `exclude "* -> *"` leaves a view with no arrows at all. The
+ * view keeps those lines as written. A relationship hidden on the canvas
+ * is saved as `exclude "a -> b"` for its pair, so an implied one between
+ * that pair is left out too. Excluding the relationship an implied one
+ * comes from does not hide it, in Structurizr or here.
  */
 export function wildcardImpliedRelationships(model: Model, view: View): ImpliedRelationship[] {
     if (!view.includeAll || !IMPLIED_VIEW_TYPES.has(view.type)) return []
+    const implied = modelImpliedRelationships(model)
+    if (implied.length === 0) return []
     const shown = new Set(view.elements.map(e => e.id))
     const byId = new Map(model.relationships.map(r => [r.id, r]))
     const excludedPairs = new Set<string>()
@@ -223,17 +274,19 @@ export function wildcardImpliedRelationships(model: Model, view: View): ImpliedR
         const rel = byId.get(id)
         if (rel) excludedPairs.add(pairKey(rel.sourceId, rel.destinationId))
     }
-    const taken = new Set(byId.keys())
+    const taken = new Set<string>()
     const out: ImpliedRelationship[] = []
-    for (const implied of impliedRelationships(model)) {
-        if (!shown.has(implied.sourceId) || !shown.has(implied.destinationId)) continue
-        if (excludedPairs.has(pairKey(implied.sourceId, implied.destinationId))) continue
+    for (const pair of implied) {
+        const { sourceId, destinationId } = pair
+        if (!shown.has(sourceId) || !shown.has(destinationId)) continue
+        if (excludedPairs.has(pairKey(sourceId, destinationId))) continue
+        if (viewExpressionsExclude(view, sourceId, destinationId)) continue
         // `>` only ever appears as the separator, so distinct pairs get
         // distinct ids; the suffix keeps clear of any relationship id.
-        let id = `implied:${encodeURIComponent(implied.sourceId)}->${encodeURIComponent(implied.destinationId)}`
-        while (taken.has(id)) id += '~'
+        let id = `implied:${encodeURIComponent(sourceId)}->${encodeURIComponent(destinationId)}`
+        while (byId.has(id) || taken.has(id)) id += '~'
         taken.add(id)
-        out.push({ id, ...implied })
+        out.push({ id, ...pair })
     }
     return out
 }
@@ -286,6 +339,9 @@ export function hierarchyGuard(model: Model, view: View, initial: Iterable<strin
         add,
         clashes: (id: string): boolean =>
             !scope.has(id) && (ancestorsOfAdded.has(id) || ancestors(id).some(a => added.has(a))),
+        /** Whether `id` is the view's scope, which Structurizr leaves out
+         *  even when an `include` line names it. */
+        isScope: (id: string): boolean => scope.has(id),
     }
 }
 

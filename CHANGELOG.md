@@ -33,9 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its containers, and excluding a deployment node also hides what runs on it.
   Every `include *` view other than a deployment view also draws
   Structurizr's implied relationships between the boxes it shows: a
-  relationship declared between containers or components appears as an arrow
-  between the people, systems or containers the view shows, labelled like the
-  first relationship that implies it (#230).
+  relationship declared further down the hierarchy, between containers or
+  components, appears as an arrow between the elements the view shows,
+  labelled like the first relationship that implies it. A relationship
+  `exclude` such as `"* -> *"`, `"user -> *"` or `"a -> b"` hides those
+  arrows too, as in Structurizr, and is saved as written rather than as one
+  line per relationship it matched (#230).
 - Workspace- and model-level `properties { }` blocks are no longer discarded
   on save (#219). Each line is written back to its own file and position, so a
   value set in an `!include`d file is not copied into the root and an override

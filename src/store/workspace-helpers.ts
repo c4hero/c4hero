@@ -2,11 +2,14 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
-  ViewType, ElementInView, DeploymentNode,
+  ViewType, ElementInView, DeploymentNode, RelationshipExclusion,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
-import { enclosingSystems, hierarchyGuard, wildcardElements, withDeploymentDescendants } from '@/lib/dsl/wildcard'
+import {
+  enclosingSystems, exclusionMatches, hierarchyGuard, modelImpliedRelationships, viewExpressionsExclude, wildcardElements,
+  withDeploymentDescendants,
+} from '@/lib/dsl/wildcard'
 export type { CascadeImpact } from './workspace-types'
 
 /** Deep-clone an object that may be an Immer draft. structuredClone'ing a
@@ -169,6 +172,64 @@ export function showWildcardArrivals(ws: Workspace, views: View[] = allViewsOf(w
       if (shown.has(rel.sourceId) && shown.has(rel.destinationId)) v.relationships.push({ id: rel.id })
     }
   }
+}
+
+/** Structurizr persists relationship exclusions by directed endpoint pair, not
+ * by relationship ID. Keep the live workspace on that same footing so adding
+ * or reconnecting a parallel relationship cannot make it appear until reload.
+ * The view's own `exclude "a -> b"` lines, `*` included, hide it on reload
+ * too (#230). */
+export function viewExcludesPair(ws: Workspace, view: View, sourceId: string, destinationId: string): boolean {
+  if (viewExpressionsExclude(view, sourceId, destinationId)) return true
+  const excludedIds = new Set(view.excludedRelationshipIds ?? [])
+  return ws.model.relationships.some(
+    (rel) => excludedIds.has(rel.id) && rel.sourceId === sourceId && rel.destinationId === destinationId,
+  )
+}
+
+/** Hide every relationship from `sourceId` to `destinationId` in `view`. */
+export function excludePair(ws: Workspace, view: View, sourceId: string, destinationId: string): void {
+  const pairIds = new Set(ws.model.relationships
+    .filter((rel) => rel.sourceId === sourceId && rel.destinationId === destinationId)
+    .map((rel) => rel.id))
+  view.relationships = view.relationships.filter((rel) => !pairIds.has(rel.id))
+  const excludedIds = (view.excludedRelationshipIds ??= [])
+  for (const id of pairIds) {
+    if (!excludedIds.includes(id)) excludedIds.push(id)
+  }
+}
+
+/** Show the pair `sourceId -> destinationId` again in a view whose own
+ *  `exclude "a -> b"` lines hide it. DSL cannot except one pair from a line
+ *  such as `* -> *`, so each line that hides the pair goes, and every other
+ *  arrow between the view's elements that only it hid keeps a line of its
+ *  own: a model relationship through `excludedRelationshipIds`, which a save
+ *  writes for its pair, and an implied one (#230) as a line naming its pair
+ *  here. */
+export function dropCoveringExclusions(ws: Workspace, view: View, sourceId: string, destinationId: string): void {
+  const exclusions = view.excludedRelationshipExpressions ?? []
+  const covering = exclusions.filter((x) => exclusionMatches(x, sourceId, destinationId))
+  if (covering.length === 0) return
+  const kept = exclusions.filter((x) => !covering.includes(x))
+  const shown = new Set(view.elements.map((e) => e.id))
+  for (const implied of modelImpliedRelationships(ws.model)) {
+    const pair = { sourceId: implied.sourceId, destinationId: implied.destinationId }
+    if (pair.sourceId === sourceId && pair.destinationId === destinationId) continue
+    if (!shown.has(pair.sourceId) || !shown.has(pair.destinationId)) continue
+    const hidden = (x: RelationshipExclusion) => exclusionMatches(x, pair.sourceId, pair.destinationId)
+    if (covering.some(hidden) && !kept.some(hidden)) kept.push(pair)
+  }
+  if (kept.length > 0) view.excludedRelationshipExpressions = kept
+  else delete view.excludedRelationshipExpressions
+}
+
+/** A view's `exclude "a -> b"` lines must not outlive an element they name:
+ *  Structurizr rejects a line naming an element that does not exist. */
+function forgetExclusionsOf(view: View, ids: ReadonlySet<string>): void {
+  if (!view.excludedRelationshipExpressions) return
+  view.excludedRelationshipExpressions = view.excludedRelationshipExpressions
+    .filter((x) => !ids.has(x.sourceId) && !ids.has(x.destinationId))
+  if (view.excludedRelationshipExpressions.length === 0) delete view.excludedRelationshipExpressions
 }
 
 /** Iterate every element in the model tree. Return true from callback to stop early. */
@@ -456,6 +517,10 @@ export function renameElementId(ws: Workspace, oldId: string, newId: string): { 
     }
     if (v.includedElementIds) v.includedElementIds = v.includedElementIds.map(id => (id === oldId ? newId : id))
     if (v.excludedElementIds) v.excludedElementIds = v.excludedElementIds.map(id => (id === oldId ? newId : id))
+    for (const x of v.excludedRelationshipExpressions ?? []) {
+      if (x.sourceId === oldId) x.sourceId = newId
+      if (x.destinationId === oldId) x.destinationId = newId
+    }
     for (const r of v.relationships) {
       if (r.sourceId === oldId) r.sourceId = newId
       if (r.destinationId === oldId) r.destinationId = newId
@@ -891,6 +956,12 @@ export function duplicateElementsInTree(
         destinationId: newDestId,
       })
       for (const v of allViewsOf(ws)) {
+        // A view's `exclude "* -> *"` line hides the copy too, on reload as
+        // in Structurizr, so it is hidden here, as addRelationship does (#230).
+        if (v.type !== 'dynamic' && v.type !== 'deployment' && viewExcludesPair(ws, v, newSourceId, newDestId)) {
+          excludePair(ws, v, newSourceId, newDestId)
+          continue
+        }
         const viewElIds = new Set(v.elements.map((e) => e.id))
         if (viewElIds.has(newSourceId) && viewElIds.has(newDestId)) {
           if (!v.relationships.some((r) => r.id === newRelId)) {
@@ -1080,6 +1151,7 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
     // A recorded `include`/`exclude` must not outlive its element: a new
     // element minted with the same id would inherit it.
     forgetWildcardLines(v, allDeletedIds)
+    forgetExclusionsOf(v, allDeletedIds)
     if (v.type === 'dynamic') {
       // Dynamic membership is derived from interaction steps; drop elements
       // whose every step died so they don't linger as orphan nodes (the next

@@ -26,7 +26,7 @@ import type {
 import { IDENTIFIER_PATTERN, dslIdentifierForm } from '@/lib/identifier'
 import { normalizeElementStatus } from '@/lib/elementStatus'
 import { representable, roundTripped } from './encoding'
-import { enclosingSystems, hierarchyGuard, wildcardElements } from './wildcard'
+import { enclosingSystems, exclusionMatches, hierarchyGuard, wildcardElements } from './wildcard'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
@@ -1313,14 +1313,20 @@ class SerializerContext {
         }
 
         // Structurizr relationship expressions are the portable way to retain
-        // a per-view hidden edge without removing either endpoint.
+        // a per-view hidden edge without removing either endpoint. The view's
+        // own `exclude "a -> b"` lines go back as written: `* -> *` also hides
+        // implied relationships and ones added later, which one line per
+        // relationship it matches today would not (#230). A relationship
+        // hidden on the canvas gets a line for its pair unless one of those
+        // already hides it.
+        const exclusions = view.excludedRelationshipExpressions ?? []
         const excludedPairs = new Set<string>()
+        const ref = (id: string) => (id === '*' ? '*' : this.idToVar.get(id) ?? id)
+        for (const exclusion of exclusions) excludedPairs.add(`${ref(exclusion.sourceId)} -> ${ref(exclusion.destinationId)}`)
         for (const id of view.excludedRelationshipIds ?? []) {
             const rel = this.workspace.model.relationships.find(r => r.id === id)
-            if (!rel) continue
-            const source = this.idToVar.get(rel.sourceId) ?? rel.sourceId
-            const destination = this.idToVar.get(rel.destinationId) ?? rel.destinationId
-            excludedPairs.add(`${source} -> ${destination}`)
+            if (!rel || exclusions.some(x => exclusionMatches(x, rel.sourceId, rel.destinationId))) continue
+            excludedPairs.add(`${ref(rel.sourceId)} -> ${ref(rel.destinationId)}`)
         }
         for (const pair of excludedPairs) this.emit(`exclude "${pair}"`)
 
