@@ -512,6 +512,109 @@ workspace "Dynamics" {
             expect(validate(serializeDSL(ws()))).toBeNull()
         })
 
+        // Structurizr copies an element relationship onto the instances
+        // created after it, so a save that wrote `web -> db` below the
+        // deploymentEnvironment left the deployment view without it (#231).
+        const ISSUE_231_DSL = `
+workspace "Deployment relationships" {
+  model {
+    a = softwareSystem "System A" {
+      web = container "Web"
+      db = container "Database"
+    }
+    web -> db "Reads from"
+
+    deploymentEnvironment "Production" {
+      deploymentNode "Server" {
+        containerInstance web
+        containerInstance db
+      }
+    }
+  }
+  views {
+    deployment * "Production" "Prod" {
+      include *
+      autolayout lr
+    }
+  }
+}
+`
+        // The environment in its own file. `ops` and `web -> api` stay after
+        // the include: one is declared there, and the other would imply
+        // `a -> b "Calls"` before the explicit one, which is then rejected.
+        const ISSUE_231_ROOT = `
+workspace "Deployment relationships" {
+  model {
+    a = softwareSystem "System A" {
+      web = container "Web"
+      db = container "Database"
+    }
+    b = softwareSystem "System B" {
+      api = container "API"
+    }
+    web -> db "Reads from"
+    !include live.dsl
+    ops -> web "Operates"
+    web -> api "Calls"
+  }
+  views {
+    deployment * "Live" "Live" {
+      include *
+    }
+  }
+}
+`
+        const ISSUE_231_INCLUDES = {
+            'live.dsl': `ops = person "Ops"
+deploymentEnvironment "Live" {
+  deploymentNode "Server" {
+    containerInstance web
+    containerInstance db
+    containerInstance api
+  }
+}
+a -> b "Calls"
+`,
+        }
+        /** A deployment view's relationships as `source -> destination: description`. */
+        const deploymentViewRelationships = (exported: Record<string, unknown>, key: string): string[] => {
+            type Item = { id?: string; name?: string; containerId?: string; softwareSystemId?: string
+                sourceId?: string; destinationId?: string; description?: string }
+            const byId = new Map<string, Item>()
+            const walk = (value: unknown): void => {
+                if (Array.isArray(value)) value.forEach(walk)
+                else if (typeof value === 'object' && value !== null) {
+                    const item = value as Item
+                    if (item.id !== undefined) byId.set(item.id, item)
+                    Object.values(value).forEach(walk)
+                }
+            }
+            walk(exported.model)
+            // An instance is named after its container or software system.
+            const name = (id: string | undefined): string | undefined => {
+                const item = id === undefined ? undefined : byId.get(id)
+                return item?.name ?? (item && name(item.containerId ?? item.softwareSystemId))
+            }
+            type View = { key: string; relationships?: { id: string }[] }
+            const view = (exported.views as { deploymentViews?: View[] }).deploymentViews?.find(v => v.key === key)
+            return (view?.relationships ?? []).map(({ id }) => byId.get(id))
+                .map(rel => `${name(rel?.sourceId)} -> ${name(rel?.destinationId)}: ${rel?.description}`)
+                .sort()
+        }
+        it.each<[string, string, Record<string, string>, string, string[]]>([
+            ['the issue fixture', ISSUE_231_DSL, {}, 'Prod', ['Web -> Database: Reads from']],
+            ['the deployment fixture', DEPLOYMENT_DSL, {}, 'LiveAll', [
+                'Load Balancer -> Web: Forwards to', 'Web -> DB: Reads', 'Web -> Mainframe: Uses',
+            ]],
+            ['an environment in an included file', ISSUE_231_ROOT, ISSUE_231_INCLUDES, 'Live', ['Web -> Database: Reads from']],
+        ])('a save keeps the relationships of a deployment view (%s, #231)', async (_name, dsl, includes, key, expected) => {
+            const { workspace, errors } = await loadWorkspaceDocument({ content: dsl, readInclude: async path => includes[path] ?? null })
+            expect(errors).toEqual([])
+            const savedIncludes = Object.fromEntries(planIncludedWrites(workspace).map(write => [write.path, write.content]))
+            expect(deploymentViewRelationships(exportModel(dsl, includes), key)).toEqual(expected)
+            expect(deploymentViewRelationships(exportModel(serializeRoot(workspace), savedIncludes), key)).toEqual(expected)
+        }, 30_000) // two CLI runs per case
+
         it('parallel-sequence numbering matches the real parser, before and after re-serialization', () => {
             const PARALLEL_DSL = `
 workspace "Parallel" {
