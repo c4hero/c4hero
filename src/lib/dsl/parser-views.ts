@@ -217,10 +217,12 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 continue
             }
             if (kw === 'filtered' || kw === 'custom') {
+                // Not modelled: skip the whole header line and its block.
+                // Skipping only string/identifier words stopped at a keyword
+                // key, so `custom deployment "T" { … }` became a deployment
+                // view (#232).
                 p.advance()
-                while (p.check('STRING') || p.check('IDENTIFIER')) p.advance()
-                p.skipNewlines()
-                p.skipBraceBlock()
+                p.skipUnknownDirective()
                 continue
             }
             if (kw === 'branding' || kw === 'terminology' || kw === 'configuration' || kw === 'properties') {
@@ -264,8 +266,7 @@ function parseSystemLandscapeView(p: ContextAwareParser, model: Model): View | n
         relationships: [],
     }
 
-    p.skipNewlines()
-    if (p.match('LBRACE')) {
+    if (openViewBody(p)) {
         parseViewBody(p, view, model)
         p.skipNewlines()
         p.expect('RBRACE')
@@ -307,8 +308,7 @@ function parseElementView(p: ContextAwareParser, type: ViewType, model: Model): 
         }
     }
 
-    p.skipNewlines()
-    if (p.match('LBRACE')) {
+    if (openViewBody(p)) {
         parseViewBody(p, view, model)
         p.skipNewlines()
         p.expect('RBRACE')
@@ -370,12 +370,14 @@ function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
     p.advance() // consume 'dynamic'
 
     // Scope: `*` (unscoped), or a software system / container reference —
-    // possibly hierarchical (`sys1.api`).
+    // possibly hierarchical (`sys1.api`), quoted or not as in the other
+    // views. A quoted scope used to be read as the key, which left the body
+    // on an unscoped view (#232).
     let scopeRef: string | undefined
     if (p.check('STAR')) {
         p.advance()
     } else {
-        scopeRef = p.readQualifiedRef()?.ref
+        scopeRef = p.readQualifiedRef({ allowString: true })?.ref
     }
 
     const key = p.readOptionalStringOrIdentifier() ?? ''
@@ -401,8 +403,7 @@ function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
         }
     }
 
-    p.skipNewlines()
-    if (p.match('LBRACE')) {
+    if (openViewBody(p)) {
         const order = { next: 1 }
         parseDynamicViewBody(p, view, model, order)
         p.skipNewlines()
@@ -597,14 +598,35 @@ function parseDeploymentView(p: ContextAwareParser, model: Model): View | null {
         p.addError(`Deployment view references unknown environment '${environment}'`, p.peek())
     }
 
-    p.skipNewlines()
-    if (p.match('LBRACE')) {
+    if (openViewBody(p)) {
         parseViewBody(p, view, model)
         p.skipNewlines()
         p.expect('RBRACE')
     }
 
     return view
+}
+
+/** Consume the `{` that opens a view's body; a `{` on a later line is
+ *  tolerated. Anything else after the header is an error. It used to end the
+ *  view silently, and the leftover words then started a view of their own,
+ *  so the real body was lost on save (#232). Recovery skips only the rest of
+ *  the header line, to its own `{`: the view keeps its body, and a view on
+ *  the next line is never swallowed. */
+function openViewBody(p: ContextAwareParser): boolean {
+    // A comment in the header is not a stray word, but it must not hide one
+    // that follows it. A line comment stops short of its NEWLINE.
+    while (p.peekType() === 'COMMENT') p.advance()
+    const next = p.peek()
+    const stray = next.type !== 'LBRACE' && next.type !== 'NEWLINE' && next.type !== 'EOF'
+    if (stray) {
+        p.addError(`Expected '{' after the view header, got ${next.type} '${next.value}'`, next)
+        while (!p.check('LBRACE') && !p.check('RBRACE') && !p.check('NEWLINE') && p.peekType() !== 'EOF') p.advance()
+    }
+    p.skipNewlines()
+    if (p.match('LBRACE')) return true
+    if (!stray) p.addError(`Expected '{' after the view header, got ${p.peekType()} '${p.peekValue()}'`, p.peek())
+    return false
 }
 
 function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
