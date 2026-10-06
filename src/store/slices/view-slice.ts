@@ -5,6 +5,7 @@ import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
 import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews, orphanedLayoutViewKeys } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
+import { defaultViewTitle, uniqueViewTitle } from '../workspace-helpers'
 
 /** View management: create / delete / rename / duplicate views, plus the
  *  per-view body actions (toggle element membership, layout direction,
@@ -46,7 +47,7 @@ export const createViewSlice: StateCreator<
       // The new view is authored, so the generated set has to become authored
       // with it or the next parse of the serialized DSL would drop it.
       materializeAutoViews(s.workspace)
-      appendScopedView(s.workspace, type, scopeId, title ?? `New ${type} view`, key, options)
+      appendScopedView(s.workspace, type, scopeId, title ?? defaultViewTitle(s.workspace, type, scopeId, options?.environment), key, options)
       s.activeViewKey = key
       s.selectedElementIds = []
       s.selectedRelationshipId = null
@@ -136,6 +137,8 @@ export const createViewSlice: StateCreator<
           title: `${src.title ?? 'View'} copy`,
           autoTitle: undefined,
         }
+        // Duplicating a view twice must not leave two views with one label.
+        copy.title = uniqueViewTitle(copy.title ?? 'View copy', ws)
         ws.views[arrKey].push(copy)
         s.activeViewKey = newKey
         s.selectedElementIds = []
