@@ -23,7 +23,7 @@ import type {
     PropertyLayout,
     WorkspaceDirective,
 } from '@/types/model'
-import { dslIdentifierForm } from '@/lib/identifier'
+import { IDENTIFIER_PATTERN, dslIdentifierForm } from '@/lib/identifier'
 import { normalizeElementStatus } from '@/lib/elementStatus'
 import { representable, roundTripped } from './encoding'
 import { enclosingSystems, hierarchyGuard, wildcardElements } from './wildcard'
@@ -1236,6 +1236,14 @@ class SerializerContext {
         this.emit('}')
     }
 
+    /** The description a view header carries after its key. A title the
+     *  parser derived from it is Structurizr's description, not a title, so
+     *  it goes back where it was read: the file keeps its form and the canvas
+     *  its label, and no `title` replaces Structurizr's default one (#233). */
+    private headerDescription(view: View): string | undefined {
+        return view.autoTitle && view.key && view.title ? view.title : undefined
+    }
+
     private serializeView(view: View): void {
         const parts: string[] = []
 
@@ -1244,25 +1252,25 @@ class SerializerContext {
         } else if (view.type === 'systemContext') {
             parts.push('systemContext')
             if (view.softwareSystemId) {
-                const ref = this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId
+                const ref = this.viewScopeRef(view.softwareSystemId)
                 parts.push(ref)
             }
         } else if (view.type === 'container') {
             parts.push('container')
             if (view.softwareSystemId) {
-                const ref = this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId
+                const ref = this.viewScopeRef(view.softwareSystemId)
                 parts.push(ref)
             }
         } else if (view.type === 'component') {
             parts.push('component')
             if (view.containerId) {
-                const ref = this.idToVar.get(view.containerId) ?? view.containerId
+                const ref = this.viewScopeRef(view.containerId)
                 parts.push(ref)
             }
         } else if (view.type === 'deployment') {
             parts.push('deployment')
             if (view.softwareSystemId) {
-                parts.push(this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId)
+                parts.push(this.viewScopeRef(view.softwareSystemId))
             } else {
                 parts.push('*')
             }
@@ -1270,20 +1278,24 @@ class SerializerContext {
         }
 
         // Skip parser-synthesised keys so DSL without explicit view keys
-        // roundtrips byte-identical.
-        if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
+        // roundtrips byte-identical. A header description needs the key slot
+        // before it, so a key generated for an unusable one is written then.
+        const headerDescription = this.headerDescription(view)
+        if (view.key && (!view.autoKey || headerDescription)) parts.push(`"${this.escapeString(view.key)}"`)
+        if (headerDescription) parts.push(`"${this.escapeString(headerDescription)}"`)
 
         this.emit(`${parts.join(' ')} {`)
         this.depth++
 
         // Structurizr view headers use the second optional string as a
         // description, not a title. Emit titles with the standard child keyword.
-        if (view.title) {
+        if (view.title && !view.autoTitle) {
             this.emit(`title "${this.escapeString(view.title)}"`)
         }
 
-        // Description (block property — cannot be expressed as a positional arg)
-        if (view.description) {
+        // Description, unless the header already carries it. An empty one
+        // still blanks a header description, as it does in Structurizr.
+        if (view.description !== undefined && view.description !== headerDescription && (view.description || headerDescription)) {
             this.emit(`description "${this.escapeString(view.description)}"`)
         }
 
@@ -1327,17 +1339,21 @@ class SerializerContext {
         const parts: string[] = ['dynamic']
         const scopeId = view.softwareSystemId ?? view.containerId
         if (scopeId) {
-            parts.push(this.idToVar.get(scopeId) ?? scopeId)
+            parts.push(this.viewScopeRef(scopeId))
         } else {
             parts.push('*')
         }
-        if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
+        const headerDescription = this.headerDescription(view)
+        if (view.key && (!view.autoKey || headerDescription)) parts.push(`"${this.escapeString(view.key)}"`)
+        if (headerDescription) parts.push(`"${this.escapeString(headerDescription)}"`)
 
         this.emit(`${parts.join(' ')} {`)
         this.depth++
 
-        if (view.title) this.emit(`title "${this.escapeString(view.title)}"`)
-        if (view.description) this.emit(`description "${this.escapeString(view.description)}"`)
+        if (view.title && !view.autoTitle) this.emit(`title "${this.escapeString(view.title)}"`)
+        if (view.description !== undefined && view.description !== headerDescription && (view.description || headerDescription)) {
+            this.emit(`description "${this.escapeString(view.description)}"`)
+        }
 
         const relById = new Map(this.workspace.model.relationships.map(r => [r.id, r]))
         const steps = view.relationships.filter(step => relById.has(step.id))
@@ -1446,6 +1462,18 @@ class SerializerContext {
             }
         }
         return groups
+    }
+
+    /** A view's scope as its header writes it: the element's variable, or,
+     *  for a scope the parser could not resolve, the ref as written — quoted
+     *  unless it is a bare (possibly dotted) identifier. Unquoted, a string
+     *  scope such as `Containers of A` reads back as three header words and
+     *  shifts the view's key and description (#232). Structurizr strips the
+     *  quotes, so quoting never changes what it resolves. */
+    private viewScopeRef(id: string): string {
+        const ref = this.idToVar.get(id)
+        if (ref !== undefined) return ref
+        return id.split('.').every(segment => IDENTIFIER_PATTERN.test(segment)) ? id : `"${this.escapeString(id)}"`
     }
 
     private serializeAutoLayout(layout: AutoLayout): void {

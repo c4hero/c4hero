@@ -50,10 +50,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.
+- A view key that is also a DSL word, such as `deployment`, `component` or
+  `container`, no longer splits the view in two. The key was read as missing,
+  so the rest of the header started a second view, the first lost its body,
+  and saving wrote DSL Structurizr rejects. The key is now kept as written. A
+  view header c4hero cannot read up to its `{` is reported as an error instead
+  of being split silently. A dynamic view's scope may now be quoted, as in the
+  other views, and a view scope that names no element and is not a plain
+  identifier is saved in quotes so it reads back unchanged (#232).
 - Orphaned view layout retained after deleting a view in the DSL code pane can
   now be reviewed and permanently removed with **Clean Up Orphaned View
   Layout** in the command palette. Cleanup lists the affected view keys, is
   undoable, and leaves current-view layout untouched. (TEA-343)
+- Saving no longer adds a `title` to a view that only has a description in its
+  header, such as `container a "Containers" "The containers inside A"`. The
+  copied title replaced the default title Structurizr shows. The description
+  now stays in the header, and c4hero still uses it as the view's label. A name
+  you give the view in c4hero is still saved as its title (#233).
 - Preserve saved layout for temporarily missing views and elements through model
   edits and repeated saves/reopens (#201). Existing sidecars need no migration.
   Explicit view/element deletion and layout reset still remove the affected
@@ -67,6 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reordered, and generated views remain hidden while explicit views exist.
   Their saved positions are retained for recovery; use explicit, unique view
   keys when stable layout ownership is needed.
+- A view created without a name no longer gets the same label as every other
+  unnamed view of its type ("New systemLandscape view" twice). It is named
+  after what it shows, such as "System Landscape" or "API — Containers", and
+  numbered when that name is taken ("System Landscape 2"). Duplicating a view
+  twice now gives "… copy" and "… copy 2". A name you type is kept as typed.
 
 ## [0.7.0] - 2026-09-18
 

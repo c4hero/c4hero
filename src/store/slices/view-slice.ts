@@ -8,6 +8,7 @@ import {
   idsEnteringView, idsLeavingView, makeRoomInWildcardView, noteHiddenFromView, noteShownInView, showWildcardArrivals,
 } from '../workspace-helpers'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
+import { defaultViewTitle, uniqueViewTitle } from '../workspace-helpers'
 
 /** View management: create / delete / rename / duplicate views, plus the
  *  per-view body actions (toggle element membership, layout direction,
@@ -49,7 +50,7 @@ export const createViewSlice: StateCreator<
       // The new view is authored, so the generated set has to become authored
       // with it or the next parse of the serialized DSL would drop it.
       materializeAutoViews(s.workspace)
-      appendScopedView(s.workspace, type, scopeId, title ?? `New ${type} view`, key, options)
+      appendScopedView(s.workspace, type, scopeId, title ?? defaultViewTitle(s.workspace, type, scopeId, options?.environment), key, options)
       s.activeViewKey = key
       s.selectedElementIds = []
       s.selectedRelationshipId = null
@@ -99,9 +100,15 @@ export const createViewSlice: StateCreator<
     for (const arrKey of VIEW_ARRAY_KEYS) {
       const v = (ws.views[arrKey] ?? []).find(v => v.key === key)
       if (v) {
+        // Unchanged text is a no-op, so confirming the label of a view that is
+        // labelled by its header description keeps it a description. The
+        // rename field trims what it sends, so outer whitespace is no change.
         if (v.title === title) return // no-op: title unchanged
+        if (v.autoTitle && v.title?.trim() === title.trim()) return
         pushUndoSnapshot(s)
         v.title = title
+        // A name the user typed is authored: it is saved as `title` (#233).
+        v.autoTitle = undefined
         return
       }
     }
@@ -128,8 +135,13 @@ export const createViewSlice: StateCreator<
           autoView: undefined,
           autoKey: undefined,
           originalKey: undefined,
+          // The new name is authored, so it is saved even when the source's
+          // title was only derived from its description (#233).
           title: `${src.title ?? 'View'} copy`,
+          autoTitle: undefined,
         }
+        // Duplicating a view twice must not leave two views with one label.
+        copy.title = uniqueViewTitle(copy.title ?? 'View copy', ws)
         ws.views[arrKey].push(copy)
         s.activeViewKey = newKey
         s.selectedElementIds = []

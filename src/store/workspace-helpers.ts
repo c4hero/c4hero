@@ -328,6 +328,39 @@ export function uniqueElementName(base: string, ws: Workspace): string {
   return `${base} ${n}`
 }
 
+/** Return a view title no other view is listed under, numbered the way
+ *  uniqueElementName numbers element names: `base`, `base 2`, `base 3`, … */
+export function uniqueViewTitle(base: string, ws: Workspace): string {
+  // Views are listed by `title ?? key`, so that is what a user sees twice.
+  const taken = new Set(allViewsOf(ws).map((v) => v.title ?? v.key))
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(`${base} ${n}`)) n++
+  return `${base} ${n}`
+}
+
+/** What a view of each type shows, for a view created without a name. */
+const DEFAULT_VIEW_NOUNS: Record<ViewType, string> = {
+  systemLandscape: 'System Landscape',
+  systemContext: 'System Context',
+  container: 'Containers',
+  component: 'Components',
+  dynamic: 'Dynamic',
+  deployment: 'Deployment',
+}
+
+/** The title of a view created without a name: what it shows, after the
+ *  element it is scoped to (or a deployment view's environment), in the
+ *  zoom-in flow's `<element> — Containers` form, and unique among the views.
+ *  A fixed `New ${type} view` gave every unnamed view of a type the same
+ *  label, spelled with the internal type id. */
+export function defaultViewTitle(ws: Workspace, type: ViewType, scopeId?: string, environment?: string): string {
+  const scopeName = scopeId ? findElementHelper(ws, scopeId)?.name : undefined
+  const prefix = scopeName ?? (type === 'deployment' ? environment : undefined)
+  const noun = DEFAULT_VIEW_NOUNS[type]
+  return uniqueViewTitle(prefix ? `${prefix} — ${noun}` : noun, ws)
+}
+
 /** IDs reserved by the model and retained layout: elements, relationships,
  *  groups, the deployment tree, and temporarily absent elements. Used to keep
  *  user-set and derived IDs from colliding or overwriting saved positions. */

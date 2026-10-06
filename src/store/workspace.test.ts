@@ -2595,6 +2595,78 @@ describe('duplicateView', () => {
   })
 })
 
+// #233: a view labelled by its header's positional description saves that
+// string as the description only; a name the user gives it is a real title.
+describe('views labelled by their positional description', () => {
+  const DSL = `workspace "T" {
+    model {
+        a = softwareSystem "System A" {
+            web = container "Web"
+        }
+    }
+    views {
+        container a "ContainersA" "The containers inside System A" {
+            include *
+        }
+    }
+}
+`
+  const containerView = () => useWorkspaceStore.getState().workspace!.views.containerViews[0]
+  const save = () => serializeDSL(useWorkspaceStore.getState().workspace!)
+
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(parseDSL(DSL).workspace)
+  })
+
+  it('saves a rename as the view title, and keeps the description', () => {
+    useWorkspaceStore.getState().renameView('ContainersA', 'Containers')
+    expect(containerView().autoTitle).toBeUndefined()
+    const output = save()
+    expect(output).toContain('container a "ContainersA" {')
+    expect(output).toContain('title "Containers"')
+    expect(output).toContain('description "The containers inside System A"')
+    expect(parseDSL(output).workspace.views.containerViews[0]).toMatchObject({ title: 'Containers', description: 'The containers inside System A' })
+  })
+
+  it('confirming the unchanged label keeps it a description, not a title', () => {
+    // The rename field starts with the label, so Enter on it renames to the same text.
+    useWorkspaceStore.getState().renameView('ContainersA', 'The containers inside System A')
+    expect(containerView().autoTitle).toBe(true)
+    expect(save()).not.toMatch(/^\s*title /m)
+  })
+
+  it('confirming the unchanged label keeps it a description when the field trims it', () => {
+    useWorkspaceStore.getState().loadWorkspace(parseDSL(DSL.replace('"The containers inside System A"', '" Containers "')).workspace)
+    // The rename field sends what it shows, trimmed.
+    useWorkspaceStore.getState().renameView('ContainersA', 'Containers')
+    expect(containerView()).toMatchObject({ title: ' Containers ', autoTitle: true })
+    expect(useWorkspaceStore.getState().canUndo()).toBe(false)
+    expect(save()).toContain('container a "ContainersA" " Containers " {')
+    expect(save()).not.toMatch(/^\s*title /m)
+  })
+
+  it('undoing a rename puts the derived label back', () => {
+    useWorkspaceStore.getState().renameView('ContainersA', 'Containers')
+    useWorkspaceStore.getState().undo()
+    expect(containerView()).toMatchObject({ title: 'The containers inside System A', autoTitle: true })
+    expect(save()).toContain('container a "ContainersA" "The containers inside System A" {')
+    expect(save()).not.toMatch(/^\s*title /m)
+  })
+
+  it('saves the duplicate\'s new name as its title, leaving the source untouched', () => {
+    const copyKey = useWorkspaceStore.getState().duplicateView('ContainersA')
+    const copy = useWorkspaceStore.getState().workspace!.views.containerViews.find(v => v.key === copyKey)!
+    expect(copy).toMatchObject({ title: 'The containers inside System A copy', description: 'The containers inside System A' })
+    expect(copy.autoTitle).toBeUndefined()
+
+    const output = save()
+    expect(output).toContain('container a "ContainersA" "The containers inside System A" {')
+    expect(output).toContain(`container a "${copyKey}" {`)
+    expect(output).toContain('title "The containers inside System A copy"')
+    expect(output.match(/^\s*title /gm)).toHaveLength(1)
+  })
+})
+
 describe('updateWorkspaceMeta', () => {
   beforeEach(() => {
     useWorkspaceStore.setState({

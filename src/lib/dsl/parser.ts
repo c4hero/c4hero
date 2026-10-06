@@ -517,9 +517,14 @@ export class ContextAwareParser {
         return ''
     }
 
+    /** A view-header slot (key, deployment environment): a string or a bare
+     *  word. Structurizr has no reserved words there, so a word c4hero lexes
+     *  as a KEYWORD counts too — `deployment * "Production" deployment { … }`
+     *  is keyed `deployment`. Reading it as "no key" split the view in two
+     *  and saved DSL Structurizr rejects (#232). */
     readOptionalStringOrIdentifier(): string | undefined {
         if (this.check('STRING')) return this.advance().value
-        if (this.check('IDENTIFIER')) return this.advance().value
+        if (this.check('IDENTIFIER') || this.check('KEYWORD')) return this.advance().value
         return undefined
     }
 
