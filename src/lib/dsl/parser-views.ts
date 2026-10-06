@@ -80,8 +80,13 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
                 // silently rename the view on screen, so the original text is
                 // promoted to the field that actually holds labels. Nothing is
                 // lost — it round-trips as `title "Billing Context"` — and a
-                // view that already has a title keeps it.
-                if (!view.title) view.title = authored
+                // view that already has a title keeps it. An empty header
+                // description left the title marked derived, but this text is
+                // a real title, so it is saved as one (#233).
+                if (!view.title) {
+                    view.title = authored
+                    view.autoTitle = undefined
+                }
                 p.addWarning(
                     `View key "${authored}" contains characters Structurizr rejects (only a-zA-Z0-9_- are allowed) — using "${view.key}", and keeping "${authored}" as the view's title`,
                     at,
@@ -90,7 +95,10 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
             }
             // Nothing legal survived (e.g. a key of only spaces): fall through
             // to a derived key, and say so rather than silently dropping it.
-            if (!view.title) view.title = authored
+            if (!view.title) {
+                view.title = authored
+                view.autoTitle = undefined
+            }
             p.addWarning(
                 `View key "${authored}" contains no characters Structurizr allows (only a-zA-Z0-9_-) — using a generated key`,
                 at,
@@ -209,10 +217,12 @@ export function parseViewsBody(p: ContextAwareParser, views: Workspace['views'],
                 continue
             }
             if (kw === 'filtered' || kw === 'custom') {
+                // Not modelled: skip the whole header line and its block.
+                // Skipping only string/identifier words stopped at a keyword
+                // key, so `custom deployment "T" { … }` became a deployment
+                // view (#232).
                 p.advance()
-                while (p.check('STRING') || p.check('IDENTIFIER')) p.advance()
-                p.skipNewlines()
-                p.skipBraceBlock()
+                p.skipUnknownDirective()
                 continue
             }
             if (kw === 'branding' || kw === 'terminology' || kw === 'configuration' || kw === 'properties') {
@@ -247,15 +257,16 @@ function parseSystemLandscapeView(p: ContextAwareParser, model: Model): View | n
         key,
         // Structurizr defines the second optional view header string as
         // the view description. Keep it as a display title fallback too so
-        // existing DSL authored for c4hero still labels views usefully.
+        // existing DSL authored for c4hero still labels views usefully —
+        // marked derived, so a save keeps it a description (#233).
         title: positionalDescription,
+        autoTitle: positionalDescription === undefined ? undefined : true,
         description: positionalDescription,
         elements: [],
         relationships: [],
     }
 
-    p.skipNewlines()
-    if (p.match('LBRACE')) {
+    if (openViewBody(p)) {
         parseViewBody(p, view, model)
         p.skipNewlines()
         p.expect('RBRACE')
@@ -279,6 +290,7 @@ function parseElementView(p: ContextAwareParser, type: ViewType, model: Model): 
         type,
         key,
         title: positionalDescription,
+        autoTitle: positionalDescription === undefined ? undefined : true,
         description: positionalDescription,
         elements: [],
         relationships: [],
@@ -296,8 +308,7 @@ function parseElementView(p: ContextAwareParser, type: ViewType, model: Model): 
         }
     }
 
-    p.skipNewlines()
-    if (p.match('LBRACE')) {
+    if (openViewBody(p)) {
         parseViewBody(p, view, model)
         p.skipNewlines()
         p.expect('RBRACE')
@@ -359,12 +370,14 @@ function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
     p.advance() // consume 'dynamic'
 
     // Scope: `*` (unscoped), or a software system / container reference —
-    // possibly hierarchical (`sys1.api`).
+    // possibly hierarchical (`sys1.api`), quoted or not as in the other
+    // views. A quoted scope used to be read as the key, which left the body
+    // on an unscoped view (#232).
     let scopeRef: string | undefined
     if (p.check('STAR')) {
         p.advance()
     } else {
-        scopeRef = p.readQualifiedRef()?.ref
+        scopeRef = p.readQualifiedRef({ allowString: true })?.ref
     }
 
     const key = p.readOptionalStringOrIdentifier() ?? ''
@@ -374,6 +387,7 @@ function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
         type: 'dynamic',
         key,
         title: positionalDescription,
+        autoTitle: positionalDescription === undefined ? undefined : true,
         description: positionalDescription,
         elements: [],
         relationships: [],
@@ -389,8 +403,7 @@ function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
         }
     }
 
-    p.skipNewlines()
-    if (p.match('LBRACE')) {
+    if (openViewBody(p)) {
         const order = { next: 1 }
         parseDynamicViewBody(p, view, model, order)
         p.skipNewlines()
@@ -442,6 +455,7 @@ function parseDynamicViewBody(p: ContextAwareParser, view: View, model: Model, o
             if (kw === 'title') {
                 p.advance()
                 view.title = p.readOptionalString()
+                view.autoTitle = undefined
                 continue
             }
             if (kw === 'description') {
@@ -568,6 +582,7 @@ function parseDeploymentView(p: ContextAwareParser, model: Model): View | null {
         type: 'deployment',
         key,
         title: positionalDescription,
+        autoTitle: positionalDescription === undefined ? undefined : true,
         description: positionalDescription,
         environment,
         elements: [],
@@ -583,14 +598,35 @@ function parseDeploymentView(p: ContextAwareParser, model: Model): View | null {
         p.addError(`Deployment view references unknown environment '${environment}'`, p.peek())
     }
 
-    p.skipNewlines()
-    if (p.match('LBRACE')) {
+    if (openViewBody(p)) {
         parseViewBody(p, view, model)
         p.skipNewlines()
         p.expect('RBRACE')
     }
 
     return view
+}
+
+/** Consume the `{` that opens a view's body; a `{` on a later line is
+ *  tolerated. Anything else after the header is an error. It used to end the
+ *  view silently, and the leftover words then started a view of their own,
+ *  so the real body was lost on save (#232). Recovery skips only the rest of
+ *  the header line, to its own `{`: the view keeps its body, and a view on
+ *  the next line is never swallowed. */
+function openViewBody(p: ContextAwareParser): boolean {
+    // A comment in the header is not a stray word, but it must not hide one
+    // that follows it. A line comment stops short of its NEWLINE.
+    while (p.peekType() === 'COMMENT') p.advance()
+    const next = p.peek()
+    const stray = next.type !== 'LBRACE' && next.type !== 'NEWLINE' && next.type !== 'EOF'
+    if (stray) {
+        p.addError(`Expected '{' after the view header, got ${next.type} '${next.value}'`, next)
+        while (!p.check('LBRACE') && !p.check('RBRACE') && !p.check('NEWLINE') && p.peekType() !== 'EOF') p.advance()
+    }
+    p.skipNewlines()
+    if (p.match('LBRACE')) return true
+    if (!stray) p.addError(`Expected '{' after the view header, got ${p.peekType()} '${p.peekValue()}'`, p.peek())
+    return false
 }
 
 function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
@@ -682,6 +718,7 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
             if (kw === 'title') {
                 p.advance()
                 view.title = p.readOptionalString()
+                view.autoTitle = undefined
                 continue
             }
 

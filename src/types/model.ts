@@ -225,6 +225,14 @@ export interface View {
    *  A c4hero concept persisted in the sidecar, not the DSL. */
   locked?: boolean
   title?: string
+  /** True when `title` was not authored but is the view header's positional
+   *  string (`container a "key" "description"`), kept so the canvas has a
+   *  label for the view. Structurizr reads that string as the description
+   *  only, so the serializer writes it back into the header rather than as a
+   *  `title`, which would replace the default title Structurizr renders
+   *  (#233). A `title` in the view body, a rename, a duplicate or an
+   *  unusable view key kept as the label makes the title authored. */
+  autoTitle?: boolean
   description?: string
   softwareSystemId?: string
   containerId?: string
