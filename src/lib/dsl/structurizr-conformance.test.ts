@@ -326,6 +326,111 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect(validate(serializeDSL(hostileWorkspace()))).toBeNull()
     })
 
+    // #232: a view key c4hero lexes as a keyword (`deployment`, `component`)
+    // was read as "no key", so the header ended early and its leftover words
+    // started a second view scoped to the description string — a save the
+    // real parser rejected outright. `expected` is what the real parser
+    // builds from each source, compared by name: element ids follow
+    // declaration order, which a save may change.
+    describe('a view keyed with a word c4hero lexes as a keyword (#232)', () => {
+        type ExportedElement = {
+            id: string
+            name?: string
+            containerId?: string
+            containers?: ExportedElement[]
+            children?: ExportedElement[]
+            containerInstances?: ExportedElement[]
+        }
+        type ExportedView = { key: string; description?: string; elements?: { id: string }[] }
+        type NamedView = { kind: string; key: string; description?: string; elements: string[] }
+
+        /** Every view the real parser built, its elements named rather than numbered. */
+        const viewsOf = (exported: Record<string, unknown>): NamedView[] => {
+            const model = exported.model as { people?: ExportedElement[]; softwareSystems?: ExportedElement[]; deploymentNodes?: ExportedElement[] }
+            const byId = new Map<string, ExportedElement>()
+            const walk = (elements: ExportedElement[] | undefined): void => {
+                for (const e of elements ?? []) {
+                    byId.set(e.id, e)
+                    walk(e.containers)
+                    walk(e.children)
+                    walk(e.containerInstances)
+                }
+            }
+            walk(model.people)
+            walk(model.softwareSystems)
+            walk(model.deploymentNodes)
+            const nameOf = (id: string): string => {
+                const e = byId.get(id)
+                return e?.name ?? `instance of ${byId.get(e?.containerId ?? '')?.name}`
+            }
+            const views = exported.views as Record<string, ExportedView[] | undefined>
+            return ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews']
+                .flatMap(kind => (views[kind] ?? []).map(v => ({
+                    kind, key: v.key, description: v.description, elements: (v.elements ?? []).map(e => nameOf(e.id)).sort(),
+                })))
+        }
+
+        it.each([
+            ['deployment', `workspace "Keyword as view key" {
+    model {
+        a = softwareSystem "System A" {
+            web = container "Web"
+        }
+        deploymentEnvironment "Production" {
+            deploymentNode "Server" {
+                containerInstance web
+            }
+        }
+    }
+    views {
+        deployment * "Production" deployment "Where it all runs" {
+            include *
+            autolayout lr
+        }
+    }
+}
+`, { kind: 'deploymentViews', key: 'deployment', description: 'Where it all runs', elements: ['Server', 'instance of Web'] }],
+            ['component', `workspace "Keyword as view key 2" {
+    model {
+        a = softwareSystem "System A" {
+            web = container "Web"
+        }
+    }
+    views {
+        container a component "Containers of A" {
+            include *
+            autolayout lr
+        }
+    }
+}
+`, { kind: 'containerViews', key: 'component', description: 'Containers of A', elements: ['Web'] }],
+            // A quoted scope too: read as the key, it left the body on an
+            // unscoped view, whose step to a container Structurizr rejects.
+            ['dynamic', `workspace "Keyword as view key 3" {
+    model {
+        u = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web"
+        }
+        u -> web "Uses"
+    }
+    views {
+        dynamic "a" dynamic "Flow" {
+            u -> web "Signs in"
+            autolayout lr
+        }
+    }
+}
+`, { kind: 'dynamicViews', key: 'dynamic', description: 'Flow', elements: ['User', 'Web'] }],
+        ])('saves a view keyed %s as the one view Structurizr built from the source', (_key, source, expected) => {
+            const { workspace, errors } = parseDSL(source)
+            expect(errors).toEqual([])
+            const saved = serializeDSL(workspace)
+            expect(validate(saved)).toBeNull()
+            expect(viewsOf(exportModel(saved))).toEqual([expected])
+        }, 30_000) // two JVM starts: near the 5 s default on a loaded runner
+    })
+
     function icePanelWorkspace(): Workspace {
         const source = readFileSync(join(process.cwd(), 'src/lib/dsl/__fixtures__/hierarchical-landscape.dsl'), 'utf8')
         const { workspace, errors } = parseDSL(source)

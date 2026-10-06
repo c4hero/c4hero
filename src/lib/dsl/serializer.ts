@@ -23,7 +23,7 @@ import type {
     PropertyLayout,
     WorkspaceDirective,
 } from '@/types/model'
-import { dslIdentifierForm } from '@/lib/identifier'
+import { IDENTIFIER_PATTERN, dslIdentifierForm } from '@/lib/identifier'
 import { normalizeElementStatus } from '@/lib/elementStatus'
 import { representable, roundTripped } from './encoding'
 
@@ -1239,25 +1239,25 @@ class SerializerContext {
         } else if (view.type === 'systemContext') {
             parts.push('systemContext')
             if (view.softwareSystemId) {
-                const ref = this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId
+                const ref = this.viewScopeRef(view.softwareSystemId)
                 parts.push(ref)
             }
         } else if (view.type === 'container') {
             parts.push('container')
             if (view.softwareSystemId) {
-                const ref = this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId
+                const ref = this.viewScopeRef(view.softwareSystemId)
                 parts.push(ref)
             }
         } else if (view.type === 'component') {
             parts.push('component')
             if (view.containerId) {
-                const ref = this.idToVar.get(view.containerId) ?? view.containerId
+                const ref = this.viewScopeRef(view.containerId)
                 parts.push(ref)
             }
         } else if (view.type === 'deployment') {
             parts.push('deployment')
             if (view.softwareSystemId) {
-                parts.push(this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId)
+                parts.push(this.viewScopeRef(view.softwareSystemId))
             } else {
                 parts.push('*')
             }
@@ -1320,7 +1320,7 @@ class SerializerContext {
         const parts: string[] = ['dynamic']
         const scopeId = view.softwareSystemId ?? view.containerId
         if (scopeId) {
-            parts.push(this.idToVar.get(scopeId) ?? scopeId)
+            parts.push(this.viewScopeRef(scopeId))
         } else {
             parts.push('*')
         }
@@ -1439,6 +1439,18 @@ class SerializerContext {
             }
         }
         return groups
+    }
+
+    /** A view's scope as its header writes it: the element's variable, or,
+     *  for a scope the parser could not resolve, the ref as written — quoted
+     *  unless it is a bare (possibly dotted) identifier. Unquoted, a string
+     *  scope such as `Containers of A` reads back as three header words and
+     *  shifts the view's key and description (#232). Structurizr strips the
+     *  quotes, so quoting never changes what it resolves. */
+    private viewScopeRef(id: string): string {
+        const ref = this.idToVar.get(id)
+        if (ref !== undefined) return ref
+        return id.split('.').every(segment => IDENTIFIER_PATTERN.test(segment)) ? id : `"${this.escapeString(id)}"`
     }
 
     private serializeAutoLayout(layout: AutoLayout): void {

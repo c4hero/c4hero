@@ -39,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.
+- A view key that is also a DSL word, such as `deployment`, `component` or
+  `container`, no longer splits the view in two. The key was read as missing,
+  so the rest of the header started a second view, the first lost its body,
+  and saving wrote DSL Structurizr rejects. The key is now kept as written. A
+  view header c4hero cannot read up to its `{` is reported as an error instead
+  of being split silently. A dynamic view's scope may now be quoted, as in the
+  other views, and a view scope that names no element and is not a plain
+  identifier is saved in quotes so it reads back unchanged (#232).
 - Orphaned view layout retained after deleting a view in the DSL code pane can
   now be reviewed and permanently removed with **Clean Up Orphaned View
   Layout** in the command palette. Cleanup lists the affected view keys, is
