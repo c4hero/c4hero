@@ -80,8 +80,13 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
                 // silently rename the view on screen, so the original text is
                 // promoted to the field that actually holds labels. Nothing is
                 // lost — it round-trips as `title "Billing Context"` — and a
-                // view that already has a title keeps it.
-                if (!view.title) view.title = authored
+                // view that already has a title keeps it. An empty header
+                // description left the title marked derived, but this text is
+                // a real title, so it is saved as one (#233).
+                if (!view.title) {
+                    view.title = authored
+                    view.autoTitle = undefined
+                }
                 p.addWarning(
                     `View key "${authored}" contains characters Structurizr rejects (only a-zA-Z0-9_- are allowed) — using "${view.key}", and keeping "${authored}" as the view's title`,
                     at,
@@ -90,7 +95,10 @@ function settleViewKeys(p: ContextAwareParser, pending: PendingViewKey[], viewsC
             }
             // Nothing legal survived (e.g. a key of only spaces): fall through
             // to a derived key, and say so rather than silently dropping it.
-            if (!view.title) view.title = authored
+            if (!view.title) {
+                view.title = authored
+                view.autoTitle = undefined
+            }
             p.addWarning(
                 `View key "${authored}" contains no characters Structurizr allows (only a-zA-Z0-9_-) — using a generated key`,
                 at,
@@ -247,8 +255,10 @@ function parseSystemLandscapeView(p: ContextAwareParser, model: Model): View | n
         key,
         // Structurizr defines the second optional view header string as
         // the view description. Keep it as a display title fallback too so
-        // existing DSL authored for c4hero still labels views usefully.
+        // existing DSL authored for c4hero still labels views usefully —
+        // marked derived, so a save keeps it a description (#233).
         title: positionalDescription,
+        autoTitle: positionalDescription === undefined ? undefined : true,
         description: positionalDescription,
         elements: [],
         relationships: [],
@@ -279,6 +289,7 @@ function parseElementView(p: ContextAwareParser, type: ViewType, model: Model): 
         type,
         key,
         title: positionalDescription,
+        autoTitle: positionalDescription === undefined ? undefined : true,
         description: positionalDescription,
         elements: [],
         relationships: [],
@@ -374,6 +385,7 @@ function parseDynamicView(p: ContextAwareParser, model: Model): View | null {
         type: 'dynamic',
         key,
         title: positionalDescription,
+        autoTitle: positionalDescription === undefined ? undefined : true,
         description: positionalDescription,
         elements: [],
         relationships: [],
@@ -442,6 +454,7 @@ function parseDynamicViewBody(p: ContextAwareParser, view: View, model: Model, o
             if (kw === 'title') {
                 p.advance()
                 view.title = p.readOptionalString()
+                view.autoTitle = undefined
                 continue
             }
             if (kw === 'description') {
@@ -568,6 +581,7 @@ function parseDeploymentView(p: ContextAwareParser, model: Model): View | null {
         type: 'deployment',
         key,
         title: positionalDescription,
+        autoTitle: positionalDescription === undefined ? undefined : true,
         description: positionalDescription,
         environment,
         elements: [],
@@ -682,6 +696,7 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
             if (kw === 'title') {
                 p.advance()
                 view.title = p.readOptionalString()
+                view.autoTitle = undefined
                 continue
             }
 

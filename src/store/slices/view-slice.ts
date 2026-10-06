@@ -96,9 +96,15 @@ export const createViewSlice: StateCreator<
     for (const arrKey of VIEW_ARRAY_KEYS) {
       const v = (ws.views[arrKey] ?? []).find(v => v.key === key)
       if (v) {
+        // Unchanged text is a no-op, so confirming the label of a view that is
+        // labelled by its header description keeps it a description. The
+        // rename field trims what it sends, so outer whitespace is no change.
         if (v.title === title) return // no-op: title unchanged
+        if (v.autoTitle && v.title?.trim() === title.trim()) return
         pushUndoSnapshot(s)
         v.title = title
+        // A name the user typed is authored: it is saved as `title` (#233).
+        v.autoTitle = undefined
         return
       }
     }
@@ -125,7 +131,10 @@ export const createViewSlice: StateCreator<
           autoView: undefined,
           autoKey: undefined,
           originalKey: undefined,
+          // The new name is authored, so it is saved even when the source's
+          // title was only derived from its description (#233).
           title: `${src.title ?? 'View'} copy`,
+          autoTitle: undefined,
         }
         ws.views[arrKey].push(copy)
         s.activeViewKey = newKey

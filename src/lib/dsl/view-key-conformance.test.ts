@@ -97,6 +97,44 @@ describe('parsing a non-conformant view key', () => {
         expect(workspace.views.systemContextViews[0].title).toBe('The billing context')
     })
 
+    it('saves that header description after the rewritten key, not as a title (#233)', () => {
+        const { workspace } = parseViews(`        systemContext sys1 "Label 602" "The billing context" {
+            include *
+        }`)
+        const output = serializeDSL(workspace)
+        expect(output).toContain('systemContext sys1 "Label-602" "The billing context" {')
+        expect(output).not.toMatch(/^\s*title /m)
+        const view = parseDSL(output).workspace.views.systemContextViews[0]
+        expect(view).toMatchObject({ key: 'Label-602', title: 'The billing context', description: 'The billing context' })
+    })
+
+    it.each([
+        ['nothing legal survives in the key', '日本語'],
+        ['the key is empty', ''],
+    ])('writes the generated key when %s, so the header description keeps its slot (#233)', (_, key) => {
+        const { workspace } = parseViews(`        systemContext sys1 "${key}" "The billing context" {
+            include *
+        }`)
+        expect(workspace.views.systemContextViews[0]).toMatchObject({ key: 'SystemContext-sys1', autoKey: true, title: 'The billing context' })
+        const output = serializeDSL(workspace)
+        expect(output).toContain('systemContext sys1 "SystemContext-sys1" "The billing context" {')
+        expect(output).not.toMatch(/^\s*(title|description) /m)
+        // Reopened, the view keeps its key (the sidecar's layout) and its label.
+        const view = parseDSL(output).workspace.views.systemContextViews[0]
+        expect(view).toMatchObject({ key: 'SystemContext-sys1', title: 'The billing context', description: 'The billing context' })
+    })
+
+    it('saves the key it keeps as a title when the header description is empty (#233)', () => {
+        const { workspace, warnings } = parseViews(`        systemContext sys1 "Label 604" "" {
+            include *
+        }`)
+        expect(warnings[0].message).toContain('keeping "Label 604" as the view\'s title')
+        const output = serializeDSL(workspace)
+        expect(output).toContain('systemContext sys1 "Label-604" {')
+        expect(output).toContain('title "Label 604"')
+        expect(parseDSL(output).workspace.views.systemContextViews[0]).toMatchObject({ key: 'Label-604', title: 'Label 604' })
+    })
+
     it('keeps the label even when nothing legal survives in the key', () => {
         const { workspace } = parseViews(`        systemContext sys1 "日本語" {
             include *

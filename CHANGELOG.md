@@ -43,6 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now be reviewed and permanently removed with **Clean Up Orphaned View
   Layout** in the command palette. Cleanup lists the affected view keys, is
   undoable, and leaves current-view layout untouched. (TEA-343)
+- Saving no longer adds a `title` to a view that only has a description in its
+  header, such as `container a "Containers" "The containers inside A"`. The
+  copied title replaced the default title Structurizr shows. The description
+  now stays in the header, and c4hero still uses it as the view's label. A name
+  you give the view in c4hero is still saved as its title (#233).
 - Preserve saved layout for temporarily missing views and elements through model
   edits and repeated saves/reopens (#201). Existing sidecars need no migration.
   Explicit view/element deletion and layout reset still remove the affected

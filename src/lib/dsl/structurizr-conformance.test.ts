@@ -598,6 +598,88 @@ workspace "Grouped" {
         expect(validate(serializeDSL(workspace))).toBeNull()
     })
 
+    // #233: c4hero labels a view by its header's positional description, and
+    // used to save that label as a `title` — which Structurizr then rendered
+    // in place of its own default title.
+    it('saves a view header description without turning it into a title', () => {
+        const dsl = `
+workspace "View description" {
+  model {
+    user = person "User"
+    a = softwareSystem "System A" {
+      web = container "Web" {
+        ui = component "UI"
+      }
+      api = container "API"
+      web -> api "Calls"
+    }
+    user -> a "Uses"
+    deploymentEnvironment "Live" {
+      deploymentNode "Server" {
+        containerInstance web
+      }
+    }
+  }
+  views {
+    systemLandscape "land" "Everything" {
+      include *
+    }
+    systemContext a "ctx" "Context description" {
+      title "Explicit title"
+      include *
+    }
+    container a "ContainersA" "The containers inside System A" {
+      include *
+    }
+    container a "renamed" "Renamed in c4hero" {
+      include *
+    }
+    component web "comp" "Header string" {
+      description "Body description"
+      include *
+    }
+    component api "blanked" "Header string" {
+      description ""
+      include *
+    }
+    dynamic a "dyn" "Dynamic description" {
+      web -> api "Calls"
+    }
+    deployment a "Live" "dep" "Deployment description" {
+      include *
+    }
+  }
+}
+`
+        type ExportedView = { key: string; title?: string; description?: string }
+        const headings = (exported: Record<string, unknown>) => {
+            const views = exported.views as Record<string, ExportedView[] | undefined>
+            return ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews']
+                .flatMap(kind => views[kind] ?? [])
+                .map(({ key, title, description }) => ({ key, title, description }))
+        }
+        const containerView = (exported: Record<string, unknown>, key: string) => {
+            const view = (exported.views as { containerViews: ExportedView[] }).containerViews.find(v => v.key === key)
+            return { title: view?.title, description: view?.description }
+        }
+
+        const { workspace, errors } = parseDSL(dsl)
+        expect(errors).toEqual([])
+        // A name the user gives a view is a real title (what renameView does).
+        const renamed = workspace.views.containerViews.find(v => v.key === 'renamed')!
+        renamed.title = 'Containers'
+        renamed.autoTitle = undefined
+
+        const theirs = exportModel(dsl)
+        const saved = exportModel(serializeDSL(workspace))
+        expect(containerView(theirs, 'ContainersA').title).toBeUndefined()
+        expect(containerView(theirs, 'ContainersA').description).toBe('The containers inside System A')
+        expect(containerView(saved, 'ContainersA')).toEqual(containerView(theirs, 'ContainersA'))
+        expect(containerView(saved, 'renamed')).toEqual({ title: 'Containers', description: 'Renamed in c4hero' })
+        // Every view type, the explicit title and the body descriptions too.
+        expect(headings(saved)).toEqual(headings(theirs).map(v => v.key === 'renamed' ? { ...v, title: 'Containers' } : v))
+    }, 30_000) // two JVM starts: near the 5 s default on a loaded runner
+
     // Validation is not enough: "X:\\" validates fine and stores a corrupted
     // value. These assert what the real parser actually built.
     describe('value fidelity', () => {
