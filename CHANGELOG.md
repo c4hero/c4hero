@@ -30,8 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the view, instead of being saved as hidden. System context, container and
   component views show what Structurizr's `include *` shows: a relationship
   with anything inside another software system brings in that system, never
-  its containers, and excluding a deployment node also hides what runs on it
-  (#230).
+  its containers, and excluding a deployment node also hides what runs on it.
+  Every `include *` view other than a deployment view also draws
+  Structurizr's implied relationships between the boxes it shows: a
+  relationship declared between containers or components appears as an arrow
+  between the people, systems or containers the view shows, labelled like the
+  first relationship that implies it (#230).
 - Workspace- and model-level `properties { }` blocks are no longer discarded
   on save (#219). Each line is written back to its own file and position, so a
   value set in an `!include`d file is not copied into the root and an override

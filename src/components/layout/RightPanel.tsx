@@ -14,6 +14,7 @@ import { useAiProvider } from '@/store/ai-settings'
 import { suggestFieldValue, suggestTags } from '@/lib/ai'
 import { useSettingsStore } from '@/store/settings'
 import { elementStatusVocabulary, statusColor } from '@/lib/elementStatus'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 interface StatusOption { value: ElementStatus | undefined; label: string; color: string | null }
 
@@ -628,6 +629,19 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
   const source = elementMap.get(relationship.sourceId)
   const dest = elementMap.get(relationship.destinationId)
   const safeUrl = relationship.url ? normalizeSafeExternalUrl(relationship.url) : null
+  // Hiding takes the relationship out of the view's own list, so only a
+  // relationship the view lists can be hidden. An `include *` view also
+  // draws arrows Structurizr implies from it between other elements; those
+  // could only be hidden by an exclude line naming that pair, which the view
+  // cannot keep, so the inspector says where the arrow comes from instead
+  // (#230).
+  const listedInView = activeView?.relationships.some((r) => r.id === relationship.id) ?? false
+  const impliedHere = useMemo(
+    () => workspace && activeView
+      ? wildcardImpliedRelationships(workspace.model, activeView).find((implied) => implied.relationship.id === relationship.id)
+      : undefined,
+    [workspace, activeView, relationship.id],
+  )
 
   return (
     <div className="flex flex-1 flex-col">
@@ -642,7 +656,7 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
           <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Relationship</div>
         </div>
         <div className="flex items-center gap-1">
-          {activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment' && (
+          {activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment' && listedInView && (
             <button
               onClick={() => removeRelationshipFromView(activeViewKey, relationship.id)}
               className="btn-icon !min-h-7 !min-w-7 !p-1"
@@ -667,6 +681,11 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {impliedHere && (
+          <p data-testid="implied-relationship-note" className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+            Shown in this view as {elementMap.get(impliedHere.sourceId)?.name ?? '?'} → {elementMap.get(impliedHere.destinationId)?.name ?? '?'}: Structurizr implies that relationship from this one.
+          </p>
+        )}
         <div>
           <FieldLabel>Description</FieldLabel>
           <EditableField value={relationship.description ?? ''} placeholder="e.g. Makes API calls to..." aria-label="Description" onCommit={(v) => updateRelationship(relationship.id, { description: v || undefined })} />

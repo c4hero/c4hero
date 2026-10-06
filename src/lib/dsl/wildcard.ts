@@ -1,9 +1,10 @@
 // `include *` expansion, shared by the parser (which shows the expansion on
 // the canvas), the serializer (which writes the wildcard back with the lines
 // that adjust it) and the store (which adds elements an edit makes eligible),
-// #230.
+// plus the implied relationships such a view draws between the elements it
+// shows (the canvas and the exports), #230.
 
-import type { Model, View, ElementInView } from '@/types/model'
+import type { Model, View, ElementInView, Relationship } from '@/types/model'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
 
 /** Each container's software system and each component's container. */
@@ -140,6 +141,101 @@ export function wildcardElements(model: Model, view: View): ElementInView[] {
     return view.type === 'deployment'
         ? expandDeploymentElements(model, view.environment, view.softwareSystemId)
         : expandWildcard(model, view)
+}
+
+/** A relationship Structurizr implies between two elements a view shows,
+ *  from a model relationship between them or their descendants (#230). */
+export interface ImpliedRelationship {
+    /** Edge id: unique per view, and never a model relationship's id. */
+    id: string
+    sourceId: string
+    destinationId: string
+    /** The model relationship it is implied from. Structurizr gives the
+     *  implied one its description and technology and styles it by its
+     *  tags, so the canvas draws it with this relationship's label and
+     *  style, and selecting the arrow selects this relationship. */
+    relationship: Relationship
+}
+
+const pairKey = (sourceId: string, destinationId: string) => `${sourceId}\u0000${destinationId}`
+
+/**
+ * Structurizr's default implied relationships (the DSL uses
+ * CreateImpliedRelationshipsUnlessAnyRelationshipExistsStrategy): creating
+ * `a -> b` also creates one from `a` or any of its ancestors to `b` or any
+ * of its ancestors, with the same description and technology, for each such
+ * pair that is not an element and its own parent or child and has no
+ * relationship from that source to that destination yet. Relationships are
+ * created in model order (the order a save writes them), so the first one
+ * to imply a pair names it, and an explicit relationship between that pair
+ * written later is added next to it rather than replacing it. Checked
+ * against the Structurizr CLI export.
+ */
+function impliedRelationships(model: Model): Omit<ImpliedRelationship, 'id'>[] {
+    const parents = parentMap(model)
+    const lineage = (id: string): string[] => {
+        const out = [id]
+        for (let p = parents.get(id); p !== undefined; p = parents.get(p)) out.push(p)
+        return out
+    }
+    const related = (a: string, b: string) => lineage(a).includes(b) || lineage(b).includes(a)
+    const connected = new Set<string>()
+    const implied: Omit<ImpliedRelationship, 'id'>[] = []
+    for (const relationship of model.relationships) {
+        // Structurizr refuses a relationship between an element and its own
+        // parent or child, so that one implies nothing.
+        if (related(relationship.sourceId, relationship.destinationId)) continue
+        connected.add(pairKey(relationship.sourceId, relationship.destinationId))
+        for (const sourceId of lineage(relationship.sourceId)) {
+            for (const destinationId of lineage(relationship.destinationId)) {
+                const key = pairKey(sourceId, destinationId)
+                if (connected.has(key) || related(sourceId, destinationId)) continue
+                connected.add(key)
+                implied.push({ sourceId, destinationId, relationship })
+            }
+        }
+    }
+    return implied
+}
+
+const IMPLIED_VIEW_TYPES = new Set<View['type']>(['systemLandscape', 'systemContext', 'container', 'component'])
+
+/**
+ * The implied relationships an `include *` static view draws besides the
+ * model relationships it lists: each one between two elements it shows.
+ * Without them the view drew no arrow to a software system it shows for
+ * another system's container or component (#230). They are worked out
+ * from the model on demand and never stored on the view, so a save writes
+ * nothing for them and Structurizr derives the same ones from the file.
+ *
+ * Structurizr's `exclude "a -> b"` removes every relationship from a to b,
+ * implied ones included. The view keeps that line as the ids of the model
+ * relationships from a to b, so an implied one between the pair is left out
+ * too. Excluding the relationship an implied one comes from does not hide
+ * it, in Structurizr or here.
+ */
+export function wildcardImpliedRelationships(model: Model, view: View): ImpliedRelationship[] {
+    if (!view.includeAll || !IMPLIED_VIEW_TYPES.has(view.type)) return []
+    const shown = new Set(view.elements.map(e => e.id))
+    const byId = new Map(model.relationships.map(r => [r.id, r]))
+    const excludedPairs = new Set<string>()
+    for (const id of view.excludedRelationshipIds ?? []) {
+        const rel = byId.get(id)
+        if (rel) excludedPairs.add(pairKey(rel.sourceId, rel.destinationId))
+    }
+    const taken = new Set(byId.keys())
+    const out: ImpliedRelationship[] = []
+    for (const implied of impliedRelationships(model)) {
+        if (!shown.has(implied.sourceId) || !shown.has(implied.destinationId)) continue
+        if (excludedPairs.has(pairKey(implied.sourceId, implied.destinationId))) continue
+        // `>` only ever appears as the separator, so distinct pairs get
+        // distinct ids; the suffix keeps clear of any relationship id.
+        let id = `implied:${encodeURIComponent(implied.sourceId)}->${encodeURIComponent(implied.destinationId)}`
+        while (taken.has(id)) id += '~'
+        taken.add(id)
+        out.push({ id, ...implied })
+    }
+    return out
 }
 
 /** Each container's and component's software system. */

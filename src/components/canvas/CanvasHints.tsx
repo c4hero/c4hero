@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useWorkspaceStore, getActiveView } from '@/store/workspace'
 import { X } from 'lucide-react'
 import { readJSON, writeJSON } from '@/lib/safeStorage'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 const HINTS_DISMISSED_KEY = 'c4hero_hints_dismissed'
 
@@ -28,9 +29,13 @@ export default function CanvasHints() {
   const elementCount = useWorkspaceStore((s) =>
     s.workspace && activeViewKey ? (getActiveView(s.workspace, activeViewKey)?.elements.length ?? 0) : 0,
   )
-  const relationshipCount = useWorkspaceStore((s) =>
-    s.workspace && activeViewKey ? (getActiveView(s.workspace, activeViewKey)?.relationships.length ?? 0) : 0,
-  )
+  // An `include *` view also draws arrows it does not list: the
+  // relationships Structurizr implies between the elements it shows (#230).
+  const relationshipCount = useWorkspaceStore((s) => {
+    const view = s.workspace && activeViewKey ? getActiveView(s.workspace, activeViewKey) : undefined
+    if (!s.workspace || !view) return 0
+    return view.relationships.length || wildcardImpliedRelationships(s.workspace.model, view).length
+  })
   const selectionCount = useWorkspaceStore((s) => s.selectedElementIds.length)
   const [dismissed, setDismissed] = useState(getDismissed)
 
