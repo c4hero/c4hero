@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `include *` in a view is no longer rewritten as a list of elements on save,
+  so elements added to the model later still appear in Structurizr. The
+  view's own `include` and `exclude` lines are kept and applied in order, as
+  Structurizr does, and an element hidden from or added to the view on the
+  canvas is saved as its own `exclude` or `include` line. An element that a
+  relationship drawn in another view brings into the wildcard now appears in
+  the view, instead of being saved as hidden. System context, container and
+  component views show what Structurizr's `include *` shows: a relationship
+  with anything inside another software system brings in that system, never
+  its containers, and excluding a deployment node also hides what runs on it
+  (#230).
 - Workspace- and model-level `properties { }` blocks are no longer discarded
   on save (#219). Each line is written back to its own file and position, so a
   value set in an `!include`d file is not copied into the root and an override

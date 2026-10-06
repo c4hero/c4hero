@@ -234,6 +234,21 @@ export interface View {
   relationships: RelationshipInView[]
   /** Model relationship IDs deliberately hidden from this static view. */
   excludedRelationshipIds?: string[]
+  /** True when the DSL said `include *`. `elements` holds the expansion (plus
+   *  any explicit includes, minus excludes); the serializer writes `include *`
+   *  back, so a save keeps the wildcard live instead of freezing it into an
+   *  id list (#230). */
+  includeAll?: boolean
+  /** `include *` views: elements hidden on purpose, by an `exclude` line
+   *  after the wildcard that hides them or by hiding them on the canvas. Each
+   *  is written back as `exclude` while it exists and is not shown. An
+   *  element the wildcard would add that the canvas has not picked up yet is
+   *  not hidden, so it gets no line (#230). */
+  excludedElementIds?: string[]
+  /** `include *` views: elements named by an `include` line of their own
+   *  next to the wildcard. Each is written back while it is shown, even when
+   *  the wildcard would add it too (#230). */
+  includedElementIds?: string[]
   autoLayout?: AutoLayout
 }
 

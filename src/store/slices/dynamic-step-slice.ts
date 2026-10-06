@@ -2,7 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import type { Relationship, View, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { allViewsOf, elementExists, findViewHelper, restoreViewElement } from '../workspace-helpers'
+import { allViewsOf, elementExists, findViewHelper, restoreViewElement, showWildcardArrivals } from '../workspace-helpers'
 
 /** Sequential renumber + membership recompute after any step edit.
  *
@@ -82,6 +82,9 @@ export const createDynamicStepSlice: StateCreator<
           v.relationships.push({ id: rel.id })
         }
       }
+      // An `include *` view also shows what the relationship makes
+      // eligible, as Structurizr will (#230).
+      showWildcardArrivals(ws)
     }
 
     view.relationships.push({

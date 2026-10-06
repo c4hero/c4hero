@@ -11,110 +11,11 @@ import type {
     View,
     ElementInView,
 } from '@/types/model'
-import { expandDeploymentElements } from '@/lib/deployment'
 import { lex } from './lexer'
 import type { Token, TokenType } from './lexer'
 import { parseViewsBody } from './parser-views'
 import { parseModelBody } from './parser-model'
-
-/**
- * Expand an `include *` wildcard into the actual elements appropriate for the view type.
- * Structurizr semantics: landscape/context = people + systems; container = people + systems + containers
- * of the scoped system; component = people + systems + containers + components of the scoped container.
- */
-function expandWildcard(model: Model, view: View): ElementInView[] {
-    // Use a Set for O(1) dedup; track insertion order via a parallel array.
-    const seen = new Set<string>()
-    const ids: string[] = []
-
-    const addId = (id: string) => {
-        if (seen.has(id)) return
-        seen.add(id)
-        ids.push(id)
-    }
-
-    if (view.type === 'systemLandscape') {
-        // Landscape: show everything — all people and software systems
-        for (const p of model.people) addId(p.id)
-        for (const s of model.softwareSystems) addId(s.id)
-    } else if (view.type === 'systemContext' && view.softwareSystemId) {
-        // System context: the scoped system + all people/systems connected to it.
-        // We follow relationships at BOTH the system level AND the container/component
-        // level of the scope system, then promote those to the system context. This
-        // matches Structurizr's "implied relationships" behavior and what users
-        // typically intend — DSL authors usually write relationships at container
-        // granularity, then expect the system context to summarize the system's
-        // collaborators rather than appear empty. (Strict spec without implied
-        // relationships would only follow system-level edges.)
-        const scopeId = view.softwareSystemId
-        addId(scopeId)
-        const scopeSys = model.softwareSystems.find(s => s.id === scopeId)
-        const scopeInternalIds = new Set<string>([scopeId])
-        if (scopeSys) {
-            for (const c of scopeSys.containers) {
-                scopeInternalIds.add(c.id)
-                for (const comp of c.components) scopeInternalIds.add(comp.id)
-            }
-        }
-        const connectedIds = new Set<string>()
-        for (const rel of model.relationships) {
-            if (scopeInternalIds.has(rel.sourceId)) connectedIds.add(rel.destinationId)
-            if (scopeInternalIds.has(rel.destinationId)) connectedIds.add(rel.sourceId)
-        }
-        // Filter the connected set down to just people and OTHER software systems —
-        // never the scope's own containers/components, and never elements inside the
-        // scope. The system context is a system-level view.
-        for (const p of model.people) { if (connectedIds.has(p.id)) addId(p.id) }
-        for (const s of model.softwareSystems) { if (s.id !== scopeId && connectedIds.has(s.id)) addId(s.id) }
-    } else if (view.type === 'container' && view.softwareSystemId) {
-        // Container view: containers of the scoped system + people/systems with direct
-        // relationships to those containers. Mirrors addView() logic in the store.
-        const scopeSys = model.softwareSystems.find(s => s.id === view.softwareSystemId)
-        if (scopeSys) {
-            for (const c of scopeSys.containers) addId(c.id)
-        }
-        const containerIds = new Set(ids)
-        const relatedIds = new Set<string>()
-        for (const rel of model.relationships) {
-            if (containerIds.has(rel.sourceId)) relatedIds.add(rel.destinationId)
-            if (containerIds.has(rel.destinationId)) relatedIds.add(rel.sourceId)
-        }
-        for (const p of model.people) { if (relatedIds.has(p.id)) addId(p.id) }
-        for (const s of model.softwareSystems) {
-            if (s.id !== view.softwareSystemId && relatedIds.has(s.id)) addId(s.id)
-            // Also include containers from other systems that are directly related
-            for (const c of s.containers) {
-                if (relatedIds.has(c.id)) addId(c.id)
-            }
-        }
-    } else if (view.type === 'component' && view.containerId) {
-        // Component view: components of the scoped container + directly related elements.
-        const containerId = view.containerId
-        for (const s of model.softwareSystems) {
-            const parentContainer = s.containers.find(c => c.id === containerId)
-            if (parentContainer) {
-                for (const comp of parentContainer.components) addId(comp.id)
-            }
-        }
-        const componentIds = new Set(ids)
-        const relatedToComponents = new Set<string>()
-        for (const rel of model.relationships) {
-            if (componentIds.has(rel.sourceId)) relatedToComponents.add(rel.destinationId)
-            if (componentIds.has(rel.destinationId)) relatedToComponents.add(rel.sourceId)
-        }
-        for (const p of model.people) { if (relatedToComponents.has(p.id)) addId(p.id) }
-        for (const s of model.softwareSystems) {
-            if (relatedToComponents.has(s.id)) addId(s.id)
-            for (const c of s.containers) {
-                if (c.id !== containerId && relatedToComponents.has(c.id)) addId(c.id)
-                // If a component in another container is related, show that container as the C4 boundary
-                else if (c.id !== containerId && c.components.some(comp => relatedToComponents.has(comp.id))) addId(c.id)
-            }
-        }
-    }
-
-    return ids.map(id => ({ id }))
-}
+import { hierarchyGuard, wildcardElements, withDeploymentDescendants } from './wildcard'
 
 // ─── Public Types ────────────────────────────────────────────────────
 
@@ -318,11 +219,24 @@ export class ContextAwareParser {
 
     relCounter = 0
 
-    // Track elements excluded per view (used in post-processing to apply `exclude` directives)
-    viewExcludedIds = new Map<View, Set<string>>()
+    // Elements named by an `include` line of their own (not `*`, not an
+    // expression), kept on `include *` views so a save writes them back (#230)
+    viewExplicitIncludes = new Map<View, string[]>()
 
-    getExcludedIdsForView(view: View): Set<string> {
-        return this.viewExcludedIds.get(view) ?? new Set()
+    noteExplicitInclude(view: View, id: string): void {
+        const ids = this.viewExplicitIncludes.get(view) ?? []
+        if (!ids.includes(id)) ids.push(id)
+        this.viewExplicitIncludes.set(view, ids)
+    }
+
+    // Each element `exclude` with the number of include entries before it:
+    // statements apply in order, so a later `include` brings an element back
+    viewExcludeOrder = new Map<View, { id: string; at: number }[]>()
+
+    noteExclude(view: View, id: string): void {
+        const excludes = this.viewExcludeOrder.get(view) ?? []
+        excludes.push({ id, at: view.elements.length })
+        this.viewExcludeOrder.set(view, excludes)
     }
 
     constructor(tokens: Token[]) {
@@ -860,42 +774,64 @@ export function parse(input: string): ParseResult {
         ...ws.views.deploymentViews,
     ]
     for (const view of allViews) {
-        const excluded = parser.getExcludedIdsForView(view)
-        const hasWildcard = view.elements.some(e => e.id === '*')
-        if (hasWildcard) {
-            // Expand `include *` to all elements appropriate for this view type
-            let expanded = view.type === 'deployment'
-                ? expandDeploymentElements(ws.model, view.environment, view.softwareSystemId)
-                : expandWildcard(ws.model, view)
-            // Apply `exclude` directives after wildcard expansion
-            if (excluded.size > 0) {
-                expanded = expanded.filter(e => !excluded.has(e.id))
-            }
-            view.elements = expanded
-            // Wildcard views include all relationships between expanded elements
-            const expandedIds = new Set(expanded.map(e => e.id))
-            view.relationships = ws.model.relationships
-                .filter(r => expandedIds.has(r.sourceId) && expandedIds.has(r.destinationId) && !view.excludedRelationshipIds?.includes(r.id))
-                .map(r => ({ id: r.id }))
-        } else {
-            // Apply `exclude` directives and deduplicate for explicit includes
-            let elements = view.elements
-            if (excluded.size > 0) {
-                elements = elements.filter(e => !excluded.has(e.id))
-            }
-            // Deduplicate: DSL may include the same element twice (e.g. two separate `include alice` lines)
-            const seen = new Set<string>()
-            elements = elements.filter(e => {
-                if (seen.has(e.id)) return false
-                seen.add(e.id)
-                return true
-            })
-            view.elements = elements
-            const elementIds = seen
-            view.relationships = ws.model.relationships
-                .filter(r => elementIds.has(r.sourceId) && elementIds.has(r.destinationId) && !view.excludedRelationshipIds?.includes(r.id))
-                .map(r => ({ id: r.id }))
+        // `include *` expands in place to every element appropriate for this
+        // view type, alongside any explicit `include` lines. The view keeps a
+        // flag rather than the `*`, so a save writes the wildcard back instead
+        // of freezing today's expansion into an id list (#230). The author's
+        // own include and exclude lines are kept too, so a save writes them
+        // back as written.
+        const wildcardAt = view.elements.findIndex(e => e.id === '*')
+        const includeAll = wildcardAt >= 0
+        if (includeAll) {
+            view.includeAll = true
+            const included = parser.viewExplicitIncludes.get(view) ?? []
+            if (included.length > 0) view.includedElementIds = [...included]
         }
+        const expanded = includeAll ? wildcardElements(ws.model, view) : []
+        // Statements apply in order, as in Structurizr: an `exclude` removes
+        // what the view holds so far (and everything on an excluded deployment
+        // node), and a later `include` brings an element back. A repeated
+        // element is kept once. Next to `include *`, an element whose parent or
+        // child is already in the view is skipped, as Structurizr does:
+        // `include api` before `include *` shows that container, not its
+        // software system.
+        let elements: ElementInView[] = []
+        const seen = new Set<string>()
+        let guard = includeAll ? hierarchyGuard(ws.model, view) : undefined
+        const excludes = parser.viewExcludeOrder.get(view) ?? []
+        let nextExclude = 0
+        const applyExcludes = (upTo: number) => {
+            const ids: string[] = []
+            while (nextExclude < excludes.length && excludes[nextExclude].at <= upTo) ids.push(excludes[nextExclude++].id)
+            if (ids.length === 0) return
+            const gone = withDeploymentDescendants(ws.model, view, ids)
+            elements = elements.filter(e => !gone.has(e.id))
+            for (const id of gone) seen.delete(id)
+            if (includeAll) guard = hierarchyGuard(ws.model, view, seen)
+        }
+        view.elements.forEach((entry, i) => {
+            applyExcludes(i)
+            for (const e of entry.id === '*' ? expanded : [entry]) {
+                if (seen.has(e.id) || guard?.clashes(e.id)) continue
+                elements.push(e)
+                seen.add(e.id)
+                guard?.add(e.id)
+            }
+        })
+        applyExcludes(Infinity)
+        if (includeAll) {
+            // Only an `exclude` after the wildcard can hide what it adds, and
+            // one a later `include` undoes hides nothing. Neither is kept, so
+            // a line that changes nothing here cannot start hiding an element
+            // after a later edit re-expands the view.
+            const hidden = new Set(excludes.filter(x => x.at > wildcardAt && !seen.has(x.id)).map(x => x.id))
+            if (hidden.size > 0) view.excludedElementIds = [...hidden]
+        }
+        view.elements = elements
+        const elementIds = seen
+        view.relationships = ws.model.relationships
+            .filter(r => elementIds.has(r.sourceId) && elementIds.has(r.destinationId) && !view.excludedRelationshipIds?.includes(r.id))
+            .map(r => ({ id: r.id }))
     }
 
     return {

@@ -3,7 +3,7 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import type { WorkspaceState } from '../workspace-types'
 import type { Relationship, View, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { allViewsOf, elementExists, forEachView, closeAiSurfaces, restoreViewElement } from '../workspace-helpers'
+import { allViewsOf, elementExists, forEachView, closeAiSurfaces, restoreViewElement, showWildcardArrivals } from '../workspace-helpers'
 
 /** Drop every step of `relId` from a dynamic view and recompute the view's
  *  derived element membership from the surviving steps. Dynamic membership
@@ -74,11 +74,14 @@ export const createRelationshipSlice: StateCreator<
       }
       ws.model.relationships.push(rel)
       created = true
-      // For systemContext views: if one endpoint is the scoped system, auto-add
+      // An `include *` view shows what the new relationship makes eligible,
+      // as Structurizr will, unless it was hidden on purpose (#230).
+      showWildcardArrivals(ws)
+      // For other systemContext views: if one endpoint is the scoped system, auto-add
       // the other endpoint (external actor) to the view so the context diagram stays
       // consistent — a person/system related to the scope should appear in its context view.
       for (const v of ws.views.systemContextViews) {
-        if (!v.softwareSystemId) continue
+        if (!v.softwareSystemId || v.includeAll) continue
         const scopeId = v.softwareSystemId
         const sourceIsScope = sourceId === scopeId
         const destIsScope = destinationId === scopeId
@@ -151,11 +154,13 @@ export const createRelationshipSlice: StateCreator<
     rel.sourceId = newSourceId
     rel.destinationId = newTargetId
 
-    // Mirror addRelationship semantics for system context views: when one endpoint
+    // Mirror addRelationship semantics: `include *` views show what is now
+    // eligible (#230); in other system context views, when one endpoint
     // is the scoped system, ensure the other endpoint is visible so the context
     // diagram still expresses the relationship after reconnecting.
+    showWildcardArrivals(ws)
     for (const v of ws.views.systemContextViews) {
-      if (!v.softwareSystemId) continue
+      if (!v.softwareSystemId || v.includeAll) continue
       const scopeId = v.softwareSystemId
       const sourceIsScope = newSourceId === scopeId
       const destIsScope = newTargetId === scopeId
