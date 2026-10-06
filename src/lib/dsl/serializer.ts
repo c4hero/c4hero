@@ -1231,6 +1231,14 @@ class SerializerContext {
         this.emit('}')
     }
 
+    /** The description a view header carries after its key. A title the
+     *  parser derived from it is Structurizr's description, not a title, so
+     *  it goes back where it was read: the file keeps its form and the canvas
+     *  its label, and no `title` replaces Structurizr's default one (#233). */
+    private headerDescription(view: View): string | undefined {
+        return view.autoTitle && view.key && view.title ? view.title : undefined
+    }
+
     private serializeView(view: View): void {
         const parts: string[] = []
 
@@ -1265,20 +1273,24 @@ class SerializerContext {
         }
 
         // Skip parser-synthesised keys so DSL without explicit view keys
-        // roundtrips byte-identical.
-        if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
+        // roundtrips byte-identical. A header description needs the key slot
+        // before it, so a key generated for an unusable one is written then.
+        const headerDescription = this.headerDescription(view)
+        if (view.key && (!view.autoKey || headerDescription)) parts.push(`"${this.escapeString(view.key)}"`)
+        if (headerDescription) parts.push(`"${this.escapeString(headerDescription)}"`)
 
         this.emit(`${parts.join(' ')} {`)
         this.depth++
 
         // Structurizr view headers use the second optional string as a
         // description, not a title. Emit titles with the standard child keyword.
-        if (view.title) {
+        if (view.title && !view.autoTitle) {
             this.emit(`title "${this.escapeString(view.title)}"`)
         }
 
-        // Description (block property — cannot be expressed as a positional arg)
-        if (view.description) {
+        // Description, unless the header already carries it. An empty one
+        // still blanks a header description, as it does in Structurizr.
+        if (view.description !== undefined && view.description !== headerDescription && (view.description || headerDescription)) {
             this.emit(`description "${this.escapeString(view.description)}"`)
         }
 
@@ -1324,13 +1336,17 @@ class SerializerContext {
         } else {
             parts.push('*')
         }
-        if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
+        const headerDescription = this.headerDescription(view)
+        if (view.key && (!view.autoKey || headerDescription)) parts.push(`"${this.escapeString(view.key)}"`)
+        if (headerDescription) parts.push(`"${this.escapeString(headerDescription)}"`)
 
         this.emit(`${parts.join(' ')} {`)
         this.depth++
 
-        if (view.title) this.emit(`title "${this.escapeString(view.title)}"`)
-        if (view.description) this.emit(`description "${this.escapeString(view.description)}"`)
+        if (view.title && !view.autoTitle) this.emit(`title "${this.escapeString(view.title)}"`)
+        if (view.description !== undefined && view.description !== headerDescription && (view.description || headerDescription)) {
+            this.emit(`description "${this.escapeString(view.description)}"`)
+        }
 
         const relById = new Map(this.workspace.model.relationships.map(r => [r.id, r]))
         const steps = view.relationships.filter(step => relById.has(step.id))
