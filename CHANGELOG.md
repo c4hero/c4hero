@@ -56,6 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reordered, and generated views remain hidden while explicit views exist.
   Their saved positions are retained for recovery; use explicit, unique view
   keys when stable layout ownership is needed.
+- A view created without a name no longer gets the same label as every other
+  unnamed view of its type ("New systemLandscape view" twice). It is named
+  after what it shows, such as "System Landscape" or "API — Containers", and
+  numbered when that name is taken ("System Landscape 2"). Duplicating a view
+  twice now gives "… copy" and "… copy 2". A name you type is kept as typed.
 
 ## [0.7.0] - 2026-09-18
 
