@@ -12,7 +12,7 @@ import { derivedViewKeyBase, isConformantViewKey, sanitizeViewKey } from './view
 import { applySidecar, extractSidecar } from '@/lib/sidecar'
 import { generateDefaultViews } from './auto-views'
 import { validateForStructurizr } from '@/lib/structurizrValidation'
-import type { Workspace } from '@/types/model'
+import type { View, Workspace } from '@/types/model'
 
 const BASE = `workspace "T" {
     model {
@@ -97,6 +97,51 @@ describe('parsing a non-conformant view key', () => {
         expect(workspace.views.systemContextViews[0].title).toBe('The billing context')
     })
 
+    it('saves that header description after the rewritten key, not as a title (#233)', () => {
+        const { workspace } = parseViews(`        systemContext sys1 "Label 602" "The billing context" {
+            include *
+        }`)
+        const output = serializeDSL(workspace)
+        expect(output).toContain('systemContext sys1 "Label-602" "The billing context" {')
+        expect(output).not.toMatch(/^\s*title /m)
+        const view = parseDSL(output).workspace.views.systemContextViews[0]
+        expect(view).toMatchObject({ key: 'Label-602', title: 'The billing context', description: 'The billing context' })
+    })
+
+    it.each([
+        ['nothing legal survives in the key', '日本語'],
+        ['the key is empty', ''],
+    ])('writes the generated key when %s, so the header description keeps its slot (#233)', (_, key) => {
+        const { workspace } = parseViews(`        systemContext sys1 "${key}" "The billing context" {
+            include *
+        }`)
+        const original = workspace.views.systemContextViews[0]
+        expect(original).toMatchObject({ key: 'SystemContext-sys1', autoKey: true, title: 'The billing context' })
+        original.locked = true
+        Object.assign(original.elements.find(el => el.id === 'sys1')!, { pinned: true, locked: true, x: 100, y: 200 })
+        const output = serializeDSL(workspace)
+        expect(output).toContain('systemContext sys1 "SystemContext-sys1" "The billing context" {')
+        expect(output).not.toMatch(/^\s*(title|description) /m)
+        // Reopened, the view keeps its key (the sidecar's layout) and its label.
+        const reopened = parseDSL(output).workspace
+        applySidecar(reopened, extractSidecar(workspace)!)
+        const view = reopened.views.systemContextViews[0]
+        expect(view).toMatchObject({ key: 'SystemContext-sys1', title: 'The billing context', description: 'The billing context' })
+        expect(view.locked).toBe(true)
+        expect(view.elements.find(el => el.id === 'sys1')).toMatchObject({ pinned: true, locked: true, x: 100, y: 200 })
+    })
+
+    it('saves the key it keeps as a title when the header description is empty (#233)', () => {
+        const { workspace, warnings } = parseViews(`        systemContext sys1 "Label 604" "" {
+            include *
+        }`)
+        expect(warnings[0].message).toContain('keeping "Label 604" as the view\'s title')
+        const output = serializeDSL(workspace)
+        expect(output).toContain('systemContext sys1 "Label-604" {')
+        expect(output).toContain('title "Label 604"')
+        expect(parseDSL(output).workspace.views.systemContextViews[0]).toMatchObject({ key: 'Label-604', title: 'Label 604' })
+    })
+
     it('keeps the label even when nothing legal survives in the key', () => {
         const { workspace } = parseViews(`        systemContext sys1 "日本語" {
             include *
@@ -171,6 +216,183 @@ describe('conformant keys are left alone', () => {
         }`)
         expect(allKeys(workspace)).toEqual(['Dup', 'Dup'])
         expect(warnings).toEqual([])
+    })
+})
+
+describe('a view key c4hero lexes as a keyword (#232)', () => {
+    // `deployment`, `component`, … are keywords to c4hero's lexer but plain
+    // words to Structurizr, which keys the view with them. Reading one as "no
+    // key" ended the header early, and its leftover words started a second
+    // view scoped to the description string — saved as DSL Structurizr
+    // rejects.
+    const MODEL = `workspace "T" {
+    model {
+        u = person "User"
+        sys1 = softwareSystem "Payments" {
+            api = container "API" {
+                ctrl = component "Controller"
+            }
+        }
+        u -> api "Uses"
+        deploymentEnvironment "default" {
+            deploymentNode "Server" {
+                containerInstance api
+            }
+        }
+    }
+    views {
+`
+    const parseWith = (viewsBlock: string) => parseDSL(`${MODEL}${viewsBlock}
+    }
+}
+`)
+    const allViews = (ws: Workspace): View[] => [
+        ...ws.views.systemLandscapeViews,
+        ...ws.views.systemContextViews,
+        ...ws.views.containerViews,
+        ...ws.views.componentViews,
+        ...(ws.views.dynamicViews ?? []),
+        ...(ws.views.deploymentViews ?? []),
+    ]
+
+    it.each([
+        ['systemLandscape', 'systemLandscape deployment "Everything"', 'deployment', 'Everything', 'include *'],
+        ['systemContext', 'systemContext sys1 systemContext "Context"', 'systemContext', 'Context', 'include *'],
+        ['container', 'container sys1 component "Containers"', 'component', 'Containers', 'include *'],
+        ['component', 'component api container "Components"', 'container', 'Components', 'include *'],
+        ['dynamic', 'dynamic sys1 dynamic "Flow"', 'dynamic', 'Flow', 'u -> api "Uses"'],
+        ['deployment', 'deployment * "default" deployment "Where it runs"', 'deployment', 'Where it runs', 'include *'],
+    ])('keeps a %s view in one piece, with its key and body', (type, header, key, description, body) => {
+        const { workspace, errors, warnings } = parseWith(`        ${header} {
+            ${body}
+            autoLayout lr
+        }`)
+        expect(errors).toEqual([])
+        expect(warnings).toEqual([])
+        const views = allViews(workspace)
+        expect(views).toHaveLength(1)
+        const [view] = views
+        expect(view).toMatchObject({ type, key, description, autoLayout: { direction: 'LR' } })
+        expect(view.autoKey).toBeUndefined()
+        expect(view.elements.length).toBeGreaterThan(0)
+
+        // The serializer quotes every key, so the keyword cannot be misread
+        // on the way back in either. A header description may follow it.
+        const saved = serializeDSL(workspace)
+        expect(saved).toMatch(new RegExp(`"${key}"( "[^"]*")? \\{`))
+        const reparsed = parseDSL(saved)
+        expect(reparsed.errors).toEqual([])
+        expect(allViews(reparsed.workspace).map(v => [v.type, v.key, v.description, v.elements.length]))
+            .toEqual([[type, key, description, view.elements.length]])
+    })
+
+    it('reads a deployment environment written as a keyword word', () => {
+        const { workspace, errors } = parseWith(`        deployment * default deployment {
+            include *
+        }`)
+        expect(errors).toEqual([])
+        expect(workspace.views.deploymentViews).toHaveLength(1)
+        expect(workspace.views.deploymentViews[0]).toMatchObject({ environment: 'default', key: 'deployment' })
+        expect(serializeDSL(workspace)).toContain('deployment * "default" "deployment" {')
+    })
+
+    it('skips custom and filtered views keyed with a keyword, leaving the views around them alone', () => {
+        // Neither is modelled. Skipping only the header's string/identifier
+        // words stopped at the keyword key, which then started a view.
+        const { workspace, errors } = parseWith(`        custom deployment "Title" {
+            autoLayout lr
+        }
+        systemContext sys1 ctx {
+            include *
+        }
+        filtered ctx exclude "Person" container
+        container sys1 cnt {
+            include *
+        }`)
+        expect(errors).toEqual([])
+        expect(allViews(workspace).map(v => [v.type, v.key])).toEqual([['systemContext', 'ctx'], ['container', 'cnt']])
+    })
+
+    it('reports a header it cannot read up to `{` instead of splitting the view', () => {
+        // `extra` is a fifth header word — Structurizr rejects it too ("Too
+        // many tokens"). Recovery skips to the header's own `{`, so the body
+        // stays with its view and the next view is untouched.
+        const { workspace, errors } = parseWith(`        systemContext sys1 ctx "Context" extra {
+            include *
+        }
+        container sys1 cnt {
+            include *
+        }`)
+        expect(errors).toHaveLength(1)
+        expect(errors[0].message).toBe('Expected \'{\' after the view header, got IDENTIFIER \'extra\'')
+        expect(errors[0].line).toBe(17)
+        expect(allViews(workspace).map(v => [v.type, v.key, v.elements.length > 0]))
+            .toEqual([['systemContext', 'ctx', true], ['container', 'cnt', true]])
+    })
+
+    it('finds a stray header word behind a comment', () => {
+        // Structurizr rejects this header too. The comment used to hide
+        // `extra`, so recovery never reached the header's `{` and the body
+        // was skipped.
+        const { workspace, errors } = parseWith(`        systemContext sys1 ctx /* note */ extra {
+            include *
+        }`)
+        expect(errors.map(e => e.message)).toEqual(['Expected \'{\' after the view header, got IDENTIFIER \'extra\''])
+        expect(workspace.views.systemContextViews[0].elements.length).toBeGreaterThan(0)
+    })
+
+    it('reports a header with no `{` without swallowing the next view', () => {
+        const { workspace, errors } = parseWith(`        systemLandscape everything
+        systemContext sys1 ctx {
+            include *
+        }`)
+        expect(errors.map(e => e.message)).toEqual(['Expected \'{\' after the view header, got KEYWORD \'systemContext\''])
+        expect(allViews(workspace).map(v => [v.type, v.key])).toEqual([['systemLandscape', 'everything'], ['systemContext', 'ctx']])
+        expect(workspace.views.systemContextViews[0].elements.length).toBeGreaterThan(0)
+    })
+
+    it.each([
+        ['on the line after the header', 'systemContext sys1 ctx\n        {'],
+        ['after a line comment', 'systemContext sys1 ctx // note\n        {'],
+        ['after a block comment', 'systemContext sys1 ctx /* note */ {'],
+    ])('still accepts the `{` %s', (_where, header) => {
+        const { workspace, errors } = parseWith(`        ${header}
+            include *
+        }`)
+        expect(errors).toEqual([])
+        expect(workspace.views.systemContextViews[0].elements.length).toBeGreaterThan(0)
+    })
+
+    it('reads a quoted dynamic view scope, as the other view types do', () => {
+        // Structurizr reads the first header word as the scope, quoted or
+        // not. Read as the key instead, `"sys1"` left `k` stray and the body
+        // landed on an unscoped view, whose step to a container Structurizr
+        // rejected on save.
+        const { workspace, errors } = parseWith(`        dynamic "sys1" k {
+            u -> api "Uses"
+        }`)
+        expect(errors).toEqual([])
+        expect(workspace.views.dynamicViews.map(v => [v.softwareSystemId, v.key, v.relationships.length]))
+            .toEqual([['sys1', 'k', 1]])
+        expect(serializeDSL(workspace)).toContain('dynamic sys1 "k" {')
+    })
+
+    it('quotes a scope it could not resolve, so the save reads back as the same header', () => {
+        // Written raw, `Containers of A` came back as a scope, a key and a
+        // stray word. Structurizr strips the quotes, so it still reads the
+        // same (unknown) scope.
+        const { workspace } = parseWith(`        container "Containers of A" cnt {
+            include *
+        }
+        dynamic "Some Flow" flow {
+        }`)
+        const saved = serializeDSL(workspace)
+        expect(saved).toContain('container "Containers of A" "cnt" {')
+        expect(saved).toContain('dynamic "Some Flow" "flow" {')
+        const reparsed = parseDSL(saved)
+        expect(reparsed.errors).toEqual([])
+        expect(allViews(reparsed.workspace).map(v => [v.type, v.softwareSystemId, v.key]))
+            .toEqual([['container', 'Containers of A', 'cnt'], ['dynamic', 'Some Flow', 'flow']])
     })
 })
 
@@ -307,7 +529,7 @@ describe('layout migration for normalized view keys', () => {
         expect(view.elements.find(el => el.id === 'sys1')).toMatchObject(saved.elements.sys1)
         const migrated = extractSidecar(workspace)!
         expect(migrated.views?.[key]).toBeUndefined()
-        expect(migrated.views?.[view.key]).toEqual(saved)
+        expect(migrated.views?.[view.key]).toEqual({ ...saved, view: expect.objectContaining({ type: 'systemContext' }) })
         const reloaded = parseDSL(serializeDSL(workspace)).workspace
         applySidecar(reloaded, migrated)
         expect(reloaded.views.systemContextViews[0].locked).toBe(true)

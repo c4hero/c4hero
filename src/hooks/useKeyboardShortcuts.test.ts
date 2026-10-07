@@ -3,6 +3,7 @@ import { renderHook } from '@testing-library/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useKeyboardShortcuts, shouldSuppressBackspaceNavigation } from './useKeyboardShortcuts'
 import type { Workspace } from '@/types/model'
+import { parseDSL } from '@/lib/dsl'
 
 vi.mock('@xyflow/react', () => ({ useReactFlow: () => { throw new Error('not in flow') } }))
 
@@ -100,6 +101,44 @@ describe('useKeyboardShortcuts — delete semantics', () => {
     const w = useWorkspaceStore.getState().workspace!
     expect(w.model.softwareSystems.find(s => s.id === 'sys')).toBeDefined()
     expect(useWorkspaceStore.getState().pendingDelete).toBeNull()
+  })
+
+  it('Backspace on an arrow an include * view implies says why nothing is hidden (#230)', async () => {
+    const live = document.createElement('div')
+    live.id = 'c4hero-live'
+    document.body.appendChild(live)
+    try {
+      useWorkspaceStore.getState().loadWorkspace(parseDSL(`workspace {
+        model {
+          user = person "User"
+          a = softwareSystem "System A" {
+            web = container "Web" {
+              ctrl = component "Controller"
+            }
+          }
+          user -> ctrl "Uses"
+        }
+        views {
+          container a "Containers" {
+            include *
+          }
+        }
+      }`).workspace)
+      useWorkspaceStore.getState().setActiveView('Containers')
+      const rel = useWorkspaceStore.getState().workspace!.model.relationships[0]
+      useWorkspaceStore.getState().selectRelationship(rel.id)
+      renderHook(() => useKeyboardShortcuts())
+
+      press('Backspace')
+
+      const state = useWorkspaceStore.getState()
+      expect(state.selectedRelationshipId).toBe(rel.id)
+      expect(state.workspace!.views.containerViews[0].excludedRelationshipIds).toBeUndefined()
+      expect(state.pendingDelete).toBeNull()
+      await vi.waitFor(() => expect(live.textContent).toMatch(/implied by a relationship between other elements/))
+    } finally {
+      live.remove()
+    }
   })
 })
 

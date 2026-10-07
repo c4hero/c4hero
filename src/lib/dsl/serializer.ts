@@ -23,9 +23,12 @@ import type {
     PropertyLayout,
     WorkspaceDirective,
 } from '@/types/model'
-import { dslIdentifierForm } from '@/lib/identifier'
+import { IDENTIFIER_PATTERN, dslIdentifierForm } from '@/lib/identifier'
 import { normalizeElementStatus } from '@/lib/elementStatus'
+import { normalizeIncludePath } from './includeResolver'
 import { representable, roundTripped } from './encoding'
+import { enclosingSystems, exclusionMatches, hierarchyGuard, wildcardElements } from './wildcard'
+import { shouldWriteViewKey } from './viewKey'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
@@ -191,6 +194,21 @@ class SerializerContext {
 
     // Track all element IDs for relationship serialization
     private allElementIds = new Set<string>()
+    /** Deployment nodes, infrastructure nodes and instances, from every file. */
+    private deploymentIds = new Set<string>()
+    /** Every person, software system, container and component, from every
+     *  file, mapped to the top-level person or software system it sits in,
+     *  and to the ids of the elements it is nested in, innermost first. */
+    private topLevelOf = new Map<string, Person | SoftwareSystem>()
+    private ancestorsOf = new Map<string, string[]>()
+    /** Relationships from every file. */
+    private allRelationships: readonly Relationship[]
+    /** Included files that declare a deployment environment. */
+    private environmentFiles: ReadonlySet<string>
+    // Set up by serializeModel() for writeRelationshipsBeforeEnvironment().
+    private unwrittenTopLevel = new Set<string>()
+    private writtenDirectives = new Set<WorkspaceDirective>()
+    private relationshipsAbove = new Set<Relationship>()
     private topLevelGroups: GroupScope<Person | SoftwareSystem>
     private containerGroups = new Map<string, GroupScope<Container>>()
     private componentGroups = new Map<string, GroupScope<Component>>()
@@ -204,14 +222,20 @@ class SerializerContext {
     /** Included files a save never writes. */
     private readOnly: ReadonlySet<string>
     private included: ReadonlySet<string>
+    /** The unfiltered model: `include *` expands against all of it, whichever
+     *  file each element was declared in. */
+    private wildcardModel: Workspace['model']
 
     /** `idSource` supplies the identifier maps when `workspace` is a filtered
      *  view of a larger model, so cross-file references still resolve. */
     constructor(workspace: Workspace, idSource: Workspace = workspace, source?: string | null) {
         this.workspace = workspace
         this.source = source
+        this.wildcardModel = idSource.model
         this.included = new Set((idSource.includedFiles ?? []).map(f => f.path))
         this.readOnly = new Set((idSource.includedFiles ?? []).filter((f) => !f.writable).map((f) => f.path))
+        this.allRelationships = idSource.model.relationships
+        this.environmentFiles = new Set((idSource.model.deploymentEnvironments ?? []).flatMap(env => env.sourcePath ?? []))
         // Ownership of a property line depends on every file's lines, so this
         // reads the unfiltered workspace.
         this.workspacePropertyLines = propertyLinesFor(idSource.properties, idSource.propertyDeclarations, source, this.readOnly)
@@ -418,14 +442,20 @@ class SerializerContext {
 
         for (const person of model.people) {
             this.registerElement(person.id)
+            this.topLevelOf.set(person.id, person)
         }
 
         for (const sys of model.softwareSystems) {
             this.registerElement(sys.id)
+            this.topLevelOf.set(sys.id, sys)
             for (const container of sys.containers) {
                 this.registerElement(container.id)
+                this.topLevelOf.set(container.id, sys)
+                this.ancestorsOf.set(container.id, [sys.id])
                 for (const comp of container.components) {
                     this.registerElement(comp.id)
+                    this.topLevelOf.set(comp.id, sys)
+                    this.ancestorsOf.set(comp.id, [container.id, sys.id])
                 }
             }
         }
@@ -438,12 +468,17 @@ class SerializerContext {
 
     private registerDeploymentNodes(nodes: DeploymentNode[]): void {
         for (const node of nodes) {
-            this.registerElement(node.id)
-            for (const infra of node.infrastructureNodes) this.registerElement(infra.id)
-            for (const inst of node.containerInstances) this.registerElement(inst.id)
-            for (const inst of node.softwareSystemInstances) this.registerElement(inst.id)
+            this.registerDeploymentElement(node.id)
+            for (const infra of node.infrastructureNodes) this.registerDeploymentElement(infra.id)
+            for (const inst of node.containerInstances) this.registerDeploymentElement(inst.id)
+            for (const inst of node.softwareSystemInstances) this.registerDeploymentElement(inst.id)
             this.registerDeploymentNodes(node.children)
         }
+    }
+
+    private registerDeploymentElement(id: string): void {
+        this.registerElement(id)
+        this.deploymentIds.add(id)
     }
 
     private usedVarNames = new Set<string>()
@@ -762,6 +797,9 @@ class SerializerContext {
      *  property's slot immediately after its preceding directive at that
      *  anchor, rather than moving every property to the model's beginning. */
     private emitModelDirective(directive: WorkspaceDirective): void {
+        const file = this.includedFile(directive)
+        if (file !== undefined && this.environmentFiles.has(file)) this.writeRelationshipsBeforeEnvironment()
+        this.writtenDirectives.add(directive)
         const directives = (this.workspace.directives ?? []).filter(d => d.scope === 'model' || d.scope === 'modelProperties')
         const slot = directives.indexOf(directive) + 1
         const lines = this.modelPropertyLines
@@ -775,6 +813,7 @@ class SerializerContext {
         this.depth++
 
         const model = this.workspace.model
+        this.unwrittenTopLevel = new Set([...model.people, ...model.softwareSystems].map(element => element.id))
 
         if (this.hasNestedGroups) {
             this.modelPropertyLines = this.modelPropertyLines.filter(line => line.key !== GROUP_SEPARATOR_KEY)
@@ -795,27 +834,107 @@ class SerializerContext {
 
         this.serializeGroupScope(this.topLevelGroups, element => {
             this.serializeModelElement(element)
+            this.unwrittenTopLevel.delete(element.id)
             this.emitDirectivesAfter(element.id)
         })
 
-        // Deployment environments (before relationships — instance identifiers
-        // must be defined before any relationship lines that reference them)
+        // Deployment environments, before the relationships that touch their
+        // nodes and instances (those identifiers must be declared first)
         for (const env of model.deploymentEnvironments ?? []) {
+            this.writeRelationshipsBeforeEnvironment()
             this.emitBlank()
             this.serializeDeploymentEnvironment(env)
             this.emitDirectivesAfter(env.id)
         }
 
-        // Relationships
-        if (model.relationships.length > 0) {
-            this.emitBlank()
-            for (const rel of model.relationships) {
-                this.serializeRelationship(rel)
-            }
+        // Relationships, apart from those already written above an environment
+        this.serializeRelationships(model.relationships.filter(rel => !this.relationshipsAbove.has(rel)))
+        // Moving them all up can leave last the blank line that preceded them.
+        if (this.relationshipsAbove.size > 0) {
+            while (this.lines[this.lines.length - 1] === '') this.lines.pop()
         }
 
         this.depth--
         this.emit('}')
+    }
+
+    /**
+     * Called just before a deployment environment is created: this file's own
+     * `deploymentEnvironment`, or the `!include` of a file that declares one.
+     * Structurizr copies a relationship onto container and software system
+     * instances only as each instance is created, so a relationship between
+     * model elements written below the environment never reaches its
+     * deployment views (#231). This writes, in their order, the ones that can
+     * move up to here: both endpoints are already declared, and everything
+     * still to come is an `!include` of a file c4hero writes back that holds
+     * no relationship creating one of the same element pairs (Structurizr
+     * implies a relationship, or rejects a duplicate, by which came first).
+     * Any other `!` line still to come (`!impliedRelationships`, an include
+     * c4hero did not read, …) may change how a relationship is read, so then
+     * nothing moves. Whatever is left is written at the end, as before.
+     */
+    private writeRelationshipsBeforeEnvironment(): void {
+        const laterFiles = new Set<string>()
+        for (const directive of this.workspace.directives ?? []) {
+            if (directive.scope !== 'model' && directive.scope !== 'modelProperties') continue
+            if (this.writtenDirectives.has(directive)) continue
+            const file = this.includedFile(directive)
+            if (file === undefined || this.readOnly.has(file)) return
+            laterFiles.add(file)
+        }
+        const declaredLater = (id: string) => {
+            const element = this.topLevelOf.get(id)
+            // An endpoint c4hero does not know (an unresolved reference) is
+            // taken to be declared with the file's own elements.
+            if (element === undefined) return this.unwrittenTopLevel.size > 0
+            return this.unwrittenTopLevel.has(element.id)
+                || (element.sourcePath !== undefined && laterFiles.has(element.sourcePath))
+        }
+        const laterPairs = new Set(this.allRelationships
+            .filter(rel => rel.sourcePath !== undefined && laterFiles.has(rel.sourcePath))
+            .flatMap(rel => this.elementPairs(rel)))
+        const movable = this.workspace.model.relationships.filter(rel => !this.relationshipsAbove.has(rel)
+            && !this.touchesDeployment(rel)
+            && !declaredLater(rel.sourceId) && !declaredLater(rel.destinationId)
+            && !this.elementPairs(rel).some(pair => laterPairs.has(pair)))
+        if (movable.length === 0) return
+        for (const rel of movable) this.relationshipsAbove.add(rel)
+        this.serializeRelationships(movable)
+        this.emitBlank()
+    }
+
+    /** The element pairs a relationship connects in Structurizr: its own, and
+     *  the implied ones between the endpoints' ancestors. */
+    private elementPairs(rel: Relationship): string[] {
+        const lineage = (id: string) => [id, ...(this.ancestorsOf.get(id) ?? [])]
+        const pairs: string[] = []
+        for (const source of lineage(rel.sourceId)) {
+            for (const destination of lineage(rel.destinationId)) {
+                if (lineage(source).includes(destination) || lineage(destination).includes(source)) continue
+                pairs.push(`${source}\u0000${destination}`)
+            }
+        }
+        return pairs
+    }
+
+    private touchesDeployment(rel: Relationship): boolean {
+        return this.deploymentIds.has(rel.sourceId) || this.deploymentIds.has(rel.destinationId)
+    }
+
+    /** The file a root `!include` line reads, when c4hero loaded it. */
+    private includedFile(directive: WorkspaceDirective): string | undefined {
+        if (this.source !== null || directive.scope !== 'model') return undefined
+        const target = /^!include\s+(.+)$/.exec(directive.raw)?.[1]
+        const path = target === undefined ? null : normalizeIncludePath('', target)
+        return path !== null && this.included.has(path) ? path : undefined
+    }
+
+    private serializeRelationships(relationships: Relationship[]): void {
+        if (relationships.length === 0) return
+        this.emitBlank()
+        for (const rel of relationships) {
+            this.serializeRelationship(rel)
+        }
     }
 
     private serializeGroupScope<T extends ModelElement>(
@@ -1231,6 +1350,14 @@ class SerializerContext {
         this.emit('}')
     }
 
+    /** The description a view header carries after its key. A title the
+     *  parser derived from it is Structurizr's description, not a title, so
+     *  it goes back where it was read: the file keeps its form and the canvas
+     *  its label, and no `title` replaces Structurizr's default one (#233). */
+    private headerDescription(view: View): string | undefined {
+        return view.autoTitle && view.key && view.title ? view.title : undefined
+    }
+
     private serializeView(view: View): void {
         const parts: string[] = []
 
@@ -1239,25 +1366,25 @@ class SerializerContext {
         } else if (view.type === 'systemContext') {
             parts.push('systemContext')
             if (view.softwareSystemId) {
-                const ref = this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId
+                const ref = this.viewScopeRef(view.softwareSystemId)
                 parts.push(ref)
             }
         } else if (view.type === 'container') {
             parts.push('container')
             if (view.softwareSystemId) {
-                const ref = this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId
+                const ref = this.viewScopeRef(view.softwareSystemId)
                 parts.push(ref)
             }
         } else if (view.type === 'component') {
             parts.push('component')
             if (view.containerId) {
-                const ref = this.idToVar.get(view.containerId) ?? view.containerId
+                const ref = this.viewScopeRef(view.containerId)
                 parts.push(ref)
             }
         } else if (view.type === 'deployment') {
             parts.push('deployment')
             if (view.softwareSystemId) {
-                parts.push(this.idToVar.get(view.softwareSystemId) ?? view.softwareSystemId)
+                parts.push(this.viewScopeRef(view.softwareSystemId))
             } else {
                 parts.push('*')
             }
@@ -1265,20 +1392,24 @@ class SerializerContext {
         }
 
         // Skip parser-synthesised keys so DSL without explicit view keys
-        // roundtrips byte-identical.
-        if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
+        // roundtrips byte-identical. A header description needs the key slot
+        // before it, so a key generated for an unusable one is written then.
+        const headerDescription = this.headerDescription(view)
+        if (shouldWriteViewKey(view)) parts.push(`"${this.escapeString(view.key)}"`)
+        if (headerDescription) parts.push(`"${this.escapeString(headerDescription)}"`)
 
         this.emit(`${parts.join(' ')} {`)
         this.depth++
 
         // Structurizr view headers use the second optional string as a
         // description, not a title. Emit titles with the standard child keyword.
-        if (view.title) {
+        if (view.title && !view.autoTitle) {
             this.emit(`title "${this.escapeString(view.title)}"`)
         }
 
-        // Description (block property — cannot be expressed as a positional arg)
-        if (view.description) {
+        // Description, unless the header already carries it. An empty one
+        // still blanks a header description, as it does in Structurizr.
+        if (view.description !== undefined && view.description !== headerDescription && (view.description || headerDescription)) {
             this.emit(`description "${this.escapeString(view.description)}"`)
         }
 
@@ -1286,6 +1417,8 @@ class SerializerContext {
         const hasWildcard = view.elements.some(e => e.id === '*')
         if (hasWildcard) {
             this.emit('include *')
+        } else if (view.includeAll) {
+            this.serializeWildcardIncludes(view)
         } else if (view.elements.length > 0) {
             for (const el of view.elements) {
                 const ref = this.idToVar.get(el.id) ?? el.id
@@ -1294,14 +1427,20 @@ class SerializerContext {
         }
 
         // Structurizr relationship expressions are the portable way to retain
-        // a per-view hidden edge without removing either endpoint.
+        // a per-view hidden edge without removing either endpoint. The view's
+        // own `exclude "a -> b"` lines go back as written: `* -> *` also hides
+        // implied relationships and ones added later, which one line per
+        // relationship it matches today would not (#230). A relationship
+        // hidden on the canvas gets a line for its pair unless one of those
+        // already hides it.
+        const exclusions = view.excludedRelationshipExpressions ?? []
         const excludedPairs = new Set<string>()
+        const ref = (id: string) => (id === '*' ? '*' : this.idToVar.get(id) ?? id)
+        for (const exclusion of exclusions) excludedPairs.add(`${ref(exclusion.sourceId)} -> ${ref(exclusion.destinationId)}`)
         for (const id of view.excludedRelationshipIds ?? []) {
             const rel = this.workspace.model.relationships.find(r => r.id === id)
-            if (!rel) continue
-            const source = this.idToVar.get(rel.sourceId) ?? rel.sourceId
-            const destination = this.idToVar.get(rel.destinationId) ?? rel.destinationId
-            excludedPairs.add(`${source} -> ${destination}`)
+            if (!rel || exclusions.some(x => exclusionMatches(x, rel.sourceId, rel.destinationId))) continue
+            excludedPairs.add(`${ref(rel.sourceId)} -> ${ref(rel.destinationId)}`)
         }
         for (const pair of excludedPairs) this.emit(`exclude "${pair}"`)
 
@@ -1320,17 +1459,21 @@ class SerializerContext {
         const parts: string[] = ['dynamic']
         const scopeId = view.softwareSystemId ?? view.containerId
         if (scopeId) {
-            parts.push(this.idToVar.get(scopeId) ?? scopeId)
+            parts.push(this.viewScopeRef(scopeId))
         } else {
             parts.push('*')
         }
-        if (view.key && !view.autoKey) parts.push(`"${this.escapeString(view.key)}"`)
+        const headerDescription = this.headerDescription(view)
+        if (shouldWriteViewKey(view)) parts.push(`"${this.escapeString(view.key)}"`)
+        if (headerDescription) parts.push(`"${this.escapeString(headerDescription)}"`)
 
         this.emit(`${parts.join(' ')} {`)
         this.depth++
 
-        if (view.title) this.emit(`title "${this.escapeString(view.title)}"`)
-        if (view.description) this.emit(`description "${this.escapeString(view.description)}"`)
+        if (view.title && !view.autoTitle) this.emit(`title "${this.escapeString(view.title)}"`)
+        if (view.description !== undefined && view.description !== headerDescription && (view.description || headerDescription)) {
+            this.emit(`description "${this.escapeString(view.description)}"`)
+        }
 
         const relById = new Map(this.workspace.model.relationships.map(r => [r.id, r]))
         const steps = view.relationships.filter(step => relById.has(step.id))
@@ -1441,6 +1584,18 @@ class SerializerContext {
         return groups
     }
 
+    /** A view's scope as its header writes it: the element's variable, or,
+     *  for a scope the parser could not resolve, the ref as written — quoted
+     *  unless it is a bare (possibly dotted) identifier. Unquoted, a string
+     *  scope such as `Containers of A` reads back as three header words and
+     *  shifts the view's key and description (#232). Structurizr strips the
+     *  quotes, so quoting never changes what it resolves. */
+    private viewScopeRef(id: string): string {
+        const ref = this.idToVar.get(id)
+        if (ref !== undefined) return ref
+        return id.split('.').every(segment => IDENTIFIER_PATTERN.test(segment)) ? id : `"${this.escapeString(id)}"`
+    }
+
     private serializeAutoLayout(layout: AutoLayout): void {
         const parts: string[] = ['autoLayout']
 
@@ -1459,6 +1614,56 @@ class SerializerContext {
         }
 
         this.emit(parts.join(' '))
+    }
+
+    /** The include and exclude lines of a view parsed from `include *`. The
+     *  wildcard is written back as `*`, so elements added to the model later
+     *  still reach the view (#230). Around it:
+     *  - `include` for each element the view shows that the wildcard would
+     *    not add (added on the canvas, or by its own `include`), and for each
+     *    shown element with an `include` line of its own. A container or
+     *    component of a software system the wildcard adds goes before
+     *    `include *`: Structurizr never shows a system together with what is
+     *    inside it, keeps whichever comes first and skips the other.
+     *  - `exclude` for each element hidden on purpose (by an `exclude` line,
+     *    or on the canvas) that still exists and is not shown, whether or not
+     *    c4hero's own expansion would add it. An element the wildcard would
+     *    add that the view does not show yet gets no line: Structurizr shows
+     *    it, and so does c4hero once the file is reopened.
+     *  - `exclude` for an element the wildcard adds that is the parent or
+     *    child of one included after it (a sibling container, in a component
+     *    view, of a component shown in its place). Structurizr would keep
+     *    the container and skip the component; the canvas shows the
+     *    component. Writing that component before `include *` instead is an
+     *    error in Structurizr.
+     *  Statements apply in order, so the excludes come before the includes
+     *  after the wildcard: hiding a container makes room for one of its
+     *  components. */
+    private serializeWildcardIncludes(view: View): void {
+        const expanded = wildcardElements(this.wildcardModel, view).map(e => e.id)
+        const expandedIds = new Set(expanded)
+        const systemOf = enclosingSystems(this.wildcardModel)
+        const explicit = new Set(view.includedElementIds ?? [])
+        const shownIds = new Set(view.elements.map(e => e.id))
+        const before: string[] = []
+        const after: string[] = []
+        for (const id of shownIds) {
+            if (expandedIds.has(id) && !explicit.has(id)) continue
+            const system = systemOf.get(id)
+            if (system !== undefined && expandedIds.has(system)) before.push(id)
+            else after.push(id)
+        }
+        for (const id of before) this.emit(`include ${this.idToVar.get(id) ?? id}`)
+        this.emit('include *')
+        const displacedBy = hierarchyGuard(this.wildcardModel, view, after)
+        const excluded = new Set<string>()
+        for (const id of [...view.excludedElementIds ?? [], ...expanded.filter(id => displacedBy.clashes(id))]) {
+            const ref = this.idToVar.get(id)
+            if (ref === undefined || shownIds.has(id) || excluded.has(id)) continue
+            excluded.add(id)
+            this.emit(`exclude ${ref}`)
+        }
+        for (const id of after) this.emit(`include ${this.idToVar.get(id) ?? id}`)
     }
 
     // ─── Styles ─────────────────────────────────────────────────────

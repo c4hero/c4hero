@@ -198,6 +198,13 @@ export interface RelationshipInView {
   description?: string
 }
 
+/** A relationship `exclude "source -> destination"` line of a view, as
+ *  written: each end is an element id, or `*` for any element. */
+export interface RelationshipExclusion {
+  sourceId: string
+  destinationId: string
+}
+
 export interface AutoLayout {
   direction: LayoutDirection
   rankSeparation?: number
@@ -225,6 +232,14 @@ export interface View {
    *  A c4hero concept persisted in the sidecar, not the DSL. */
   locked?: boolean
   title?: string
+  /** True when `title` was not authored but is the view header's positional
+   *  string (`container a "key" "description"`), kept so the canvas has a
+   *  label for the view. Structurizr reads that string as the description
+   *  only, so the serializer writes it back into the header rather than as a
+   *  `title`, which would replace the default title Structurizr renders
+   *  (#233). A `title` in the view body, a rename, a duplicate or an
+   *  unusable view key kept as the label makes the title authored. */
+  autoTitle?: boolean
   description?: string
   softwareSystemId?: string
   containerId?: string
@@ -234,6 +249,30 @@ export interface View {
   relationships: RelationshipInView[]
   /** Model relationship IDs deliberately hidden from this static view. */
   excludedRelationshipIds?: string[]
+  /** Each `exclude "source -> destination"` line of the view, as written.
+   *  Structurizr applies it to every relationship the view would draw,
+   *  implied ones included, so `* -> *` hides the arrows an `include *`
+   *  view draws between elements whose own relationships are declared
+   *  further down. The canvas applies it to those arrows too, and a save
+   *  writes it back as written instead of one line per model relationship
+   *  it matches (#230). The model relationships it matches are also in
+   *  `excludedRelationshipIds`. */
+  excludedRelationshipExpressions?: RelationshipExclusion[]
+  /** True when the DSL said `include *`. `elements` holds the expansion (plus
+   *  any explicit includes, minus excludes); the serializer writes `include *`
+   *  back, so a save keeps the wildcard live instead of freezing it into an
+   *  id list (#230). */
+  includeAll?: boolean
+  /** `include *` views: elements hidden on purpose, by an `exclude` line
+   *  after the wildcard that hides them or by hiding them on the canvas. Each
+   *  is written back as `exclude` while it exists and is not shown. An
+   *  element the wildcard would add that the canvas has not picked up yet is
+   *  not hidden, so it gets no line (#230). */
+  excludedElementIds?: string[]
+  /** `include *` views: elements named by an `include` line of their own
+   *  next to the wildcard. Each is written back while it is shown, even when
+   *  the wildcard would add it too (#230). */
+  includedElementIds?: string[]
   autoLayout?: AutoLayout
 }
 
@@ -368,9 +407,31 @@ export interface IncludedFile {
   text?: string
 }
 
+/** What a stored layout entry is *for*, written alongside it so the entry
+ * never has to be re-identified from the key it happens to be filed under
+ * (TEA-345). A derived view key is numbered by declaration order, so it moves
+ * when a same-scope sibling comes or goes; the view's type and scope do not.
+ *
+ * `key` is present when the DSL author wrote it or a save writes a generated
+ * key to preserve the slot before a header description. An unnamed view of
+ * the same scope otherwise has a distinct identity. */
+export interface StoredViewIdentity {
+  key?: string
+  type: ViewType
+  softwareSystemId?: string
+  containerId?: string
+  environment?: string
+  /** Complete view membership when saved, including nodes with no persisted
+   *  position. Older identities omit this and use the positioned nodes. */
+  elementIds?: string[]
+}
+
 /** Layout retained independently of whether a view or element is currently visible.
  * Uses the version-1 sidecar shape; no on-disk migration is needed. */
 export interface SavedViewLayout {
+  /** The view this layout belongs to. Absent in entries written before
+   *  TEA-345, which are matched by key instead. */
+  view?: StoredViewIdentity
   locked?: boolean
   elements?: Record<string, Pick<ElementInView, 'x' | 'y' | 'pinned' | 'locked'>>
 }

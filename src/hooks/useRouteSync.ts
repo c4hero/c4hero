@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useNavigate, useLocation, useParams } from 'react-router-dom'
+import { useNavigate, useLocation, useNavigationType, useParams } from 'react-router-dom'
 import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
 import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile, readDSLFileAt } from '@/lib/folderIO'
 import { loadFromLocalStorage } from '@/lib/fileIO'
@@ -30,6 +30,7 @@ export function useRouteSync() {
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   const navigate = useNavigate()
   const location = useLocation()
+  const navigationType = useNavigationType()
   const { viewKey: urlViewKey } = useParams<{ viewKey?: string }>()
   const isInitialSync = useRef(true)
 
@@ -79,6 +80,12 @@ export function useRouteSync() {
     if (viewFromUrl && viewFromUrl !== activeViewKey) {
       const allViews = allViewsOf(workspace)
       if (allViews.some(v => v.key === viewFromUrl)) {
+        // Only history navigation (back/forward) moves the view. A PUSH or
+        // REPLACE is the effect above echoing an earlier view change: the
+        // router commits it in a transition, so it can land after a newer
+        // switch, and applying it would bounce the user back to the older
+        // view. The effect above has already pushed the newer path.
+        if (navigationType !== 'POP') return
         useWorkspaceStore.setState({
           activeViewKey: viewFromUrl,
           selectedElementIds: [],

@@ -3,8 +3,14 @@ import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews, orphanedLayoutViewKeys } from '../workspace-helpers'
+import {
+  findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews, orphanedLayoutViewKeys,
+  idsEnteringView, idsLeavingView, makeRoomInWildcardView, noteHiddenFromView, noteShownInView, showWildcardArrivals,
+  dropCoveringExclusions,
+} from '../workspace-helpers'
+import { viewExpressionsExclude } from '@/lib/dsl/wildcard'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
+import { defaultViewTitle, uniqueViewTitle } from '../workspace-helpers'
 
 /** View management: create / delete / rename / duplicate views, plus the
  *  per-view body actions (toggle element membership, layout direction,
@@ -46,7 +52,7 @@ export const createViewSlice: StateCreator<
       // The new view is authored, so the generated set has to become authored
       // with it or the next parse of the serialized DSL would drop it.
       materializeAutoViews(s.workspace)
-      appendScopedView(s.workspace, type, scopeId, title ?? `New ${type} view`, key, options)
+      appendScopedView(s.workspace, type, scopeId, title ?? defaultViewTitle(s.workspace, type, scopeId, options?.environment), key, options)
       s.activeViewKey = key
       s.selectedElementIds = []
       s.selectedRelationshipId = null
@@ -96,9 +102,15 @@ export const createViewSlice: StateCreator<
     for (const arrKey of VIEW_ARRAY_KEYS) {
       const v = (ws.views[arrKey] ?? []).find(v => v.key === key)
       if (v) {
+        // Unchanged text is a no-op, so confirming the label of a view that is
+        // labelled by its header description keeps it a description. The
+        // rename field trims what it sends, so outer whitespace is no change.
         if (v.title === title) return // no-op: title unchanged
+        if (v.autoTitle && v.title?.trim() === title.trim()) return
         pushUndoSnapshot(s)
         v.title = title
+        // A name the user typed is authored: it is saved as `title` (#233).
+        v.autoTitle = undefined
         return
       }
     }
@@ -125,8 +137,13 @@ export const createViewSlice: StateCreator<
           autoView: undefined,
           autoKey: undefined,
           originalKey: undefined,
+          // The new name is authored, so it is saved even when the source's
+          // title was only derived from its description (#233).
           title: `${src.title ?? 'View'} copy`,
+          autoTitle: undefined,
         }
+        // Duplicating a view twice must not leave two views with one label.
+        copy.title = uniqueViewTitle(copy.title ?? 'View copy', ws)
         ws.views[arrKey].push(copy)
         s.activeViewKey = newKey
         s.selectedElementIds = []
@@ -206,10 +223,13 @@ export const createViewSlice: StateCreator<
     // The keymap layer should already filter these out, but the helper guards
     // again so future callers can't accidentally bypass the rule.
     const focalId = getFocalScopeId(view)
-    const removable = new Set(ids.filter((id) => id !== focalId))
-    if (removable.size === 0) return
+    const requested = new Set(ids.filter((id) => id !== focalId))
+    if (requested.size === 0) return
 
     pushUndoSnapshot(s)
+    // An `include *` view keeps the hide, so a save writes it as `exclude` (#230).
+    noteHiddenFromView(ws, view, view.elements.map((e) => e.id).filter((id) => requested.has(id)))
+    const removable = idsLeavingView(ws, view, requested)
     for (const id of removable) {
       if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[id]
     }
@@ -219,6 +239,8 @@ export const createViewSlice: StateCreator<
       if (!rel) return false
       return !removable.has(rel.sourceId) && !removable.has(rel.destinationId)
     })
+    // An `include *` view shows what a hidden element was keeping out of it.
+    showWildcardArrivals(ws, [view])
   }),
 
   removeRelationshipFromView: (viewKey, relationshipId) => set((s) => {
@@ -259,7 +281,10 @@ export const createViewSlice: StateCreator<
       .map((r) => r.id))
     const wasExcluded = view.excludedRelationshipIds?.some((id) => pairIds.has(id)) ?? false
     const wasMissing = [...pairIds].some((id) => !view.relationships.some((r) => r.id === id))
-    if (!wasExcluded && !wasMissing) return
+    // An `exclude "a -> b"` line of the view's own that hides the pair would
+    // hide it again on reload, so it goes too (#230).
+    const lineHides = viewExpressionsExclude(view, rel.sourceId, rel.destinationId)
+    if (!wasExcluded && !wasMissing && !lineHides) return
     pushUndoSnapshot(s)
     if (wasMissing) {
       const presentIds = new Set(view.relationships.map((r) => r.id))
@@ -269,6 +294,7 @@ export const createViewSlice: StateCreator<
       view.excludedRelationshipIds = view.excludedRelationshipIds!.filter((id) => !pairIds.has(id))
       if (view.excludedRelationshipIds.length === 0) delete view.excludedRelationshipIds
     }
+    if (lineHides) dropCoveringExclusions(s.workspace, view, rel.sourceId, rel.destinationId)
   }),
 
   toggleElementInView: (viewKey, elementId) => set((s) => {
@@ -279,29 +305,43 @@ export const createViewSlice: StateCreator<
     const idx = view.elements.findIndex(e => e.id === elementId)
     pushUndoSnapshot(s)
     if (idx >= 0) {
-      if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[elementId]
-      view.elements.splice(idx, 1)
+      // An `include *` view keeps the hide, so a save writes it as `exclude` (#230).
+      noteHiddenFromView(ws, view, [elementId])
+      const leaving = idsLeavingView(ws, view, [elementId])
+      for (const id of leaving) {
+        if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[id]
+      }
+      view.elements = view.elements.filter(e => !leaving.has(e.id))
       // Also remove relationships that reference this element
       view.relationships = view.relationships.filter(r => {
         const rel = ws.model.relationships.find(mr => mr.id === r.id)
         if (!rel) return false
-        return rel.sourceId !== elementId && rel.destinationId !== elementId
+        return !leaving.has(rel.sourceId) && !leaving.has(rel.destinationId)
       })
+      showWildcardArrivals(ws, [view])
     } else {
+      // In an `include *` view, the element replaces its shown parent or
+      // child: Structurizr never shows both (#230).
+      makeRoomInWildcardView(ws, view, elementId)
       // Capture IDs already in the view BEFORE adding the new element
       const existingElementIds = new Set(view.elements.map(e => e.id))
+      noteShownInView(view, elementId)
       // Absence caused by a DSL edit is not a reset. Restore the retained
       // position when the user brings the element back; explicit removal
-      // above already discards its retained entry.
-      view.elements.push(restoreViewElement(ws, viewKey, elementId))
-      // Auto-add any model relationships that connect the new element to elements
+      // above already discards its retained entry. In an `include *`
+      // deployment view a node comes back with what runs on it, as in
+      // Structurizr once its `exclude` line is gone (#230).
+      const entering = idsEnteringView(ws, view, elementId)
+      for (const id of entering) view.elements.push(restoreViewElement(ws, viewKey, id))
+      // Auto-add any model relationships that connect the new elements to elements
       // already present in the view (avoids forcing the user to re-draw connections)
+      const enteringIds = new Set(entering)
       const existingRelIds = new Set(view.relationships.map(r => r.id))
+      const links = (from: string, to: string) =>
+        enteringIds.has(from) && (existingElementIds.has(to) || (enteringIds.has(to) && to !== from))
       for (const rel of ws.model.relationships) {
         if (existingRelIds.has(rel.id)) continue
-        const linksNewEl =
-          (rel.sourceId === elementId && existingElementIds.has(rel.destinationId)) ||
-          (rel.destinationId === elementId && existingElementIds.has(rel.sourceId))
+        const linksNewEl = links(rel.sourceId, rel.destinationId) || links(rel.destinationId, rel.sourceId)
         if (linksNewEl && !view.excludedRelationshipIds?.includes(rel.id)) {
           view.relationships.push({ id: rel.id })
           existingRelIds.add(rel.id)

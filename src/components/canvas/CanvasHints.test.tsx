@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { useWorkspaceStore } from '@/store/workspace'
+import { parseDSL } from '@/lib/dsl'
 import type { Workspace } from '@/types/model'
 import CanvasHints from './CanvasHints'
 
@@ -77,5 +78,46 @@ describe('CanvasHints — Backspace semantics hint', () => {
     render(<CanvasHints />)
     await act(() => new Promise(r => setTimeout(r, 600)))
     expect(screen.queryByText(/Backspace removes from this view/i)).toBeNull()
+  })
+})
+
+describe('CanvasHints — connect hint', () => {
+  // A context view of a system whose relationships are all declared at
+  // container level: it lists none, but draws the implied ones (#230).
+  function contextWs(include: string): Workspace {
+    return parseDSL(`workspace {
+      model {
+        user = person "User"
+        a = softwareSystem "System A" {
+          web = container "Web"
+        }
+        b = softwareSystem "System B" {
+          api = container "B API"
+        }
+        user -> web "Uses"
+        web -> api "Calls"
+      }
+      views {
+        systemContext a "Context" {
+          ${include}
+        }
+      }
+    }`).workspace
+  }
+
+  it('is not offered when an include * view draws implied relationships', async () => {
+    useWorkspaceStore.getState().loadWorkspace(contextWs('include *'))
+    useWorkspaceStore.getState().setActiveView('Context')
+    render(<CanvasHints />)
+    await act(() => new Promise(r => setTimeout(r, 600)))
+    expect(screen.queryByText(/create a connection/i)).toBeNull()
+  })
+
+  it('is offered when the view draws no relationship at all', async () => {
+    useWorkspaceStore.getState().loadWorkspace(contextWs('include user a b'))
+    useWorkspaceStore.getState().setActiveView('Context')
+    render(<CanvasHints />)
+    await act(() => new Promise(r => setTimeout(r, 600)))
+    expect(screen.getByText(/create a connection/i)).toBeTruthy()
   })
 })
