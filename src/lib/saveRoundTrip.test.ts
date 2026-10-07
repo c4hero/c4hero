@@ -21,7 +21,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setDirHandle, writeDSLFile, writeSidecarFile } from './folderIO'
-import { MAX_FILE_SIZE, fileAlreadyHas, openDSLFile, saveDSLFile, writeToCurrentHandle } from './fileIO'
+import { MAX_FILE_SIZE, fileAlreadyHas, openDSLFile, saveDSLFile, writeSidecarToHandle, writeToCurrentHandle } from './fileIO'
 import { writeLinkedWorkspace } from './workspaceSave'
 import { isSelfWrite, resetSaveCoordinator } from './saveCoordinator'
 import { hashContent } from './fileWatch'
@@ -166,11 +166,12 @@ describe('the disk watcher still recognises a save that skipped one of its two f
 
 describe('single-file mode, the other half of the patch', () => {
   /** Install a file handle the way the app does, through the open picker. */
-  async function openSingleFile(initial: string) {
+  async function openSingleFile(initial: string, parent?: FileSystemDirectoryHandle) {
     const state = { content: initial, opened: 0 }
     const handle = {
       kind: 'file' as const,
       name: 'single.dsl',
+      getParent: parent ? async () => parent : undefined,
       getFile: async () => new File([state.content], 'single.dsl', { type: 'text/plain' }),
       createWritable: async () => {
         state.opened++
@@ -202,6 +203,31 @@ describe('single-file mode, the other half of the patch', () => {
     expect(await writeToCurrentHandle('workspace "T" {}')).toBe(true)
     expect(state.opened).toBe(1)
     expect(state.content).toBe('workspace "T" {}')
+  })
+
+  it('skips identical sidecar bytes found during creation and writes changed layout', async () => {
+    // No sidecar was present when the picker opened the DSL. It appears before
+    // the first save, so the create branch must compare instead of rewriting it.
+    await openSingleFile('workspace "S" {}', rig.dir)
+    const path = 'single.c4hero.json'
+    const initial = '{"version":1,"views":{}}'
+    rig.content[path] = initial
+    const getFileHandle = vi.spyOn(rig.dir, 'getFileHandle')
+
+    expect(await writeSidecarToHandle(initial)).toBe(true)
+    expect(getFileHandle).toHaveBeenCalledWith(path, { create: true })
+    expect(rig.opened[path]).toBeUndefined()
+    expect(rig.content[path]).toBe(initial)
+    expect(await writeSidecarToHandle(initial)).toBe(true)
+    expect(rig.opened[path]).toBeUndefined()
+
+    const moved = '{"version":1,"views":{"Ctx":{"elements":{"s":{"x":42,"y":99}}}}}'
+    expect(await writeSidecarToHandle(moved)).toBe(true)
+    expect(rig.opened[path]).toBe(1)
+    expect(getFileHandle).toHaveBeenCalledTimes(1)
+    expect(rig.content[path]).toBe(moved)
+    expect(await writeSidecarToHandle(moved)).toBe(true)
+    expect(rig.opened[path]).toBe(1)
   })
 })
 

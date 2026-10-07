@@ -4,6 +4,7 @@ import {
   openFolder,
   readDSLFile,
   writeDSLFile,
+  writeDSLFileAt,
   writeSidecarFile,
   listDSLFiles,
   restoreDirHandle,
@@ -671,7 +672,7 @@ describe('reading, listing and removing inside a chosen folder', () => {
 
 describe('docs bundle file helpers', () => {
   /** A directory tree backed by a flat map of `path -> content`. */
-  function makeTree(files: Map<string, string>, prefix = ''): FileSystemDirectoryHandle {
+  function makeTree(files: Map<string, string>, prefix = '', opened = new Map<string, number>()): FileSystemDirectoryHandle {
     return {
       kind: 'directory',
       name: prefix || 'root',
@@ -690,7 +691,7 @@ describe('docs bundle file helpers', () => {
         const dir = `${prefix}${name}/`
         const exists = [...files.keys()].some((p) => p.startsWith(dir))
         if (!exists && !opts?.create) throw new DOMException('Not found', 'NotFoundError')
-        return makeTree(files, dir)
+        return makeTree(files, dir, opened)
       },
       getFileHandle: async (name: string, opts?: { create?: boolean }) => {
         const path = `${prefix}${name}`
@@ -699,19 +700,23 @@ describe('docs bundle file helpers', () => {
           kind: 'file',
           name,
           getFile: async () => new File([files.get(path) ?? ''], name),
-          createWritable: async () => ({
-            write: async (d: string) => { files.set(path, d) },
-            close: async () => {},
-          }),
+          createWritable: async () => {
+            opened.set(path, (opened.get(path) ?? 0) + 1)
+            let pending = ''
+            return {
+              write: async (d: string) => { pending = d },
+              close: async () => { files.set(path, pending) },
+            }
+          },
         }
       },
       queryPermission: async () => 'granted' as PermissionState,
     } as unknown as FileSystemDirectoryHandle
   }
 
-  async function mount(files: Map<string, string>) {
+  async function mount(files: Map<string, string>, opened = new Map<string, number>()) {
     vi.stubGlobal('indexedDB', { open: () => { const req = { onsuccess: null as null | (() => void), onerror: null, onupgradeneeded: null, result: { transaction: () => ({ objectStore: () => ({ put: () => {} }) }) } }; setTimeout(() => req.onsuccess?.(), 0); return req } })
-    await setDirHandle(makeTree(files))
+    await setDirHandle(makeTree(files, '', opened))
   }
 
   afterEach(() => vi.unstubAllGlobals())
@@ -740,5 +745,45 @@ describe('docs bundle file helpers', () => {
     expect(await writeTextFileAt('../x.md', 'no')).toBe(false)
     expect(await writeTextFileAt('', 'no')).toBe(false)
     expect(files.size).toBe(1)
+  })
+
+  it('skips unchanged nested include write-back and persists changed fragment bytes', async () => {
+    const path = 'includes/model/systems.dsl'
+    const initial = 's = softwareSystem "Café"'
+    const changed = 's = softwareSystem "Café API"'
+    const files = new Map([[path, initial]])
+    const opened = new Map<string, number>()
+    await mount(files, opened)
+
+    expect(await writeDSLFileAt(path, initial)).toBe(true)
+    expect(await writeDSLFileAt(path, initial)).toBe(true)
+    expect(opened.get(path)).toBeUndefined()
+    expect(files.get(path)).toBe(initial)
+
+    expect(await writeDSLFileAt(path, changed)).toBe(true)
+    expect(files.get(path)).toBe(changed)
+    expect(opened.get(path)).toBe(1)
+    expect(await writeDSLFileAt(path, changed)).toBe(true)
+    expect(opened.get(path)).toBe(1)
+  })
+
+  it('skips unchanged nested document writes and persists a changed decision', async () => {
+    const path = 'docs/decisions/storage.md'
+    const initial = '# Storage\n\nUse Café DB.\n'
+    const changed = '# Storage\n\nUse Café DB with replicas.\n'
+    const files = new Map([[path, initial]])
+    const opened = new Map<string, number>()
+    await mount(files, opened)
+
+    expect(await writeTextFileAt(path, initial)).toBe(true)
+    expect(await writeTextFileAt(path, initial)).toBe(true)
+    expect(opened.get(path)).toBeUndefined()
+    expect(files.get(path)).toBe(initial)
+
+    expect(await writeTextFileAt(path, changed)).toBe(true)
+    expect(files.get(path)).toBe(changed)
+    expect(opened.get(path)).toBe(1)
+    expect(await writeTextFileAt(path, changed)).toBe(true)
+    expect(opened.get(path)).toBe(1)
   })
 })
