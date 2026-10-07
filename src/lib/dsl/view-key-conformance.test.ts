@@ -115,13 +115,20 @@ describe('parsing a non-conformant view key', () => {
         const { workspace } = parseViews(`        systemContext sys1 "${key}" "The billing context" {
             include *
         }`)
-        expect(workspace.views.systemContextViews[0]).toMatchObject({ key: 'SystemContext-sys1', autoKey: true, title: 'The billing context' })
+        const original = workspace.views.systemContextViews[0]
+        expect(original).toMatchObject({ key: 'SystemContext-sys1', autoKey: true, title: 'The billing context' })
+        original.locked = true
+        Object.assign(original.elements.find(el => el.id === 'sys1')!, { pinned: true, locked: true, x: 100, y: 200 })
         const output = serializeDSL(workspace)
         expect(output).toContain('systemContext sys1 "SystemContext-sys1" "The billing context" {')
         expect(output).not.toMatch(/^\s*(title|description) /m)
         // Reopened, the view keeps its key (the sidecar's layout) and its label.
-        const view = parseDSL(output).workspace.views.systemContextViews[0]
+        const reopened = parseDSL(output).workspace
+        applySidecar(reopened, extractSidecar(workspace)!)
+        const view = reopened.views.systemContextViews[0]
         expect(view).toMatchObject({ key: 'SystemContext-sys1', title: 'The billing context', description: 'The billing context' })
+        expect(view.locked).toBe(true)
+        expect(view.elements.find(el => el.id === 'sys1')).toMatchObject({ pinned: true, locked: true, x: 100, y: 200 })
     })
 
     it('saves the key it keeps as a title when the header description is empty (#233)', () => {
@@ -522,7 +529,7 @@ describe('layout migration for normalized view keys', () => {
         expect(view.elements.find(el => el.id === 'sys1')).toMatchObject(saved.elements.sys1)
         const migrated = extractSidecar(workspace)!
         expect(migrated.views?.[key]).toBeUndefined()
-        expect(migrated.views?.[view.key]).toEqual(saved)
+        expect(migrated.views?.[view.key]).toEqual({ ...saved, view: expect.objectContaining({ type: 'systemContext' }) })
         const reloaded = parseDSL(serializeDSL(workspace)).workspace
         applySidecar(reloaded, migrated)
         expect(reloaded.views.systemContextViews[0].locked).toBe(true)
