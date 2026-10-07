@@ -300,13 +300,33 @@ describe('deployment round-trip (serialize → parse)', () => {
     expect(scoped.autoLayout?.direction).toBe('LR')
 
     // Element sets survive (compare cardinality — parse-time expansion
-    // re-derives the same concrete membership from explicit includes)
+    // re-derives the same concrete membership from the saved `include *`)
     const firstScoped = first.views.deploymentViews.find(v => v.key === 'LiveDeployment')!
     expect(scoped.elements.length).toBe(firstScoped.elements.length)
 
     const unscoped = second.views.deploymentViews.find(v => v.key === 'AllLiveDeployment')!
     expect(unscoped.softwareSystemId).toBeUndefined()
     expect(unscoped.environment).toBe('Live')
+  })
+
+  it('writes include * back rather than listing every deployment element (#230)', () => {
+    const { workspace: first } = parseDSL(STRUCTURIZR_DSL)
+    const { workspace: second, errors, dsl } = roundtrip(first)
+    expect(errors).toHaveLength(0)
+
+    // Each view body is the wildcard (plus autoLayout), not one `include`
+    // per node and instance — the unnamed nodes' synthesised ids among them.
+    const viewBodies = dsl.slice(dsl.indexOf('views {')).match(/deployment [^\n]*\{[^}]*\}/g) ?? []
+    expect(viewBodies).toHaveLength(2)
+    for (const body of viewBodies) {
+      const lines = body.split('\n').map(l => l.trim())
+      expect(lines.filter(l => /^(include|exclude) /.test(l))).toEqual(['include *'])
+    }
+
+    const ids = (ws: Workspace, key: string) => ws.views.deploymentViews.find(v => v.key === key)!.elements.map(e => e.id)
+    for (const key of ['LiveDeployment', 'AllLiveDeployment']) {
+      expect(ids(second, key)).toEqual(ids(first, key))
+    }
   })
 
   it('round-trips instance extra tags, urls, and properties', () => {

@@ -198,6 +198,13 @@ export interface RelationshipInView {
   description?: string
 }
 
+/** A relationship `exclude "source -> destination"` line of a view, as
+ *  written: each end is an element id, or `*` for any element. */
+export interface RelationshipExclusion {
+  sourceId: string
+  destinationId: string
+}
+
 export interface AutoLayout {
   direction: LayoutDirection
   rankSeparation?: number
@@ -242,6 +249,30 @@ export interface View {
   relationships: RelationshipInView[]
   /** Model relationship IDs deliberately hidden from this static view. */
   excludedRelationshipIds?: string[]
+  /** Each `exclude "source -> destination"` line of the view, as written.
+   *  Structurizr applies it to every relationship the view would draw,
+   *  implied ones included, so `* -> *` hides the arrows an `include *`
+   *  view draws between elements whose own relationships are declared
+   *  further down. The canvas applies it to those arrows too, and a save
+   *  writes it back as written instead of one line per model relationship
+   *  it matches (#230). The model relationships it matches are also in
+   *  `excludedRelationshipIds`. */
+  excludedRelationshipExpressions?: RelationshipExclusion[]
+  /** True when the DSL said `include *`. `elements` holds the expansion (plus
+   *  any explicit includes, minus excludes); the serializer writes `include *`
+   *  back, so a save keeps the wildcard live instead of freezing it into an
+   *  id list (#230). */
+  includeAll?: boolean
+  /** `include *` views: elements hidden on purpose, by an `exclude` line
+   *  after the wildcard that hides them or by hiding them on the canvas. Each
+   *  is written back as `exclude` while it exists and is not shown. An
+   *  element the wildcard would add that the canvas has not picked up yet is
+   *  not hidden, so it gets no line (#230). */
+  excludedElementIds?: string[]
+  /** `include *` views: elements named by an `include` line of their own
+   *  next to the wildcard. Each is written back while it is shown, even when
+   *  the wildcard would add it too (#230). */
+  includedElementIds?: string[]
   autoLayout?: AutoLayout
 }
 

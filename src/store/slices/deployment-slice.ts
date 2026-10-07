@@ -4,6 +4,7 @@ import type { DeploymentEnvironment, DeploymentNode, InfrastructureNode, Workspa
 import { nanoid, pushUndoSnapshot } from '../internals'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
 import { restoreViewElement } from '../workspace-helpers'
+import { withDeploymentDescendants } from '@/lib/dsl/wildcard'
 
 function envByName(ws: Workspace, environment: string): DeploymentEnvironment | undefined {
   return (ws.model.deploymentEnvironments ?? []).find(e => e.name === environment)
@@ -19,12 +20,22 @@ function nodeById(env: DeploymentEnvironment, id: string): DeploymentNode | unde
 
 /** Recompute every deployment view of `environment` from the canonical
  *  membership rules (the same expansion `include *` parses to), keeping the
- *  live positions and restoring retained layout for returning elements. */
+ *  live positions and restoring retained layout for returning elements. A
+ *  view parsed from `include *` keeps what it hides (with everything on a
+ *  hidden node, as Structurizr's `exclude` does) and what it shows by an
+ *  `include` line of its own (#230). */
 function refreshDeploymentViews(ws: Workspace, environment: string): void {
   for (const v of ws.views.deploymentViews ?? []) {
     if (v.environment !== environment) continue
     const existing = new Map(v.elements.map(e => [e.id, e]))
-    v.elements = expandDeploymentElements(ws.model, v.environment, v.softwareSystemId)
+    const hidden = withDeploymentDescendants(ws.model, v, v.includeAll ? v.excludedElementIds ?? [] : [])
+    const expanded = expandDeploymentElements(ws.model, v.environment, v.softwareSystemId)
+      .filter(e => !hidden.has(e.id))
+    const expandedIds = new Set(expanded.map(e => e.id))
+    const kept = (v.includeAll ? v.includedElementIds ?? [] : [])
+      .filter(id => existing.has(id) && !expandedIds.has(id))
+      .map(id => ({ id }))
+    v.elements = [...expanded, ...kept]
       .map(e => existing.get(e.id) ?? restoreViewElement(ws, v.key, e.id))
   }
 }

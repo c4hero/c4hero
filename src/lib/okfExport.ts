@@ -13,6 +13,7 @@ import type {
 import { deriveIdFromName, dslIdentifierForm } from '@/lib/identifier'
 import { WINDOWS_RESERVED_NAME } from '@/lib/filenames'
 import { allViewsOf } from '@/store/workspace-helpers'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 /**
  * Export a workspace as an Open Knowledge Format (OKF v0.1) bundle.
@@ -519,6 +520,11 @@ function viewConcept(ctx: Ctx, view: View): Concept {
     const row = [endpoint(ctx, from), endpoint(ctx, to), escapeInline(description)]
     if (dynamic) row.unshift(escapeInline(riv.order ?? ''))
     rows.push(row)
+  }
+  // An `include *` view also shows the relationships Structurizr implies
+  // between the elements it shows, as the canvas does (#230).
+  for (const implied of wildcardImpliedRelationships(ctx.ws.model, view)) {
+    rows.push([endpoint(ctx, implied.sourceId), endpoint(ctx, implied.destinationId), escapeInline(implied.relationship.description ?? '')])
   }
   const headers = dynamic ? ['Step', 'From', 'To', 'Description'] : ['From', 'To', 'Description']
 

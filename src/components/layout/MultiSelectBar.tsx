@@ -3,6 +3,7 @@ import { useReactFlow } from '@xyflow/react'
 import { useWorkspaceStore, isFocalScopeElement, getActiveView, buildRelationshipMap } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 import {
   AlignStartVertical,
   AlignCenterVertical,
@@ -279,11 +280,15 @@ export default function MultiSelectBar() {
 
     const selected = new Set(selectedElementIds)
     const relationshipMap = buildRelationshipMap(workspace)
-    const edges = activeView.relationships
-      .map((viewRelationship) => relationshipMap.get(viewRelationship.id))
-      .filter((relationship): relationship is NonNullable<typeof relationship> =>
-        !!relationship && selected.has(relationship.sourceId) && selected.has(relationship.destinationId),
-      )
+    // The arrows the view draws: the relationships it lists, and in an
+    // `include *` view the implied ones between the elements it shows (#230).
+    const drawn: { sourceId: string; destinationId: string }[] = [
+      ...activeView.relationships
+        .map((viewRelationship) => relationshipMap.get(viewRelationship.id))
+        .filter((relationship): relationship is NonNullable<typeof relationship> => !!relationship),
+      ...wildcardImpliedRelationships(workspace.model, activeView),
+    ]
+    const edges = drawn.filter((edge) => selected.has(edge.sourceId) && selected.has(edge.destinationId))
     if (edges.length < selected.size - 1) return null
 
     const outgoing = new Map<string, string>()

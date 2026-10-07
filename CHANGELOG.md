@@ -21,6 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `include *` in a view is no longer rewritten as a list of elements on save,
+  so elements added to the model later still appear in Structurizr. The
+  view's own `include` and `exclude` lines are kept and applied in order, as
+  Structurizr does, and an element hidden from or added to the view on the
+  canvas is saved as its own `exclude` or `include` line. An element that a
+  relationship drawn in another view brings into the wildcard now appears in
+  the view, instead of being saved as hidden. System context, container and
+  component views show what Structurizr's `include *` shows: a relationship
+  with anything inside another software system brings in that system, never
+  its containers, and excluding a deployment node also hides what runs on it.
+  Every `include *` view other than a deployment view also draws
+  Structurizr's implied relationships between the boxes it shows: a
+  relationship declared further down the hierarchy, between containers or
+  components, appears as an arrow between the elements the view shows,
+  labelled like the first relationship that implies it. A relationship
+  `exclude` such as `"* -> *"`, `"user -> *"` or `"a -> b"` hides those
+  arrows too, as in Structurizr, and is saved as written rather than as one
+  line per relationship it matched (#230).
 - Saved layouts now record view identity, keeping positions and locks with
   distinguishable unnamed views when siblings are deleted or reordered
   (TEA-345). Ambiguous layouts remain saved for recovery. Older sidecars still
