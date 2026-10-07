@@ -59,6 +59,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nested, so `Group:` style tags keep matching. Editing a property whose value
   came from a read-only include now writes the new value into the root file
   instead of losing it (TEA-349).
+- Saving no longer strips relationships from deployment views in Structurizr.
+  Relationships between people, software systems, containers and components
+  were written below every `deploymentEnvironment` block, and Structurizr only
+  copies a relationship onto the container and software system instances
+  created after it, so deployment views lost arrows such as `web -> db`
+  between the deployed containers. They are now written above the
+  environments, also when an environment comes from an `!include`d file,
+  while relationships to deployment nodes and instances stay below. A
+  relationship the file had placed after an environment now reaches its
+  instances in Structurizr too, as c4hero's canvas already showed. The old
+  order is kept when a `!` line at or after the environment is anything but
+  an `!include` of a file c4hero writes back, and for a relationship that uses
+  an element such an `!include` declares, or that connects the same elements
+  or their parents as a relationship in that file (#231).
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.

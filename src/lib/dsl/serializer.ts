@@ -25,6 +25,7 @@ import type {
 } from '@/types/model'
 import { IDENTIFIER_PATTERN, dslIdentifierForm } from '@/lib/identifier'
 import { normalizeElementStatus } from '@/lib/elementStatus'
+import { normalizeIncludePath } from './includeResolver'
 import { representable, roundTripped } from './encoding'
 import { enclosingSystems, exclusionMatches, hierarchyGuard, wildcardElements } from './wildcard'
 import { shouldWriteViewKey } from './viewKey'
@@ -193,6 +194,21 @@ class SerializerContext {
 
     // Track all element IDs for relationship serialization
     private allElementIds = new Set<string>()
+    /** Deployment nodes, infrastructure nodes and instances, from every file. */
+    private deploymentIds = new Set<string>()
+    /** Every person, software system, container and component, from every
+     *  file, mapped to the top-level person or software system it sits in,
+     *  and to the ids of the elements it is nested in, innermost first. */
+    private topLevelOf = new Map<string, Person | SoftwareSystem>()
+    private ancestorsOf = new Map<string, string[]>()
+    /** Relationships from every file. */
+    private allRelationships: readonly Relationship[]
+    /** Included files that declare a deployment environment. */
+    private environmentFiles: ReadonlySet<string>
+    // Set up by serializeModel() for writeRelationshipsBeforeEnvironment().
+    private unwrittenTopLevel = new Set<string>()
+    private writtenDirectives = new Set<WorkspaceDirective>()
+    private relationshipsAbove = new Set<Relationship>()
     private topLevelGroups: GroupScope<Person | SoftwareSystem>
     private containerGroups = new Map<string, GroupScope<Container>>()
     private componentGroups = new Map<string, GroupScope<Component>>()
@@ -218,6 +234,8 @@ class SerializerContext {
         this.wildcardModel = idSource.model
         this.included = new Set((idSource.includedFiles ?? []).map(f => f.path))
         this.readOnly = new Set((idSource.includedFiles ?? []).filter((f) => !f.writable).map((f) => f.path))
+        this.allRelationships = idSource.model.relationships
+        this.environmentFiles = new Set((idSource.model.deploymentEnvironments ?? []).flatMap(env => env.sourcePath ?? []))
         // Ownership of a property line depends on every file's lines, so this
         // reads the unfiltered workspace.
         this.workspacePropertyLines = propertyLinesFor(idSource.properties, idSource.propertyDeclarations, source, this.readOnly)
@@ -424,14 +442,20 @@ class SerializerContext {
 
         for (const person of model.people) {
             this.registerElement(person.id)
+            this.topLevelOf.set(person.id, person)
         }
 
         for (const sys of model.softwareSystems) {
             this.registerElement(sys.id)
+            this.topLevelOf.set(sys.id, sys)
             for (const container of sys.containers) {
                 this.registerElement(container.id)
+                this.topLevelOf.set(container.id, sys)
+                this.ancestorsOf.set(container.id, [sys.id])
                 for (const comp of container.components) {
                     this.registerElement(comp.id)
+                    this.topLevelOf.set(comp.id, sys)
+                    this.ancestorsOf.set(comp.id, [container.id, sys.id])
                 }
             }
         }
@@ -444,12 +468,17 @@ class SerializerContext {
 
     private registerDeploymentNodes(nodes: DeploymentNode[]): void {
         for (const node of nodes) {
-            this.registerElement(node.id)
-            for (const infra of node.infrastructureNodes) this.registerElement(infra.id)
-            for (const inst of node.containerInstances) this.registerElement(inst.id)
-            for (const inst of node.softwareSystemInstances) this.registerElement(inst.id)
+            this.registerDeploymentElement(node.id)
+            for (const infra of node.infrastructureNodes) this.registerDeploymentElement(infra.id)
+            for (const inst of node.containerInstances) this.registerDeploymentElement(inst.id)
+            for (const inst of node.softwareSystemInstances) this.registerDeploymentElement(inst.id)
             this.registerDeploymentNodes(node.children)
         }
+    }
+
+    private registerDeploymentElement(id: string): void {
+        this.registerElement(id)
+        this.deploymentIds.add(id)
     }
 
     private usedVarNames = new Set<string>()
@@ -768,6 +797,9 @@ class SerializerContext {
      *  property's slot immediately after its preceding directive at that
      *  anchor, rather than moving every property to the model's beginning. */
     private emitModelDirective(directive: WorkspaceDirective): void {
+        const file = this.includedFile(directive)
+        if (file !== undefined && this.environmentFiles.has(file)) this.writeRelationshipsBeforeEnvironment()
+        this.writtenDirectives.add(directive)
         const directives = (this.workspace.directives ?? []).filter(d => d.scope === 'model' || d.scope === 'modelProperties')
         const slot = directives.indexOf(directive) + 1
         const lines = this.modelPropertyLines
@@ -781,6 +813,7 @@ class SerializerContext {
         this.depth++
 
         const model = this.workspace.model
+        this.unwrittenTopLevel = new Set([...model.people, ...model.softwareSystems].map(element => element.id))
 
         if (this.hasNestedGroups) {
             this.modelPropertyLines = this.modelPropertyLines.filter(line => line.key !== GROUP_SEPARATOR_KEY)
@@ -801,27 +834,107 @@ class SerializerContext {
 
         this.serializeGroupScope(this.topLevelGroups, element => {
             this.serializeModelElement(element)
+            this.unwrittenTopLevel.delete(element.id)
             this.emitDirectivesAfter(element.id)
         })
 
-        // Deployment environments (before relationships — instance identifiers
-        // must be defined before any relationship lines that reference them)
+        // Deployment environments, before the relationships that touch their
+        // nodes and instances (those identifiers must be declared first)
         for (const env of model.deploymentEnvironments ?? []) {
+            this.writeRelationshipsBeforeEnvironment()
             this.emitBlank()
             this.serializeDeploymentEnvironment(env)
             this.emitDirectivesAfter(env.id)
         }
 
-        // Relationships
-        if (model.relationships.length > 0) {
-            this.emitBlank()
-            for (const rel of model.relationships) {
-                this.serializeRelationship(rel)
-            }
+        // Relationships, apart from those already written above an environment
+        this.serializeRelationships(model.relationships.filter(rel => !this.relationshipsAbove.has(rel)))
+        // Moving them all up can leave last the blank line that preceded them.
+        if (this.relationshipsAbove.size > 0) {
+            while (this.lines[this.lines.length - 1] === '') this.lines.pop()
         }
 
         this.depth--
         this.emit('}')
+    }
+
+    /**
+     * Called just before a deployment environment is created: this file's own
+     * `deploymentEnvironment`, or the `!include` of a file that declares one.
+     * Structurizr copies a relationship onto container and software system
+     * instances only as each instance is created, so a relationship between
+     * model elements written below the environment never reaches its
+     * deployment views (#231). This writes, in their order, the ones that can
+     * move up to here: both endpoints are already declared, and everything
+     * still to come is an `!include` of a file c4hero writes back that holds
+     * no relationship creating one of the same element pairs (Structurizr
+     * implies a relationship, or rejects a duplicate, by which came first).
+     * Any other `!` line still to come (`!impliedRelationships`, an include
+     * c4hero did not read, …) may change how a relationship is read, so then
+     * nothing moves. Whatever is left is written at the end, as before.
+     */
+    private writeRelationshipsBeforeEnvironment(): void {
+        const laterFiles = new Set<string>()
+        for (const directive of this.workspace.directives ?? []) {
+            if (directive.scope !== 'model' && directive.scope !== 'modelProperties') continue
+            if (this.writtenDirectives.has(directive)) continue
+            const file = this.includedFile(directive)
+            if (file === undefined || this.readOnly.has(file)) return
+            laterFiles.add(file)
+        }
+        const declaredLater = (id: string) => {
+            const element = this.topLevelOf.get(id)
+            // An endpoint c4hero does not know (an unresolved reference) is
+            // taken to be declared with the file's own elements.
+            if (element === undefined) return this.unwrittenTopLevel.size > 0
+            return this.unwrittenTopLevel.has(element.id)
+                || (element.sourcePath !== undefined && laterFiles.has(element.sourcePath))
+        }
+        const laterPairs = new Set(this.allRelationships
+            .filter(rel => rel.sourcePath !== undefined && laterFiles.has(rel.sourcePath))
+            .flatMap(rel => this.elementPairs(rel)))
+        const movable = this.workspace.model.relationships.filter(rel => !this.relationshipsAbove.has(rel)
+            && !this.touchesDeployment(rel)
+            && !declaredLater(rel.sourceId) && !declaredLater(rel.destinationId)
+            && !this.elementPairs(rel).some(pair => laterPairs.has(pair)))
+        if (movable.length === 0) return
+        for (const rel of movable) this.relationshipsAbove.add(rel)
+        this.serializeRelationships(movable)
+        this.emitBlank()
+    }
+
+    /** The element pairs a relationship connects in Structurizr: its own, and
+     *  the implied ones between the endpoints' ancestors. */
+    private elementPairs(rel: Relationship): string[] {
+        const lineage = (id: string) => [id, ...(this.ancestorsOf.get(id) ?? [])]
+        const pairs: string[] = []
+        for (const source of lineage(rel.sourceId)) {
+            for (const destination of lineage(rel.destinationId)) {
+                if (lineage(source).includes(destination) || lineage(destination).includes(source)) continue
+                pairs.push(`${source}\u0000${destination}`)
+            }
+        }
+        return pairs
+    }
+
+    private touchesDeployment(rel: Relationship): boolean {
+        return this.deploymentIds.has(rel.sourceId) || this.deploymentIds.has(rel.destinationId)
+    }
+
+    /** The file a root `!include` line reads, when c4hero loaded it. */
+    private includedFile(directive: WorkspaceDirective): string | undefined {
+        if (this.source !== null || directive.scope !== 'model') return undefined
+        const target = /^!include\s+(.+)$/.exec(directive.raw)?.[1]
+        const path = target === undefined ? null : normalizeIncludePath('', target)
+        return path !== null && this.included.has(path) ? path : undefined
+    }
+
+    private serializeRelationships(relationships: Relationship[]): void {
+        if (relationships.length === 0) return
+        this.emitBlank()
+        for (const rel of relationships) {
+            this.serializeRelationship(rel)
+        }
     }
 
     private serializeGroupScope<T extends ModelElement>(
