@@ -26,6 +26,7 @@ import type {
 import { IDENTIFIER_PATTERN, dslIdentifierForm } from '@/lib/identifier'
 import { normalizeElementStatus } from '@/lib/elementStatus'
 import { representable, roundTripped } from './encoding'
+import { shouldWriteViewKey } from './viewKey'
 
 const INDENT = '    ' // 4 spaces
 const GROUP_SEPARATOR = '/'
@@ -1276,7 +1277,7 @@ class SerializerContext {
         // roundtrips byte-identical. A header description needs the key slot
         // before it, so a key generated for an unusable one is written then.
         const headerDescription = this.headerDescription(view)
-        if (view.key && (!view.autoKey || headerDescription)) parts.push(`"${this.escapeString(view.key)}"`)
+        if (shouldWriteViewKey(view)) parts.push(`"${this.escapeString(view.key)}"`)
         if (headerDescription) parts.push(`"${this.escapeString(headerDescription)}"`)
 
         this.emit(`${parts.join(' ')} {`)
@@ -1337,7 +1338,7 @@ class SerializerContext {
             parts.push('*')
         }
         const headerDescription = this.headerDescription(view)
-        if (view.key && (!view.autoKey || headerDescription)) parts.push(`"${this.escapeString(view.key)}"`)
+        if (shouldWriteViewKey(view)) parts.push(`"${this.escapeString(view.key)}"`)
         if (headerDescription) parts.push(`"${this.escapeString(headerDescription)}"`)
 
         this.emit(`${parts.join(' ')} {`)
