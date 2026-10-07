@@ -1,5 +1,6 @@
 import type { StoredViewIdentity, View, ViewType } from '@/types/model'
 import { isRecord } from '@/lib/guards'
+import { shouldWriteViewKey } from '@/lib/dsl/viewKey'
 
 // Which view a piece of stored layout belongs to (TEA-345).
 //
@@ -14,7 +15,7 @@ import { isRecord } from '@/lib/guards'
 /** The identity to store alongside a view's layout. */
 export function viewIdentityOf(v: View): StoredViewIdentity {
   return {
-    ...(!v.autoKey && { key: v.key }),
+    ...(shouldWriteViewKey(v) && { key: v.key }),
     type: v.type,
     ...(v.softwareSystemId !== undefined && { softwareSystemId: v.softwareSystemId }),
     ...(v.containerId !== undefined && { containerId: v.containerId }),

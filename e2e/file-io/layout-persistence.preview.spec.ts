@@ -126,6 +126,39 @@ for (const lockOnly of [false, true]) {
   })
 }
 
+for (const [type, key] of [['container', ''], ['dynamic', '!!!']] as const) {
+  test(`${type} layout survives a generated key written before its header description`, async ({ page }, testInfo) => {
+    const viewKey = `${type === 'container' ? 'Containers' : 'Dynamic'}-payments`
+    await seed(page, `workspace "Preview" {
+      model {
+        payments = softwareSystem "Payments" {
+          api = container "API"
+          db = container "Database"
+        }
+        api -> db "Reads"
+      }
+      views {
+        ${type} payments "${key}" "Description" {
+          ${type === 'container' ? 'include *' : 'api -> db "Reads"'}
+        }
+      }
+    }`, { version: 1, views: {
+      [viewKey]: { locked: true, elements: { api: { pinned: true, locked: true, x: 100, y: 200 } } },
+    } })
+    await save(page)
+    const saved = await readSidecar(page)
+    expect(saved.views?.[viewKey].view?.key).toBe(viewKey)
+    await reopen(page)
+    await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+      .toBe('translate(100px, 200px)')
+    await expect(node(page, 'api').getByRole('img', { name: 'API is locked in place' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Auto-arrange (view layout locked)', exact: true })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('materialized-key-after-reopen.png') })
+    await save(page)
+    expect(await readSidecar(page)).toEqual(saved)
+  })
+}
+
 test('keyless layouts follow reordered and surviving views through real save/reopen', async ({ page }, testInfo) => {
   const wide = 'container payments {\n include *\n }'
   const narrow = 'container payments {\n include api\n }'

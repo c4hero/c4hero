@@ -60,6 +60,35 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
     }
   })
 
+  it.each(['', '!!!'])('keeps dynamic layout when saving materializes an unusable key %j before a header description', key => {
+    load(dsl(`    dynamic payments "${key}" "Description" {\n      api -> db "Reads"\n    }`))
+    place()
+    const original = state().workspace!.views.dynamicViews[0]
+    expect(original.autoKey).toBe(true)
+    expect(original.autoTitle).toBe(true)
+    state().setElementsLocked(original.key, ['api'], true)
+    state().setViewLocked(original.key, true)
+    const before = layout()
+    expect(before[original.key].view?.key).toBe(original.key)
+    cycles()
+    const current = state().workspace!.views.dynamicViews[0]
+    expect(current.autoKey).toBeUndefined()
+    expect(current.locked).toBe(true)
+    expect(current.elements.find(el => el.id === 'api')).toMatchObject(before[original.key].elements!.api)
+    expect(layout()).toEqual(before)
+  })
+
+  it('keeps ordinary unnamed views scope-identified when their title and description are in the body', () => {
+    const unnamed = narrow.replace(' "Narrow"', '').replace('include api', 'title "Description"\n      description "Description"\n      include api')
+    load(dsl(unnamed)); place()
+    const before = layout()
+    expect(before['Containers-payments'].view?.key).toBeUndefined()
+    expect(serializeDSL(state().workspace!)).toContain('container payments {')
+    cycles()
+    expect(layout()).toEqual(before)
+    expect(state().workspace!.views.containerViews[0].autoKey).toBe(true)
+  })
+
   it('retains an absent view through repeated code-pane edits and restores it', () => {
     load(); place()
     const before = layout()

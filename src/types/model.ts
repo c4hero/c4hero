@@ -381,9 +381,9 @@ export interface IncludedFile {
  * (TEA-345). A derived view key is numbered by declaration order, so it moves
  * when a same-scope sibling comes or goes; the view's type and scope do not.
  *
- * `key` is present only when the DSL author wrote the key. A name someone
- * chose is part of what the view is, so an unnamed view showing the same
- * scope is a different view, not that one renumbered. */
+ * `key` is present when the DSL author wrote it or a save writes a generated
+ * key to preserve the slot before a header description. An unnamed view of
+ * the same scope otherwise has a distinct identity. */
 export interface StoredViewIdentity {
   key?: string
   type: ViewType

@@ -45,7 +45,7 @@ Absence alone must not delete that content on the next save.
 
 The sidecar stays at version 1. Each saved view entry gains an optional `view`
 object containing `type`, scope fields, the complete `elementIds` membership
-and, only for named views, `key`.
+and `key` for named views or a generated key written before a header description.
 Existing files need no migration: entries without identity use exact key or
 the parser's original-key alias and gain identity on the next save. Identities
 saved without membership still use positioned elements as their evidence.
