@@ -382,6 +382,9 @@ export interface StoredViewIdentity {
   softwareSystemId?: string
   containerId?: string
   environment?: string
+  /** Complete view membership when saved, including nodes with no persisted
+   *  position. Older identities omit this and use the positioned nodes. */
+  elementIds?: string[]
 }
 
 /** Layout retained independently of whether a view or element is currently visible.

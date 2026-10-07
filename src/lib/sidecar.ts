@@ -95,7 +95,10 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // including when the workspace is frozen by Immer.
   const views: Record<string, SavedViewLayout> = Object.fromEntries(
     Object.entries(workspace.savedLayout ?? {}).map(([key, data]) =>
-      [key, { ...data, ...(data.elements ? { elements: { ...data.elements } } : {}) }]),
+      [key, { ...data,
+        ...(data.view ? { view: { ...data.view, ...(data.view.elementIds ? { elementIds: [...data.view.elementIds] } : {}) } } : {}),
+        ...(data.elements ? { elements: { ...data.elements } } : {}),
+      }]),
   )
   for (const view of allViewsOf(workspace)) {
     const viewElements: Record<string, SidecarViewElement> = { ...views[view.key]?.elements }
@@ -180,11 +183,16 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   const views = allViewsOf(workspace)
   const candidates: LayoutCandidate<SavedViewLayout>[] = Object.entries(sidecar.views ?? {}).map(([key, data]) => {
     const { view: identity, ...rest } = data
-    const trusted = isStoredViewIdentity(identity) ? { ...identity } : undefined
+    const trusted = isStoredViewIdentity(identity)
+      ? { ...identity, ...(identity.elementIds ? { elementIds: [...identity.elementIds] } : {}) }
+      : undefined
     return {
       key,
       identity: trusted,
-      elementIds: Object.keys(data.elements ?? {}),
+      // Pinned positions are only a subset of a view. Save its entire
+      // membership independently so sparse and lock-only siblings remain
+      // distinguishable even when the source DSL has not changed.
+      elementIds: trusted?.elementIds ?? Object.keys(data.elements ?? {}),
       value: {
         ...(trusted && { view: trusted }),
         ...rest,

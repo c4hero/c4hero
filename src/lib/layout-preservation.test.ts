@@ -90,6 +90,47 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
 
   // Reordering renumbers both derived keys. Each view's layout follows the
   // view, not the key it used to be filed under (TEA-345).
+  it.each(['unchanged', 'reorder', 'delete'])('preserves sparse keyless layouts through save/reopen after an %s edit', action => {
+    const a = wide.replace(' "Wide"', '')
+    const b = narrow.replace(' "Narrow"', '')
+    load(dsl(`${a}\n${b}`))
+    state().setActiveView('Containers-payments')
+    state().updateNodePosition('api', 100, 200)
+    state().setActiveView('Containers-payments-2')
+    state().updateNodePosition('api', 800, 450)
+    state().setElementsLocked('Containers-payments-2', ['api'], true)
+    const before = layout()
+    expect(before['Containers-payments'].view?.elementIds).toEqual(['api', 'db'])
+    expect(before['Containers-payments'].elements?.db).toBeUndefined()
+    reopen(dsl(action === 'delete' ? b : action === 'reorder' ? `${b}\n${a}` : `${a}\n${b}`))
+    cycles()
+    const current = state().workspace!.views.containerViews
+    const narrowView = current.find(v => v.elements.length === 1)!
+    expect(narrowView.elements[0]).toMatchObject({ pinned: true, locked: true, x: 800, y: 450 })
+    if (action !== 'delete') {
+      expect(current.find(v => v.elements.length === 2)!.elements.find(e => e.id === 'api'))
+        .toMatchObject({ pinned: true, x: 100, y: 200 })
+    }
+    expect(Object.values(layout())).toContainEqual(before['Containers-payments'])
+    expect(Object.values(layout())).toContainEqual(before['Containers-payments-2'])
+    expect(Object.keys(layout())).toHaveLength(2)
+  })
+
+  it.each(['unchanged', 'reorder', 'delete'])('preserves a lock-only keyless layout through save/reopen after an %s edit', action => {
+    const a = wide.replace(' "Wide"', '')
+    const b = narrow.replace(' "Narrow"', '')
+    load(dsl(`${a}\n${b}`))
+    state().setViewLocked('Containers-payments-2', true)
+    const before = layout()
+    expect(before['Containers-payments-2'].elements).toBeUndefined()
+    reopen(dsl(action === 'delete' ? b : action === 'reorder' ? `${b}\n${a}` : `${a}\n${b}`))
+    cycles()
+    const current = state().workspace!.views.containerViews
+    expect(current.find(v => v.elements.length === 1)!.locked).toBe(true)
+    if (action !== 'delete') expect(current.find(v => v.elements.length === 2)!.locked).toBeUndefined()
+    expect(Object.values(layout())).toEqual(Object.values(before))
+  })
+
   it('keeps each keyless view\'s layout when the views reorder', () => {
     const keylessWide = wide.replace(' "Wide"', '')
     const keylessNarrow = narrow.replace(' "Narrow"', '')
@@ -157,7 +198,7 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
     applySidecar(next, { version: 1, views: legacy })
     state().loadWorkspace(next)
     expect(state().workspace!.views.containerViews[1].elements[0]).toMatchObject(legacy['Containers-payments-2'].elements!.api)
-    expect(layout()['Containers-payments-2'].view).toEqual({ type: 'container', softwareSystemId: 'payments' })
+    expect(layout()['Containers-payments-2'].view).toEqual({ type: 'container', softwareSystemId: 'payments', elementIds: ['api'] })
   })
 
   it.each(['delete', 'reorder'])('restores the right layout after an external %s of keyless views', action => {
@@ -234,7 +275,7 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
     applySidecar(next, sidecar!)
     expect(next.views.containerViews[0].elements.find(e => e.id === 'db')?.pinned).toBe(true)
     state().loadWorkspace(next)
-    expect(layout()['Containers-payments'].view).toEqual({ type: 'container', softwareSystemId: 'payments' })
+    expect(layout()['Containers-payments'].view).toEqual({ type: 'container', softwareSystemId: 'payments', elementIds: ['api', 'db'] })
   })
 
   it.each(['Billing Context', '__proto__'])('restores identified layout for an authored key %s', key => {
@@ -249,7 +290,7 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
     expect(current.locked).toBe(true)
     expect(current.elements.find(el => el.id === 'api')).toMatchObject(elements.api)
     expect(layout()[current.key]).toEqual({
-      view: { type: 'container', key: current.key, softwareSystemId: 'payments' }, locked: true, elements,
+      view: { type: 'container', key: current.key, softwareSystemId: 'payments', elementIds: ['api', 'db'] }, locked: true, elements,
     })
   })
 
@@ -261,7 +302,9 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
       : dsl(`${wide}\n${narrow}\n    systemContext payments "Context" {\n      include *\n    }`)
     expect(state().replaceWorkspaceFromDSL(changed).ok).toBe(true)
     cycles()
-    expect(layout()).toEqual(before)
+    expect(layout()).toEqual(kind === 'element'
+      ? { ...before, Wide: { ...before.Wide, view: { ...before.Wide.view, elementIds: ['api', 'db', 'worker'] } } }
+      : before)
   })
 })
 
@@ -604,6 +647,6 @@ it('rejects a scope rename that would overwrite a retained view key, and derived
   expect(layout()['Containers-billing']).toEqual(retained)
   expect(layout()['Containers-billing2']).toEqual({
     ...before['Containers-payments'],
-    view: { type: 'container', softwareSystemId: 'billing2' },
+    view: { type: 'container', softwareSystemId: 'billing2', elementIds: ['api', 'db'] },
   })
 })

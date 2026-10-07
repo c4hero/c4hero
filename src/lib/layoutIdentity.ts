@@ -19,6 +19,7 @@ export function viewIdentityOf(v: View): StoredViewIdentity {
     ...(v.softwareSystemId !== undefined && { softwareSystemId: v.softwareSystemId }),
     ...(v.containerId !== undefined && { containerId: v.containerId }),
     ...(v.environment !== undefined && { environment: v.environment }),
+    elementIds: [...new Set(v.elements.map((el) => el.id))].sort(),
   }
 }
 
@@ -43,6 +44,8 @@ export function isStoredViewIdentity(value: unknown): value is StoredViewIdentit
   for (const field of ['key', 'softwareSystemId', 'containerId', 'environment'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') return false
   }
+  if (value.elementIds !== undefined
+    && (!Array.isArray(value.elementIds) || !value.elementIds.every((id) => typeof id === 'string'))) return false
   return true
 }
 
@@ -52,8 +55,8 @@ export interface LayoutCandidate<T> {
   key: string
   /** Absent for an entry written before entries carried their identity. */
   identity?: StoredViewIdentity
-  /** The elements it holds layout for — the only evidence that tells apart
-   *  entries sharing one identity. */
+  /** Complete saved view membership, or positioned elements for older
+   *  entries — the evidence that tells apart entries sharing one identity. */
   elementIds: readonly string[]
   value: T
 }
@@ -127,7 +130,7 @@ export function resolveViewLayouts<T>(
  * Pair the views of one identity group with the entries that belong to it.
  *
  * Within a group the DSL says nothing to tell the entries apart, so the
- * evidence is which elements each one holds layout for. A pair is made only
+ * evidence is the saved membership of each view. A pair is made only
  * where it points one way from both sides — this view's single best entry,
  * and that entry's single best view — because layout landing on the wrong
  * diagram is harder to notice than layout left unapplied.
@@ -146,30 +149,36 @@ function pairWithinGroup<T>(
   const freeViews = new Set(views)
   const freeCandidates = new Set(candidates)
   const held = new Map(views.map((v) => [v, new Set(v.elements.map((el) => el.id))]))
+  const candidateMembership = new Map(candidates.map((c) => [c, new Set(c.elementIds)]))
 
-  // A fraction first, because an entry lists only the elements with layout
-  // while a view lists all of them: a raw count would let a large view outbid
-  // the small one an entry really belongs to. Then the count. The storage
-  // key is deliberately not evidence of ownership.
+  // Complete membership uses intersection / union: an exact small view
+  // must beat a larger sibling containing all its nodes, including when it
+  // is the only entry with a saved lock. Older entries list only positioned
+  // nodes, so extra live nodes cannot be used against them.
   type Score = readonly [number, number]
   const score = (view: View, c: LayoutCandidate<T>): Score => {
     const ids = held.get(view)!
+    const savedIds = candidateMembership.get(c)!
     let n = 0
-    for (const id of c.elementIds) if (ids.has(id)) n++
-    return n === 0 ? [0, 0] : [n / c.elementIds.length, n]
+    for (const id of savedIds) if (ids.has(id)) n++
+    const denominator = c.identity?.elementIds !== undefined
+      ? ids.size + savedIds.size - n
+      : savedIds.size
+    if (c.identity?.elementIds !== undefined && denominator === 0) return [1, 0]
+    return n === 0 ? [0, 0] : [n / denominator, n]
   }
   const cmp = (a: Score, b: Score): number => {
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]
     return 0
   }
   /** The single best of `pool` against `scoreOf`, or undefined on a tie or
-   *  when nothing overlaps at all. */
+   *  when membership supplies no evidence (two complete empty sets match). */
   const uniqueBest = <U>(pool: Iterable<U>, scoreOf: (u: U) => Score): U | undefined => {
     let top: Score = [0, 0]
     let winners: U[] = []
     for (const u of pool) {
       const s = scoreOf(u)
-      if (s[1] === 0) continue
+      if (s[0] === 0) continue
       const d = cmp(s, top)
       if (d > 0) { top = s; winners = [u] } else if (d === 0) winners.push(u)
     }

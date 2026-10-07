@@ -11,7 +11,8 @@ Absence alone must not delete that content on the next save.
   matches entries by their recorded view identity. Authored keys identify
   named views; unnamed views use their type and scope (including deployment
   environment). The parser's original, pre-normalization key is an alias.
-  Within a shared identity, element overlap must pick a unique best match
+  Each identity records the complete saved view membership, including nodes
+  with no pinned position. Within a shared identity, element overlap must pick a unique best match
   from both sides. Unmatched entries are parked outside live view keys so
   the next save cannot overwrite or merge them into another view's layout.
 - `extractSidecar` merges current layout into that record at element granularity.
@@ -43,9 +44,13 @@ Absence alone must not delete that content on the next save.
   Structurizr's implicit-views convention is all-or-nothing.
 
 The sidecar stays at version 1. Each saved view entry gains an optional `view`
-object containing `type`, scope fields and, only for named views, `key`.
+object containing `type`, scope fields, the complete `elementIds` membership
+and, only for named views, `key`.
 Existing files need no migration: entries without identity use exact key or
-the parser's original-key alias and gain identity on the next save. Malformed
+the parser's original-key alias and gain identity on the next save. Identities
+saved without membership still use positioned elements as their evidence.
+Saving adds full membership so sparse positions and lock-only entries can
+follow distinguishable siblings. Malformed
 identity is treated as absent without rejecting the layout. This change does
 not rewrite DSL view keys.
 

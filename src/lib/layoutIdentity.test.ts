@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { View } from '@/types/model'
+import type { StoredViewIdentity, View } from '@/types/model'
 import { isStoredViewIdentity, resolveViewLayouts, viewIdentityOf } from './layoutIdentity'
 import type { LayoutCandidate } from './layoutIdentity'
 
@@ -7,7 +7,7 @@ const view = (key: string, ids: string[], extra: Partial<View> = {}): View => ({
   type: 'container', key, autoKey: true, softwareSystemId: 'payments',
   elements: ids.map((id) => ({ id })), relationships: [], ...extra,
 })
-const entry = (key: string, ids: string[], identity = viewIdentityOf(view(key, []))): LayoutCandidate<string> => ({
+const entry = (key: string, ids: string[], identity: StoredViewIdentity = { type: 'container', softwareSystemId: 'payments' }): LayoutCandidate<string> => ({
   key, identity, elementIds: ids, value: key,
 })
 const matched = (views: View[], candidates: LayoutCandidate<string>[]) => {
@@ -52,6 +52,20 @@ describe('resolveViewLayouts (TEA-345)', () => {
   it('pairs a lone entry that holds only a lock with the lone view of its identity', () => {
     expect(matched([view('Containers-payments-2', ['api'])], [entry('Containers-payments', [])]))
       .toEqual(['Containers-payments'])
+  })
+
+  it('uses complete membership to distinguish a lock-only subset from a larger sibling', () => {
+    const views = [view('Containers-payments', ['api', 'db']), view('Containers-payments-2', ['api'])]
+    const identity = viewIdentityOf(views[1])
+    expect(matched(views, [entry('Containers-payments-2', identity.elementIds!, identity)]))
+      .toEqual([undefined, 'Containers-payments-2'])
+  })
+
+  it('distinguishes an empty view from a populated sibling using complete membership', () => {
+    const views = [view('Containers-payments', ['api']), view('Containers-payments-2', [])]
+    const identity = viewIdentityOf(views[1])
+    expect(matched(views, [entry('Containers-payments-2', [], identity)]))
+      .toEqual([undefined, 'Containers-payments-2'])
   })
 
   it('keeps each entry on its own key when the evidence ties', () => {
@@ -105,6 +119,10 @@ describe('resolveViewLayouts (TEA-345)', () => {
 describe('isStoredViewIdentity', () => {
   it('accepts a sound identity and rejects anything half-built', () => {
     expect(isStoredViewIdentity({ type: 'container', softwareSystemId: 'x' })).toBe(true)
+    expect(isStoredViewIdentity({ type: 'container', elementIds: [] })).toBe(true)
+    expect(isStoredViewIdentity({ type: 'container', elementIds: ['a', 'b'] })).toBe(true)
+    expect(isStoredViewIdentity({ type: 'container', elementIds: 'a' })).toBe(false)
+    expect(isStoredViewIdentity({ type: 'container', elementIds: ['a', 3] })).toBe(false)
     expect(isStoredViewIdentity({ type: 'nope' })).toBe(false)
     expect(isStoredViewIdentity({ type: 'container', key: 3 })).toBe(false)
     expect(isStoredViewIdentity('container')).toBe(false)
