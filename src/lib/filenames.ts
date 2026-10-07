@@ -8,10 +8,14 @@ export function sanitizeFilename(name: string): string {
     const code = char.charCodeAt(0)
     return code <= 31 || code === 127 || illegalChars.has(char) ? '_' : char
   }).join('')
-  const cleaned = safeChars
-    .replace(/^\.+/, '_')
-    .replace(/[. ]+$/, '')
-    .slice(0, 180)
+  const withoutLeadingDots = safeChars.replace(/^\.+/, '_')
+  // Scan the suffix once: an unanchored greedy regex can retry a long run
+  // of dots/spaces at every position when a non-matching character follows.
+  let end = withoutLeadingDots.length
+  while (end > 0 && (withoutLeadingDots[end - 1] === '.' || withoutLeadingDots[end - 1] === ' ')) {
+    end -= 1
+  }
+  const cleaned = withoutLeadingDots.slice(0, end).slice(0, 180)
 
   if (!cleaned || cleaned === '_') return 'download'
   if (WINDOWS_RESERVED_NAME.test(cleaned)) {

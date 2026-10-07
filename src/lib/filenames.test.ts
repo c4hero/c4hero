@@ -14,6 +14,14 @@ describe('sanitizeFilename', () => {
     expect(sanitizeFilename('CON.dsl')).toBe('_CON.dsl')
     expect(sanitizeFilename(`${'a'.repeat(220)}.dsl`)).toHaveLength(180)
   })
+
+  it('handles long runs of dots and spaces both inside and at the end of a filename', () => {
+    const run = '. '.repeat(100_000)
+    // A final non-matching character must keep the run; the filename limit
+    // then applies. Retrying a suffix regex across this run takes quadratic time.
+    expect(sanitizeFilename(`a${run}b`)).toBe(`a${run}`.slice(0, 180))
+    expect(sanitizeFilename(`architecture.dsl${run}`)).toBe('architecture.dsl')
+  })
 })
 
 describe('safeSuggestedDslName', () => {
