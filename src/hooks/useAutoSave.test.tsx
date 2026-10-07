@@ -5,7 +5,11 @@ vi.mock('@/lib/workspaceSave', () => ({
   isWorkspaceLinked: vi.fn(() => false),
   writeLinkedWorkspace: vi.fn(async () => true),
 }))
-vi.mock('@/lib/fileIO', () => ({ saveToLocalStorage: vi.fn() }))
+vi.mock('@/lib/host', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/host')>()),
+  isVsCodeHost: vi.fn(() => false),
+  saveToLocalStorage: vi.fn(),
+}))
 
 import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { useWorkspaceStore } from '@/store/workspace'

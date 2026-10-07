@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'coverage', '.claude', '.worktrees']),
+  globalIgnores(['dist', 'extension/dist', 'extension/media', '**/.vscode-test', 'coverage', '.claude', '.worktrees']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -25,6 +25,14 @@ export default defineConfig([
   },
   {
     files: ['src/lib/logger.ts', '**/*.test.*', 'e2e/**', 'src/test-setup.ts'],
+    rules: { 'no-console': 'off' },
+  },
+  {
+    files: ['extension/**/*.ts'],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    files: ['extension/src/test/**/*.ts'],
     rules: { 'no-console': 'off' },
   },
 ])

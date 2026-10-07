@@ -41,6 +41,15 @@ Optional variables are documented in `.env.example`:
 
 Keep local overrides out of git.
 
+## VS Code Extension
+
+Run `npm ci --prefix extension` after installing root dependencies.
+`npm run package:vscode` builds the shared app for the webview and produces
+`extension/c4hero.vsix`; `npm run test:vscode` runs native editor integration
+checks (use `xvfb-run -a` on headless Linux). See [extension/TESTING.md](extension/TESTING.md)
+for the manual platform matrix and [extension/README.md](extension/README.md) for
+the document and sidecar save behavior.
+
 ## Package Distribution
 
 c4hero is not currently published as an npm package. The npm metadata exists for

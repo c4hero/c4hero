@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { getCommands, CATEGORY_ORDER, CATEGORY_LABELS, type Command } from './commands'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
-import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { saveDSLFile, writeSidecarToHandle } from '@/lib/host'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import type { ReactFlowInstance } from '@xyflow/react'
 import type { Workspace } from '@/types/model'
 
-vi.mock('@/lib/fileIO', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/fileIO')>()
+vi.mock('@/lib/host', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/host')>()
   return {
     ...actual,
     saveDSLFile: vi.fn().mockResolvedValue(true),

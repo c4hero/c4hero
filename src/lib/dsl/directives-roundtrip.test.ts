@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
-import { isWorkspaceShape } from '@/lib/fileIO'
+import { isWorkspaceShape } from '@/lib/host'
 
 const DSL = `workspace "Federated" "Org landscape" {
     !const ORG "Acme"

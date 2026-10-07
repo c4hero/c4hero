@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { FileInput, Upload, AlertTriangle, Check } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore } from '@/store/workspace'
-import { readTextFileWithLimit } from '@/lib/fileIO'
+import { readTextFileWithLimit } from '@/lib/host'
 import { importForeign, ImportError, type ForeignImport } from '@/lib/import'
 import { announce } from '@/lib/announce'
 

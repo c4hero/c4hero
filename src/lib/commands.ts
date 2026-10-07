@@ -1,3 +1,5 @@
+import { openVsCodeDocument } from '@/lib/host'
+import { reportHostError } from '@/lib/host/status'
 import type { LucideIcon } from 'lucide-react'
 import {
   UserRound, Globe, Box, Puzzle, Layers, Undo2, Redo2, Trash2,
@@ -10,7 +12,8 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFoc
 import { computeCascadeImpact, orphanedLayoutViewKeys } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
-import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { isVsCodeHost, runVsCodeHistoryCommand, saveDSLFile, writeSidecarToHandle } from '@/lib/host'
+import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
@@ -139,8 +142,8 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'edit',
       icon: Undo2,
       shortcut: `${mod}Z`,
-      when: () => store().canUndo(),
-      execute: () => store().undo(),
+      when: () => isVsCodeHost() || store().canUndo(),
+      execute: () => isVsCodeHost() ? void runVsCodeHistoryCommand('undo').catch(reportHostError) : store().undo(),
     },
     {
       id: 'redo',
@@ -148,8 +151,8 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'edit',
       icon: Redo2,
       shortcut: `${mod}⇧Z`,
-      when: () => store().canRedo(),
-      execute: () => store().redo(),
+      when: () => isVsCodeHost() || store().canRedo(),
+      execute: () => isVsCodeHost() ? void runVsCodeHistoryCommand('redo').catch(reportHostError) : store().redo(),
     },
     {
       id: 'duplicate-selected',
@@ -461,7 +464,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'navigation',
       icon: FolderOpen,
       keywords: ['close', 'home', 'welcome'],
-      execute: () => store().closeWorkspace(),
+      execute: () => isVsCodeHost() ? void openVsCodeDocument().catch(reportHostError) : store().closeWorkspace(),
     },
 
     // ─── Export ──────────────────────────────────────────
@@ -476,6 +479,10 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.workspace) return
         try {
+          if (isWorkspaceLinked(s.activeWorkspaceFilename)) {
+            await writeLinkedWorkspace(s.workspace, s.activeWorkspaceFilename)
+            return
+          }
           const dsl = serializeRoot(s.workspace)
           if (!await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)) return
           const sidecar = extractSidecar(s.workspace) ?? { version: 1 as const, views: {} }

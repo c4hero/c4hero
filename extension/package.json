@@ -1,0 +1,136 @@
+{
+  "name": "c4hero-vscode",
+  "displayName": "c4hero",
+  "description": "Edit Structurizr DSL as a visual C4 architecture canvas.",
+  "version": "0.1.0",
+  "publisher": "c4hero",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/c4hero/c4hero.git"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "c4",
+    "structurizr",
+    "architecture",
+    "dsl",
+    "diagram"
+  ],
+  "icon": "assets/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCustomEditor:c4hero.dsl",
+    "onCommand:c4hero.openArchitectureView"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "c4hero.openArchitectureView",
+        "title": "Open Architecture View",
+        "category": "c4hero"
+      },
+      {
+        "command": "c4hero.save",
+        "title": "Save Architecture and Layout",
+        "category": "c4hero"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "c4hero.openArchitectureView",
+          "when": "resourceExtname == .dsl",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "c4hero.openArchitectureView",
+          "when": "resourceExtname == .dsl && activeCustomEditorId != c4hero.dsl",
+          "group": "navigation"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "c4hero.dsl",
+        "displayName": "c4hero Architecture",
+        "selector": [
+          {
+            "filenamePattern": "*.dsl"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "c4hero.save",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "activeCustomEditorId == c4hero.dsl && !inputFocus"
+      },
+      {
+        "command": "c4hero.undo",
+        "key": "ctrl+z",
+        "mac": "cmd+z",
+        "when": "activeCustomEditorId == c4hero.dsl && !inputFocus"
+      },
+      {
+        "command": "c4hero.redo",
+        "key": "ctrl+shift+z",
+        "mac": "cmd+shift+z",
+        "when": "activeCustomEditorId == c4hero.dsl && !inputFocus"
+      },
+      {
+        "command": "c4hero.redo",
+        "key": "ctrl+y",
+        "when": "activeCustomEditorId == c4hero.dsl && !inputFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs && npm run build:webview",
+    "build:host": "node esbuild.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "build:webview": "cd .. && cross-env VITE_HOST=vscode npx vite build",
+    "package": "npx vsce package --no-dependencies --out c4hero.vsix",
+    "test:compile": "node esbuild.test.mjs",
+    "test": "npm run typecheck && npm run build && npm run test:compile && node dist/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.2",
+    "cross-env": "^10.1.0",
+    "esbuild": "^0.25.12",
+    "typescript": "~5.9.3"
+  },
+  "files": [
+    "dist/extension.js",
+    "dist/extension.js.map",
+    "media/**",
+    "assets/**",
+    "README.md",
+    "LICENSE",
+    "TESTING.md"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "The architecture editor reads local includes and edits workspace files."
+    },
+    "virtualWorkspaces": true
+  },
+  "extensionKind": [
+    "workspace"
+  ]
+}

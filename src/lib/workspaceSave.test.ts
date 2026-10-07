@@ -1,19 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/lib/fileIO', () => ({
+vi.mock('@/lib/host', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/host')>()),
+  isVsCodeHost: vi.fn(() => false),
   getCurrentFileHandle: vi.fn(() => null),
   writeToCurrentHandle: vi.fn(async () => true),
   writeSidecarToHandle: vi.fn(async () => true),
-}))
-vi.mock('@/lib/folderIO', () => ({
   getCurrentDirHandle: vi.fn(() => null),
   writeDSLFile: vi.fn(async () => true),
   writeSidecarFile: vi.fn(async () => true),
   writeDSLFileAt: vi.fn(async () => true),
 }))
 
-import { getCurrentFileHandle, writeToCurrentHandle, writeSidecarToHandle } from '@/lib/fileIO'
-import { getCurrentDirHandle, writeDSLFile, writeDSLFileAt, writeSidecarFile } from '@/lib/folderIO'
+import { getCurrentFileHandle, writeToCurrentHandle, writeSidecarToHandle, getCurrentDirHandle, writeDSLFile, writeDSLFileAt, writeSidecarFile } from '@/lib/host'
 import { isWorkspaceLinked, writeLinkedWorkspace } from './workspaceSave'
 import { parseDSL } from '@/lib/dsl'
 import { applySidecar } from './sidecar'

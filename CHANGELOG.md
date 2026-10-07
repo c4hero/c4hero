@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- VS Code extension for editing `.dsl` files on the c4hero canvas. Saves use real
+  DSL, layout, and include documents, with native undo/redo, external-edit
+  refresh, VS Code themes, and SecretStorage for optional AI keys. Layout-only
+  edits leave DSL bytes unchanged. CI produces an installable VSIX. (TEA-327)
+
 - Element lifecycle status is now an open vocabulary. `Live`, `Planned`,
   `Deprecated` and `Removed` still ship as the built-ins and nothing changes for
   workspaces that only use them, but a status c4hero does not know is no longer

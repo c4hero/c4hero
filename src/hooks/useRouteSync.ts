@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
-import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile, readDSLFileAt } from '@/lib/folderIO'
-import { loadFromLocalStorage } from '@/lib/fileIO'
+import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile, readDSLFileAt } from '@/lib/host'
+import { loadFromLocalStorage } from '@/lib/host'
+import { isVsCodeHost } from '@/lib/host'
 import { createLogger } from '@/lib/logger'
 import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 
@@ -35,6 +36,7 @@ export function useRouteSync() {
 
   // On mount / workspace load: apply view key from URL
   useEffect(() => {
+    if (isVsCodeHost()) return
     if (!workspace) return
     if (urlViewKey) {
       const decoded = decodeURIComponent(urlViewKey)
@@ -50,6 +52,7 @@ export function useRouteSync() {
 
   // Sync state → URL when view changes
   useEffect(() => {
+    if (isVsCodeHost()) return
     if (!workspace) return
     const targetPath = buildCanvasPath(activeViewKey)
     if (location.pathname !== targetPath) {
@@ -65,6 +68,7 @@ export function useRouteSync() {
 
   // React to location changes (browser back/forward)
   useEffect(() => {
+    if (isVsCodeHost()) return
     if (!workspace) return
 
     // Check if we navigated away from canvas
@@ -106,6 +110,7 @@ export function useRefreshRedirect() {
   const location = useLocation()
 
   useEffect(() => {
+    if (isVsCodeHost()) return
     const match = location.pathname.match(/^\/collection\/([^/]+)\/([^/]+)(?:\/(.+))?$/)
     if (!match) return
     if (workspace) return

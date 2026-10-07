@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { WorkspaceScope } from '@/types/model'
 import { X } from 'lucide-react'
-import { slugifyName } from '@/lib/folderIO'
+import { slugifyName } from '@/lib/host'
 
 // ─── Animated diagrams ───────────────────────────────────────────────
 

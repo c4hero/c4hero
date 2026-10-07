@@ -1,0 +1,561 @@
+import { sidecarName } from '@/lib/sidecar'
+import { createLogger } from '@/lib/logger'
+import { readTextFileWithLimit } from '@/lib/fileIO'
+import { isRecord } from '@/lib/guards'
+import { recordSelfDslWrite, recordSelfSidecarWrite } from '@/lib/saveCoordinator'
+import type { WatchedSnapshot } from '@/lib/fileWatch'
+
+const log = createLogger('folderIO')
+
+// ─── Module-level state ───────────────────────────────────────────────
+
+let currentDirHandle: FileSystemDirectoryHandle | null = null
+
+// ─── IndexedDB helpers ────────────────────────────────────────────────
+
+const DB_NAME = 'c4hero'
+const STORE_NAME = 'handles'
+
+async function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1)
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME)
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+// ─── Public API ───────────────────────────────────────────────────────
+
+/** Check if the File System Access API directory picker is available */
+/** Convert a friendly display name to a filesystem-safe slug */
+export function slugifyName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')           // spaces → hyphens
+    .replace(/[^a-z0-9\-_.]/g, '') // remove invalid chars
+    .replace(/-+/g, '-')            // collapse multiple hyphens
+    .replace(/^[-_.]+|[-_.]+$/g, '') // trim leading/trailing
+    || 'collection'
+}
+
+/** Check if a folder name already exists in the given parent handle */
+export async function folderExists(parent: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+  try {
+    await parent.getDirectoryHandle(name, { create: false })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function hasFolderAccess(): boolean {
+  return typeof window !== 'undefined' && 'showDirectoryPicker' in window
+}
+
+/** Get the currently active directory handle */
+export function getCurrentDirHandle(): FileSystemDirectoryHandle | null {
+  return currentDirHandle
+}
+
+export async function setDirHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+  currentDirHandle = handle
+  await persistDirHandle()
+}
+
+/** Open a folder via showDirectoryPicker, list .dsl files within it */
+export async function openFolder(): Promise<{ dirHandle: FileSystemDirectoryHandle; dslFiles: string[] } | null> {
+  if (!hasFolderAccess()) return null
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
+    currentDirHandle = dirHandle
+    const dslFiles = await listDSLFilesIn(dirHandle)
+    await persistDirHandle()
+    return { dirHandle, dslFiles }
+  } catch (err) {
+    // AbortError = user cancelled — silence it; log anything unexpected
+    if (err instanceof Error && err.name !== 'AbortError') {
+      log.warn('openFolder failed', err)
+    }
+    return null
+  }
+}
+
+/** Read a .dsl file and its matching .c4hero.json sidecar from the current directory */
+export async function readDSLFile(filename: string): Promise<{ content: string; sidecarJson?: string } | null> {
+  if (!currentDirHandle) return null
+  try {
+    const fileHandle = await currentDirHandle.getFileHandle(filename)
+    const file = await fileHandle.getFile()
+    const content = await readTextFileWithLimit(file, 'DSL file')
+
+    let sidecarJson: string | undefined
+    try {
+      const sidecarFilename = sidecarName(filename)
+      const sidecarHandle = await currentDirHandle.getFileHandle(sidecarFilename)
+      const sidecarFile = await sidecarHandle.getFile()
+      sidecarJson = await readTextFileWithLimit(sidecarFile, 'Sidecar file')
+    } catch {
+      // No sidecar — expected for new workspaces
+    }
+
+    return { content, sidecarJson }
+  } catch (err) {
+    log.warn('readDSLFile failed', err)
+    return null
+  }
+}
+
+/** Walk `a/b/c.dsl` from the current directory handle. `create` makes
+ *  intermediate directories; the file itself is created only by the writer. */
+async function resolveFileHandle(relPath: string, create: boolean): Promise<FileSystemFileHandle | null> {
+  const parts = splitRelPath(relPath)
+  if (parts.length === 0 || parts.some((p) => p === '..')) return null
+  const dir = await resolveDirHandle(parts.slice(0, -1).join('/'), create)
+  if (!dir) return null
+  try {
+    return await dir.getFileHandle(parts[parts.length - 1], { create })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+}
+
+function splitRelPath(rel: string): string[] {
+  return rel.split('/').filter((p) => p !== '' && p !== '.')
+}
+
+/** Walk `a/b` from the current directory handle. `null` when it does not
+ *  exist (or when the path escapes the folder); throws on other failures. */
+async function resolveDirHandle(relDir: string, create: boolean): Promise<FileSystemDirectoryHandle | null> {
+  if (!currentDirHandle) return null
+  const parts = splitRelPath(relDir)
+  if (parts.some((p) => p === '..')) return null
+  let dir = currentDirHandle
+  try {
+    for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create })
+    return dir
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+}
+
+/** Read a text file at a path relative to the open folder (for `!include`
+ *  resolution). `null` when it does not exist; throws on other failures. */
+export async function readDSLFileAt(relPath: string): Promise<string | null> {
+  const handle = await resolveFileHandle(relPath, false)
+  if (!handle) return null
+  const file = await handle.getFile()
+  return readTextFileWithLimit(file, 'Included DSL file')
+}
+
+/** Write a text file at a path relative to the open folder (include
+ *  write-back). Never creates the file: an included file that vanished is
+ *  not silently recreated. */
+export async function writeDSLFileAt(relPath: string, content: string): Promise<boolean> {
+  try {
+    const handle = await resolveFileHandle(relPath, false)
+    if (!handle) return false
+    recordSelfDslWrite(content)
+    const writable = await handle.createWritable()
+    await writable.write(content)
+    await writable.close()
+    return true
+  } catch (err) {
+    log.error('writeDSLFileAt failed', { relPath, err })
+    return false
+  }
+}
+
+/** Write a set of text files under an arbitrary directory handle, creating
+ *  intermediate directories and overwriting files that already exist. Used by
+ *  exports that produce a tree (the OKF bundle) rather than a single file;
+ *  unlike the DSL writers it takes the handle explicitly, so it never touches
+ *  the open collection. Rejects any path that would escape the directory. */
+export async function writeFilesInto(
+  dir: FileSystemDirectoryHandle,
+  files: ReadonlyArray<{ path: string; content: string }>,
+): Promise<void> {
+  // Directory handles resolved once per directory, not once per file.
+  const dirs = new Map<string, FileSystemDirectoryHandle>([['', dir]])
+  for (const file of files) {
+    const parts = exportPathParts(file.path, 'write')
+    let cur = dir
+    let key = ''
+    for (const seg of parts.slice(0, -1)) {
+      key = `${key}${seg}/`
+      let next = dirs.get(key)
+      if (!next) dirs.set(key, (next = await cur.getDirectoryHandle(seg, { create: true })))
+      cur = next
+    }
+    const handle = await cur.getFileHandle(parts[parts.length - 1], { create: true })
+    const writable = await handle.createWritable()
+    await writable.write(file.content)
+    await writable.close()
+  }
+}
+
+/** Segments of a path inside a chosen export directory, rejecting anything
+ *  that would escape it. */
+function exportPathParts(path: string, verb: 'write' | 'read' | 'delete'): string[] {
+  const parts = path.split('/').filter((p) => p !== '' && p !== '.')
+  if (parts.length === 0 || parts.some((p) => p === '..')) {
+    throw new Error(`Refusing to ${verb} outside the chosen folder: ${path}`)
+  }
+  return parts
+}
+
+/** Read one text file under an arbitrary directory handle; `null` when it is
+ *  not there. Used to recognise a folder a previous export wrote. */
+export async function readFileIn(
+  dir: FileSystemDirectoryHandle,
+  path: string,
+): Promise<string | null> {
+  const parts = exportPathParts(path, 'read')
+  try {
+    let cur = dir
+    for (const seg of parts.slice(0, -1)) cur = await cur.getDirectoryHandle(seg)
+    const handle = await cur.getFileHandle(parts[parts.length - 1])
+    return await readTextFileWithLimit(await handle.getFile(), 'Bundle file')
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+}
+
+/** Files directly inside `dir` and inside each named subdirectory, as paths
+ *  relative to `dir`. Missing subdirectories are skipped, and nothing
+ *  recurses deeper — a bundle is two levels and the caller names the
+ *  directories it owns, so a folder holding anything else is never walked. */
+export async function listFilesIn(
+  dir: FileSystemDirectoryHandle,
+  subdirs: ReadonlyArray<string>,
+): Promise<string[]> {
+  const found: string[] = []
+  const collect = async (handle: FileSystemDirectoryHandle, prefix: string) => {
+    for await (const [name, entry] of handle.entries()) {
+      if (entry.kind === 'file') found.push(`${prefix}${name}`)
+    }
+  }
+  await collect(dir, '')
+  for (const name of subdirs) {
+    try {
+      await collect(await dir.getDirectoryHandle(name), `${name}/`)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'NotFoundError') continue
+      throw err
+    }
+  }
+  return found.sort()
+}
+
+/** Delete files by path relative to `dir`, returning the ones that went. A
+ *  file that is already gone is not an error, and neither is one the browser
+ *  refuses to delete: tidying up is never worth failing an export over. */
+export async function removeFilesIn(
+  dir: FileSystemDirectoryHandle,
+  paths: ReadonlyArray<string>,
+): Promise<string[]> {
+  const removed: string[] = []
+  for (const path of paths) {
+    const parts = exportPathParts(path, 'delete')
+    try {
+      let cur = dir
+      for (const seg of parts.slice(0, -1)) cur = await cur.getDirectoryHandle(seg)
+      await cur.removeEntry(parts[parts.length - 1])
+      removed.push(path)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'NotFoundError') continue
+      log.warn('Could not remove stale file', { path, err })
+    }
+  }
+  return removed
+}
+
+/** Read a workspace file for the disk watcher. Unlike `readDSLFile` this is
+ *  silent and distinguishes "gone" (`null`) from a transient failure (throws),
+ *  because it runs every couple of seconds. */
+export async function readDSLFileForWatch(filename: string): Promise<WatchedSnapshot | null> {
+  if (!currentDirHandle) return null
+  let content: string
+  try {
+    const fileHandle = await currentDirHandle.getFileHandle(filename)
+    const file = await fileHandle.getFile()
+    content = await readTextFileWithLimit(file, 'DSL file')
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotFoundError') return null
+    throw err
+  }
+  let sidecarJson: string | undefined
+  try {
+    const sidecarHandle = await currentDirHandle.getFileHandle(sidecarName(filename))
+    const sidecarFile = await sidecarHandle.getFile()
+    sidecarJson = await readTextFileWithLimit(sidecarFile, 'Sidecar file')
+  } catch {
+    // No sidecar — expected for new workspaces
+  }
+  return { content, sidecarJson }
+}
+
+/** Write DSL content to a file in the current directory (creates if not present) */
+export async function writeDSLFile(filename: string, content: string): Promise<boolean> {
+  if (!currentDirHandle) return false
+  try {
+    recordSelfDslWrite(content)
+    const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(content)
+    await writable.close()
+    return true
+  } catch (err) {
+    log.error('writeDSLFile failed', err)
+    return false
+  }
+}
+
+/** Write sidecar JSON to the matching .c4hero.json file in the current directory */
+export async function writeSidecarFile(dslFilename: string, json: string): Promise<boolean> {
+  if (!currentDirHandle) return false
+  try {
+    const filename = sidecarName(dslFilename)
+    recordSelfSidecarWrite(json)
+    const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(json)
+    await writable.close()
+    return true
+  } catch (err) {
+    log.error('writeSidecarFile failed', err)
+    return false
+  }
+}
+
+/** List all .dsl files in the current directory */
+export async function listDSLFiles(): Promise<string[]> {
+  if (!currentDirHandle) return []
+  return listDSLFilesIn(currentDirHandle)
+}
+
+// ─── Arbitrary files under the open folder (docs bundles) ─────────────
+
+/** File names directly inside a folder relative to the open folder; `null`
+ *  when the folder does not exist. Subdirectories are not listed. */
+export async function listFilesAt(relDir: string): Promise<string[] | null> {
+  const dir = await resolveDirHandle(relDir, false)
+  if (!dir) return null
+  const names: string[] = []
+  for await (const [name, entry] of dir.entries()) if (entry.kind === 'file') names.push(name)
+  return names.sort()
+}
+
+/** Read a text file relative to the open folder; `null` when it does not exist. */
+export async function readTextFileAt(relPath: string): Promise<string | null> {
+  const handle = await resolveFileHandle(relPath, false)
+  if (!handle) return null
+  const file = await handle.getFile()
+  return readTextFileWithLimit(file, 'Document')
+}
+
+/** Write (create or overwrite) a text file relative to the open folder,
+ *  creating intermediate directories. Unlike the DSL writers this is not
+ *  tracked by the save coordinator — it is for files the workspace points at,
+ *  not the workspace itself. Rejects a path that escapes the folder. */
+export async function writeTextFileAt(relPath: string, content: string): Promise<boolean> {
+  try {
+    const handle = await resolveFileHandle(relPath, true)
+    if (!handle) return false
+    const writable = await handle.createWritable()
+    await writable.write(content)
+    await writable.close()
+    return true
+  } catch (err) {
+    log.error('writeTextFileAt failed', { relPath, err })
+    return false
+  }
+}
+
+/** Persist a directory handle to IndexedDB keyed by folder name */
+export async function persistDirHandle(): Promise<void> {
+  if (!currentDirHandle) return
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    // Always update the "last" handle for quick restore on startup
+    store.put(currentDirHandle, 'dirHandle')
+    // Also key by folder name so recents can be restored without re-prompting
+    store.put(currentDirHandle, `folder:${currentDirHandle.name}`)
+  } catch (err) {
+    log.warn('persistDirHandle failed', err)
+  }
+}
+
+/** Try to restore a handle by folder name (for recents).
+ *  - If permission is granted: restores silently.
+ *  - If permission is 'prompt': requests permission scoped to that folder (no generic picker).
+ *  - If folder is gone or permission denied: returns null.
+ */
+export async function restoreDirHandleByName(name: string): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const handle: FileSystemDirectoryHandle = await new Promise((resolve, reject) => {
+      const req = tx.objectStore(STORE_NAME).get(`folder:${name}`)
+      req.onsuccess = () => resolve(req.result as FileSystemDirectoryHandle)
+      req.onerror = () => reject(req.error)
+    })
+    if (!handle) return null
+
+    let perm = await handle.queryPermission({ mode: 'readwrite' })
+
+    // If permission needs re-confirmation, request it scoped to this folder
+    if (perm === 'prompt') {
+      perm = await handle.requestPermission({ mode: 'readwrite' })
+    }
+
+    if (perm !== 'granted') return null
+
+    // Verify folder is still accessible (handles deleted/moved folders)
+    try {
+      // Attempt a benign read — iterating 0 entries is enough to detect a missing folder
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _ of handle.entries()) { break }
+    } catch {
+      return null // Folder no longer exists or was moved
+    }
+
+    currentDirHandle = handle
+    return handle
+  } catch {
+    return null
+  }
+}
+
+/** Restore directory handle from IndexedDB if permission is still granted */
+export async function restoreDirHandle(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const handle: FileSystemDirectoryHandle = await new Promise((resolve, reject) => {
+      const req = tx.objectStore(STORE_NAME).get('dirHandle')
+      req.onsuccess = () => resolve(req.result as FileSystemDirectoryHandle)
+      req.onerror = () => reject(req.error)
+    })
+    if (!handle) return null
+    const perm = await handle.queryPermission({ mode: 'readwrite' })
+    if (perm === 'granted') {
+      currentDirHandle = handle
+      return handle
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// ─── Internal helpers ─────────────────────────────────────────────────
+
+async function listDSLFilesIn(dirHandle: FileSystemDirectoryHandle): Promise<string[]> {
+  const files: string[] = []
+  for await (const [name, entry] of dirHandle.entries()) {
+    if (entry.kind === 'file' && name.toLowerCase().endsWith('.dsl')) {
+      files.push(name)
+    }
+  }
+  return files.sort()
+}
+
+// ─── Collection settings (.c4hero/settings.json) ─────────────────────────────
+
+export interface CollectionSettings {
+  name?: string          // Display name override for the collection
+  defaultScope?: string  // Default scope for new workspaces
+  createdAt?: string     // ISO timestamp
+  [key: string]: unknown // Forward-compatible — unknown keys are preserved
+}
+
+const C4HERO_DIR = '.c4hero'
+const SETTINGS_FILE = 'settings.json'
+
+function parseCollectionSettings(text: string): CollectionSettings | null {
+  const parsed = JSON.parse(text)
+  if (!isRecord(parsed)) return null
+  if ('name' in parsed && parsed.name !== undefined && typeof parsed.name !== 'string') return null
+  if ('defaultScope' in parsed && parsed.defaultScope !== undefined && typeof parsed.defaultScope !== 'string') return null
+  if ('createdAt' in parsed && parsed.createdAt !== undefined && typeof parsed.createdAt !== 'string') return null
+  return parsed as CollectionSettings
+}
+
+async function getC4HeroDir(create = false): Promise<FileSystemDirectoryHandle | null> {
+  if (!currentDirHandle) return null
+  try {
+    return await currentDirHandle.getDirectoryHandle(C4HERO_DIR, { create })
+  } catch {
+    return null
+  }
+}
+
+export async function readCollectionSettings(): Promise<CollectionSettings | null> {
+  try {
+    const dir = await getC4HeroDir(false)
+    if (!dir) return null
+    const fileHandle = await dir.getFileHandle(SETTINGS_FILE)
+    const file = await fileHandle.getFile()
+    const text = await readTextFileWithLimit(file, 'Collection settings file')
+    return parseCollectionSettings(text)
+  } catch {
+    return null
+  }
+}
+
+export async function writeCollectionSettings(settings: CollectionSettings): Promise<boolean> {
+  try {
+    const dir = await getC4HeroDir(true)
+    if (!dir) return false
+    const fileHandle = await dir.getFileHandle(SETTINGS_FILE, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(JSON.stringify(settings, null, 2))
+    await writable.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function initCollectionSettings(name: string): Promise<CollectionSettings> {
+  const existing = await readCollectionSettings()
+  if (existing) return existing
+  const settings: CollectionSettings = {
+    name,
+    createdAt: new Date().toISOString(),
+  }
+  await writeCollectionSettings(settings)
+  return settings
+}
+
+/** Check if a stored handle exists in IDB (regardless of permission state) */
+export async function handleExistsInIDB(name: string): Promise<boolean> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const handle: FileSystemDirectoryHandle = await new Promise((resolve, reject) => {
+      const req = tx.objectStore(STORE_NAME).get(`folder:${name}`)
+      req.onsuccess = () => resolve(req.result as FileSystemDirectoryHandle)
+      req.onerror = () => reject(req.error)
+    })
+    return !!handle
+  } catch {
+    return false
+  }
+}
+
+/** Filter a list of recent folder names to only those we have a stored handle for */
+export async function filterValidRecentFolders(names: string[]): Promise<string[]> {
+  const results = await Promise.all(names.map(async name => ({
+    name,
+    valid: await handleExistsInIDB(name),
+  })))
+  return results.filter(r => r.valid).map(r => r.name)
+}
