@@ -96,7 +96,7 @@ export default function CreateViewDialog({ onClose }: { onClose: () => void }) {
     addView(
       type,
       (needsScope || optionalSystemScope) && scopeId ? scopeId : undefined,
-      title || undefined,
+      title.trim() || undefined,
       needsEnvironment ? { environment: effectiveEnvironment } : undefined,
     )
     setCreateViewDefaults(null) // consume the zoom defaults so the next open starts fresh
