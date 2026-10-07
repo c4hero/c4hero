@@ -27,6 +27,7 @@ import { IDENTIFIER_PATTERN, dslIdentifierForm } from '@/lib/identifier'
 import { normalizeElementStatus } from '@/lib/elementStatus'
 import { normalizeIncludePath } from './includeResolver'
 import { representable, roundTripped } from './encoding'
+import { enclosingSystems, exclusionMatches, hierarchyGuard, wildcardElements } from './wildcard'
 import { shouldWriteViewKey } from './viewKey'
 
 const INDENT = '    ' // 4 spaces
@@ -221,12 +222,16 @@ class SerializerContext {
     /** Included files a save never writes. */
     private readOnly: ReadonlySet<string>
     private included: ReadonlySet<string>
+    /** The unfiltered model: `include *` expands against all of it, whichever
+     *  file each element was declared in. */
+    private wildcardModel: Workspace['model']
 
     /** `idSource` supplies the identifier maps when `workspace` is a filtered
      *  view of a larger model, so cross-file references still resolve. */
     constructor(workspace: Workspace, idSource: Workspace = workspace, source?: string | null) {
         this.workspace = workspace
         this.source = source
+        this.wildcardModel = idSource.model
         this.included = new Set((idSource.includedFiles ?? []).map(f => f.path))
         this.readOnly = new Set((idSource.includedFiles ?? []).filter((f) => !f.writable).map((f) => f.path))
         this.allRelationships = idSource.model.relationships
@@ -1412,6 +1417,8 @@ class SerializerContext {
         const hasWildcard = view.elements.some(e => e.id === '*')
         if (hasWildcard) {
             this.emit('include *')
+        } else if (view.includeAll) {
+            this.serializeWildcardIncludes(view)
         } else if (view.elements.length > 0) {
             for (const el of view.elements) {
                 const ref = this.idToVar.get(el.id) ?? el.id
@@ -1420,14 +1427,20 @@ class SerializerContext {
         }
 
         // Structurizr relationship expressions are the portable way to retain
-        // a per-view hidden edge without removing either endpoint.
+        // a per-view hidden edge without removing either endpoint. The view's
+        // own `exclude "a -> b"` lines go back as written: `* -> *` also hides
+        // implied relationships and ones added later, which one line per
+        // relationship it matches today would not (#230). A relationship
+        // hidden on the canvas gets a line for its pair unless one of those
+        // already hides it.
+        const exclusions = view.excludedRelationshipExpressions ?? []
         const excludedPairs = new Set<string>()
+        const ref = (id: string) => (id === '*' ? '*' : this.idToVar.get(id) ?? id)
+        for (const exclusion of exclusions) excludedPairs.add(`${ref(exclusion.sourceId)} -> ${ref(exclusion.destinationId)}`)
         for (const id of view.excludedRelationshipIds ?? []) {
             const rel = this.workspace.model.relationships.find(r => r.id === id)
-            if (!rel) continue
-            const source = this.idToVar.get(rel.sourceId) ?? rel.sourceId
-            const destination = this.idToVar.get(rel.destinationId) ?? rel.destinationId
-            excludedPairs.add(`${source} -> ${destination}`)
+            if (!rel || exclusions.some(x => exclusionMatches(x, rel.sourceId, rel.destinationId))) continue
+            excludedPairs.add(`${ref(rel.sourceId)} -> ${ref(rel.destinationId)}`)
         }
         for (const pair of excludedPairs) this.emit(`exclude "${pair}"`)
 
@@ -1601,6 +1614,56 @@ class SerializerContext {
         }
 
         this.emit(parts.join(' '))
+    }
+
+    /** The include and exclude lines of a view parsed from `include *`. The
+     *  wildcard is written back as `*`, so elements added to the model later
+     *  still reach the view (#230). Around it:
+     *  - `include` for each element the view shows that the wildcard would
+     *    not add (added on the canvas, or by its own `include`), and for each
+     *    shown element with an `include` line of its own. A container or
+     *    component of a software system the wildcard adds goes before
+     *    `include *`: Structurizr never shows a system together with what is
+     *    inside it, keeps whichever comes first and skips the other.
+     *  - `exclude` for each element hidden on purpose (by an `exclude` line,
+     *    or on the canvas) that still exists and is not shown, whether or not
+     *    c4hero's own expansion would add it. An element the wildcard would
+     *    add that the view does not show yet gets no line: Structurizr shows
+     *    it, and so does c4hero once the file is reopened.
+     *  - `exclude` for an element the wildcard adds that is the parent or
+     *    child of one included after it (a sibling container, in a component
+     *    view, of a component shown in its place). Structurizr would keep
+     *    the container and skip the component; the canvas shows the
+     *    component. Writing that component before `include *` instead is an
+     *    error in Structurizr.
+     *  Statements apply in order, so the excludes come before the includes
+     *  after the wildcard: hiding a container makes room for one of its
+     *  components. */
+    private serializeWildcardIncludes(view: View): void {
+        const expanded = wildcardElements(this.wildcardModel, view).map(e => e.id)
+        const expandedIds = new Set(expanded)
+        const systemOf = enclosingSystems(this.wildcardModel)
+        const explicit = new Set(view.includedElementIds ?? [])
+        const shownIds = new Set(view.elements.map(e => e.id))
+        const before: string[] = []
+        const after: string[] = []
+        for (const id of shownIds) {
+            if (expandedIds.has(id) && !explicit.has(id)) continue
+            const system = systemOf.get(id)
+            if (system !== undefined && expandedIds.has(system)) before.push(id)
+            else after.push(id)
+        }
+        for (const id of before) this.emit(`include ${this.idToVar.get(id) ?? id}`)
+        this.emit('include *')
+        const displacedBy = hierarchyGuard(this.wildcardModel, view, after)
+        const excluded = new Set<string>()
+        for (const id of [...view.excludedElementIds ?? [], ...expanded.filter(id => displacedBy.clashes(id))]) {
+            const ref = this.idToVar.get(id)
+            if (ref === undefined || shownIds.has(id) || excluded.has(id)) continue
+            excluded.add(id)
+            this.emit(`exclude ${ref}`)
+        }
+        for (const id of after) this.emit(`include ${this.idToVar.get(id) ?? id}`)
     }
 
     // ─── Styles ─────────────────────────────────────────────────────

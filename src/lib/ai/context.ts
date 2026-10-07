@@ -1,6 +1,7 @@
 import type {
   Workspace, ModelElement, Person, SoftwareSystem, Container, Component, Relationship, View,
 } from '@/types/model'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 // Pure helpers that flatten a Workspace into compact, id-tagged context for
 // prompts, and collect items that lack descriptions. No store access, no I/O —
@@ -234,11 +235,19 @@ export function serializeViewContext(ws: Workspace, view: View): string {
   const onScreenRels = ws.model.relationships.filter(
     (r) => viewRelIds.has(r.id) && viewElementIds.has(r.sourceId) && viewElementIds.has(r.destinationId),
   )
-  if (onScreenRels.length === 0) {
+  // An `include *` view also draws the relationships Structurizr implies
+  // between the elements it shows, each labelled like the relationship it
+  // comes from, whose id the row carries (#230).
+  const implied = wildcardImpliedRelationships(ws.model, view)
+  if (onScreenRels.length === 0 && implied.length === 0) {
     lines.push('  (none)')
   } else {
     for (const r of onScreenRels) {
       lines.push(`  ${r.id} | ${names.get(r.sourceId) ?? r.sourceId} -> ${names.get(r.destinationId) ?? r.destinationId} | ${r.description?.trim() || '(no description)'}`)
+    }
+    for (const { sourceId, destinationId, relationship: r } of implied) {
+      const from = `${names.get(r.sourceId) ?? r.sourceId} -> ${names.get(r.destinationId) ?? r.destinationId}`
+      lines.push(`  ${r.id} | ${names.get(sourceId) ?? sourceId} -> ${names.get(destinationId) ?? destinationId} | ${r.description?.trim() || '(no description)'} (implied by ${from})`)
     }
   }
 
