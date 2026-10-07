@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, Download, Save, Stethoscope } from 'lucide-react'
 import { draftAdr, buildDocsContext, type AdrSeed, type AiProvider } from '@/lib/ai'
 import { downloadFile } from '@/lib/exportUtils'
-import { getCurrentDirHandle } from '@/lib/host'
+import { hasOpenFolder } from '@/lib/host'
 import { useDocsStore } from '@/store/docs'
 import { firstHeading } from '@/lib/docs/bundle'
 import { announce } from '@/lib/announce'
@@ -72,7 +72,7 @@ export function AdrBody({ provider, workspace, seed }: {
 
   // Only offered when the workspace came from a folder: the record lands in
   // its `!adrs` bundle (created, and linked from the DSL, when there is none).
-  const canSave = !!workspace && !!getCurrentDirHandle()
+  const canSave = !!workspace && hasOpenFolder()
   async function save() {
     if (!md || saving) return
     setSaving(true)

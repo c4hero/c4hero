@@ -13,6 +13,7 @@ import { computeCascadeImpact, orphanedLayoutViewKeys } from '@/store/workspace-
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { isVsCodeHost, runVsCodeHistoryCommand, saveDSLFile, writeSidecarToHandle } from '@/lib/host'
+import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
@@ -478,6 +479,10 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.workspace) return
         try {
+          if (isWorkspaceLinked(s.activeWorkspaceFilename)) {
+            await writeLinkedWorkspace(s.workspace, s.activeWorkspaceFilename)
+            return
+          }
           const dsl = serializeRoot(s.workspace)
           if (!await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)) return
           const sidecar = extractSidecar(s.workspace) ?? { version: 1 as const, views: {} }

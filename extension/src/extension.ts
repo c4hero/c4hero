@@ -25,7 +25,7 @@ async function webviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): P
   return html.replace('<head>', `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`)
 }
 
-class C4HeroEditorProvider implements vscode.CustomTextEditorProvider, vscode.Disposable {
+export class C4HeroEditorProvider implements vscode.CustomTextEditorProvider, vscode.Disposable {
   private readonly sessions = new Map<string, { session: DocumentSession; references: number }>()
   private readonly panels = new Map<vscode.WebviewPanel, DocumentSession>()
   private nextFlush = 0
@@ -70,10 +70,12 @@ class C4HeroEditorProvider implements vscode.CustomTextEditorProvider, vscode.Di
     this.panels.set(panel, session)
     panel.webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')] }
     const post = (message: HostToWebviewMessage) => panel.webview.postMessage(message)
-    let editingHere = false
     const subscriptions: vscode.Disposable[] = []
     subscriptions.push(session.onDidChange(snapshot => {
-      if (!editingHere) void post({ type: 'documentChanged', snapshot, revision: session.revision, dirty: session.dirty })
+      // The session suppresses the changes from its own WorkspaceEdit. Keep
+      // publishing external changes even while an edit request is preparing;
+      // a rejected stale request must leave its canvas on the newer revision.
+      void post({ type: 'documentChanged', snapshot, revision: session.revision, dirty: session.dirty })
     }))
     const init = async () => {
       const keys = Object.fromEntries(await Promise.all(SECRET_PROVIDERS.map(async provider => [provider,
@@ -117,9 +119,7 @@ class C4HeroEditorProvider implements vscode.CustomTextEditorProvider, vscode.Di
           }
           else { value = await session.writeFile(uri, operation.content); await post({ type: 'saved', dirty: session.dirty }) }
         } else if (operation.kind === 'edit') {
-          editingHere = true
-          try { value = await session.edit(operation.snapshot, operation.revision) }
-          finally { editingHere = false }
+          value = await session.edit(operation.snapshot, operation.revision)
           // Other split views need the acknowledged snapshot too.
           for (const [other, otherSession] of this.panels) if (other !== panel && otherSession === session) {
             void other.webview.postMessage({ type: 'documentChanged', snapshot: await session.snapshot(), revision: session.revision, dirty: session.dirty } satisfies HostToWebviewMessage)
@@ -142,8 +142,14 @@ class C4HeroEditorProvider implements vscode.CustomTextEditorProvider, vscode.Di
       if (event.document.uri.toString() === key) event.waitUntil(session.idle().then(() => []))
     }))
     subscriptions.push(vscode.workspace.onDidSaveTextDocument(saved => {
-      if (saved.uri.toString() !== key) return
-      void session.saveCompanions().then(() => post({ type: 'saved', dirty: session.dirty }), error => vscode.window.showErrorMessage(String(error)))
+      if (!session.watches(saved.uri)) return
+      if (saved.uri.toString() === key) {
+        void session.saveCompanions().then(() => post({ type: 'saved', dirty: session.dirty }), error => vscode.window.showErrorMessage(String(error)))
+      } else {
+        // Auto Save and Save All can save only a dirty layout/include while
+        // the root DSL stays clean, so observe companion saves directly.
+        void post({ type: 'saved', dirty: session.dirty })
+      }
     }))
     subscriptions.push(this.context.secrets.onDidChange(async event => {
       const provider = SECRET_PROVIDERS.find(p => event.key === `${SECRET_PREFIX}${p}`)

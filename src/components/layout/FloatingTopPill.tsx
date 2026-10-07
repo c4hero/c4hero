@@ -1,4 +1,5 @@
 import { isVsCodeHost, runVsCodeHistoryCommand, openVsCodeDocument } from '@/lib/host'
+import c4LogoUrl from '../../../public/c4-logo.png'
 import { reportHostError } from '@/lib/host/status'
 import { lazy, Suspense, useEffect, useState, useCallback } from 'react'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
@@ -290,7 +291,7 @@ export default function FloatingTopPill() {
             flexShrink: 0,
           }}
         >
-          <img src="/c4-logo.png" alt="c4hero" style={{ width: 24, height: 24 }} />
+          <img src={c4LogoUrl} alt="c4hero" style={{ width: 24, height: 24 }} />
         </button>
 
         {/* Workspace name — click to open switcher */}

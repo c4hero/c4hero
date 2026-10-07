@@ -4,12 +4,14 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import * as vscode from 'vscode'
 import { DocumentSession, scopedUri } from '../../documentSession'
+import { C4HeroEditorProvider } from '../../extension'
+import type { HostToWebviewMessage, WebviewToHostMessage } from '../../../../src/lib/host/protocol'
 
 const dsl = 'workspace "Smoke" {\n model {\n user = person "User"\n system = softwareSystem "System"\n }\n views {\n systemLandscape "All" {\n include *\n autoLayout\n }\n }\n}\n'
-async function fixture(sidecar = '{"version":1,"views":{}}') {
+async function fixture(sidecar = '{"version":1,"views":{}}', content = dsl) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'c4hero-vscode-'))
   const file = path.join(dir, 'smoke.dsl')
-  await fs.writeFile(file, dsl)
+  await fs.writeFile(file, content)
   if (sidecar) await fs.writeFile(path.join(dir, 'smoke.c4hero.json'), sidecar)
   const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file))
   return { dir, file, document, session: new DocumentSession(document) }
@@ -18,6 +20,31 @@ async function eventually(check: () => boolean, message: string) {
   const deadline = Date.now() + 20000
   while (!check() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50))
   assert.ok(check(), message)
+}
+async function testPanel(document: vscode.TextDocument) {
+  const receive = new vscode.EventEmitter<WebviewToHostMessage>()
+  const close = new vscode.EventEmitter<void>()
+  const secretChanges = new vscode.EventEmitter<vscode.SecretStorageChangeEvent>()
+  const messages: HostToWebviewMessage[] = []
+  const extensionUri = vscode.extensions.getExtension('c4hero.c4hero-vscode')!.extensionUri
+  const context = {
+    extensionUri,
+    secrets: { get: async () => undefined, onDidChange: secretChanges.event },
+  } as unknown as vscode.ExtensionContext
+  const provider = new C4HeroEditorProvider(context)
+  const panel = {
+    webview: {
+      options: {}, html: '', cspSource: 'test', asWebviewUri: (uri: vscode.Uri) => uri,
+      onDidReceiveMessage: receive.event,
+      postMessage: async (message: HostToWebviewMessage) => { messages.push(message); return true },
+    },
+    onDidDispose: close.event,
+  } as unknown as vscode.WebviewPanel
+  await provider.resolveCustomTextEditor(document, panel)
+  return {
+    messages, send: (message: WebviewToHostMessage) => receive.fire(message),
+    dispose: () => { close.fire(); provider.dispose(); receive.dispose(); close.dispose(); secretChanges.dispose() },
+  }
 }
 export async function run(): Promise<void> {
   const tests: { title: string; body: () => Promise<void> }[] = []
@@ -127,6 +154,66 @@ export async function run(): Promise<void> {
       assert.match(document.getText(), /^\/\/ external edit/)
       await document.save()
     } finally { session.dispose() }
+  })
+  test('publishes external text changes while preparing a stale canvas edit', async () => {
+    const changed = new vscode.EventEmitter<vscode.FileChangeEvent[]>()
+    const contents = new Map([['/model.dsl', dsl], ['/model.c4hero.json', '{"version":1,"views":{}}']])
+    let holdRead = false
+    let preparing = false
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const filesystem: vscode.FileSystemProvider = {
+      onDidChangeFile: changed.event,
+      stat: uri => ({ type: vscode.FileType.File, ctime: 1, mtime: 1, size: contents.get(uri.path)!.length }),
+      readFile: async uri => {
+        if (holdRead && uri.path === '/model.c4hero.json') {
+          holdRead = false; preparing = true; await gate
+        }
+        return new TextEncoder().encode(contents.get(uri.path)!)
+      },
+      writeFile: (uri, bytes) => { contents.set(uri.path, new TextDecoder().decode(bytes)) },
+      readDirectory: () => [], watch: () => ({ dispose() {} }),
+      createDirectory() {}, delete() {}, rename() {},
+    }
+    const registration = vscode.workspace.registerFileSystemProvider('c4hero-review', filesystem)
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.parse('c4hero-review:/model.dsl'))
+    const panel = await testPanel(document)
+    try {
+      holdRead = true
+      panel.send({ type: 'request', id: 100, operation: {
+        kind: 'edit', revision: 0,
+        snapshot: { content: dsl.replace('"User"', '"Canvas"'), sidecarJson: '{"version":1,"views":{"All":{"locked":true}}}', includes: {} },
+      } })
+      await eventually(() => preparing, 'The canvas edit did not await its companion file')
+      const edit = new vscode.WorkspaceEdit()
+      edit.insert(document.uri, new vscode.Position(0, 0), '// external edit\n')
+      await vscode.workspace.applyEdit(edit)
+      await eventually(() => panel.messages.some(message => message.type === 'documentChanged'), 'The originating canvas missed the external text change during edit preparation')
+      release()
+      await eventually(() => panel.messages.some(message => message.type === 'fsResponse' && message.id === 100), 'The stale edit was not answered')
+      const response = panel.messages.find(message => message.type === 'fsResponse' && message.id === 100)
+      assert.ok(response?.type === 'fsResponse' && response.error?.includes('changed while preparing'))
+      assert.match(document.getText(), /^\/\/ external edit/)
+      await document.save()
+    } finally { release(); panel.dispose(); registration.dispose(); changed.dispose() }
+  })
+  test('native companion-only saves clear the canvas dirty status', async () => {
+    const { document, session } = await fixture()
+    const panel = await testPanel(document)
+    try {
+      await session.edit({ ...await session.snapshot(), sidecarJson: '{"version":1,"views":{"All":{"locked":true}}}' }, session.revision)
+      const sidecar = await vscode.workspace.openTextDocument(session.sidecar)
+      assert.equal(document.isDirty, false)
+      assert.equal(sidecar.isDirty, true)
+      await sidecar.save()
+      await eventually(() => panel.messages.some(message => message.type === 'saved' && !message.dirty), 'Saving the sidecar did not clear the canvas dirty status')
+      assert.equal(session.dirty, false)
+    } finally { panel.dispose(); session.dispose() }
+  })
+  test('rejects oversized root DSL snapshots before loading companion files', async () => {
+    const { session } = await fixture('', ' '.repeat(10 * 1024 * 1024 + 1))
+    try { await assert.rejects(session.snapshot(), /10 MB limit/) }
+    finally { session.dispose() }
   })
   test('rejects filesystem access outside the opened architecture folder', async () => {
     const folder = vscode.Uri.parse('vscode-remote://ssh-remote+test/project')

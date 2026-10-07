@@ -19,6 +19,7 @@ export function useVsCodeHost() {
     let loadGeneration = 0
     let sync: ReturnType<typeof createDocumentSync> | undefined
     let project: ReturnType<typeof createSnapshotProjector> | undefined
+    let projectionError: string | null = null
     let lastWorkspace = useWorkspaceStore.getState().workspace
     let init: VsCodeInitPayload | undefined
     let mountedObserver: MutationObserver | undefined
@@ -28,6 +29,9 @@ export function useVsCodeHost() {
       const generation = ++loadGeneration
       // Suspend outbound edits while the document being displayed is changing.
       project = undefined
+      // Invalidate queued edits immediately, even while asynchronous include
+      // reads are still preparing the replacement workspace.
+      sync?.receive(snapshot, revision)
       const texts = { ...snapshot.includes }
       const loaded = await loadWorkspaceDocument({
         ...snapshot,
@@ -55,6 +59,7 @@ export function useVsCodeHost() {
         if (sync) sync.receive(baseline, revision)
         else sync = createDocumentSync(baseline, revision, replaceVsCodeDocument)
         useHostStatus.setState({ loading: false, error: null })
+        projectionError = null
       } finally { applying = false }
       // The smoke test waits for actual React Flow DOM nodes, not model counts.
       const reportMounted = () => {
@@ -72,18 +77,33 @@ export function useVsCodeHost() {
       observer.observe(document.body, { childList: true, subtree: true })
       mountedTimer = setTimeout(() => observer.disconnect(), 15000)
     }
+    const captureCurrent = (workspace: NonNullable<typeof lastWorkspace>) => {
+      const snapshot = project!(workspace)
+      if (projectionError && useHostStatus.getState().error === projectionError) {
+        useHostStatus.setState({ error: null })
+      }
+      projectionError = null
+      return snapshot
+    }
     const sendCurrent = async () => {
       if (!project || !sync) throw new Error('Wait for the workspace to load or fix its DSL before saving')
-      if (useHostStatus.getState().error) throw new Error(useHostStatus.getState().error!)
       const workspace = useWorkspaceStore.getState().workspace
-      if (workspace) await sync.push(project(workspace))
+      const snapshot = workspace ? captureCurrent(workspace) : undefined
+      if (useHostStatus.getState().error) throw new Error(useHostStatus.getState().error!)
+      if (snapshot) await sync.push(snapshot)
       await sync.flush()
     }
     setDocumentFlusher(sendCurrent)
     const unsubscribeStore = useWorkspaceStore.subscribe((state) => {
       if (disposed || applying || !project || !sync || !state.workspace || state.workspace === lastWorkspace) return
       lastWorkspace = state.workspace
-      void sync.push(project(state.workspace)).catch(reportHostError)
+      try {
+        void sync.push(captureCurrent(state.workspace)).catch(reportHostError)
+      } catch (error) {
+        projectionError = error instanceof Error ? error.message : String(error)
+        useHostStatus.setState({ dirty: true })
+        reportHostError(error)
+      }
     })
     const unsubscribeMessages = subscribeHostMessages((message) => {
       if (disposed) return

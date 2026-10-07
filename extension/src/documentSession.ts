@@ -3,6 +3,10 @@ import { sanitizeFilename } from '../../src/lib/filenames'
 import type { DocumentSnapshot } from '../../src/lib/host/protocol'
 
 const LIMIT = 10 * 1024 * 1024
+function checkedText(text: string): string {
+  if (new TextEncoder().encode(text).byteLength > LIMIT) throw new Error('Architecture file exceeds the 10 MB limit')
+  return text
+}
 export function scopedUri(folder: vscode.Uri, raw: string): vscode.Uri {
   const uri = vscode.Uri.parse(raw)
   const base = folder.path.replace(/\/$/, '') + '/'
@@ -14,11 +18,7 @@ export function scopedUri(folder: vscode.Uri, raw: string): vscode.Uri {
 }
 export async function readText(uri: vscode.Uri): Promise<string | undefined> {
   const open = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString())
-  if (open) {
-    const text = open.getText()
-    if (new TextEncoder().encode(text).byteLength > LIMIT) throw new Error('Architecture file exceeds the 10 MB limit')
-    return text
-  }
+  if (open) return checkedText(open.getText())
   try {
     const stat = await vscode.workspace.fs.stat(uri)
     if (stat.size > LIMIT) throw new Error('Architecture file exceeds the 10 MB limit')
@@ -84,11 +84,13 @@ export class DocumentSession implements vscode.Disposable {
   }
   get dirty() { return this.documents().some(doc => doc.isDirty) }
   private documents() { return vscode.workspace.textDocuments.filter(doc => this.watches(doc.uri)) }
-  private watches(uri: vscode.Uri) {
+  watches(uri: vscode.Uri) {
     const key = uri.toString()
     return this.docs.has(key) || key === this.sidecar.toString() || this.includes.has(key)
   }
   async snapshot(): Promise<DocumentSnapshot> {
+    const version = this.document.version
+    const content = checkedText(this.document.getText())
     const includes: Record<string, string> = {}
     for (const key of this.includes) {
       const uri = vscode.Uri.parse(key)
@@ -97,7 +99,7 @@ export class DocumentSession implements vscode.Disposable {
     }
     const sidecarJson = await readText(this.sidecar)
     this.watchedText.set(this.sidecar.toString(), sidecarJson)
-    return { content: this.document.getText(), sidecarJson, includes }
+    return { content: this.document.version === version ? content : checkedText(this.document.getText()), sidecarJson, includes }
   }
   private async publish() {
     const generation = ++this.publishing

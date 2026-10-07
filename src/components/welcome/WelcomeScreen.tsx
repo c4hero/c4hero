@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, lazy, Suspense } from 'react'
+import c4LogoUrl from '../../../public/c4-logo.png'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
@@ -672,7 +673,7 @@ function CollectionLoadingOverlay({ name, kind = 'collection' }: { name: string;
               <line className="diag-edge"
                     x1="68" y1="60" x2="124" y2="60" strokeWidth="1.6" />
             </g>
-            <image className="diag-author" href="/c4-logo.png" x="84" y="14" width="32" height="32" />
+            <image className="diag-author" href={c4LogoUrl} x="84" y="14" width="32" height="32" />
           </svg>
         </div>
 

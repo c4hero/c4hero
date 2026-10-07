@@ -3,12 +3,13 @@
 // route-level state machine.
 
 import { FileText, ChevronRight } from 'lucide-react'
+import c4LogoUrl from '../../../public/c4-logo.png'
 
 export function C4Mark({ compact }: { compact?: boolean }) {
   return (
     <img
       className={compact ? 'welcome-mark compact' : 'welcome-mark'}
-      src="/c4-logo.png"
+      src={c4LogoUrl}
       alt=""
       aria-hidden="true"
     />
