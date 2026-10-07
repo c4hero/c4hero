@@ -62,7 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Workspace saves now leave a DSL or layout file untouched when its existing
   UTF-8 bytes exactly match the saved output. Repeated saves preserve file
   modification times and reduce disk watcher activity, while model edits and
-  node drags still reach disk (#222, TEA-356).
+  node drags still reach disk. Autosave now gives idle callbacks a one-second
+  deadline so busy canvas or editor activity cannot leave disk writes waiting
+  indefinitely (#222, TEA-356).
 - Saving no longer strips relationships from deployment views in Structurizr.
   Relationships between people, software systems, containers and components
   were written below every `deploymentEnvironment` block, and Structurizr only
