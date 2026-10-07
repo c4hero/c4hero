@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exclude` such as `"* -> *"`, `"user -> *"` or `"a -> b"` hides those
   arrows too, as in Structurizr, and is saved as written rather than as one
   line per relationship it matched (#230).
+- Saved layouts now record view identity, keeping positions and locks with
+  distinguishable unnamed views when siblings are deleted or reordered
+  (TEA-345). Ambiguous layouts remain saved for recovery. Older sidecars still
+  load by key and gain identity on save; identical unnamed views still need
+  explicit keys to distinguish their layouts.
 - Workspace- and model-level `properties { }` blocks are no longer discarded
   on save (#219). Each line is written back to its own file and position, so a
   value set in an `!include`d file is not copied into the root and an override

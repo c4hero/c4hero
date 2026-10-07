@@ -537,6 +537,10 @@ export function renameElementId(ws: Workspace, oldId: string, newId: string): { 
   // IDs in retained layout participate in the same atomic rename, including
   // entries belonging to views that are temporarily absent.
   for (const layout of Object.values(ws.savedLayout ?? {})) {
+    // The scope an entry records is part of how it finds its view again.
+    if (layout.view?.softwareSystemId === oldId) layout.view.softwareSystemId = newId
+    if (layout.view?.containerId === oldId) layout.view.containerId = newId
+    if (layout.view?.elementIds) layout.view.elementIds = layout.view.elementIds.map(id => id === oldId ? newId : id)
     if (layout.elements && Object.hasOwn(layout.elements, oldId)) {
       layout.elements[newId] = layout.elements[oldId]
       delete layout.elements[oldId]
@@ -1192,6 +1196,7 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
 
   if (ws.savedLayout) {
     for (const layout of Object.values(ws.savedLayout)) {
+      if (layout.view?.elementIds) layout.view.elementIds = layout.view.elementIds.filter(id => !allDeletedIds.has(id))
       if (!layout.elements) continue
       for (const id of allDeletedIds) delete layout.elements[id]
     }

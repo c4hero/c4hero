@@ -73,6 +73,143 @@ async function arrange(page: Page) {
   await page.keyboard.press('Control+Shift+l')
 }
 
+for (const lockOnly of [false, true]) {
+  test(`${lockOnly ? 'lock-only' : 'sparse'} keyless layouts survive unchanged real save/reopen`, async ({ page }) => {
+    const dsl = `workspace "Preview" {
+      model {
+        payments = softwareSystem "Payments" {
+          api = container "API"
+          db = container "Database"
+        }
+      }
+      views {
+        container payments {
+          title "Wide"
+          include *
+        }
+        container payments {
+          title "Narrow"
+          include api
+        }
+      }
+    }`
+    // Start with a legacy sidecar so the save also verifies migration to
+    // complete membership. Only a shared node has a persisted position.
+    await seed(page, dsl, { version: 1, views: lockOnly ? {
+      'Containers-payments-2': { locked: true },
+    } : {
+      'Containers-payments': { elements: { api: { pinned: true, locked: true, x: 100, y: 200 } } },
+      'Containers-payments-2': { elements: { api: retained } },
+    } })
+    await save(page)
+    const saved = await readSidecar(page)
+    expect(saved.views?.['Containers-payments-2'].view?.elementIds).toEqual(['api'])
+    if (!lockOnly) expect(saved.views?.['Containers-payments'].view?.elementIds).toEqual(['api', 'db'])
+    await reopen(page)
+    if (!lockOnly) {
+      await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+        .toBe('translate(100px, 200px)')
+      await expect(node(page, 'api').getByRole('img', { name: 'API is locked in place' })).toBeVisible()
+    }
+    await page.getByRole('button', { name: 'Switch view' }).click()
+    await page.getByText('Narrow', { exact: true }).click()
+    await expect(node(page, 'db')).toHaveCount(0)
+    if (lockOnly) {
+      await expect(page.getByRole('button', { name: 'Auto-arrange (view layout locked)', exact: true })).toBeVisible()
+    } else {
+      await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+        .toBe('translate(800px, 450px)')
+      await expect(node(page, 'api').getByRole('img', { name: 'API is locked in place' })).toBeVisible()
+    }
+    await save(page)
+    expect(await readSidecar(page)).toEqual(saved)
+  })
+}
+
+for (const [type, key] of [['container', ''], ['dynamic', '!!!']] as const) {
+  test(`${type} layout survives a generated key written before its header description`, async ({ page }, testInfo) => {
+    const viewKey = `${type === 'container' ? 'Containers' : 'Dynamic'}-payments`
+    await seed(page, `workspace "Preview" {
+      model {
+        payments = softwareSystem "Payments" {
+          api = container "API"
+          db = container "Database"
+        }
+        api -> db "Reads"
+      }
+      views {
+        ${type} payments "${key}" "Description" {
+          ${type === 'container' ? 'include *' : 'api -> db "Reads"'}
+        }
+      }
+    }`, { version: 1, views: {
+      [viewKey]: { locked: true, elements: { api: { pinned: true, locked: true, x: 100, y: 200 } } },
+    } })
+    await save(page)
+    const saved = await readSidecar(page)
+    expect(saved.views?.[viewKey].view?.key).toBe(viewKey)
+    await reopen(page)
+    await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+      .toBe('translate(100px, 200px)')
+    await expect(node(page, 'api').getByRole('img', { name: 'API is locked in place' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Auto-arrange (view layout locked)', exact: true })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('materialized-key-after-reopen.png') })
+    await save(page)
+    expect(await readSidecar(page)).toEqual(saved)
+  })
+}
+
+test('keyless layouts follow reordered and surviving views through real save/reopen', async ({ page }, testInfo) => {
+  const wide = 'container payments {\n include *\n }'
+  const narrow = 'container payments {\n include api\n }'
+  const dsl = (views: string) => `workspace "Preview" {
+    model {
+      payments = softwareSystem "Payments" {
+        api = container "API"
+        db = container "Database"
+      }
+    }
+    views {
+      ${views}
+    }
+  }`
+  const identity = { type: 'container' as const, softwareSystemId: 'payments' }
+  const wideLayout = { view: { ...identity, elementIds: ['api', 'db'] }, elements: {
+    api: { pinned: true, x: 100, y: 200 },
+    db: { pinned: true, x: 400, y: 200 },
+  } }
+  const narrowLayout = { view: { ...identity, elementIds: ['api'] }, locked: true, elements: { api: retained } }
+  await seed(page, dsl(`${wide}\n${narrow}`), { version: 1, views: {
+    'Containers-payments': wideLayout,
+    'Containers-payments-2': narrowLayout,
+  } })
+  await expect(node(page, 'db')).toBeVisible()
+  await editDSL(page, dsl(`${narrow}\n${wide}`))
+  await expect(node(page, 'db')).toHaveCount(0)
+  await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+    .toBe('translate(800px, 450px)')
+  await save(page)
+  expect((await readSidecar(page)).views).toEqual({
+    'Containers-payments': narrowLayout,
+    'Containers-payments-2': wideLayout,
+  })
+  await reopen(page)
+  await expect(node(page, 'db')).toHaveCount(0)
+  await editDSL(page, dsl(`${wide}\n${narrow}`))
+  await expect(node(page, 'db')).toBeVisible()
+  await editDSL(page, dsl(narrow))
+  await expect(node(page, 'db')).toHaveCount(0)
+  await save(page)
+  await reopen(page)
+  await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+    .toBe('translate(800px, 450px)')
+  await save(page)
+  const saved = (await readSidecar(page)).views!
+  expect(saved['Containers-payments']).toEqual(narrowLayout)
+  expect(Object.values(saved)).toContainEqual(wideLayout)
+  await page.screenshot({ path: testInfo.outputPath('keyless-survivor.png') })
+})
+
 test('dynamic restoration, reset, undo/redo and real save/reopen', async ({ page }) => {
   await seed(page, `workspace "Preview" {
     model {
@@ -142,15 +279,20 @@ test('same-name elements keep exact retained positions through DSL edits and reo
       }
     }
   }`
-  const original = { version: 1 as const, views: { View: { elements: {
+  const original = { version: 1 as const, views: { View: {
+    view: { type: 'container' as const, key: 'View', softwareSystemId: 'payments', elementIds: ['a', 'b'] },
+    elements: {
     a: { pinned: true, locked: true, x: 100, y: 200 },
     b: { pinned: true, x: 800, y: 900 },
   } } } }
+  const withMembership = (elementIds: string[]) => ({ ...original, views: { View: {
+    ...original.views.View, view: { ...original.views.View.view, elementIds },
+  } } })
   await seed(page, dsl('*'), original)
   await editDSL(page, dsl('a'))
   await expect(node(page, 'b')).toHaveCount(0)
   await save(page)
-  expect(await readSidecar(page)).toEqual(original)
+  expect(await readSidecar(page)).toEqual(withMembership(['a']))
   await editDSL(page, dsl('b'))
   await expect(node(page, 'a')).toHaveCount(0)
   await expect(node(page, 'b')).toBeVisible()
@@ -159,13 +301,13 @@ test('same-name elements keep exact retained positions through DSL edits and reo
   await page.keyboard.press('Control+Shift+z')
   await expect(node(page, 'b')).toBeVisible()
   await save(page)
-  expect(await readSidecar(page)).toEqual(original)
+  expect(await readSidecar(page)).toEqual(withMembership(['b']))
   await reopen(page)
   await expect(node(page, 'b')).toBeVisible()
   await node(page, 'b').click()
   await expect(page.getByRole('button', { name: 'Lock position', exact: true })).toBeVisible()
   await save(page)
-  expect(await readSidecar(page)).toEqual(original)
+  expect(await readSidecar(page)).toEqual(withMembership(['b']))
 })
 
 test('deployment refresh restores a hidden instance through real save/reopen', async ({ page }) => {
