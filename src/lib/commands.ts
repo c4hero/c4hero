@@ -198,9 +198,12 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['remove', 'hide', 'exclude', 'view'],
       when: () => {
         const s = store()
-        return s.selectedRelationshipId !== null && s.activeViewKey !== null
-          && !!s.workspace
-          && !['dynamic', 'deployment'].includes(getActiveView(s.workspace, s.activeViewKey)?.type ?? '')
+        if (s.selectedRelationshipId === null || s.activeViewKey === null || !s.workspace) return false
+        const view = getActiveView(s.workspace, s.activeViewKey)
+        // Only a relationship the view lists can be hidden from it: an arrow
+        // an `include *` view draws as implied by it is not one (#230).
+        return !!view && !['dynamic', 'deployment'].includes(view.type)
+          && view.relationships.some((r) => r.id === s.selectedRelationshipId)
       },
       execute: () => {
         const s = store()

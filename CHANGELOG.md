@@ -21,6 +21,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `include *` in a view is no longer rewritten as a list of elements on save,
+  so elements added to the model later still appear in Structurizr. The
+  view's own `include` and `exclude` lines are kept and applied in order, as
+  Structurizr does, and an element hidden from or added to the view on the
+  canvas is saved as its own `exclude` or `include` line. An element that a
+  relationship drawn in another view brings into the wildcard now appears in
+  the view, instead of being saved as hidden. System context, container and
+  component views show what Structurizr's `include *` shows: a relationship
+  with anything inside another software system brings in that system, never
+  its containers, and excluding a deployment node also hides what runs on it.
+  Every `include *` view other than a deployment view also draws
+  Structurizr's implied relationships between the boxes it shows: a
+  relationship declared further down the hierarchy, between containers or
+  components, appears as an arrow between the elements the view shows,
+  labelled like the first relationship that implies it. A relationship
+  `exclude` such as `"* -> *"`, `"user -> *"` or `"a -> b"` hides those
+  arrows too, as in Structurizr, and is saved as written rather than as one
+  line per relationship it matched (#230).
+- Saved layouts now record view identity, keeping positions and locks with
+  distinguishable unnamed views when siblings are deleted or reordered
+  (TEA-345). Ambiguous layouts remain saved for recovery. Older sidecars still
+  load by key and gain identity on save; identical unnamed views still need
+  explicit keys to distinguish their layouts.
 - Workspace- and model-level `properties { }` blocks are no longer discarded
   on save (#219). Each line is written back to its own file and position, so a
   value set in an `!include`d file is not copied into the root and an override
@@ -36,13 +59,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nested, so `Group:` style tags keep matching. Editing a property whose value
   came from a read-only include now writes the new value into the root file
   instead of losing it (TEA-349).
+- Workspace saves now leave a DSL or layout file untouched when its existing
+  UTF-8 bytes exactly match the saved output. Repeated saves preserve file
+  modification times and reduce disk watcher activity, while model edits and
+  node drags still reach disk. Autosave now gives idle callbacks a one-second
+  deadline so busy canvas or editor activity cannot leave disk writes waiting
+  indefinitely (#222, TEA-356).
+- Saving no longer strips relationships from deployment views in Structurizr.
+  Relationships between people, software systems, containers and components
+  were written below every `deploymentEnvironment` block, and Structurizr only
+  copies a relationship onto the container and software system instances
+  created after it, so deployment views lost arrows such as `web -> db`
+  between the deployed containers. They are now written above the
+  environments, also when an environment comes from an `!include`d file,
+  while relationships to deployment nodes and instances stay below. A
+  relationship the file had placed after an environment now reaches its
+  instances in Structurizr too, as c4hero's canvas already showed. The old
+  order is kept when a `!` line at or after the environment is anything but
+  an `!include` of a file c4hero writes back, and for a relationship that uses
+  an element such an `!include` declares, or that connects the same elements
+  or their parents as a relationship in that file (#231).
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.
+- A view key that is also a DSL word, such as `deployment`, `component` or
+  `container`, no longer splits the view in two. The key was read as missing,
+  so the rest of the header started a second view, the first lost its body,
+  and saving wrote DSL Structurizr rejects. The key is now kept as written. A
+  view header c4hero cannot read up to its `{` is reported as an error instead
+  of being split silently. A dynamic view's scope may now be quoted, as in the
+  other views, and a view scope that names no element and is not a plain
+  identifier is saved in quotes so it reads back unchanged (#232).
 - Orphaned view layout retained after deleting a view in the DSL code pane can
   now be reviewed and permanently removed with **Clean Up Orphaned View
   Layout** in the command palette. Cleanup lists the affected view keys, is
   undoable, and leaves current-view layout untouched. (TEA-343)
+- Saving no longer adds a `title` to a view that only has a description in its
+  header, such as `container a "Containers" "The containers inside A"`. The
+  copied title replaced the default title Structurizr shows. The description
+  now stays in the header, and c4hero still uses it as the view's label. A name
+  you give the view in c4hero is still saved as its title (#233).
 - Preserve saved layout for temporarily missing views and elements through model
   edits and repeated saves/reopens (#201). Existing sidecars need no migration.
   Explicit view/element deletion and layout reset still remove the affected
@@ -56,6 +112,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reordered, and generated views remain hidden while explicit views exist.
   Their saved positions are retained for recovery; use explicit, unique view
   keys when stable layout ownership is needed.
+- A view created without a name no longer gets the same label as every other
+  unnamed view of its type ("New systemLandscape view" twice). It is named
+  after what it shows, such as "System Landscape" or "API — Containers", and
+  numbered when that name is taken ("System Landscape 2"). Duplicating a view
+  twice now gives "… copy" and "… copy 2". A name you type is kept as typed.
 
 ## [0.7.0] - 2026-09-18
 

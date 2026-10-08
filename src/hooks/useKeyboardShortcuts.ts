@@ -14,6 +14,7 @@ import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import { parseWorkspaceDocument } from '@/lib/workspaceDocument'
 import { isCanvasRoute } from '@/lib/routes'
 import { announce } from '@/lib/announce'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 const log = createLogger('keyboard')
 
@@ -48,6 +49,16 @@ function backspaceLikeHandler(destructive: boolean): KeyHandler {
         ? getActiveView(store.workspace, store.activeViewKey)
         : undefined
       if (!destructive && store.activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment') {
+        // An arrow an `include *` view draws as implied by the selected
+        // relationship cannot be hidden on its own; the inspector says where
+        // it comes from (#230).
+        const id = store.selectedRelationshipId
+        if (store.workspace && activeView && !activeView.relationships.some((r) => r.id === id)) {
+          if (wildcardImpliedRelationships(store.workspace.model, activeView).some((r) => r.relationship.id === id)) {
+            announce('This arrow is implied by a relationship between other elements, so it cannot be hidden on its own')
+          }
+          return
+        }
         store.removeRelationshipFromView(store.activeViewKey, store.selectedRelationshipId)
         return
       }

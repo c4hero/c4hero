@@ -1,10 +1,12 @@
-import type { Workspace, ElementStatus, LineStyle, SavedViewLayout } from '@/types/model'
+import type { Workspace, ElementStatus, LineStyle, SavedViewLayout, View } from '@/types/model'
 import { current, isDraft } from 'immer'
 import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
 import { sanitizeFilename } from '@/lib/filenames'
 import { isElementStatusValue, normalizeElementStatus } from '@/lib/elementStatus'
+import { isStoredViewIdentity, resolveViewLayouts, viewIdentityOf } from '@/lib/layoutIdentity'
+import type { LayoutCandidate } from '@/lib/layoutIdentity'
 
 function cloneZoomLayout(layout: NonNullable<Workspace['exploreLayout']>) {
   return structuredClone(isDraft(layout) ? current(layout) : layout)
@@ -107,7 +109,11 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   // including when the workspace is frozen by Immer.
   const views: Record<string, SavedViewLayout> = Object.fromEntries(
     Object.entries(workspace.savedLayout ?? {}).map(([key, data]) =>
-      [key, { ...data, ...(data.exploreLayout ? { exploreLayout: cloneZoomLayout(data.exploreLayout) } : {}), ...(data.elements ? { elements: { ...data.elements } } : {}) }]),
+      [key, { ...data,
+        ...(data.view ? { view: { ...data.view, ...(data.view.elementIds ? { elementIds: [...data.view.elementIds] } : {}) } } : {}),
+        ...(data.exploreLayout ? { exploreLayout: cloneZoomLayout(data.exploreLayout) } : {}),
+        ...(data.elements ? { elements: { ...data.elements } } : {}),
+      }]),
   )
   for (const view of allViewsOf(workspace)) {
     const viewElements: Record<string, SidecarViewElement> = { ...views[view.key]?.elements }
@@ -123,7 +129,9 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
         viewElements[el.id] = entry
       }
     }
-    const entry: SavedViewLayout = {}
+    // Every entry says which view it belongs to, so it can be found again
+    // after the view's derived key is renumbered (TEA-345).
+    const entry: SavedViewLayout = { view: viewIdentityOf(view) }
     if (view.exploreLayout) entry.exploreLayout = cloneZoomLayout(view.exploreLayout)
     if (view.locked) {
       entry.locked = true
@@ -144,16 +152,6 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
 export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   if (sidecar.version !== 1) return
   if (sidecar.explore && isSidecarData({ version: 1, explore: sidecar.explore })) workspace.exploreLayout = cloneZoomLayout(sidecar.explore)
-  workspace.savedLayout = Object.fromEntries(
-    Object.entries(sidecar.views ?? {}).map(([key, data]) => [key, {
-      ...data,
-      ...(data.exploreLayout ? { exploreLayout: cloneZoomLayout(data.exploreLayout) } : {}),
-      ...(data.elements ? { elements: Object.fromEntries(
-        Object.entries(data.elements).map(([id, el]) => [id, { ...el }]),
-      ) } : {}),
-    }]),
-  )
-
   // Elements — only apply known sidecar properties
   if (sidecar.elements) {
     const applyToElement = (id: string, data: SidecarElement) => {
@@ -196,40 +194,74 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     }
   }
 
-  // Views: the view-level layout lock, plus hand-placed and locked elements
-  if (sidecar.views) {
-    for (const view of allViewsOf(workspace)) {
-      const viewData = sidecar.views[view.key]
-        ?? (view.originalKey ? sidecar.views[view.originalKey] : undefined)
-      if (!viewData) continue
-      // Migrate only the parser's explicit key normalization alias. Never
-      // infer ownership from key prefixes, declaration order or element overlap.
-      // Guarded: two views can share one originalKey (the same non-conformant
-      // authored key declared twice), and the first of them already moved the
-      // entry — without this the second would store `undefined` under its key
-      // and every later savedLayout walk would throw on it.
-      if (!Object.hasOwn(sidecar.views, view.key) && view.originalKey) {
-        const carried = workspace.savedLayout[view.originalKey]
-        if (carried !== undefined) {
-          workspace.savedLayout[view.key] = carried
-          delete workspace.savedLayout[view.originalKey]
-        }
-      }
-      if (viewData.exploreLayout) view.exploreLayout = cloneZoomLayout(viewData.exploreLayout)
-      if (viewData.locked) view.locked = true
-      if (!viewData.elements) continue
-      for (const el of view.elements) {
-        const elData = viewData.elements[el.id]
-        // An entry with explicit pinned:false / locked:false is well-formed
-        // per isSidecarViewElement — checking the entry's presence rather
-        // than the truthiness of its fields is what makes that entry's x/y
-        // apply instead of being silently dropped alongside the false flags.
-        if (!elData) continue
-        if (elData.pinned !== undefined) el.pinned = elData.pinned || undefined
-        if (elData.locked !== undefined) el.locked = elData.locked || undefined
-        if (isFiniteNumber(elData.x)) el.x = elData.x
-        if (isFiniteNumber(elData.y)) el.y = elData.y
-      }
+  // Views: the view-level layout lock, plus hand-placed and locked elements.
+  // Each entry is matched to its view on the identity it records, falling
+  // back to its key only when it records none (TEA-345).
+  const views = allViewsOf(workspace)
+  const candidates: LayoutCandidate<SavedViewLayout>[] = Object.entries(sidecar.views ?? {}).map(([key, data]) => {
+    const { view: identity, ...rest } = data
+    const trusted = isStoredViewIdentity(identity)
+      ? { ...identity, ...(identity.elementIds ? { elementIds: [...identity.elementIds] } : {}) }
+      : undefined
+    return {
+      key,
+      identity: trusted,
+      // Pinned positions are only a subset of a view. Save its entire
+      // membership independently so sparse and lock-only siblings remain
+      // distinguishable even when the source DSL has not changed.
+      elementIds: trusted?.elementIds ?? Object.keys(data.elements ?? {}),
+      value: {
+        ...(trusted && { view: trusted }),
+        ...rest,
+        ...(rest.exploreLayout ? { exploreLayout: cloneZoomLayout(rest.exploreLayout) } : {}),
+        ...(rest.elements ? { elements: Object.fromEntries(
+          Object.entries(rest.elements).map(([id, el]) => [id, { ...el }]),
+        ) } : {}),
+      },
+    }
+  })
+  const byView = resolveViewLayouts(views, candidates)
+
+  // Re-file every entry under the key of the view that now owns it, so the
+  // rest of the store can keep looking layout up by `view.key`. An entry no
+  // view took is kept — declining a match must never cost the layout — but
+  // moved out of any slot a live view answers to, where the next save would
+  // otherwise merge it into that view's layout.
+  const owners = new Map<LayoutCandidate<SavedViewLayout>, View[]>()
+  for (const [view, c] of byView) owners.set(c, [...(owners.get(c) ?? []), view])
+  const liveKeys = new Set(views.map((v) => v.key))
+  const saved: Record<string, SavedViewLayout> = Object.create(null)
+  for (const c of candidates) {
+    // Two views can share one authored key; they share its entry too. A
+    // second, different entry for that key is parked rather than overwrite it.
+    const taken = owners.get(c)?.filter((view) => !Object.hasOwn(saved, view.key))
+    if (taken?.length) {
+      for (const view of taken) saved[view.key] = c.value
+      continue
+    }
+    let slot = c.key
+    for (let n = 2; liveKeys.has(slot) || Object.hasOwn(saved, slot); n++) slot = `${c.key}~${n}`
+    saved[slot] = c.value
+  }
+  workspace.savedLayout = saved
+
+  for (const view of views) {
+    const viewData = byView.get(view)?.value
+    if (!viewData) continue
+    if (viewData.exploreLayout) view.exploreLayout = cloneZoomLayout(viewData.exploreLayout)
+    if (viewData.locked) view.locked = true
+    if (!viewData.elements) continue
+    for (const el of view.elements) {
+      const elData = viewData.elements[el.id]
+      // An entry with explicit pinned:false / locked:false is well-formed
+      // per isSidecarViewElement — checking the entry's presence rather
+      // than the truthiness of its fields is what makes that entry's x/y
+      // apply instead of being silently dropped alongside the false flags.
+      if (!elData) continue
+      if (elData.pinned !== undefined) el.pinned = elData.pinned || undefined
+      if (elData.locked !== undefined) el.locked = elData.locked || undefined
+      if (isFiniteNumber(elData.x)) el.x = elData.x
+      if (isFiniteNumber(elData.y)) el.y = elData.y
     }
   }
 }
@@ -249,7 +281,13 @@ export function serializeSidecar(data: SidecarData): string {
 export function parseSidecar(json: string): SidecarData | null {
   try {
     const data = JSON.parse(json)
-    return isSidecarData(data) ? data : null
+    if (!isSidecarData(data)) return null
+    // Identity is an optional addition to version 1. Reject only the bad
+    // identity, leaving the layout available to the legacy key matcher.
+    for (const entry of Object.values(data.views ?? {})) {
+      if (!isStoredViewIdentity(entry.view)) delete entry.view
+    }
+    return data
   } catch (err) {
     log.warn('Failed to parse sidecar JSON', err)
     return null

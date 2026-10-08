@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { parseDSL, serializeDSL } from './index'
 import { deriveInstanceRelationships } from '@/lib/deployment'
+import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
+import { planIncludedWrites, serializeRoot } from '@/lib/includeWriteback'
 import type { DeploymentNode, Workspace } from '@/types/model'
 
 // Structurizr-authored deployment DSL, adapted from the official Big Bank plc
@@ -300,13 +302,33 @@ describe('deployment round-trip (serialize → parse)', () => {
     expect(scoped.autoLayout?.direction).toBe('LR')
 
     // Element sets survive (compare cardinality — parse-time expansion
-    // re-derives the same concrete membership from explicit includes)
+    // re-derives the same concrete membership from the saved `include *`)
     const firstScoped = first.views.deploymentViews.find(v => v.key === 'LiveDeployment')!
     expect(scoped.elements.length).toBe(firstScoped.elements.length)
 
     const unscoped = second.views.deploymentViews.find(v => v.key === 'AllLiveDeployment')!
     expect(unscoped.softwareSystemId).toBeUndefined()
     expect(unscoped.environment).toBe('Live')
+  })
+
+  it('writes include * back rather than listing every deployment element (#230)', () => {
+    const { workspace: first } = parseDSL(STRUCTURIZR_DSL)
+    const { workspace: second, errors, dsl } = roundtrip(first)
+    expect(errors).toHaveLength(0)
+
+    // Each view body is the wildcard (plus autoLayout), not one `include`
+    // per node and instance — the unnamed nodes' synthesised ids among them.
+    const viewBodies = dsl.slice(dsl.indexOf('views {')).match(/deployment [^\n]*\{[^}]*\}/g) ?? []
+    expect(viewBodies).toHaveLength(2)
+    for (const body of viewBodies) {
+      const lines = body.split('\n').map(l => l.trim())
+      expect(lines.filter(l => /^(include|exclude) /.test(l))).toEqual(['include *'])
+    }
+
+    const ids = (ws: Workspace, key: string) => ws.views.deploymentViews.find(v => v.key === key)!.elements.map(e => e.id)
+    for (const key of ['LiveDeployment', 'AllLiveDeployment']) {
+      expect(ids(second, key)).toEqual(ids(first, key))
+    }
   })
 
   it('round-trips instance extra tags, urls, and properties', () => {
@@ -346,5 +368,210 @@ describe('deployment round-trip (serialize → parse)', () => {
     expect(inst2.tags).toEqual(expect.arrayContaining(['Container Instance', 'critical', 'monitored']))
     expect(inst2.url).toBe('https://runbook.example.com')
     expect(inst2.properties.region).toBe('us-east-1')
+  })
+})
+
+// Structurizr copies an element relationship onto container / software system
+// instances only when the instance is created after it, so writing `web -> db`
+// below the deploymentEnvironment left the deployment view without it (#231).
+describe('relationships around deployment environments (#231)', () => {
+  const DSL = `workspace {
+    model {
+      user = person "User"
+      sys = softwareSystem "Sys" {
+        web = container "Web"
+        db = container "DB"
+      }
+      user -> web "Uses"
+      deploymentEnvironment "Live" {
+        s1 = deploymentNode "Server 1" {
+          lb = infrastructureNode "LB"
+          liveWeb = containerInstance web
+        }
+        s2 = deploymentNode "Server 2" {
+          liveDb = containerInstance db
+        }
+        lb -> liveWeb "Routes"
+      }
+      web -> db "Reads"
+      s1 -> s2 "Replicates"
+    }
+  }`
+
+  it('writes element relationships above the environment and deployment ones below, each in order', () => {
+    const { workspace, errors } = parseDSL(DSL)
+    expect(errors).toEqual([])
+    const dsl = serializeDSL(workspace)
+
+    const at = (text: string) => {
+      const i = dsl.indexOf(text)
+      expect(i, text).toBeGreaterThan(-1)
+      return i
+    }
+    const order = [
+      'user -> web "Uses"',
+      'web -> db "Reads"',
+      'deploymentEnvironment "Live"',
+      'lb -> liveWeb "Routes"',
+      's1 -> s2 "Replicates"',
+    ].map(at)
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+
+    // Stable from here on, with every relationship kept.
+    const reparsed = parseDSL(dsl)
+    expect(reparsed.errors).toEqual([])
+    expect(serializeDSL(reparsed.workspace)).toBe(dsl)
+    expect(reparsed.workspace.model.relationships.map(r => r.description))
+      .toEqual(['Uses', 'Reads', 'Routes', 'Replicates'])
+  })
+
+  it.each(['!include extra.dsl', '!impliedRelationships false'])('leaves relationships below the environment when `%s` follows it', (line) => {
+    // An include c4hero has not read may declare an endpoint, and
+    // `!impliedRelationships` changes how later relationships are read;
+    // moving them above either is not safe.
+    const dsl = `workspace {
+      model {
+        sys = softwareSystem "Sys" {
+          web = container "Web"
+          db = container "DB"
+        }
+        web -> db "Reads"
+        deploymentEnvironment "Live" {
+          deploymentNode "Server" {
+            liveWeb = containerInstance web
+          }
+        }
+        ${line}
+      }
+    }`
+    const { workspace, errors } = parseDSL(dsl)
+    expect(errors).toEqual([])
+    const saved = serializeDSL(workspace)
+    expect(saved.indexOf('deploymentEnvironment "Live"')).toBeLessThan(saved.indexOf(line))
+    expect(saved.indexOf(line)).toBeLessThan(saved.indexOf('web -> db "Reads"'))
+  })
+
+  it('writes them above the !include of a file that declares an environment', async () => {
+    const root = `workspace {
+    model {
+        sys = softwareSystem "Sys" {
+            web = container "Web"
+            db = container "DB"
+        }
+        ext = softwareSystem "Ext" {
+            api = container "API"
+        }
+        web -> db "Reads"
+        !include live.dsl
+        ops -> web "Operates"
+        web -> api "Calls"
+    }
+}
+`
+    const live = `ops = person "Ops"
+deploymentEnvironment "Live" {
+    deploymentNode "Server" {
+        liveWeb = containerInstance web
+        liveDb = containerInstance db
+    }
+}
+sys -> ext "Calls"
+`
+    const save = async (file: string) => {
+      const { workspace, errors } = await loadWorkspaceDocument({ content: root, readInclude: async p => (p === 'live.dsl' ? file : null) })
+      expect(errors).toEqual([])
+      return serializeRoot(workspace)
+    }
+
+    const saved = await save(live)
+    expect(saved.indexOf('web -> db "Reads"')).toBeLessThan(saved.indexOf('!include live.dsl'))
+    // `ops` is declared by that file, and `web -> api` implies `sys -> ext`,
+    // which it declares (Structurizr rejects the explicit one after that).
+    expect(saved.indexOf('!include live.dsl')).toBeLessThan(saved.indexOf('ops -> web "Operates"'))
+    expect(saved.indexOf('!include live.dsl')).toBeLessThan(saved.indexOf('web -> api "Calls"'))
+
+    // A file c4hero does not write back (it has its own ! line) may hold
+    // anything, so nothing moves past it.
+    const kept = await save(`!impliedRelationships true\n${live}`)
+    expect(kept.indexOf('!include live.dsl')).toBeLessThan(kept.indexOf('web -> db "Reads"'))
+  })
+
+  it('moves them past a later !include whose file declares neither endpoint', async () => {
+    const root = `workspace {
+    model {
+        sys = softwareSystem "Sys" {
+            web = container "Web"
+            db = container "DB"
+        }
+        web -> db "Reads"
+        deploymentEnvironment "Live" {
+            deploymentNode "Server" {
+                liveWeb = containerInstance web
+                liveDb = containerInstance db
+            }
+        }
+        !include late.dsl
+        web -> late "Calls"
+    }
+}
+`
+    const { workspace, errors } = await loadWorkspaceDocument({
+      content: root,
+      readInclude: async p => (p === 'late.dsl' ? 'late = softwareSystem "Late"\n' : null),
+    })
+    expect(errors).toEqual([])
+    const saved = serializeRoot(workspace)
+    expect(saved.indexOf('web -> db "Reads"')).toBeLessThan(saved.indexOf('deploymentEnvironment "Live"'))
+    expect(saved.indexOf('!include late.dsl')).toBeLessThan(saved.indexOf('web -> late "Calls"'))
+  })
+
+  it('reorders within each file of a multi-file workspace, never across files', async () => {
+    const root = `workspace {
+    model {
+        !include people.dsl
+        sys = softwareSystem "Sys" {
+            web = container "Web"
+            db = container "DB"
+        }
+        !include staging.dsl
+        deploymentEnvironment "Live" {
+            deploymentNode "Server" {
+                liveWeb = containerInstance web
+            }
+        }
+        u -> web "Uses"
+    }
+}
+`
+    const files: Record<string, string> = {
+      'people.dsl': 'u = person "U"\n',
+      'staging.dsl': `deploymentEnvironment "Staging" {
+    deploymentNode "Box" {
+        lb = infrastructureNode "LB"
+        stagingWeb = containerInstance web
+    }
+}
+lb -> stagingWeb "Routes"
+web -> db "Reads"
+`,
+    }
+    const { workspace, errors } = await loadWorkspaceDocument({ content: root, readInclude: async p => files[p] ?? null })
+    expect(errors).toEqual([])
+
+    // `u` comes from an include written above, so the root's relationship
+    // moves up even though one endpoint is not its own: above the include
+    // that brings in the Staging environment, and so above Live too.
+    const saved = serializeRoot(workspace)
+    expect(saved.indexOf('u -> web "Uses"')).toBeLessThan(saved.indexOf('!include staging.dsl'))
+    expect(saved.indexOf('!include staging.dsl')).toBeLessThan(saved.indexOf('deploymentEnvironment "Live"'))
+    expect(saved).not.toContain('web -> db')
+    expect(saved).not.toContain('Routes')
+
+    const writes = new Map(planIncludedWrites(workspace).map(w => [w.path, w.content]))
+    expect(writes.get('people.dsl')).toBe(files['people.dsl'])
+    const staging = writes.get('staging.dsl')!
+    expect(staging.indexOf('web -> db "Reads"')).toBeLessThan(staging.indexOf('deploymentEnvironment "Staging"'))
+    expect(staging.indexOf('lb -> stagingWeb "Routes"')).toBeGreaterThan(staging.indexOf('deploymentEnvironment "Staging"'))
+    expect(staging).not.toContain('Uses')
   })
 })

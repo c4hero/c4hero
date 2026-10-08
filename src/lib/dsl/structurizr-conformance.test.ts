@@ -39,6 +39,8 @@ import { representable } from './encoding'
 import { validateForStructurizr } from '@/lib/structurizrValidation'
 import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 import { planIncludedWrites, serializeRoot } from '@/lib/includeWriteback'
+import { wildcardImpliedRelationships } from './wildcard'
+import { useWorkspaceStore } from '@/store/workspace'
 
 const CLI = process.env.STRUCTURIZR_CLI ?? join(process.cwd(), '.structurizr-cli', 'structurizr.sh')
 const CLI_AVAILABLE = existsSync(CLI)
@@ -326,6 +328,111 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         expect(validate(serializeDSL(hostileWorkspace()))).toBeNull()
     })
 
+    // #232: a view key c4hero lexes as a keyword (`deployment`, `component`)
+    // was read as "no key", so the header ended early and its leftover words
+    // started a second view scoped to the description string — a save the
+    // real parser rejected outright. `expected` is what the real parser
+    // builds from each source, compared by name: element ids follow
+    // declaration order, which a save may change.
+    describe('a view keyed with a word c4hero lexes as a keyword (#232)', () => {
+        type ExportedElement = {
+            id: string
+            name?: string
+            containerId?: string
+            containers?: ExportedElement[]
+            children?: ExportedElement[]
+            containerInstances?: ExportedElement[]
+        }
+        type ExportedView = { key: string; description?: string; elements?: { id: string }[] }
+        type NamedView = { kind: string; key: string; description?: string; elements: string[] }
+
+        /** Every view the real parser built, its elements named rather than numbered. */
+        const viewsOf = (exported: Record<string, unknown>): NamedView[] => {
+            const model = exported.model as { people?: ExportedElement[]; softwareSystems?: ExportedElement[]; deploymentNodes?: ExportedElement[] }
+            const byId = new Map<string, ExportedElement>()
+            const walk = (elements: ExportedElement[] | undefined): void => {
+                for (const e of elements ?? []) {
+                    byId.set(e.id, e)
+                    walk(e.containers)
+                    walk(e.children)
+                    walk(e.containerInstances)
+                }
+            }
+            walk(model.people)
+            walk(model.softwareSystems)
+            walk(model.deploymentNodes)
+            const nameOf = (id: string): string => {
+                const e = byId.get(id)
+                return e?.name ?? `instance of ${byId.get(e?.containerId ?? '')?.name}`
+            }
+            const views = exported.views as Record<string, ExportedView[] | undefined>
+            return ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews']
+                .flatMap(kind => (views[kind] ?? []).map(v => ({
+                    kind, key: v.key, description: v.description, elements: (v.elements ?? []).map(e => nameOf(e.id)).sort(),
+                })))
+        }
+
+        it.each([
+            ['deployment', `workspace "Keyword as view key" {
+    model {
+        a = softwareSystem "System A" {
+            web = container "Web"
+        }
+        deploymentEnvironment "Production" {
+            deploymentNode "Server" {
+                containerInstance web
+            }
+        }
+    }
+    views {
+        deployment * "Production" deployment "Where it all runs" {
+            include *
+            autolayout lr
+        }
+    }
+}
+`, { kind: 'deploymentViews', key: 'deployment', description: 'Where it all runs', elements: ['Server', 'instance of Web'] }],
+            ['component', `workspace "Keyword as view key 2" {
+    model {
+        a = softwareSystem "System A" {
+            web = container "Web"
+        }
+    }
+    views {
+        container a component "Containers of A" {
+            include *
+            autolayout lr
+        }
+    }
+}
+`, { kind: 'containerViews', key: 'component', description: 'Containers of A', elements: ['Web'] }],
+            // A quoted scope too: read as the key, it left the body on an
+            // unscoped view, whose step to a container Structurizr rejects.
+            ['dynamic', `workspace "Keyword as view key 3" {
+    model {
+        u = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web"
+        }
+        u -> web "Uses"
+    }
+    views {
+        dynamic "a" dynamic "Flow" {
+            u -> web "Signs in"
+            autolayout lr
+        }
+    }
+}
+`, { kind: 'dynamicViews', key: 'dynamic', description: 'Flow', elements: ['User', 'Web'] }],
+        ])('saves a view keyed %s as the one view Structurizr built from the source', (_key, source, expected) => {
+            const { workspace, errors } = parseDSL(source)
+            expect(errors).toEqual([])
+            const saved = serializeDSL(workspace)
+            expect(validate(saved)).toBeNull()
+            expect(viewsOf(exportModel(saved))).toEqual([expected])
+        }, 30_000) // two JVM starts: near the 5 s default on a loaded runner
+    })
+
     function icePanelWorkspace(): Workspace {
         const source = readFileSync(join(process.cwd(), 'src/lib/dsl/__fixtures__/hierarchical-landscape.dsl'), 'utf8')
         const { workspace, errors } = parseDSL(source)
@@ -349,6 +456,468 @@ describe.skipIf(!CLI_AVAILABLE)('Structurizr conformance (real CLI)', () => {
         const ws = icePanelWorkspace()
         expect(ws.views.systemContextViews.map(v => v.key)).toContain('Label-602')
         expect(validateForStructurizr(ws)).toEqual([])
+    })
+
+    describe('include * survives a save (#230)', () => {
+        interface ExportedElement {
+            id: string
+            name?: string
+            containerId?: string
+            softwareSystemId?: string
+            containers?: ExportedElement[]
+            components?: ExportedElement[]
+            children?: ExportedElement[]
+            containerInstances?: ExportedElement[]
+            softwareSystemInstances?: ExportedElement[]
+            infrastructureNodes?: ExportedElement[]
+        }
+
+        /** What the real parser draws in view `key`: its element names, sorted
+         *  (an instance has no name of its own, so it reads as `<name> instance`),
+         *  and how many relationships it shows. */
+        function exportedView(exported: Record<string, unknown>, key: string): { elements: string[]; relationships: number } {
+            const m = exported.model as { people?: ExportedElement[]; softwareSystems?: ExportedElement[]; deploymentNodes?: ExportedElement[] }
+            const byId = new Map<string, ExportedElement>()
+            const walk = (elements: ExportedElement[] | undefined): void => {
+                for (const e of elements ?? []) {
+                    byId.set(e.id, e)
+                    for (const children of [e.containers, e.components, e.children, e.containerInstances, e.softwareSystemInstances, e.infrastructureNodes]) walk(children)
+                }
+            }
+            walk(m.people)
+            walk(m.softwareSystems)
+            walk(m.deploymentNodes)
+            const nameOf = (id: string): string => {
+                const e = byId.get(id)
+                const instanceOf = e?.containerId ?? e?.softwareSystemId
+                return instanceOf ? `${byId.get(instanceOf)?.name} instance` : e?.name ?? id
+            }
+            const view = Object.values(exported.views as Record<string, unknown>)
+                .flatMap(v => (Array.isArray(v) ? v as { key: string; elements?: { id: string }[]; relationships?: unknown[] }[] : []))
+                .find(v => v.key === key)
+            expect(view).toBeDefined()
+            return { elements: (view?.elements ?? []).map(e => nameOf(e.id)).sort(), relationships: view?.relationships?.length ?? 0 }
+        }
+
+        /** The names c4hero shows in static view `key`, sorted. */
+        function shownNames(ws: Workspace, key: string): string[] {
+            const names = new Map<string, string>()
+            for (const p of ws.model.people) names.set(p.id, p.name)
+            for (const sys of ws.model.softwareSystems) {
+                names.set(sys.id, sys.name)
+                for (const c of sys.containers) {
+                    names.set(c.id, c.name)
+                    for (const comp of c.components) names.set(comp.id, comp.name)
+                }
+            }
+            const view = [...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews].find(v => v.key === key)!
+            return view.elements.map(e => names.get(e.id) ?? e.id).sort()
+        }
+
+        /** The trimmed include/exclude lines of the view whose header names `key`. */
+        function includeLines(dsl: string, key: string): string[] {
+            const lines = dsl.split('\n').map(l => l.trim())
+            const start = lines.findIndex(l => l.includes(`"${key}"`) && l.endsWith('{'))
+            expect(start).toBeGreaterThanOrEqual(0)
+            return lines.slice(start + 1, lines.indexOf('}', start)).filter(l => /^(include|exclude) /.test(l))
+        }
+
+        // The issue's fixture: User reaches the view through a component of
+        // Web, System B through one of its containers.
+        const ISSUE_DSL = `workspace "Container view include *" {
+    model {
+        user = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web" {
+                ctrl = component "Controller"
+            }
+            db = container "Database"
+        }
+        b = softwareSystem "System B" {
+            api = container "B API"
+        }
+        user -> ctrl "Uses"
+        web -> db "Reads from"
+        web -> api "Calls"
+    }
+    views {
+        container a "ContainersA" {
+            include *
+            autolayout lr
+        }
+    }
+}`
+
+        it('the issue fixture saves as include * and Structurizr draws the same container view', () => {
+            const { workspace, errors } = parseDSL(ISSUE_DSL)
+            expect(errors).toEqual([])
+            const saved = serializeDSL(workspace)
+            expect(saved).toContain('include *')
+            expect(saved).not.toContain('include api')
+
+            const original = exportedView(exportModel(ISSUE_DSL), 'ContainersA')
+            expect(original).toEqual({ elements: ['Database', 'System B', 'User', 'Web'], relationships: 3 })
+            expect(exportedView(exportModel(saved), 'ContainersA')).toEqual(original)
+            // …and the canvas shows what Structurizr draws.
+            expect(shownNames(workspace, 'ContainersA')).toEqual(original.elements)
+        }, 30_000)
+
+        it('canvas edits to a wildcard view reach Structurizr as include/exclude lines', () => {
+            const { workspace, errors } = parseDSL(ISSUE_DSL)
+            expect(errors).toEqual([])
+            const view = workspace.views.containerViews[0]
+            // Hide Database (recorded, as removeElementsFromView does); add a
+            // container to System A (shown, as addContainer does) and a person
+            // with no relationships yet.
+            view.elements = view.elements.filter(e => e.id !== 'db')
+            view.excludedElementIds = ['db']
+            workspace.model.softwareSystems[0].containers.push({
+                id: 'cache', type: 'container', name: 'Cache', tags: ['Element', 'Container'], properties: {}, components: [],
+            })
+            workspace.model.people.push({ id: 'ops', type: 'person', name: 'Ops', tags: ['Element', 'Person'], properties: {} })
+            view.elements.push({ id: 'cache' }, { id: 'ops' })
+
+            const saved = serializeDSL(workspace)
+            // The wildcard stays, and only the edits get lines of their own.
+            expect(includeLines(saved, 'ContainersA')).toEqual(['include *', 'exclude db', 'include ops'])
+            expect(exportedView(exportModel(saved), 'ContainersA').elements).toEqual(shownNames(workspace, 'ContainersA'))
+        }, 30_000)
+
+        it('a component shown in its container\'s place stays there once a relationship brings the container in', () => {
+            const source = `workspace {
+    model {
+        user = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web" {
+                ctrl = component "Controller"
+            }
+            db = container "Database" {
+                repo = component "Repo"
+            }
+        }
+        user -> ctrl "Uses"
+    }
+    views {
+        component web "ComponentsWeb" {
+            include *
+            include repo
+        }
+    }
+}`
+            const { workspace, errors } = parseDSL(source)
+            expect(errors).toEqual([])
+            // A relationship drawn on the canvas makes the wildcard add Database.
+            workspace.model.relationships.push({ id: 'ctrlDb', sourceId: 'ctrl', destinationId: 'db', description: 'Reads from', tags: ['Relationship'], properties: {} })
+            expect(shownNames(workspace, 'ComponentsWeb')).toEqual(['Controller', 'Repo', 'User'])
+
+            const saved = serializeDSL(workspace)
+            expect(includeLines(saved, 'ComponentsWeb')).toEqual(['include *', 'exclude db', 'include repo'])
+            expect(exportedView(exportModel(saved), 'ComponentsWeb').elements).toEqual(shownNames(workspace, 'ComponentsWeb'))
+            // Without the exclude, Structurizr keeps Database and skips Repo.
+            const withoutExclude = exportedView(exportModel(saved.replace(/\n\s*exclude db/, '')), 'ComponentsWeb')
+            expect(withoutExclude.elements).toEqual(['Controller', 'Database', 'User'])
+        }, 30_000)
+
+        it('author include and exclude lines next to the wildcard survive a save', () => {
+            // Each line matters to Structurizr: the excludes hide what its
+            // wildcard adds (System B through a container or a component; DC
+            // and its Mainframe instance, another system's, in the scoped
+            // deployment view, which c4hero does not show); `include api bdb`
+            // before `include *` shows those containers and keeps System B out.
+            const source = `workspace {
+    model {
+        user = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web" {
+                ctrl = component "Controller"
+                svc = component "Service"
+            }
+            db = container "Database"
+        }
+        b = softwareSystem "System B" {
+            api = container "B API"
+            bdb = container "B DB"
+        }
+        ext = softwareSystem "Mainframe"
+        user -> ctrl "Uses"
+        web -> db "Reads from"
+        ctrl -> api "Calls"
+        svc -> bdb "Stores in"
+        deploymentEnvironment "Live" {
+            deploymentNode "AWS" {
+                containerInstance web
+            }
+            dc = deploymentNode "DC" {
+                softwareSystemInstance ext
+            }
+        }
+    }
+    views {
+        systemContext a "ContextA" {
+            include *
+            exclude b
+        }
+        container a "ContainersA" {
+            include api bdb
+            include *
+        }
+        component web "ComponentsWeb" {
+            include *
+            exclude b
+        }
+        deployment a "Live" "LiveScoped" {
+            include *
+            exclude dc
+        }
+    }
+}`
+            const { workspace, errors } = parseDSL(source)
+            expect(errors).toEqual([])
+            const saved = serializeDSL(workspace)
+            expect(includeLines(saved, 'ContextA')).toEqual(['include *', 'exclude b'])
+            expect(includeLines(saved, 'ContainersA')).toEqual(['include api', 'include bdb', 'include *'])
+            expect(includeLines(saved, 'ComponentsWeb')).toEqual(['include *', 'exclude b'])
+            expect(includeLines(saved, 'LiveScoped')).toEqual(['include *', 'exclude dc'])
+
+            const original = exportModel(source)
+            const resaved = exportModel(saved)
+            for (const key of ['ContextA', 'ContainersA', 'ComponentsWeb', 'LiveScoped']) {
+                expect(exportedView(resaved, key)).toEqual(exportedView(original, key))
+            }
+            expect(exportedView(original, 'ContainersA').elements).toEqual(['B API', 'B DB', 'Database', 'User', 'Web'])
+            for (const key of ['ContextA', 'ContainersA', 'ComponentsWeb']) {
+                expect(shownNames(workspace, key)).toEqual(exportedView(original, key).elements)
+            }
+        }, 30_000)
+
+        it('an explicit include next to the wildcard survives where implied relationships are off', () => {
+            // c4hero does not model `!impliedRelationships false`, so its
+            // wildcard adds User here; Structurizr's does not, and only the
+            // author's own line shows User there.
+            const source = ISSUE_DSL
+                .replace('    model {', '    !impliedRelationships false\n    model {')
+                .replace('include *\n', 'include *\n            include user\n')
+            const { workspace, errors } = parseDSL(source)
+            expect(errors).toEqual([])
+            const saved = serializeDSL(workspace)
+            expect(includeLines(saved, 'ContainersA')).toEqual(['include *', 'include user'])
+            const original = exportedView(exportModel(source), 'ContainersA')
+            expect(original.elements).toContain('User')
+            expect(exportedView(exportModel(saved), 'ContainersA')).toEqual(original)
+        }, 30_000)
+
+        /** The arrows the real parser draws in view `key`, each as
+         *  `Source -> Destination 'description'`, sorted. Implied
+         *  relationships are model relationships of their own in its export. */
+        function exportedArrows(exported: Record<string, unknown>, key: string): string[] {
+            interface Rel { id: string; sourceId: string; destinationId: string; description?: string }
+            interface El { id: string; name?: string; relationships?: Rel[]; containers?: El[]; components?: El[] }
+            const m = exported.model as { people?: El[]; softwareSystems?: El[] }
+            const names = new Map<string, string>()
+            const rels = new Map<string, Rel>()
+            const walk = (elements: El[] | undefined): void => {
+                for (const e of elements ?? []) {
+                    names.set(e.id, e.name ?? e.id)
+                    for (const r of e.relationships ?? []) rels.set(r.id, r)
+                    walk(e.containers)
+                    walk(e.components)
+                }
+            }
+            walk(m.people)
+            walk(m.softwareSystems)
+            const view = Object.values(exported.views as Record<string, unknown>)
+                .flatMap(v => (Array.isArray(v) ? v as { key: string; relationships?: { id: string }[] }[] : []))
+                .find(v => v.key === key)
+            expect(view).toBeDefined()
+            return (view?.relationships ?? []).map(({ id }) => rels.get(id)!)
+                .map(r => `${names.get(r.sourceId)} -> ${names.get(r.destinationId)} '${r.description ?? ''}'`)
+                .sort()
+        }
+
+        /** The arrows c4hero draws in static view `key`: the relationships it
+         *  lists and the implied ones, as exportedArrows writes them. */
+        function canvasArrows(ws: Workspace, key: string): string[] {
+            const names = new Map<string, string>()
+            for (const p of ws.model.people) names.set(p.id, p.name)
+            for (const sys of ws.model.softwareSystems) {
+                names.set(sys.id, sys.name)
+                for (const c of sys.containers) {
+                    names.set(c.id, c.name)
+                    for (const comp of c.components) names.set(comp.id, comp.name)
+                }
+            }
+            const view = [...ws.views.systemContextViews, ...ws.views.containerViews, ...ws.views.componentViews].find(v => v.key === key)!
+            const label = (sourceId: string, destinationId: string, description?: string) =>
+                `${names.get(sourceId)} -> ${names.get(destinationId)} '${description ?? ''}'`
+            return [
+                ...view.relationships.map(r => ws.model.relationships.find(m => m.id === r.id)!)
+                    .map(r => label(r.sourceId, r.destinationId, r.description)),
+                ...wildcardImpliedRelationships(ws.model, view)
+                    .map(r => label(r.sourceId, r.destinationId, r.relationship.description)),
+            ].sort()
+        }
+
+        // Relationship excludes next to `include *`: each hides implied
+        // relationships too, `*` matches any element and each end matches
+        // exactly. The component views include their own scope, which
+        // Structurizr ignores.
+        const EXCLUDES_DSL = `workspace {
+    model {
+        user = person "User"
+        a = softwareSystem "System A" {
+            web = container "Web" {
+                ctrl = component "Controller"
+                svc = component "Service"
+            }
+            db = container "Database"
+        }
+        b = softwareSystem "System B" {
+            api = container "B API"
+        }
+        user -> ctrl "Uses"
+        svc -> db "Service reads"
+        web -> db "Web reads"
+        web -> api "Calls"
+        user -> b "Direct"
+    }
+    views {
+        systemContext a "XAll" {
+            include *
+            exclude "* -> *"
+        }
+        container a "CAll" {
+            include *
+            exclude "* -> *"
+        }
+        systemContext a "XUser" {
+            include *
+            exclude "user -> *"
+        }
+        systemContext a "XAB" {
+            include *
+            exclude "a -> b"
+        }
+        systemContext a "XUserCtrl" {
+            include *
+            exclude "user -> ctrl"
+        }
+        container a "CWebB" {
+            include *
+            exclude "web -> b"
+        }
+        container a "CStarB" {
+            include *
+            exclude "* -> b"
+        }
+        container a "CWebDb" {
+            include *
+            exclude "web -> db"
+        }
+        container a "CUserWeb" {
+            include *
+            exclude "user -> web"
+        }
+        container a "CAB" {
+            include *
+            exclude "a -> b"
+        }
+        systemContext a "Listed" {
+            include user a b
+            exclude "* -> *"
+        }
+        component web "CompSystem" {
+            include *
+            include a
+        }
+        component web "CompContainer" {
+            include web
+            include *
+        }
+    }
+}`
+        const EXCLUDE_KEYS = ['XAll', 'CAll', 'XUser', 'XAB', 'XUserCtrl', 'CWebB', 'CStarB', 'CWebDb', 'CUserWeb', 'CAB', 'Listed', 'CompSystem', 'CompContainer']
+
+        it('relationship excludes hide implied arrows as Structurizr does, and are saved as written', () => {
+            const { workspace, errors } = parseDSL(EXCLUDES_DSL)
+            expect(errors).toEqual([])
+            const original = exportModel(EXCLUDES_DSL)
+            const resaved = exportModel(serializeDSL(workspace))
+            for (const key of EXCLUDE_KEYS) {
+                expect([key, canvasArrows(workspace, key)]).toEqual([key, exportedArrows(original, key)])
+                expect([key, exportedArrows(resaved, key)]).toEqual([key, exportedArrows(original, key)])
+            }
+            expect(exportedArrows(original, 'CAll')).toEqual([])
+            for (const key of ['CompSystem', 'CompContainer']) {
+                expect(shownNames(workspace, key)).toEqual(exportedView(original, key).elements)
+            }
+        }, 60_000)
+
+        it('canvas edits next to a * -> * line reach Structurizr as the canvas shows them', () => {
+            const store = useWorkspaceStore.getState
+            store().loadWorkspace(parseDSL(EXCLUDES_DSL).workspace)
+            const id = (description: string) => store().workspace!.model.relationships.find(r => r.description === description)!.id
+            // A relationship drawn on the canvas stays hidden, as the line
+            // hides it; one restored to the view replaces the line with one
+            // per arrow it still hides.
+            store().addRelationship('user', 'db', 'Queries')
+            store().restoreRelationshipToView('CAll', id('Web reads'))
+            const ws = store().workspace!
+            expect(canvasArrows(ws, 'CAll')).toEqual(["Web -> Database 'Service reads'", "Web -> Database 'Web reads'"])
+            const saved = exportModel(serializeDSL(ws))
+            for (const key of EXCLUDE_KEYS) {
+                expect([key, exportedArrows(saved, key)]).toEqual([key, canvasArrows(ws, key)])
+            }
+            store().closeWorkspace()
+        }, 60_000)
+
+        it('a deployment view wildcard keeps its elements and relationships through a save', () => {
+            // Only a relationship between deployment elements: whether
+            // Structurizr derives instance relationships from container
+            // relationships depends on where a save writes those (#231).
+            const source = `workspace {
+    model {
+        sys = softwareSystem "Sys" {
+            web = container "Web"
+            db = container "DB"
+        }
+        ext = softwareSystem "Mainframe"
+        deploymentEnvironment "Live" {
+            deploymentNode "AWS" {
+                lb = infrastructureNode "Load Balancer"
+                deploymentNode "Web Server" {
+                    liveWeb = containerInstance web
+                }
+                deploymentNode "DB Server" {
+                    containerInstance db
+                }
+            }
+            deploymentNode "DC" {
+                softwareSystemInstance ext
+            }
+            lb -> liveWeb "Forwards to"
+        }
+    }
+    views {
+        deployment sys "Live" "LiveScoped" {
+            include *
+        }
+        deployment * "Live" "LiveAll" {
+            include *
+        }
+    }
+}`
+            const { workspace, errors } = parseDSL(source)
+            expect(errors).toEqual([])
+            const saved = serializeDSL(workspace)
+            expect(saved).not.toMatch(/include p\d/)
+
+            const original = exportModel(source)
+            const resaved = exportModel(saved)
+            for (const key of ['LiveScoped', 'LiveAll']) {
+                expect(exportedView(resaved, key)).toEqual(exportedView(original, key))
+            }
+            expect(exportedView(original, 'LiveAll').relationships).toBe(1)
+        }, 30_000)
     })
 
     // Deployment + dynamic views: the grammar shapes that broke the first
@@ -512,6 +1081,109 @@ workspace "Dynamics" {
             expect(validate(serializeDSL(ws()))).toBeNull()
         })
 
+        // Structurizr copies an element relationship onto the instances
+        // created after it, so a save that wrote `web -> db` below the
+        // deploymentEnvironment left the deployment view without it (#231).
+        const ISSUE_231_DSL = `
+workspace "Deployment relationships" {
+  model {
+    a = softwareSystem "System A" {
+      web = container "Web"
+      db = container "Database"
+    }
+    web -> db "Reads from"
+
+    deploymentEnvironment "Production" {
+      deploymentNode "Server" {
+        containerInstance web
+        containerInstance db
+      }
+    }
+  }
+  views {
+    deployment * "Production" "Prod" {
+      include *
+      autolayout lr
+    }
+  }
+}
+`
+        // The environment in its own file. `ops` and `web -> api` stay after
+        // the include: one is declared there, and the other would imply
+        // `a -> b "Calls"` before the explicit one, which is then rejected.
+        const ISSUE_231_ROOT = `
+workspace "Deployment relationships" {
+  model {
+    a = softwareSystem "System A" {
+      web = container "Web"
+      db = container "Database"
+    }
+    b = softwareSystem "System B" {
+      api = container "API"
+    }
+    web -> db "Reads from"
+    !include live.dsl
+    ops -> web "Operates"
+    web -> api "Calls"
+  }
+  views {
+    deployment * "Live" "Live" {
+      include *
+    }
+  }
+}
+`
+        const ISSUE_231_INCLUDES = {
+            'live.dsl': `ops = person "Ops"
+deploymentEnvironment "Live" {
+  deploymentNode "Server" {
+    containerInstance web
+    containerInstance db
+    containerInstance api
+  }
+}
+a -> b "Calls"
+`,
+        }
+        /** A deployment view's relationships as `source -> destination: description`. */
+        const deploymentViewRelationships = (exported: Record<string, unknown>, key: string): string[] => {
+            type Item = { id?: string; name?: string; containerId?: string; softwareSystemId?: string
+                sourceId?: string; destinationId?: string; description?: string }
+            const byId = new Map<string, Item>()
+            const walk = (value: unknown): void => {
+                if (Array.isArray(value)) value.forEach(walk)
+                else if (typeof value === 'object' && value !== null) {
+                    const item = value as Item
+                    if (item.id !== undefined) byId.set(item.id, item)
+                    Object.values(value).forEach(walk)
+                }
+            }
+            walk(exported.model)
+            // An instance is named after its container or software system.
+            const name = (id: string | undefined): string | undefined => {
+                const item = id === undefined ? undefined : byId.get(id)
+                return item?.name ?? (item && name(item.containerId ?? item.softwareSystemId))
+            }
+            type View = { key: string; relationships?: { id: string }[] }
+            const view = (exported.views as { deploymentViews?: View[] }).deploymentViews?.find(v => v.key === key)
+            return (view?.relationships ?? []).map(({ id }) => byId.get(id))
+                .map(rel => `${name(rel?.sourceId)} -> ${name(rel?.destinationId)}: ${rel?.description}`)
+                .sort()
+        }
+        it.each<[string, string, Record<string, string>, string, string[]]>([
+            ['the issue fixture', ISSUE_231_DSL, {}, 'Prod', ['Web -> Database: Reads from']],
+            ['the deployment fixture', DEPLOYMENT_DSL, {}, 'LiveAll', [
+                'Load Balancer -> Web: Forwards to', 'Web -> DB: Reads', 'Web -> Mainframe: Uses',
+            ]],
+            ['an environment in an included file', ISSUE_231_ROOT, ISSUE_231_INCLUDES, 'Live', ['Web -> Database: Reads from']],
+        ])('a save keeps the relationships of a deployment view (%s, #231)', async (_name, dsl, includes, key, expected) => {
+            const { workspace, errors } = await loadWorkspaceDocument({ content: dsl, readInclude: async path => includes[path] ?? null })
+            expect(errors).toEqual([])
+            const savedIncludes = Object.fromEntries(planIncludedWrites(workspace).map(write => [write.path, write.content]))
+            expect(deploymentViewRelationships(exportModel(dsl, includes), key)).toEqual(expected)
+            expect(deploymentViewRelationships(exportModel(serializeRoot(workspace), savedIncludes), key)).toEqual(expected)
+        }, 30_000) // two CLI runs per case
+
         it('parallel-sequence numbering matches the real parser, before and after re-serialization', () => {
             const PARALLEL_DSL = `
 workspace "Parallel" {
@@ -597,6 +1269,88 @@ workspace "Grouped" {
         expect(errors).toEqual([])
         expect(validate(serializeDSL(workspace))).toBeNull()
     })
+
+    // #233: c4hero labels a view by its header's positional description, and
+    // used to save that label as a `title` — which Structurizr then rendered
+    // in place of its own default title.
+    it('saves a view header description without turning it into a title', () => {
+        const dsl = `
+workspace "View description" {
+  model {
+    user = person "User"
+    a = softwareSystem "System A" {
+      web = container "Web" {
+        ui = component "UI"
+      }
+      api = container "API"
+      web -> api "Calls"
+    }
+    user -> a "Uses"
+    deploymentEnvironment "Live" {
+      deploymentNode "Server" {
+        containerInstance web
+      }
+    }
+  }
+  views {
+    systemLandscape "land" "Everything" {
+      include *
+    }
+    systemContext a "ctx" "Context description" {
+      title "Explicit title"
+      include *
+    }
+    container a "ContainersA" "The containers inside System A" {
+      include *
+    }
+    container a "renamed" "Renamed in c4hero" {
+      include *
+    }
+    component web "comp" "Header string" {
+      description "Body description"
+      include *
+    }
+    component api "blanked" "Header string" {
+      description ""
+      include *
+    }
+    dynamic a "dyn" "Dynamic description" {
+      web -> api "Calls"
+    }
+    deployment a "Live" "dep" "Deployment description" {
+      include *
+    }
+  }
+}
+`
+        type ExportedView = { key: string; title?: string; description?: string }
+        const headings = (exported: Record<string, unknown>) => {
+            const views = exported.views as Record<string, ExportedView[] | undefined>
+            return ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews']
+                .flatMap(kind => views[kind] ?? [])
+                .map(({ key, title, description }) => ({ key, title, description }))
+        }
+        const containerView = (exported: Record<string, unknown>, key: string) => {
+            const view = (exported.views as { containerViews: ExportedView[] }).containerViews.find(v => v.key === key)
+            return { title: view?.title, description: view?.description }
+        }
+
+        const { workspace, errors } = parseDSL(dsl)
+        expect(errors).toEqual([])
+        // A name the user gives a view is a real title (what renameView does).
+        const renamed = workspace.views.containerViews.find(v => v.key === 'renamed')!
+        renamed.title = 'Containers'
+        renamed.autoTitle = undefined
+
+        const theirs = exportModel(dsl)
+        const saved = exportModel(serializeDSL(workspace))
+        expect(containerView(theirs, 'ContainersA').title).toBeUndefined()
+        expect(containerView(theirs, 'ContainersA').description).toBe('The containers inside System A')
+        expect(containerView(saved, 'ContainersA')).toEqual(containerView(theirs, 'ContainersA'))
+        expect(containerView(saved, 'renamed')).toEqual({ title: 'Containers', description: 'Renamed in c4hero' })
+        // Every view type, the explicit title and the body descriptions too.
+        expect(headings(saved)).toEqual(headings(theirs).map(v => v.key === 'renamed' ? { ...v, title: 'Containers' } : v))
+    }, 30_000) // two JVM starts: near the 5 s default on a loaded runner
 
     // Validation is not enough: "X:\\" validates fine and stores a corrupted
     // value. These assert what the real parser actually built.

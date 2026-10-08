@@ -310,6 +310,11 @@ describe('exportWorkspaceAsOkf — deployment and views', () => {
     expect(fm.key).toBe('"Containers"')
     expect(fm.scope).toBe('"systems/internetBankingSystem"')
     expect(files.get('views/Containers.md')).toContain('| [Customer](/people/customer.md) | [Web Application](/containers/webApplication.md) | Uses |')
+    // An include * view lists the relationships Structurizr implies between
+    // the elements it shows, as the canvas draws them (#230).
+    const context = files.get('views/Context.md')!
+    expect(context).toContain('| [Customer](/people/customer.md) | [Internet Banking System](/systems/internetBankingSystem.md) | Uses |')
+    expect(context).toContain('| [Internet Banking System](/systems/internetBankingSystem.md) | [Mainframe Banking System](/systems/mainframe.md) | Uses |')
 
     const dynamic = files.get('views/SignIn.md')!
     expect(dynamic).toContain('| Step | From | To | Description |')

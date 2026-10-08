@@ -7,7 +7,7 @@ import { createLogger } from '@/lib/logger'
 const log = createLogger('useAutoSave')
 
 const scheduleIdle = typeof requestIdleCallback === 'function'
-  ? requestIdleCallback
+  ? (cb: () => void) => requestIdleCallback(cb, { timeout: 1000 })
   : (cb: () => void) => setTimeout(cb, 50)
 
 const cancelIdle = typeof cancelIdleCallback === 'function'
@@ -39,7 +39,8 @@ export function useAutoSave() {
       // Always save to localStorage for crash recovery (fast, synchronous)
       saveToLocalStorage(currentWs)
 
-      // Defer file I/O to idle time so it doesn't block interaction
+      // Prefer idle time, but bound the delay: a busy canvas can otherwise
+      // leave a valid edit in crash recovery without ever saving it to disk.
       cancelIdle(idleHandle.current)
       idleHandle.current = scheduleIdle(() => {
         // Re-check at idle fire time too — closeWorkspace may have run

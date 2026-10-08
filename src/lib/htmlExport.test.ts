@@ -101,6 +101,15 @@ describe('exportWorkspaceAsHtml — document shape', () => {
     expect(stages[1]).toContain('hidden')
   })
 
+  it('draws the relationships Structurizr implies in an include * view (#230)', () => {
+    // `cust -> web` is declared at container level; the context view shows
+    // the Shop system, so it draws the implied Customer -> Shop, as the
+    // canvas does.
+    const { document } = dom(exportWorkspaceAsHtml(shop()))
+    const labels = [...document.querySelectorAll('.stage[data-view="Context"] .e-label')].map((label) => label.textContent)
+    expect(labels).toEqual(['Browses'])
+  })
+
   it('is deterministic', () => {
     expect(exportWorkspaceAsHtml(shop())).toBe(exportWorkspaceAsHtml(shop()))
   })

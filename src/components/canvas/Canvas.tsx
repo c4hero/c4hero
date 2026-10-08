@@ -46,6 +46,7 @@ import {
 } from './canvasBuilders'
 import { buildDeploymentNodes, deploymentBoundaryMemberIds } from './deploymentBuilders'
 import { deploymentViewRelationships } from '@/lib/deployment'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -335,6 +336,11 @@ export default function Canvas() {
         if (!rel) continue
         if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
         tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
+      }
+      // The implied relationships an `include *` view draws shape its layout
+      // too, as they do in Structurizr's (#230).
+      for (const implied of wildcardImpliedRelationships(workspace.model, view)) {
+        tempEdges.push({ id: implied.id, source: implied.sourceId, target: implied.destinationId })
       }
     }
 

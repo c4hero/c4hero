@@ -60,6 +60,35 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
     }
   })
 
+  it.each(['', '!!!'])('keeps dynamic layout when saving materializes an unusable key %j before a header description', key => {
+    load(dsl(`    dynamic payments "${key}" "Description" {\n      api -> db "Reads"\n    }`))
+    place()
+    const original = state().workspace!.views.dynamicViews[0]
+    expect(original.autoKey).toBe(true)
+    expect(original.autoTitle).toBe(true)
+    state().setElementsLocked(original.key, ['api'], true)
+    state().setViewLocked(original.key, true)
+    const before = layout()
+    expect(before[original.key].view?.key).toBe(original.key)
+    cycles()
+    const current = state().workspace!.views.dynamicViews[0]
+    expect(current.autoKey).toBeUndefined()
+    expect(current.locked).toBe(true)
+    expect(current.elements.find(el => el.id === 'api')).toMatchObject(before[original.key].elements!.api)
+    expect(layout()).toEqual(before)
+  })
+
+  it('keeps ordinary unnamed views scope-identified when their title and description are in the body', () => {
+    const unnamed = narrow.replace(' "Narrow"', '').replace('include api', 'title "Description"\n      description "Description"\n      include api')
+    load(dsl(unnamed)); place()
+    const before = layout()
+    expect(before['Containers-payments'].view?.key).toBeUndefined()
+    expect(serializeDSL(state().workspace!)).toContain('container payments {')
+    cycles()
+    expect(layout()).toEqual(before)
+    expect(state().workspace!.views.containerViews[0].autoKey).toBe(true)
+  })
+
   it('retains an absent view through repeated code-pane edits and restores it', () => {
     load(); place()
     const before = layout()
@@ -88,22 +117,210 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
     expect(view(state().workspace!).elements.find(e => e.id === 'db')).toMatchObject(before.Wide.elements!.db)
   })
 
-  it('retains every saved position when keyless views reorder, including elements absent from the receiving view', () => {
+  // Reordering renumbers both derived keys. Each view's layout follows the
+  // view, not the key it used to be filed under (TEA-345).
+  it.each(['unchanged', 'reorder', 'delete'])('preserves sparse keyless layouts through save/reopen after an %s edit', action => {
+    const a = wide.replace(' "Wide"', '')
+    const b = narrow.replace(' "Narrow"', '')
+    load(dsl(`${a}\n${b}`))
+    state().setActiveView('Containers-payments')
+    state().updateNodePosition('api', 100, 200)
+    state().setActiveView('Containers-payments-2')
+    state().updateNodePosition('api', 800, 450)
+    state().setElementsLocked('Containers-payments-2', ['api'], true)
+    const before = layout()
+    expect(before['Containers-payments'].view?.elementIds).toEqual(['api', 'db'])
+    expect(before['Containers-payments'].elements?.db).toBeUndefined()
+    reopen(dsl(action === 'delete' ? b : action === 'reorder' ? `${b}\n${a}` : `${a}\n${b}`))
+    cycles()
+    const current = state().workspace!.views.containerViews
+    const narrowView = current.find(v => v.elements.length === 1)!
+    expect(narrowView.elements[0]).toMatchObject({ pinned: true, locked: true, x: 800, y: 450 })
+    if (action !== 'delete') {
+      expect(current.find(v => v.elements.length === 2)!.elements.find(e => e.id === 'api'))
+        .toMatchObject({ pinned: true, x: 100, y: 200 })
+    }
+    expect(Object.values(layout())).toContainEqual(before['Containers-payments'])
+    expect(Object.values(layout())).toContainEqual(before['Containers-payments-2'])
+    expect(Object.keys(layout())).toHaveLength(2)
+  })
+
+  it.each(['unchanged', 'reorder', 'delete'])('preserves a lock-only keyless layout through save/reopen after an %s edit', action => {
+    const a = wide.replace(' "Wide"', '')
+    const b = narrow.replace(' "Narrow"', '')
+    load(dsl(`${a}\n${b}`))
+    state().setViewLocked('Containers-payments-2', true)
+    const before = layout()
+    expect(before['Containers-payments-2'].elements).toBeUndefined()
+    reopen(dsl(action === 'delete' ? b : action === 'reorder' ? `${b}\n${a}` : `${a}\n${b}`))
+    cycles()
+    const current = state().workspace!.views.containerViews
+    expect(current.find(v => v.elements.length === 1)!.locked).toBe(true)
+    if (action !== 'delete') expect(current.find(v => v.elements.length === 2)!.locked).toBeUndefined()
+    expect(Object.values(layout())).toEqual(Object.values(before))
+  })
+
+  it('keeps each keyless view\'s layout when the views reorder', () => {
     const keylessWide = wide.replace(' "Wide"', '')
     const keylessNarrow = narrow.replace(' "Narrow"', '')
     load(dsl(`${keylessWide}\n${keylessNarrow}`)); place()
     const before = layout()
     expect(state().replaceWorkspaceFromDSL(dsl(`${keylessNarrow}\n${keylessWide}`)).ok).toBe(true)
     cycles()
-    expect(layout()).toEqual(before)
+    expect(layout()).toEqual({
+      'Containers-payments': before['Containers-payments-2'],
+      'Containers-payments-2': before['Containers-payments'],
+    })
+    const [narrowView, wideView] = state().workspace!.views.containerViews
+    expect(narrowView.elements.map(e => e.id)).toEqual(['api'])
+    expect(narrowView.elements[0]).toMatchObject(before['Containers-payments-2'].elements!.api)
+    expect(wideView.elements.find(e => e.id === 'db')).toMatchObject(before['Containers-payments'].elements!.db)
   })
 
-  it('retains the survivor layout when deleting the first keyless view renumbers it', () => {
+  it('keeps the survivor\'s layout when deleting the first keyless view renumbers it', () => {
     load(dsl(`${wide.replace(' "Wide"', '')}\n${narrow.replace(' "Narrow"', '')}`)); place(); reopen()
     const before = layout()['Containers-payments-2']
     state().deleteView('Containers-payments')
     cycles()
-    expect(layout()['Containers-payments-2']).toEqual(before)
+    expect(layout()).toEqual({ 'Containers-payments': before })
+    const [survivor] = state().workspace!.views.containerViews
+    expect(survivor.key).toBe('Containers-payments')
+    expect(survivor.elements[0]).toMatchObject(before.elements!.api)
+  })
+
+  it('keeps the survivor\'s layout when the first keyless view is deleted in the code pane', () => {
+    const keylessWide = wide.replace(' "Wide"', '')
+    const keylessNarrow = narrow.replace(' "Narrow"', '')
+    load(dsl(`${keylessWide}\n${keylessNarrow}`)); place()
+    const before = layout()
+    expect(state().replaceWorkspaceFromDSL(dsl(keylessNarrow)).ok).toBe(true)
+    const [survivor] = state().workspace!.views.containerViews
+    expect(survivor.elements[0]).toMatchObject(before['Containers-payments-2'].elements!.api)
+    cycles()
+    // The deleted view's layout is retained, parked out of the survivor's way.
+    expect(layout()['Containers-payments']).toEqual(before['Containers-payments-2'])
+    expect(Object.values(layout())).toContainEqual(before['Containers-payments'])
+  })
+
+  it('does not hand a named view\'s layout to a keyless view that derives the same key', () => {
+    // Someone named a view exactly what c4hero would derive. Deleting it and
+    // adding an unnamed view of that scope is a different view.
+    const named = narrow.replace('"Narrow"', '"Containers-payments"')
+    load(dsl(named)); place(); reopen()
+    const before = layout()
+    const keylessNarrow = narrow.replace(' "Narrow"', '')
+    expect(state().replaceWorkspaceFromDSL(dsl(keylessNarrow)).ok).toBe(true)
+    const [view] = state().workspace!.views.containerViews
+    expect(view.key).toBe('Containers-payments')
+    expect(view.elements[0].pinned).toBeUndefined()
+    cycles()
+    // Retained, but parked out of the slot the keyless view now answers to.
+    expect(Object.values(layout())).toEqual([before['Containers-payments']])
+    expect(layout()['Containers-payments']).toBeUndefined()
+  })
+
+  it('gives an entry written before identities existed to the view with its key', () => {
+    load(dsl(`${wide.replace(' "Wide"', '')}\n${narrow.replace(' "Narrow"', '')}`)); place()
+    const legacy = structuredClone(layout())
+    for (const entry of Object.values(legacy)) delete entry.view
+    const next = parse(serializeDSL(state().workspace!))
+    applySidecar(next, { version: 1, views: legacy })
+    state().loadWorkspace(next)
+    expect(state().workspace!.views.containerViews[1].elements[0]).toMatchObject(legacy['Containers-payments-2'].elements!.api)
+    expect(layout()['Containers-payments-2'].view).toEqual({ type: 'container', softwareSystemId: 'payments', elementIds: ['api'] })
+  })
+
+  it.each(['delete', 'reorder'])('restores the right layout after an external %s of keyless views', action => {
+    const a = wide.replace(' "Wide"', '')
+    const b = narrow.replace(' "Narrow"', '')
+    load(dsl(`${a}\n${b}`)); place()
+    state().setViewLocked('Containers-payments-2', true)
+    state().setElementsLocked('Containers-payments-2', ['api'], true)
+    const before = layout()
+    reopen(dsl(action === 'delete' ? b : `${b}\n${a}`))
+    cycles()
+    expect(layout()['Containers-payments']).toEqual(before['Containers-payments-2'])
+    expect(view(state().workspace!, 'Containers-payments').locked).toBe(true)
+    expect(view(state().workspace!, 'Containers-payments').elements[0]).toMatchObject(before['Containers-payments-2'].elements!.api)
+    expect(Object.values(layout())).toContainEqual(before['Containers-payments'])
+    // A deleted view can return even after its storage slot was reused.
+    reopen(dsl(`${a}\n${b}`))
+    cycles()
+    expect(layout()).toEqual(before)
+  })
+
+  it('keeps transient auto-layout positions and a view lock with a distinguishable survivor', () => {
+    const a = wide.replace(' "Wide"', '')
+    const b = narrow.replace(' "Narrow"', '')
+    load(dsl(`${a}\n${b}`))
+    state().setActiveView('Containers-payments-2')
+    state().syncAutoLayoutPositions('Containers-payments-2', new Map([['api', { x: 321, y: 654 }]]))
+    state().setViewLocked('Containers-payments-2', true)
+    expect(state().replaceWorkspaceFromDSL(dsl(b)).ok).toBe(true)
+    const survivor = view(state().workspace!, 'Containers-payments')
+    expect(survivor.locked).toBe(true)
+    expect(survivor.elements[0]).toMatchObject({ x: 321, y: 654 })
+    expect(survivor.elements[0].pinned).toBeUndefined()
+  })
+
+  it('retains ambiguous entries through repeated saves without applying a guessed owner', () => {
+    const a = narrow.replace(' "Narrow"', '')
+    load(dsl(`${a}\n${a}`)); place()
+    const before = layout()
+    reopen(dsl(a))
+    cycles()
+    expect(view(state().workspace!, 'Containers-payments').elements[0].pinned).toBeUndefined()
+    expect(layout()['Containers-payments']).toBeUndefined()
+    expect(Object.values(layout())).toEqual(Object.values(before))
+    expect(orphanedLayoutViewKeys(state().workspace!)).toHaveLength(2)
+    state().pruneOrphanedViewLayout()
+    cycles()
+    expect(layout()).toEqual({})
+  })
+
+  it('KNOWN LIMITATION: indistinguishable keyless views retain layout by key when reordered', () => {
+    // Titles are labels, not stable identities; both views have the same
+    // type, scope and elements. Their layouts cannot follow this reorder.
+    const a = narrow.replace(' "Narrow"', '').replace('include api', 'title "First"\n      include api')
+    const b = a.replace('First', 'Second')
+    load(dsl(`${a}\n${b}`)); place()
+    const before = layout()
+    expect(state().replaceWorkspaceFromDSL(dsl(`${b}\n${a}`)).ok).toBe(true)
+    cycles()
+    expect(layout()).toEqual(before)
+    const first = state().workspace!.views.containerViews[0]
+    expect(first.title).toBe('Second')
+    expect(first.elements[0]).toMatchObject(before['Containers-payments'].elements!.api)
+  })
+
+  it('treats a malformed identity as absent rather than rejecting the file', () => {
+    load(dsl(wide.replace(' "Wide"', ''))); place()
+    const text = serializeSidecar(extractSidecar(state().workspace!)!)
+      .replace('"type": "container"', '"type": "nonsense"')
+    const sidecar = parseSidecar(text)
+    expect(sidecar).not.toBeNull()
+    expect(sidecar!.views!['Containers-payments'].view).toBeUndefined()
+    const next = parse(serializeDSL(state().workspace!))
+    applySidecar(next, sidecar!)
+    expect(next.views.containerViews[0].elements.find(e => e.id === 'db')?.pinned).toBe(true)
+    state().loadWorkspace(next)
+    expect(layout()['Containers-payments'].view).toEqual({ type: 'container', softwareSystemId: 'payments', elementIds: ['api', 'db'] })
+  })
+
+  it.each(['Billing Context', '__proto__'])('restores identified layout for an authored key %s', key => {
+    const next = parse(dsl(wide.replace('Wide', key)))
+    const elements = { api: { pinned: true, x: 17, y: 29 } }
+    applySidecar(next, { version: 1, views: {
+      parked: { view: { type: 'container', key, softwareSystemId: 'payments' }, locked: true, elements },
+    } })
+    state().loadWorkspace(next)
+    cycles()
+    const current = state().workspace!.views.containerViews[0]
+    expect(current.locked).toBe(true)
+    expect(current.elements.find(el => el.id === 'api')).toMatchObject(elements.api)
+    expect(layout()[current.key]).toEqual({
+      view: { type: 'container', key: current.key, softwareSystemId: 'payments', elementIds: ['api', 'db'] }, locked: true, elements,
+    })
   })
 
   it.each(['relationship', 'element', 'new view'])('preserves named layouts after a %s edit', kind => {
@@ -114,7 +331,9 @@ describe('layout preservation through real DSL and sidecar round trips (#201)', 
       : dsl(`${wide}\n${narrow}\n    systemContext payments "Context" {\n      include *\n    }`)
     expect(state().replaceWorkspaceFromDSL(changed).ok).toBe(true)
     cycles()
-    expect(layout()).toEqual(before)
+    expect(layout()).toEqual(kind === 'element'
+      ? { ...before, Wide: { ...before.Wide, view: { ...before.Wide.view, elementIds: ['api', 'db', 'worker'] } } }
+      : before)
   })
 })
 
@@ -225,7 +444,7 @@ describe('intentional changes remain authoritative', () => {
     state().updateElementId('payments', 'billing')
     cycles()
     expect(layout()['Containers-payments']).toBeUndefined()
-    expect(layout()['Containers-billing']).toEqual(before)
+    expect(layout()['Containers-billing']).toEqual({ ...before, view: { ...before.view, softwareSystemId: 'billing' } })
   })
 
   it('deleting a scope clears its saved views and undo restores them', () => {
@@ -263,7 +482,7 @@ describe('intentional changes remain authoritative', () => {
     const key = state().duplicateView(source.key)
     cycles()
     expect(allViewsOf(state().workspace!).some(v => v.key === key)).toBe(true)
-    expect(layout()[key]).toEqual(before)
+    expect(layout()[key]).toEqual({ ...before, view: { ...before.view, key } })
     expect(layout()[source.key]).toEqual(before)
   })
 })
@@ -455,11 +674,44 @@ it('rejects a scope rename that would overwrite a retained view key, and derived
   expect(state().workspace!.model.softwareSystems[0].id).toBe('billing2')
   cycles()
   expect(layout()['Containers-billing']).toEqual(retained)
-  expect(layout()['Containers-billing2']).toEqual(before['Containers-payments'])
+  expect(layout()['Containers-billing2']).toEqual({
+    ...before['Containers-payments'],
+    view: { type: 'container', softwareSystemId: 'billing2', elementIds: ['api', 'db'] },
+  })
 })
 
 
 describe('Zoom layout across persistence boundaries', () => {
+  it.each(['reparse', 'reopen'])('keeps Zoom layouts with keyless views across reorder, removal and return (%s)', boundary => {
+    const unnamedWide = wide.replace(' "Wide"', '')
+    const unnamedNarrow = narrow.replace(' "Narrow"', '')
+    const wideZoom = { positionSpace: 'parent-body' as const, direction: 'LR' as const, elements: { api: { x: .2, y: .3, pinned: true } } }
+    const narrowZoom = { positionSpace: 'parent-body' as const, direction: 'TB' as const, elements: { api: { x: .7, y: .8, locked: true } } }
+    const cross = (text: string) => {
+      if (boundary === 'reopen') reopen(text)
+      else expect(state().replaceWorkspaceFromDSL(text).ok).toBe(true)
+    }
+    load(dsl(`${unnamedWide}\n${unnamedNarrow}`))
+    state().setActiveView('Containers-payments')
+    state().updateExploreLayout(wideZoom)
+    state().setActiveView('Containers-payments-2')
+    state().updateExploreLayout(narrowZoom)
+
+    cross(dsl(`${unnamedNarrow}\n${unnamedWide}`))
+    expect(view(state().workspace!, 'Containers-payments').exploreLayout).toEqual(narrowZoom)
+    expect(view(state().workspace!, 'Containers-payments-2').exploreLayout).toEqual(wideZoom)
+
+    cross(dsl(unnamedNarrow))
+    cycles()
+    expect(view(state().workspace!, 'Containers-payments').exploreLayout).toEqual(narrowZoom)
+    expect(Object.values(layout()).map(entry => entry.exploreLayout)).toContainEqual(wideZoom)
+
+    cross(dsl(`${unnamedWide}\n${unnamedNarrow}`))
+    cycles()
+    expect(view(state().workspace!, 'Containers-payments').exploreLayout).toEqual(wideZoom)
+    expect(view(state().workspace!, 'Containers-payments-2').exploreLayout).toEqual(narrowZoom)
+  })
+
   it('restores per-view child coordinates, hidden nodes and locks after absent views return', () => {
     load()
     const zoom = { positionSpace: 'parent-body' as const, direction: 'LR' as const, hiddenIds: ['db'], elements: { api: { x: .3, y: .7, pinned: true, locked: true } } }

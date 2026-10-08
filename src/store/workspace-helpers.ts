@@ -2,10 +2,14 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
-  ViewType, ElementInView, DeploymentNode,
+  ViewType, ElementInView, DeploymentNode, RelationshipExclusion,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
+import {
+  enclosingSystems, exclusionMatches, hierarchyGuard, modelImpliedRelationships, viewExpressionsExclude, wildcardElements,
+  withDeploymentDescendants,
+} from '@/lib/dsl/wildcard'
 export type { CascadeImpact } from './workspace-types'
 
 /** Deep-clone an object that may be an Immer draft. structuredClone'ing a
@@ -54,6 +58,178 @@ export function restoreViewElement(ws: Workspace, viewKey: string, id: string): 
   const saved = ws.savedLayout?.[viewKey]?.elements?.[id]
   if (!saved) return { id }
   return { id, x: saved.x, y: saved.y, pinned: saved.pinned, locked: saved.locked }
+}
+
+// ─── Views parsed from `include *` (#230) ────────────────────────────
+// A save writes `include *` back, plus an `include` or `exclude` line for
+// what the view adds to or hides from it. Hides are recorded as they happen
+// (View.excludedElementIds) rather than inferred from what the canvas lacks,
+// so an element an edit elsewhere makes eligible is never saved as hidden.
+
+/** Forget the recorded `include`/`exclude` lines for `ids`. */
+export function forgetWildcardLines(view: View, ids: ReadonlySet<string>): void {
+  if (view.includedElementIds) {
+    view.includedElementIds = view.includedElementIds.filter((id) => !ids.has(id))
+    if (view.includedElementIds.length === 0) delete view.includedElementIds
+  }
+  if (view.excludedElementIds) {
+    view.excludedElementIds = view.excludedElementIds.filter((id) => !ids.has(id))
+    if (view.excludedElementIds.length === 0) delete view.excludedElementIds
+  }
+}
+
+/** An element shown in a view again is no longer hidden from it on purpose. */
+export function noteShownInView(view: View, id: string): void {
+  if (!view.excludedElementIds?.includes(id)) return
+  view.excludedElementIds = view.excludedElementIds.filter((x) => x !== id)
+  if (view.excludedElementIds.length === 0) delete view.excludedElementIds
+}
+
+/** What leaves `view` when the user hides `ids`. In an `include *`
+ *  deployment view that includes everything on a hidden deployment node: the
+ *  `exclude` line a save writes for the node hides that in Structurizr too. */
+export function idsLeavingView(ws: Workspace, view: View, ids: Iterable<string>): Set<string> {
+  return view.includeAll ? withDeploymentDescendants(ws.model, view, ids) : new Set(ids)
+}
+
+/** What enters `view` when the user shows `id`, `id` first. In an
+ *  `include *` deployment view a node comes back with what the wildcard
+ *  adds on it, unless that is hidden on purpose: Structurizr shows it all
+ *  once the node's `exclude` line is gone. Call after `noteShownInView`. */
+export function idsEnteringView(ws: Workspace, view: View, id: string): string[] {
+  if (!view.includeAll || view.type !== 'deployment') return [id]
+  const inside = withDeploymentDescendants(ws.model, view, [id])
+  const hidden = withDeploymentDescendants(ws.model, view, view.excludedElementIds ?? [])
+  const shown = new Set(view.elements.map((e) => e.id))
+  const contents = wildcardElements(ws.model, view)
+    .map((e) => e.id)
+    .filter((other) => other !== id && inside.has(other) && !hidden.has(other) && !shown.has(other))
+  return [id, ...contents]
+}
+
+/** Record that the user hid `ids` from an `include *` view: an element the
+ *  wildcard adds is saved as `exclude`, and one shown only by its own
+ *  `include` line loses that line. */
+export function noteHiddenFromView(ws: Workspace, view: View, ids: Iterable<string>): void {
+  if (!view.includeAll) return
+  const hidden = new Set(ids)
+  forgetWildcardLines(view, hidden)
+  const expanded = new Set(wildcardElements(ws.model, view).map((e) => e.id))
+  for (const id of hidden) {
+    if (expanded.has(id)) (view.excludedElementIds ??= []).push(id)
+  }
+}
+
+/** In an `include *` view, `id` takes the place of the shown elements
+ *  Structurizr cannot show next to it: its parent or child. A software
+ *  system it sits in is kept out by writing `id` before the wildcard; any
+ *  other element the wildcard adds (a sibling container, in a component
+ *  view) is recorded as hidden. Either way the save shows `id`, as the
+ *  canvas does. */
+export function makeRoomInWildcardView(ws: Workspace, view: View, id: string): void {
+  if (!view.includeAll || view.type === 'dynamic' || view.type === 'deployment') return
+  const guard = hierarchyGuard(ws.model, view, [id])
+  const displaced = new Set(view.elements.filter((e) => e.id !== id && guard.clashes(e.id)).map((e) => e.id))
+  if (displaced.size === 0) return
+  const enclosingSystem = enclosingSystems(ws.model).get(id)
+  const expanded = new Set(wildcardElements(ws.model, view).map((e) => e.id))
+  forgetWildcardLines(view, displaced)
+  for (const other of displaced) {
+    if (expanded.has(other) && other !== enclosingSystem) (view.excludedElementIds ??= []).push(other)
+  }
+  view.elements = view.elements.filter((e) => !displaced.has(e.id))
+  view.relationships = view.relationships.filter((r) => {
+    const rel = ws.model.relationships.find((mr) => mr.id === r.id)
+    return !!rel && !displaced.has(rel.sourceId) && !displaced.has(rel.destinationId)
+  })
+}
+
+/** Add to each static `include *` view the elements the wildcard adds that
+ *  it does not show yet: ones an edit just connected to the view's scope, or
+ *  one a hidden element was keeping out. Structurizr shows them, so the
+ *  canvas does too. An element hidden on purpose, or whose parent or child
+ *  the view already shows, stays out, and nothing is removed. */
+export function showWildcardArrivals(ws: Workspace, views: View[] = allViewsOf(ws)): void {
+  for (const v of views) {
+    if (!v.includeAll || v.type === 'dynamic' || v.type === 'deployment') continue
+    const shown = new Set(v.elements.map((e) => e.id))
+    const hidden = new Set(v.excludedElementIds ?? [])
+    const guard = hierarchyGuard(ws.model, v, shown)
+    const arrived = new Set<string>()
+    for (const { id } of wildcardElements(ws.model, v)) {
+      if (shown.has(id) || hidden.has(id) || guard.clashes(id)) continue
+      v.elements.push(restoreViewElement(ws, v.key, id))
+      shown.add(id)
+      guard.add(id)
+      arrived.add(id)
+    }
+    if (arrived.size === 0) continue
+    const present = new Set(v.relationships.map((r) => r.id))
+    const excludedRels = new Set(v.excludedRelationshipIds ?? [])
+    for (const rel of ws.model.relationships) {
+      if (present.has(rel.id) || excludedRels.has(rel.id)) continue
+      if (!arrived.has(rel.sourceId) && !arrived.has(rel.destinationId)) continue
+      if (shown.has(rel.sourceId) && shown.has(rel.destinationId)) v.relationships.push({ id: rel.id })
+    }
+  }
+}
+
+/** Structurizr persists relationship exclusions by directed endpoint pair, not
+ * by relationship ID. Keep the live workspace on that same footing so adding
+ * or reconnecting a parallel relationship cannot make it appear until reload.
+ * The view's own `exclude "a -> b"` lines, `*` included, hide it on reload
+ * too (#230). */
+export function viewExcludesPair(ws: Workspace, view: View, sourceId: string, destinationId: string): boolean {
+  if (viewExpressionsExclude(view, sourceId, destinationId)) return true
+  const excludedIds = new Set(view.excludedRelationshipIds ?? [])
+  return ws.model.relationships.some(
+    (rel) => excludedIds.has(rel.id) && rel.sourceId === sourceId && rel.destinationId === destinationId,
+  )
+}
+
+/** Hide every relationship from `sourceId` to `destinationId` in `view`. */
+export function excludePair(ws: Workspace, view: View, sourceId: string, destinationId: string): void {
+  const pairIds = new Set(ws.model.relationships
+    .filter((rel) => rel.sourceId === sourceId && rel.destinationId === destinationId)
+    .map((rel) => rel.id))
+  view.relationships = view.relationships.filter((rel) => !pairIds.has(rel.id))
+  const excludedIds = (view.excludedRelationshipIds ??= [])
+  for (const id of pairIds) {
+    if (!excludedIds.includes(id)) excludedIds.push(id)
+  }
+}
+
+/** Show the pair `sourceId -> destinationId` again in a view whose own
+ *  `exclude "a -> b"` lines hide it. DSL cannot except one pair from a line
+ *  such as `* -> *`, so each line that hides the pair goes, and every other
+ *  arrow between the view's elements that only it hid keeps a line of its
+ *  own: a model relationship through `excludedRelationshipIds`, which a save
+ *  writes for its pair, and an implied one (#230) as a line naming its pair
+ *  here. */
+export function dropCoveringExclusions(ws: Workspace, view: View, sourceId: string, destinationId: string): void {
+  const exclusions = view.excludedRelationshipExpressions ?? []
+  const covering = exclusions.filter((x) => exclusionMatches(x, sourceId, destinationId))
+  if (covering.length === 0) return
+  const kept = exclusions.filter((x) => !covering.includes(x))
+  const shown = new Set(view.elements.map((e) => e.id))
+  for (const implied of modelImpliedRelationships(ws.model)) {
+    const pair = { sourceId: implied.sourceId, destinationId: implied.destinationId }
+    if (pair.sourceId === sourceId && pair.destinationId === destinationId) continue
+    if (!shown.has(pair.sourceId) || !shown.has(pair.destinationId)) continue
+    const hidden = (x: RelationshipExclusion) => exclusionMatches(x, pair.sourceId, pair.destinationId)
+    if (covering.some(hidden) && !kept.some(hidden)) kept.push(pair)
+  }
+  if (kept.length > 0) view.excludedRelationshipExpressions = kept
+  else delete view.excludedRelationshipExpressions
+}
+
+/** A view's `exclude "a -> b"` lines must not outlive an element they name:
+ *  Structurizr rejects a line naming an element that does not exist. */
+function forgetExclusionsOf(view: View, ids: ReadonlySet<string>): void {
+  if (!view.excludedRelationshipExpressions) return
+  view.excludedRelationshipExpressions = view.excludedRelationshipExpressions
+    .filter((x) => !ids.has(x.sourceId) && !ids.has(x.destinationId))
+  if (view.excludedRelationshipExpressions.length === 0) delete view.excludedRelationshipExpressions
 }
 
 /** Iterate every element in the model tree. Return true from callback to stop early. */
@@ -213,6 +389,39 @@ export function uniqueElementName(base: string, ws: Workspace): string {
   return `${base} ${n}`
 }
 
+/** Return a view title no other view is listed under, numbered the way
+ *  uniqueElementName numbers element names: `base`, `base 2`, `base 3`, … */
+export function uniqueViewTitle(base: string, ws: Workspace): string {
+  // Views are listed by `title ?? key`, so that is what a user sees twice.
+  const taken = new Set(allViewsOf(ws).map((v) => v.title ?? v.key))
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(`${base} ${n}`)) n++
+  return `${base} ${n}`
+}
+
+/** What a view of each type shows, for a view created without a name. */
+const DEFAULT_VIEW_NOUNS: Record<ViewType, string> = {
+  systemLandscape: 'System Landscape',
+  systemContext: 'System Context',
+  container: 'Containers',
+  component: 'Components',
+  dynamic: 'Dynamic',
+  deployment: 'Deployment',
+}
+
+/** The title of a view created without a name: what it shows, after the
+ *  element it is scoped to (or a deployment view's environment), in the
+ *  zoom-in flow's `<element> — Containers` form, and unique among the views.
+ *  A fixed `New ${type} view` gave every unnamed view of a type the same
+ *  label, spelled with the internal type id. */
+export function defaultViewTitle(ws: Workspace, type: ViewType, scopeId?: string, environment?: string): string {
+  const scopeName = scopeId ? findElementHelper(ws, scopeId)?.name : undefined
+  const prefix = scopeName ?? (type === 'deployment' ? environment : undefined)
+  const noun = DEFAULT_VIEW_NOUNS[type]
+  return uniqueViewTitle(prefix ? `${prefix} — ${noun}` : noun, ws)
+}
+
 /** IDs reserved by the model and retained layout: elements, relationships,
  *  groups, the deployment tree, and temporarily absent elements. Used to keep
  *  user-set and derived IDs from colliding or overwriting saved positions. */
@@ -310,6 +519,12 @@ export function renameElementId(ws: Workspace, oldId: string, newId: string): { 
     for (const el of v.elements) {
       if (el.id === oldId) el.id = newId
     }
+    if (v.includedElementIds) v.includedElementIds = v.includedElementIds.map(id => (id === oldId ? newId : id))
+    if (v.excludedElementIds) v.excludedElementIds = v.excludedElementIds.map(id => (id === oldId ? newId : id))
+    for (const x of v.excludedRelationshipExpressions ?? []) {
+      if (x.sourceId === oldId) x.sourceId = newId
+      if (x.destinationId === oldId) x.destinationId = newId
+    }
     for (const r of v.relationships) {
       if (r.sourceId === oldId) r.sourceId = newId
       if (r.destinationId === oldId) r.destinationId = newId
@@ -326,6 +541,10 @@ export function renameElementId(ws: Workspace, oldId: string, newId: string): { 
   // IDs in retained layout participate in the same atomic rename, including
   // entries belonging to views that are temporarily absent.
   for (const layout of Object.values(ws.savedLayout ?? {})) {
+    // The scope an entry records is part of how it finds its view again.
+    if (layout.view?.softwareSystemId === oldId) layout.view.softwareSystemId = newId
+    if (layout.view?.containerId === oldId) layout.view.containerId = newId
+    if (layout.view?.elementIds) layout.view.elementIds = layout.view.elementIds.map(id => id === oldId ? newId : id)
     if (layout.elements && Object.hasOwn(layout.elements, oldId)) {
       layout.elements[newId] = layout.elements[oldId]
       delete layout.elements[oldId]
@@ -381,6 +600,7 @@ export function addToCurrentView(
   if (elementType && !viewAllowsElementType(view.type, elementType)) return
   if (!view.elements.some((e) => e.id === elementId)) {
     view.elements.push({ id: elementId, x: position?.x, y: position?.y })
+    noteShownInView(view, elementId)
   }
 }
 
@@ -744,6 +964,12 @@ export function duplicateElementsInTree(
         destinationId: newDestId,
       })
       for (const v of allViewsOf(ws)) {
+        // A view's `exclude "* -> *"` line hides the copy too, on reload as
+        // in Structurizr, so it is hidden here, as addRelationship does (#230).
+        if (v.type !== 'dynamic' && v.type !== 'deployment' && viewExcludesPair(ws, v, newSourceId, newDestId)) {
+          excludePair(ws, v, newSourceId, newDestId)
+          continue
+        }
         const viewElIds = new Set(v.elements.map((e) => e.id))
         if (viewElIds.has(newSourceId) && viewElIds.has(newDestId)) {
           if (!v.relationships.some((r) => r.id === newRelId)) {
@@ -934,6 +1160,10 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
   forEachView(ws, (v) => {
     v.elements = v.elements.filter((e) => !allDeletedIds.has(e.id))
     v.relationships = v.relationships.filter((r) => survivingRelIds.has(r.id))
+    // A recorded `include`/`exclude` must not outlive its element: a new
+    // element minted with the same id would inherit it.
+    forgetWildcardLines(v, allDeletedIds)
+    forgetExclusionsOf(v, allDeletedIds)
     if (v.type === 'dynamic') {
       // Dynamic membership is derived from interaction steps; drop elements
       // whose every step died so they don't linger as orphan nodes (the next
@@ -974,6 +1204,7 @@ export function cascadeDeleteElements(ws: Workspace, ids: Iterable<string>): Cas
 
   if (ws.savedLayout) {
     for (const layout of Object.values(ws.savedLayout)) {
+      if (layout.view?.elementIds) layout.view.elementIds = layout.view.elementIds.filter(id => !allDeletedIds.has(id))
       if (!layout.elements) continue
       for (const id of allDeletedIds) delete layout.elements[id]
     }

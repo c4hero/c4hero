@@ -26,6 +26,10 @@ interface RelationshipEdgeData {
   stepDescription?: string
   /** Tech-filter highlight; the CSS recolors the line, so the markers follow. */
   highlighted?: boolean
+  /** `include *` views: an arrow Structurizr implies from `relationship`
+   *  between the elements the view shows instead of its own ends. It is
+   *  drawn exactly like the relationship, as Structurizr draws it (#230). */
+  implied?: boolean
 }
 
 const FULL_LABEL_MAX_WIDTH = 200

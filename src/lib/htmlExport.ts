@@ -9,6 +9,7 @@ import type {
 import { applyAutoLayout, type LayoutBoundaryCluster } from '@/lib/canvasLayout'
 import { THEMES } from '@/lib/themes'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 /**
  * Export a workspace as one self-contained `.html` file.
@@ -418,6 +419,11 @@ function layoutView(
     if (!rel) continue
     if (!present.has(rel.sourceId) || !present.has(rel.destinationId)) continue
     viewRelationships.push(rel)
+  }
+  // An `include *` view also draws the relationships Structurizr implies
+  // between the elements it shows, as the canvas does (#230).
+  for (const implied of wildcardImpliedRelationships(workspace.model, view)) {
+    viewRelationships.push({ ...implied.relationship, id: implied.id, sourceId: implied.sourceId, destinationId: implied.destinationId })
   }
   const layoutEdges: Edge[] = viewRelationships.map((rel) => ({
     id: rel.id, source: rel.sourceId, target: rel.destinationId,

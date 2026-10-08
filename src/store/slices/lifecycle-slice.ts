@@ -4,6 +4,7 @@ import type { WorkspaceState } from '../workspace-types'
 import { validateScope } from '@/lib/scopeValidation'
 import { parseDSL } from '@/lib/dsl'
 import { applySidecar, extractSidecar } from '@/lib/sidecar'
+import { resolveViewLayouts, viewIdentityOf } from '@/lib/layoutIdentity'
 import { checkModelIntegrity } from '@/lib/modelIntegrity'
 import { pushUndoSnapshot } from '../internals'
 import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelper, clearSelectionDraft } from '../workspace-helpers'
@@ -20,8 +21,8 @@ function elementNamesById(ws: Workspace): Map<string, string> {
 }
 
 /** Carry per-view element layout (x/y/pinned/locked) and view-level locks over
- *  from the previous workspace onto a freshly parsed one, matched by view key +
- *  element id. Positions never round-trip through DSL text — without this every
+ *  from the previous workspace onto a freshly parsed one, matched by view
+ *  identity + element id. Positions never round-trip through DSL text — without this every
  *  code-pane apply would scramble the canvas.
  *
  *  Elements written WITHOUT an explicit DSL identifier get a fresh
@@ -33,12 +34,19 @@ function carryOverViewLayout(prev: Workspace, next: Workspace): void {
   // positions and handles identifier-less elements within the current session.
   const saved = extractSidecar(prev)
   if (saved) applySidecar(next, saved)
-  const prevViews = new Map(allViewsOf(prev).map((v) => [v.key, v]))
+  // Pair each view with its previous self on identity, not key: deleting or
+  // reordering a same-scope keyless sibling renumbers the key (TEA-345).
+  const nextViews = allViewsOf(next)
+  const prevOf = resolveViewLayouts(nextViews, allViewsOf(prev).map((v) => ({
+    key: v.key,
+    identity: viewIdentityOf(v),
+    elementIds: v.elements.map((el) => el.id),
+    value: v,
+  })))
   const prevNames = elementNamesById(prev)
   const nextNames = elementNamesById(next)
-  for (const view of allViewsOf(next)) {
-    const old = prevViews.get(view.key)
-      ?? (view.originalKey ? prevViews.get(view.originalKey) : undefined)
+  for (const view of nextViews) {
+    const old = prevOf.get(view)?.value
     if (!old) continue
     if (old.locked) view.locked = true
     const oldById = new Map(old.elements.map((el) => [el.id, el]))

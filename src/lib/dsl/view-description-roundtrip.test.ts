@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseDSL } from '@/lib/dsl'
 import { serialize } from '@/lib/dsl/serializer'
+import type { View, Workspace } from '@/types/model'
 
 describe('view description roundtrip', () => {
   it('systemLandscape view description survives serialize → parse', () => {
@@ -175,6 +176,197 @@ workspace {
     const view = workspace.views.systemContextViews[0]
     expect(view.description).toBe('Context view for API')
     expect(view.title).toBe('Context view for API')
+  })
+
+  // #233: the canvas labels a view by its positional description, but saving
+  // that label as a `title` replaced the default title Structurizr renders. It
+  // goes back into the header, where Structurizr reads it as the description.
+  describe('positional description is saved as the description only (#233)', () => {
+    const dsl = `
+workspace {
+  model {
+    user = person "User"
+    sys = softwareSystem "System" {
+      web = container "Web" {
+        ui = component "UI"
+      }
+      api = container "API"
+      web -> api "Calls"
+    }
+    user -> sys "Uses"
+    deploymentEnvironment "Live" {
+      deploymentNode "Server" {
+        containerInstance web
+      }
+    }
+  }
+  views {
+    systemLandscape "land" "Landscape description" {
+      include *
+    }
+    systemContext sys "ctx" "Context description" {
+      include *
+    }
+    container sys "cont" "Container description" {
+      include *
+    }
+    component web "comp" "Component description" {
+      include *
+    }
+    dynamic sys "dyn" "Dynamic description" {
+      web -> api "Calls"
+    }
+    deployment sys "Live" "dep" "Deployment description" {
+      include *
+    }
+  }
+}
+`
+    const allViews = (ws: Workspace): View[] => [
+      ...ws.views.systemLandscapeViews,
+      ...ws.views.systemContextViews,
+      ...ws.views.containerViews,
+      ...ws.views.componentViews,
+      ...ws.views.dynamicViews,
+      ...ws.views.deploymentViews,
+    ]
+    const headings = (ws: Workspace) => allViews(ws).map(v => ({ key: v.key, title: v.title, description: v.description }))
+
+    it('labels each view type by its header description, marked as derived', () => {
+      const { workspace, errors } = parseDSL(dsl)
+      expect(errors).toEqual([])
+      expect(allViews(workspace)).toHaveLength(6)
+      for (const view of allViews(workspace)) {
+        expect(view.title).toBe(view.description)
+        expect(view.autoTitle).toBe(true)
+      }
+    })
+
+    it('writes it back into the header, not as a title, for every view type', () => {
+      const { workspace } = parseDSL(dsl)
+      const output = serialize(workspace)
+      expect(output).not.toMatch(/^\s*title /m)
+      expect(output).not.toMatch(/^\s*description /m)
+      for (const view of allViews(workspace)) {
+        expect(output).toContain(`"${view.key}" "${view.description}" {`)
+      }
+
+      const { workspace: reparsed, errors } = parseDSL(output)
+      expect(errors).toEqual([])
+      expect(headings(reparsed)).toEqual(headings(workspace))
+      expect(allViews(reparsed).every(v => v.autoTitle)).toBe(true)
+    })
+
+    it('saves an explicit body title next to the positional description', () => {
+      const { workspace, errors } = parseDSL(`
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      web = container "Web"
+      api = container "API"
+      web -> api "Calls"
+    }
+  }
+  views {
+    container sys "cont" "Container description" {
+      title "Containers"
+      include *
+    }
+    dynamic sys "dyn" "Dynamic description" {
+      title "Checkout"
+      web -> api "Calls"
+    }
+  }
+}
+`)
+      expect(errors).toEqual([])
+      const [container] = workspace.views.containerViews
+      const [dynamic] = workspace.views.dynamicViews
+      expect(container).toMatchObject({ title: 'Containers', description: 'Container description' })
+      expect(container.autoTitle).toBeFalsy()
+      expect(dynamic).toMatchObject({ title: 'Checkout', description: 'Dynamic description' })
+      expect(dynamic.autoTitle).toBeFalsy()
+
+      const output = serialize(workspace)
+      expect(output).toContain('title "Containers"')
+      expect(output).toContain('description "Container description"')
+      expect(output).toContain('title "Checkout"')
+      expect(output).toContain('description "Dynamic description"')
+      expect(headings(parseDSL(output).workspace)).toEqual(headings(workspace))
+    })
+
+    it('keeps both the header string and a body description that replaces it', () => {
+      // Structurizr keeps the body description; the header string is still
+      // what the canvas shows, so it stays in the header rather than becoming
+      // a title.
+      const { workspace, errors } = parseDSL(`
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      web = container "Web"
+      api = container "API"
+      web -> api "Calls"
+    }
+  }
+  views {
+    systemLandscape "land" "Landscape" {
+      description "All software systems"
+      include *
+    }
+    dynamic sys "dyn" "Checkout" {
+      description "How an order is placed"
+      web -> api "Calls"
+    }
+  }
+}
+`)
+      expect(errors).toEqual([])
+      expect(workspace.views.systemLandscapeViews[0]).toMatchObject({ title: 'Landscape', description: 'All software systems', autoTitle: true })
+      expect(workspace.views.dynamicViews[0]).toMatchObject({ title: 'Checkout', description: 'How an order is placed', autoTitle: true })
+
+      const output = serialize(workspace)
+      expect(output).not.toMatch(/^\s*title /m)
+      expect(output).toContain('systemLandscape "land" "Landscape" {')
+      expect(output).toContain('description "All software systems"')
+      expect(output).toContain('dynamic sys "dyn" "Checkout" {')
+      expect(output).toContain('description "How an order is placed"')
+      expect(headings(parseDSL(output).workspace)).toEqual(headings(workspace))
+    })
+
+    it('keeps an empty body description that blanks the header string', () => {
+      // Structurizr applies `description ""` over the header string, so the
+      // view has no description. Dropping it would bring the header text back.
+      const { workspace, errors } = parseDSL(`
+workspace {
+  model {
+    sys = softwareSystem "System" {
+      web = container "Web"
+      api = container "API"
+      web -> api "Calls"
+    }
+  }
+  views {
+    container sys "cont" "Header text" {
+      description ""
+      include *
+    }
+    dynamic sys "dyn" "Checkout" {
+      description ""
+      web -> api "Calls"
+    }
+  }
+}
+`)
+      expect(errors).toEqual([])
+      expect(workspace.views.containerViews[0]).toMatchObject({ title: 'Header text', description: '', autoTitle: true })
+
+      const output = serialize(workspace)
+      expect(output).toContain('container sys "cont" "Header text" {')
+      expect(output).toContain('dynamic sys "dyn" "Checkout" {')
+      expect(output.match(/^\s*description ""$/gm)).toHaveLength(2)
+      expect(output).not.toMatch(/^\s*title /m)
+      expect(headings(parseDSL(output).workspace)).toEqual(headings(workspace))
+    })
   })
 
   it('roundtrips a relationship excluded from one static view', () => {

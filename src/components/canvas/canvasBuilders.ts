@@ -9,6 +9,7 @@ import {
 import { CENTER_SLOT, handleId, pickSlots, type Side } from './handleSlots'
 import { buildDeploymentLayoutClusters, buildDeploymentBoundaryNodes } from './deploymentBuilders'
 import { deploymentViewRelationships } from '@/lib/deployment'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
 
 import { buildDiagramStyleIndex, getElementStyle } from '@/lib/elementStyles'
@@ -481,13 +482,16 @@ export function buildEdges(
     rel: NonNullable<ReturnType<typeof relationshipMap.get>>
     order?: string
     stepDescription?: string
+    implied?: boolean
   }
 
   // The relationships this view draws, each with the endpoints the arrow
   // travels between. Dynamic steps carry their own endpoints (response steps
   // run against the relationship's direction; hierarchy-implied steps connect
   // coarser elements). Deployment views add derived instance relationships,
-  // which exist in no view.relationships list.
+  // which exist in no view.relationships list, and `include *` static views
+  // add Structurizr's implied relationships between the boxes they show
+  // (#230): drawn with the relationship they come from, between that pair.
   type DrawnRel = {
     rel: NonNullable<ReturnType<typeof relationshipMap.get>>
     edgeId: string
@@ -495,6 +499,7 @@ export function buildEdges(
     targetId: string
     order?: string
     stepDescription?: string
+    implied?: boolean
   }
   const drawn: DrawnRel[] = []
   if (view.type === 'deployment') {
@@ -519,6 +524,15 @@ export function buildEdges(
         stepDescription: viewRel.description,
       })
     })
+    for (const implied of wildcardImpliedRelationships(workspace.model, view)) {
+      drawn.push({
+        rel: implied.relationship,
+        edgeId: implied.id,
+        sourceId: implied.sourceId,
+        targetId: implied.destinationId,
+        implied: true,
+      })
+    }
   }
 
   const edgeInfos: EdgeInfo[] = []
@@ -545,6 +559,7 @@ export function buildEdges(
       // Dynamic views: the ordered interaction label and per-step description.
       order: d.order,
       stepDescription: d.stepDescription,
+      implied: d.implied,
     })
   }
 
@@ -621,8 +636,12 @@ export function buildEdges(
         highlighted,
         order: e.order,
         stepDescription: e.stepDescription,
+        implied: e.implied,
       },
       className,
+      // An implied edge stands for a relationship between other elements:
+      // dragging its end would move that relationship instead (#230).
+      ...(e.implied ? { reconnectable: false } : {}),
     })
   }
 
