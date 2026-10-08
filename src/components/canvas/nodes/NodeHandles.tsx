@@ -1,5 +1,5 @@
-import { Handle, Position, useNodeId, useStore } from '@xyflow/react'
-import { useMemo } from 'react'
+import { Handle, Position, useNodeId, useStore, useUpdateNodeInternals, useStoreApi } from '@xyflow/react'
+import { useMemo, useEffect } from 'react'
 import {
   CENTER_SLOT,
   SIDES,
@@ -40,6 +40,14 @@ function getHandleStyle(side: Side, slot: string): React.CSSProperties {
 
 export default function NodeHandles() {
   const nodeId = useNodeId()
+  const store = useStoreApi()
+  const prepareConnection = () => {
+    const data = nodeId ? store.getState().nodeLookup.get(nodeId)?.data : undefined
+    const scale = (data?.semantic as { scale: number } | undefined)?.scale ?? 1
+    // The drag handler captures this radius at pointer-down, before a
+    // connection exists. Set it before that handler runs, not on the next render.
+    store.setState({ connectionRadius: 40 * scale })
+  }
 
   // Only subscribe to edges connected to this node (avoids O(N*E) re-renders).
   // Shallow-compare by IDs so the component doesn't re-render when unrelated edges change.
@@ -54,6 +62,13 @@ export default function NodeHandles() {
       prev.length === next.length &&
       prev.every((e, i) => e.id === next[i].id && e.sourceHandle === next[i].sourceHandle && e.targetHandle === next[i].targetHandle),
   )
+
+  const updateNodeInternals = useUpdateNodeInternals()
+  useEffect(() => {
+    // Occupied slots grow from zero to their visible size. Refresh the handle
+    // measurements after React commits those classes, including on reveal.
+    if (nodeId) updateNodeInternals(nodeId)
+  }, [nodeId, connectedEdges, updateNodeInternals])
 
   // Slots this node's own edges land on, keyed by side. A slot counts as
   // occupied whichever end of the edge it is — the source dot and the target
@@ -105,7 +120,7 @@ export default function NodeHandles() {
             : 'c4-handle c4-handle-target c4-handle-hidden-extra !border-0'
 
           return (
-            <span key={`${side}-${slot}`}>
+            <span key={`${side}-${slot}`} onMouseDownCapture={prepareConnection} onTouchStartCapture={prepareConnection}>
               <Handle
                 type="target"
                 position={pos}

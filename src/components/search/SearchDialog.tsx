@@ -1,3 +1,4 @@
+import { getActiveCamera } from '@/lib/activeCamera'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useWorkspaceStore, buildElementMap, getAllViews } from '@/store/workspace'
 import type { ModelElement, View, Container, Component } from '@/types/model'
@@ -89,7 +90,8 @@ export default function SearchDialog() {
 
   function handleSelect(result: SearchResult) {
     if (result.kind === 'element') {
-      selectElements([result.element.id])
+      if (useWorkspaceStore.getState().rendererMode === 'explore') getActiveCamera()?.focus(result.element.id)
+      else selectElements([result.element.id])
     } else {
       setActiveView(result.view.key)
     }
