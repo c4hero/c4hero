@@ -73,6 +73,59 @@ async function arrange(page: Page) {
   await page.keyboard.press('Control+Shift+l')
 }
 
+test('canonical files keep their timestamps on reopen and save, while drags and model edits persist', async ({ page }, testInfo) => {
+  await seed(page, `workspace "Write timestamps" {
+    model {
+      payments = softwareSystem "Payments" {
+        api = container "API"
+      }
+    }
+    views {
+      container payments "Services" {
+        include *
+      }
+    }
+  }`, { version: 1, views: { Services: { elements: { api: { pinned: true, x: 100, y: 200 } } } } })
+  const files = () => page.evaluate(async folderName => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName)
+    const read = async (name: string) => {
+      const file = await (await dir.getFileHandle(name)).getFile()
+      return { content: await file.text(), modified: file.lastModified }
+    }
+    return { dsl: await read('preview.dsl'), sidecar: await read('preview.c4hero.json') }
+  }, folder)
+
+  // Establish files in the app's saved format, including sidecar identity.
+  // The first save may canonicalize an externally authored source.
+  await save(page)
+  const initial = await files()
+  await reopen(page)
+  // Allow the on-open autosave debounce and idle callback to run, then also
+  // exercise manual Save. Identical bytes must never open a writable stream.
+  await page.waitForTimeout(1800)
+  await save(page)
+  const untouched = await files()
+  expect(untouched).toEqual(initial)
+
+  const beforeDrag = (await readSidecar(page)).views!.Services.elements!.api
+  await new WorkspaceHelper(page).dragNodeBy('API', { x: 64, y: 44 })
+  await expect.poll(async () => (await readSidecar(page)).views!.Services.elements!.api).not.toEqual(beforeDrag)
+  const dragged = await files()
+  expect(dragged.dsl).toEqual(initial.dsl)
+  expect(dragged.sidecar.modified).toBeGreaterThan(initial.sidecar.modified)
+
+  await editDSL(page, dragged.dsl.content.replace('"API"', '"Updated API"'))
+  await expect.poll(async () => (await files()).dsl.content).toContain('"Updated API"')
+  const edited = await files()
+  expect(edited.dsl.modified).toBeGreaterThan(initial.dsl.modified)
+  await save(page)
+  expect(await files()).toEqual(edited)
+  await testInfo.attach('file-timestamps.json', {
+    body: JSON.stringify({ initial, untouched, dragged, edited }, null, 2),
+    contentType: 'application/json',
+  })
+})
+
 for (const lockOnly of [false, true]) {
   test(`${lockOnly ? 'lock-only' : 'sparse'} keyless layouts survive unchanged real save/reopen`, async ({ page }) => {
     const dsl = `workspace "Preview" {

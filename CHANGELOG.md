@@ -59,6 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nested, so `Group:` style tags keep matching. Editing a property whose value
   came from a read-only include now writes the new value into the root file
   instead of losing it (TEA-349).
+- Workspace saves now leave a DSL or layout file untouched when its existing
+  UTF-8 bytes exactly match the saved output. Repeated saves preserve file
+  modification times and reduce disk watcher activity, while model edits and
+  node drags still reach disk. Autosave now gives idle callbacks a one-second
+  deadline so busy canvas or editor activity cannot leave disk writes waiting
+  indefinitely (#222, TEA-356).
 - Saving no longer strips relationships from deployment views in Structurizr.
   Relationships between people, software systems, containers and components
   were written below every `deploymentEnvironment` block, and Structurizr only
