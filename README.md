@@ -136,3 +136,11 @@ To report a security issue, see [`SECURITY.md`](SECURITY.md).
 Released under the [Apache License 2.0](LICENSE).
 
 The c4hero name, logo, domain, and product identity are not licensed under Apache-2.0. See [TRADEMARKS.md](TRADEMARKS.md) for the brand-use boundary.
+
+## Coding-agent integration
+
+The [local MCP companion](packages/mcp/README.md) lets coding agents read a DSL
+workspace and propose architecture edits for review. Changes are written only
+when the agent host explicitly invokes `apply_edit_plan`, with conflict checks
+and original-file backups. Build it with `npm run build:mcp`; no API key or
+c4hero backend is required.

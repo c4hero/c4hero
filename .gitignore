@@ -50,3 +50,8 @@ coverage/
 
 # Structurizr CLI used by the DSL conformance tests (see structurizr-conformance.test.ts)
 .structurizr-cli/
+
+# Packed MCP companion and generated license copies
+c4hero-mcp-*.tgz
+/packages/mcp/LICENSE
+/packages/mcp/NOTICE

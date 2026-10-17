@@ -139,6 +139,29 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:mcp
+      - run: npm pack --workspace c4hero-mcp
+      - name: Verify installed companion
+        run: |
+          npm install --prefix "$RUNNER_TEMP/c4hero-mcp" ./c4hero-mcp-*.tgz --omit=dev
+          C4HERO_MCP_BIN="$RUNNER_TEMP/c4hero-mcp/node_modules/c4hero-mcp/dist/cli.js" \
+            npm exec --workspace c4hero-mcp -- vitest run --config vitest.config.ts test/stdio.test.ts
+      - name: Upload companion package
+        uses: actions/upload-artifact@v7
+        with:
+          name: c4hero-mcp
+          path: c4hero-mcp-*.tgz
+          retention-days: 7
+
   security:
     runs-on: ubuntu-latest
     steps:

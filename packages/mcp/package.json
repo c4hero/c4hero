@@ -1,0 +1,35 @@
+{
+  "name": "c4hero-mcp",
+  "version": "0.7.0",
+  "description": "Local MCP tools for reading and safely editing c4hero architecture workspaces",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/c4hero/c4hero.git",
+    "directory": "packages/mcp"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "c4hero-mcp": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run build && vitest run --config vitest.config.ts",
+    "check": "npm run typecheck && npm test",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "zod": "4.6.5"
+  }
+}

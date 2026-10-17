@@ -43,9 +43,10 @@ Keep local overrides out of git.
 
 ## Package Distribution
 
-c4hero is not currently published as an npm package. The npm metadata exists for
-local development, CI, and static app builds, and `package.json` stays marked
-`private` to avoid accidental publishing.
+The web app is not published as an npm package. Its root `package.json` stays
+marked `private`. The `packages/mcp` workspace builds the independently packable
+`c4hero-mcp` companion; see its [README](packages/mcp/README.md) for build,
+installation, tool contracts and recovery instructions.
 
 ## Tech Stack
 
