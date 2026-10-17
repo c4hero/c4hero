@@ -2,29 +2,38 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // An in-memory folder standing in for the File System Access API.
 const fs = new Map<string, string>()
+let folderHandle = { name: 'shop' } as FileSystemDirectoryHandle
+const folders = new Map<FileSystemDirectoryHandle, Map<string, string>>()
 let folderOpen = true
 /** When set, directory listings wait on it — lets a test hold a load in flight. */
 let gate: Promise<void> | null = null
 let failReads = false
+const failWrites = new Set<string>()
 
 vi.mock('@/lib/folderIO', () => ({
-  getCurrentDirHandle: () => (folderOpen ? { name: 'shop' } : null),
-  listFilesAt: async (dir: string) => {
+  getCurrentDirHandle: () => (folderOpen ? folderHandle : null),
+  listFilesAt: vi.fn(async (dir: string, handle = folderHandle) => {
+    const files = folders.get(handle)!
     if (gate) await gate
     const prefix = `${dir}/`
-    const names = [...fs.keys()].filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes('/')).map((p) => p.slice(prefix.length))
+    const names = [...files.keys()].filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes('/')).map((p) => p.slice(prefix.length))
     return names.length ? names.sort() : null
-  },
-  readTextFileAt: async (path: string) => {
+  }),
+  readTextFileAt: vi.fn(async (path: string, handle = folderHandle) => {
     if (failReads) throw new Error('Document too large')
-    return fs.get(path) ?? null
-  },
-  writeTextFileAt: async (path: string, content: string) => { fs.set(path, content); return true },
+    return folders.get(handle)!.get(path) ?? null
+  }),
+  writeTextFileAt: vi.fn(async (path: string, content: string, handle = folderHandle) => {
+    if (failWrites.has(path)) return false
+    folders.get(handle)!.set(path, content)
+    return true
+  }),
 }))
 
 import { useDocsStore, bundleKey, selectElementDocs, selectElementHasDocs, selectWorkspaceDocs } from './docs'
 import { useWorkspaceStore } from '@/store/workspace'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
+import { readTextFileAt, writeTextFileAt } from '@/lib/folderIO'
 
 const DSL = `
 workspace "Shop" {
@@ -48,9 +57,14 @@ function loadWs() {
 
 beforeEach(() => {
   fs.clear()
+  folders.clear()
+  folderHandle = { name: 'shop' } as FileSystemDirectoryHandle
+  folders.set(folderHandle, fs)
   folderOpen = true
   gate = null
   failReads = false
+  failWrites.clear()
+  vi.clearAllMocks()
   useDocsStore.getState().reset()
   vi.useFakeTimers({ now: new Date('2026-09-13T12:00:00Z') })
 })
@@ -104,6 +118,21 @@ describe('useDocsStore.load', () => {
     await useDocsStore.getState().load(loadWs())
     expect(useDocsStore.getState().bundles).toEqual({})
     expect(useDocsStore.getState().loaded).toBe(true)
+  })
+
+  it('keeps every read on the captured folder and drops its result after changing folders', async () => {
+    const original = folderHandle
+    fs.set('docs/overview.md', '# Original folder')
+    let release!: () => void
+    gate = new Promise<void>((resolve) => { release = resolve })
+    const loading = useDocsStore.getState().load(loadWs())
+    folderHandle = { name: 'other' } as FileSystemDirectoryHandle
+    folders.set(folderHandle, new Map([['docs/overview.md', '# Other folder']]))
+    release()
+    await loading
+    expect(readTextFileAt).toHaveBeenCalledWith('docs/overview.md', original)
+    expect(useDocsStore.getState().bundles).toEqual({})
+    expect(useDocsStore.getState().loaded).toBe(false)
   })
 })
 
@@ -170,5 +199,45 @@ describe('useDocsStore.create', () => {
     loadWs()
     expect(await useDocsStore.getState().create('docs', {}, { title: 'X' })).toBeNull()
     expect(fs.size).toBe(0)
+  })
+
+  it('returns null and adds no directive when the index write fails', async () => {
+    loadWs()
+    failWrites.add('adrs/index.md')
+    expect(await useDocsStore.getState().create('adrs', {}, { title: 'Unindexed decision' })).toBeNull()
+    expect(fs.has('adrs/0001-unindexed-decision.md')).toBe(true)
+    expect(fs.has('adrs/index.md')).toBe(false)
+    expect(serializeDSL(useWorkspaceStore.getState().workspace!)).not.toContain('!adrs adrs')
+  })
+
+  it('finishes files in the captured folder without adding directives to a switched workspace', async () => {
+    const original = folderHandle
+    loadWs()
+    useWorkspaceStore.getState().setActiveWorkspaceFilename('first.dsl')
+    let started!: () => void
+    const writing = new Promise<void>((resolve) => { started = resolve })
+    let release!: () => void
+    const blocked = new Promise<void>((resolve) => { release = resolve })
+    vi.mocked(writeTextFileAt).mockImplementationOnce(async (path, content, handle) => {
+      started()
+      await blocked
+      folders.get(handle!)!.set(path, content)
+      return true
+    })
+    const creating = useDocsStore.getState().create('adrs', {}, { title: 'Original decision' })
+    await writing
+    folderHandle = { name: 'other' } as FileSystemDirectoryHandle
+    const otherFiles = new Map<string, string>()
+    folders.set(folderHandle, otherFiles)
+    loadWs()
+    useWorkspaceStore.getState().setActiveWorkspaceFilename('second.dsl')
+    release()
+
+    expect(await creating).toBeNull()
+    expect(writeTextFileAt).toHaveBeenCalledWith('adrs/index.md', expect.any(String), original)
+    expect(fs.has('adrs/0001-original-decision.md')).toBe(true)
+    expect(fs.get('adrs/index.md')).toContain('Original decision')
+    expect(otherFiles.size).toBe(0)
+    expect(serializeDSL(useWorkspaceStore.getState().workspace!)).not.toContain('!adrs adrs')
   })
 })

@@ -27,6 +27,7 @@ const busyBrowser = vi.hoisted(() => {
   install()
   return {
     install,
+    lastCallback: () => request.mock.calls.at(-1)?.[0],
     reset: () => {
       for (const id of pending.keys()) cancel(id)
       nextId = 0
@@ -38,6 +39,7 @@ const saves = vi.hoisted(() => ({
   isWorkspaceLinked: vi.fn(() => true),
   writeLinkedWorkspace: vi.fn(async () => true),
   saveToLocalStorage: vi.fn(),
+  resetIncludedSaveHistory: vi.fn(),
 }))
 vi.mock('@/lib/workspaceSave', () => saves)
 vi.mock('@/lib/fileIO', () => ({ saveToLocalStorage: saves.saveToLocalStorage }))
@@ -129,6 +131,26 @@ describe('autosave when the browser has no idle time', () => {
     expect(useWorkspaceStore.getState().workspace).toBeNull()
   })
 
+  it('records a failed layout-only autosave with no undo entries and clears the failure on retry', async () => {
+    vi.mocked(writeLinkedWorkspace).mockResolvedValueOnce(false)
+    render(<Harness />)
+    act(() => {
+      openWorkspace()
+      useWorkspaceStore.getState().updateNodePosition('api', 100, 200)
+    })
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(0)
+    await advance(2000)
+    expect(writeLinkedWorkspace).toHaveBeenCalledOnce()
+    expect(useWorkspaceStore.getState().fileSaveFailed).toBe(true)
+    expect(useWorkspaceStore.getState().lastSavedUndoLength).toBe(0)
+
+    act(() => { useWorkspaceStore.getState().updateNodePosition('api', 120, 220) })
+    await advance(2000)
+    expect(writeLinkedWorkspace).toHaveBeenCalledTimes(2)
+    expect(useWorkspaceStore.getState().fileSaveFailed).toBe(false)
+    expect(useWorkspaceStore.getState().undoStack).toHaveLength(0)
+  })
+
   it('cancels the prior idle callback when switching to a workspace with the same name', async () => {
     render(<Harness />)
     act(() => { openWorkspace(DSL, 'first.dsl') })
@@ -145,5 +167,48 @@ describe('autosave when the browser has no idle time', () => {
     const [workspace, filename] = vi.mocked(writeLinkedWorkspace).mock.calls[0]
     expect(workspace.model.softwareSystems[0].containers[0].name).toBe('Second API')
     expect(filename).toBe('second.dsl')
+  })
+
+  it.each(['close', 'switch', 'edit', 'filename'].flatMap(change => [true, false].map(ok => ({ change, ok }))))('does not mark stale state saved or failed after a pending write ($ok) and a $change', async ({ change, ok }) => {
+    let complete!: (ok: boolean) => void
+    vi.mocked(writeLinkedWorkspace).mockImplementationOnce(() => new Promise<boolean>((resolve) => { complete = resolve }))
+    render(<Harness />)
+    act(() => {
+      openWorkspace()
+      useWorkspaceStore.getState().replaceWorkspaceFromDSL(DSL.replace('"API"', '"First edit"'))
+    })
+    await advance(2000)
+    expect(writeLinkedWorkspace).toHaveBeenCalledOnce()
+
+    act(() => {
+      const store = useWorkspaceStore.getState()
+      if (change === 'close') store.closeWorkspace()
+      if (change === 'switch') {
+        openWorkspace(DSL, 'second.dsl')
+        useWorkspaceStore.getState().replaceWorkspaceFromDSL(DSL.replace('"API"', '"Second edit"'))
+      }
+      if (change === 'edit') store.replaceWorkspaceFromDSL(DSL.replace('"API"', '"Newer edit"'))
+      if (change === 'filename') store.setActiveWorkspaceFilename('renamed.dsl')
+    })
+    await act(async () => { complete(ok); await Promise.resolve() })
+    expect(useWorkspaceStore.getState().lastSavedUndoLength).toBe(0)
+    expect(useWorkspaceStore.getState().fileSaveFailed).toBe(false)
+    if (change !== 'close') {
+      expect(useWorkspaceStore.getState().undoStack.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('rejects a cancelled callback forced to run after opening another same-name snapshot at the same filename', async () => {
+    render(<Harness />)
+    act(() => { openWorkspace() })
+    await advance(1000)
+    const cancelled = busyBrowser.lastCallback()!
+    act(() => { openWorkspace(DSL.replace('"API"', '"Another API"')) })
+    await act(async () => { cancelled({ didTimeout: true, timeRemaining: () => 0 }); await Promise.resolve() })
+    expect(writeLinkedWorkspace).not.toHaveBeenCalled()
+
+    await advance(2000)
+    expect(writeLinkedWorkspace).toHaveBeenCalledOnce()
+    expect(vi.mocked(writeLinkedWorkspace).mock.calls[0][0].model.softwareSystems[0].containers[0].name).toBe('Another API')
   })
 })

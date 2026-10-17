@@ -2,33 +2,49 @@ import { test, expect, type Page } from '@playwright/test'
 import { WorkspaceHelper } from '../fixtures/workspace'
 import type { SidecarData } from '../../src/lib/sidecar'
 
-// Runs against the production build without dev-only store hooks. Only the
-// chooser is replaced: every handle, write, close, and reopen uses Chromium's
-// real origin-private filesystem (OPFS), including persistence across reloads.
+// Runs against the production build without dev-only store hooks. The chooser
+// uses Chromium's real origin-private filesystem (OPFS), including persistence
+// across reloads. Fault cases control errors/completion at the writable API.
 const folder = 'layout-preview'
 const retained = { pinned: true, locked: true, x: 800, y: 450 }
 const node = (page: Page, id: string) => page.locator(`.react-flow__node[data-id="${id}"]`)
 
-async function seed(page: Page, dsl: string, sidecar: SidecarData) {
+test.afterEach(async ({ page }, testInfo) => {
+  const screenshot = await page.screenshot({ path: testInfo.outputPath('final-workspace.png') })
+  await testInfo.attach('final-workspace', { body: screenshot, contentType: 'image/png' })
+})
+
+async function seed(page: Page, dsl: string, sidecar: SidecarData, additionalFiles: Record<string, string> = {}) {
   await page.addInitScript((folderName) => {
     localStorage.clear()
     sessionStorage.clear()
     localStorage.setItem('c4hero.json', JSON.stringify({ canvasGuideDismissed: true }))
+    const observed = window as Window & { __layoutIdleRuns: number }
+    observed.__layoutIdleRuns = 0
+    const request = window.requestIdleCallback.bind(window)
+    window.requestIdleCallback = (callback, options) => request((deadline) => {
+      callback(deadline)
+      observed.__layoutIdleRuns++
+    }, options)
     Object.defineProperty(window, 'showDirectoryPicker', {
       configurable: true,
       value: async () => (await navigator.storage.getDirectory()).getDirectoryHandle(folderName),
     })
   }, folder)
   await page.goto('/')
-  await page.evaluate(async ({ folderName, text, data }) => {
+  await page.evaluate(async ({ folderName, text, data, files }) => {
     const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName, { create: true })
-    for (const [name, content] of [['preview.dsl', text], ['preview.c4hero.json', JSON.stringify(data)]]) {
-      const file = await dir.getFileHandle(name, { create: true })
+    const contents = { 'preview.dsl': text, 'preview.c4hero.json': JSON.stringify(data), ...files }
+    for (const [name, content] of Object.entries(contents)) {
+      const parts = name.split('/')
+      let target = dir
+      for (const part of parts.slice(0, -1)) target = await target.getDirectoryHandle(part, { create: true })
+      const file = await target.getFileHandle(parts[parts.length - 1], { create: true })
       const writable = await file.createWritable()
       await writable.write(content)
       await writable.close()
     }
-  }, { folderName: folder, text: dsl, data: sidecar })
+  }, { folderName: folder, text: dsl, data: sidecar, files: additionalFiles })
   await openCollection(page)
 }
 
@@ -102,7 +118,7 @@ test('canonical files keep their timestamps on reopen and save, while drags and 
   await reopen(page)
   // Allow the on-open autosave debounce and idle callback to run, then also
   // exercise manual Save. Identical bytes must never open a writable stream.
-  await page.waitForTimeout(1800)
+  await expect.poll(() => page.evaluate(() => (window as Window & { __layoutIdleRuns: number }).__layoutIdleRuns)).toBeGreaterThan(0)
   await save(page)
   const untouched = await files()
   expect(untouched).toEqual(initial)
@@ -120,10 +136,203 @@ test('canonical files keep their timestamps on reopen and save, while drags and 
   expect(edited.dsl.modified).toBeGreaterThan(initial.dsl.modified)
   await save(page)
   expect(await files()).toEqual(edited)
+  const persistedPosition = (await readSidecar(page)).views!.Services.elements!.api
+  await page.screenshot({ path: testInfo.outputPath('edited-and-saved.png') })
+  await reopen(page)
+  await expect(node(page, 'api')).toContainText('Updated API')
+  await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+    .toBe(`translate(${persistedPosition.x}px, ${persistedPosition.y}px)`)
   await testInfo.attach('file-timestamps.json', {
     body: JSON.stringify({ initial, untouched, dragged, edited }, null, 2),
     contentType: 'application/json',
   })
+})
+
+test('a failed layout write shows an error and keeps the edit unsaved until retry', async ({ page }, testInfo) => {
+  const dsl = `workspace "Save retry" {
+    model {
+      payments = softwareSystem "Payments" {
+        api = container "API"
+      }
+    }
+    views {
+      container payments "Services" { include * }
+    }
+  }`
+  await seed(page, dsl, { version: 1, views: { Services: { elements: { api: { pinned: true, x: 100, y: 200 } } } } })
+  await save(page)
+  const before = await readSidecar(page)
+  await page.evaluate(() => {
+    const observed = window as Window & { __failLayoutWrite: boolean }
+    observed.__failLayoutWrite = true
+    const original = FileSystemFileHandle.prototype.createWritable
+    FileSystemFileHandle.prototype.createWritable = function (options) {
+      if (observed.__failLayoutWrite && this.name.endsWith('.c4hero.json')) {
+        return Promise.reject(new DOMException('Layout write denied', 'NotAllowedError'))
+      }
+      return original.call(this, options)
+    }
+  })
+  await new WorkspaceHelper(page).dragNodeBy('API', { x: 64, y: 44 })
+  const retry = page.getByRole('button', { name: 'Save failed — click to retry', exact: true })
+  await expect(retry).toBeVisible()
+  expect(await readSidecar(page)).toEqual(before)
+  await page.screenshot({ path: testInfo.outputPath('layout-save-failed.png') })
+  await page.evaluate(() => { (window as Window & { __failLayoutWrite: boolean }).__failLayoutWrite = false })
+  await retry.click()
+  await expect(page.getByRole('button', { name: 'Saved to file', exact: true })).toBeVisible()
+  expect(await readSidecar(page)).not.toEqual(before)
+  const persistedPosition = (await readSidecar(page)).views!.Services.elements!.api
+  await reopen(page)
+  await expect(node(page, 'api')).toContainText('API')
+  await expect.poll(() => node(page, 'api').evaluate(el => (el as HTMLElement).style.transform))
+    .toBe(`translate(${persistedPosition.x}px, ${persistedPosition.y}px)`)
+})
+
+test('a pending save cannot mark a different same-name workspace saved', async ({ page }, testInfo) => {
+  const dsl = (name: string) => `workspace "Shared name" {
+    model {
+      payments = softwareSystem "Payments" {
+        api = container "${name}"
+      }
+    }
+    views {
+      container payments "Services" { include * }
+    }
+  }`
+  await seed(page, dsl('First API'), { version: 1, views: { Services: { elements: { api: { pinned: true, x: 100, y: 200 } } } } })
+  await save(page)
+  await page.evaluate(async ({ folderName, text }) => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName)
+    const stream = await (await dir.getFileHandle('second.dsl', { create: true })).createWritable()
+    await stream.write(text)
+    await stream.close()
+    const observed = window as Window & {
+      __pendingSaveStarted: boolean
+      __pendingSaveClosed: boolean
+      __releasePendingSave: () => void
+    }
+    observed.__pendingSaveStarted = false
+    observed.__pendingSaveClosed = false
+    const held = new Promise<void>((resolve) => { observed.__releasePendingSave = resolve })
+    const original = FileSystemFileHandle.prototype.createWritable
+    FileSystemFileHandle.prototype.createWritable = async function (options) {
+      const writable = await original.call(this, options)
+      if (this.name === 'preview.dsl') {
+        const close = writable.close.bind(writable)
+        writable.close = async () => {
+          observed.__pendingSaveStarted = true
+          await held
+          await close()
+          observed.__pendingSaveClosed = true
+        }
+      }
+      return writable
+    }
+    // The test controls Save explicitly so the new workspace cannot save
+    // itself while the first workspace's completion is being checked.
+    let idleId = 0
+    window.requestIdleCallback = () => ++idleId
+  }, { folderName: folder, text: dsl('Second API') })
+  await editDSL(page, dsl('Saved first API'))
+  await page.getByRole('button', { name: /^(Unsaved changes|All changes saved|Saved to file)/ }).click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { __pendingSaveStarted: boolean }).__pendingSaveStarted)).toBe(true)
+  await page.getByRole('button', { name: 'Shared name', exact: true }).click()
+  await page.getByText('second', { exact: true }).click()
+  await expect(node(page, 'api')).toContainText('Second API')
+  await editDSL(page, dsl('Unsaved second API'))
+  await page.evaluate(() => { (window as Window & { __releasePendingSave: () => void }).__releasePendingSave() })
+  await expect.poll(() => page.evaluate(() => (window as Window & { __pendingSaveClosed: boolean }).__pendingSaveClosed)).toBe(true)
+  await expect(page.getByRole('button', { name: 'Unsaved changes — click to save', exact: true })).toBeVisible()
+  const secondText = await page.evaluate(async (folderName) => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName)
+    return (await (await dir.getFileHandle('second.dsl')).getFile()).text()
+  }, folder)
+  expect(secondText).toContain('"Second API"')
+  expect(secondText).not.toContain('"Unsaved second API"')
+  await page.screenshot({ path: testInfo.outputPath('switched-workspace-stays-unsaved.png') })
+  await save(page)
+  await page.getByRole('button', { name: 'Shared name', exact: true }).click()
+  await page.getByText('preview', { exact: true }).click()
+  await expect(node(page, 'api')).toContainText('Saved first API')
+})
+
+test('watch mode reloads an external restore of previously saved bytes', async ({ page }, testInfo) => {
+  await seed(page, `workspace "External restore" {
+    model {
+      payments = softwareSystem "Payments" {
+        api = container "API"
+      }
+    }
+    views {
+      container payments "Services" { include * }
+    }
+  }`, { version: 1, views: { Services: { elements: { api: { pinned: true, x: 100, y: 200 } } } } })
+  await save(page)
+  await expect(page.locator('[data-watching-disk="true"]')).toBeVisible()
+  const original = await page.evaluate(async (folderName) => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName)
+    return (await (await dir.getFileHandle('preview.dsl')).getFile()).text()
+  }, folder)
+  await editDSL(page, original.replace('"API"', '"Updated API"'))
+  await save(page)
+  await expect(node(page, 'api')).toContainText('Updated API')
+  // Let the watcher acknowledge the successful save before a different
+  // writer restores the old canonical bytes. Old self-write history must
+  // not classify this later external operation as our own save.
+  await page.waitForTimeout(2200)
+  await page.evaluate(async ({ folderName, text }) => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName)
+    const stream = await (await dir.getFileHandle('preview.dsl')).createWritable()
+    await stream.write(text)
+    await stream.close()
+  }, { folderName: folder, text: original })
+  await expect(node(page, 'api').getByText('API', { exact: true })).toBeVisible({ timeout: 6000 })
+  await expect(node(page, 'api').getByText('Updated API', { exact: true })).toHaveCount(0)
+  await expect(page.locator('[data-disk-conflict-bar]')).toBeHidden()
+  await page.screenshot({ path: testInfo.outputPath('external-old-bytes-restored.png') })
+})
+
+test('an unrelated autosave preserves an externally edited included fragment and stays unsaved', async ({ page }, testInfo) => {
+  await seed(page, `workspace "Include protection" {
+    model {
+      !include model/fragment.dsl
+    }
+    views {
+      container payments "Services" { include * }
+    }
+  }`, { version: 1, views: { Services: { elements: { api: { pinned: true, x: 100, y: 200 } } } } }, {
+    'model/fragment.dsl': 'payments = softwareSystem "Payments" {\n  api = container "API"\n}\n',
+  })
+  await save(page)
+  const beforePosition = (await readSidecar(page)).views!.Services.elements!.api
+  const disk = await page.evaluate(async (folderName) => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName)
+    const model = await dir.getDirectoryHandle('model')
+    const fragment = await (await model.getFileHandle('fragment.dsl')).getFile()
+    return { fragment: await fragment.text() }
+  }, folder)
+  const external = disk.fragment.replace('"API"', '"External API"')
+  await page.evaluate(async ({ folderName, text }) => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName)
+    const model = await dir.getDirectoryHandle('model')
+    const stream = await (await model.getFileHandle('fragment.dsl')).createWritable()
+    await stream.write(text)
+    await stream.close()
+  }, { folderName: folder, text: external })
+  const idleRuns = await page.evaluate(() => (window as Window & { __layoutIdleRuns: number }).__layoutIdleRuns)
+  await new WorkspaceHelper(page).dragNodeBy('API', { x: 64, y: 44 })
+  await expect.poll(() => page.evaluate(() => (window as Window & { __layoutIdleRuns: number }).__layoutIdleRuns)).toBeGreaterThan(idleRuns)
+  await expect.poll(async () => (await readSidecar(page)).views!.Services.elements!.api).not.toEqual(beforePosition)
+  const preserved = await page.evaluate(async (folderName) => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(folderName)
+    const model = await dir.getDirectoryHandle('model')
+    return (await (await model.getFileHandle('fragment.dsl')).getFile()).text()
+  }, folder)
+  expect(preserved).toBe(external)
+  await expect(page.getByRole('button', { name: 'Save failed — click to retry', exact: true })).toBeVisible()
+  await expect(page.locator('[data-disk-conflict-bar]')).toBeHidden()
+  await page.screenshot({ path: testInfo.outputPath('external-include-preserved.png') })
 })
 
 for (const lockOnly of [false, true]) {

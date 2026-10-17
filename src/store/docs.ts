@@ -52,7 +52,8 @@ export interface DocsState {
   /** Write a new doc or ADR into the scope's bundle, creating the folder,
    *  the index and — when the scope has no directive yet — the `!docs` /
    *  `!adrs` line in the DSL. Resolves with the new file's path, or `null`
-   *  when nothing could be written (no folder open, or the write failed). */
+   *  when the file and index could not both be written, or the workspace
+   *  changed before its directive could be added. */
   create: (kind: DocsKind, scope: { elementId?: string }, input: NewDocInput) => Promise<string | null>
   reset: () => void
 }
@@ -70,14 +71,15 @@ export const useDocsStore = create<DocsState>((set, get) => ({
   load: async (ws) => {
     const ticket = ++loadTicket
     const refs = allDocsDirs(ws)
-    if (!getCurrentDirHandle() || refs.length === 0) {
+    const dirHandle = getCurrentDirHandle()
+    if (!dirHandle || refs.length === 0) {
       set({ bundles: {}, loaded: true })
       return
     }
     const bundles: Record<string, DocsBundle | null> = {}
     await Promise.all(refs.map(async ({ kind, dir }) => {
       try {
-        const names = await listFilesAt(dir)
+        const names = await listFilesAt(dir, dirHandle)
         if (names === null) {
           bundles[bundleKey(kind, dir)] = null
           return
@@ -85,7 +87,7 @@ export const useDocsStore = create<DocsState>((set, get) => ({
         const files = await Promise.all(
           names.filter((n) => n.toLowerCase().endsWith('.md')).map(async (name) => ({
             name,
-            text: (await readTextFileAt(`${dir}/${name}`)) ?? '',
+            text: (await readTextFileAt(`${dir}/${name}`, dirHandle)) ?? '',
           })),
         )
         bundles[bundleKey(kind, dir)] = parseDocsBundle(kind, dir, files)
@@ -96,14 +98,16 @@ export const useDocsStore = create<DocsState>((set, get) => ({
         bundles[bundleKey(kind, dir)] = null
       }
     }))
-    if (ticket !== loadTicket) return
+    if (ticket !== loadTicket || getCurrentDirHandle() !== dirHandle) return
     set({ bundles, loaded: true })
   },
 
   create: async (kind, scope, input) => {
     const wsStore = useWorkspaceStore.getState()
     const ws = wsStore.workspace
-    if (!ws || !getCurrentDirHandle()) return null
+    const activeFilename = wsStore.activeWorkspaceFilename
+    const dirHandle = getCurrentDirHandle()
+    if (!ws || !dirHandle) return null
 
     const element = scope.elementId ? findElementHelper(ws, scope.elementId) : undefined
     const existingScope: DocsScope = element ? elementDocsScope(element) : workspaceDocsScope(ws)
@@ -116,7 +120,7 @@ export const useDocsStore = create<DocsState>((set, get) => ({
     // other failed write.
     let path: string
     try {
-      const existing = (await listFilesAt(dir)) ?? []
+      const existing = (await listFilesAt(dir, dirHandle)) ?? []
       const file = kind === 'adrs'
         ? nextAdrFilename(existing, input.title)
         : uniqueDocFilename(existing, slugify(input.title))
@@ -127,16 +131,19 @@ export const useDocsStore = create<DocsState>((set, get) => ({
         : renderNewDoc({ ...input, elementId: scope.elementId })
 
       path = `${dir}/${file}`
-      if (!(await writeTextFileAt(path, content))) return null
+      if (!(await writeTextFileAt(path, content, dirHandle))) return null
 
       // Keep the bundle's section index in step, as an OKF consumer expects.
       const indexPath = `${dir}/index.md`
-      const index = appendToIndex(await readTextFileAt(indexPath), dirTitle(kind, dir), file, input.title, input.description)
-      await writeTextFileAt(indexPath, index)
+      const index = appendToIndex(await readTextFileAt(indexPath, dirHandle), dirTitle(kind, dir), file, input.title, input.description)
+      if (!(await writeTextFileAt(indexPath, index, dirHandle))) return null
     } catch (err) {
       log.error('docs create failed', { kind, dir, err })
       return null
     }
+
+    const current = useWorkspaceStore.getState()
+    if (current.workspace !== ws || current.activeWorkspaceFilename !== activeFilename || getCurrentDirHandle() !== dirHandle) return null
 
     if (needsDirective) {
       const line = docsDirectiveLine(kind, dir)
@@ -144,8 +151,8 @@ export const useDocsStore = create<DocsState>((set, get) => ({
       else wsStore.addWorkspaceDirective(line)
     }
 
-    const current = useWorkspaceStore.getState().workspace
-    if (current) await get().load(current)
+    const updated = useWorkspaceStore.getState().workspace
+    if (updated) await get().load(updated)
     return path
   },
 

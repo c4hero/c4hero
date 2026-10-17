@@ -64,7 +64,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   modification times and reduce disk watcher activity, while model edits and
   node drags still reach disk. Autosave now gives idle callbacks a one-second
   deadline so busy canvas or editor activity cannot leave disk writes waiting
-  indefinitely (#222, TEA-356).
+  indefinitely. Save requests retain their original destinations and order,
+  wait for included fragments, and report layout or document-index failures.
+  Included fragments changed externally are preserved until the workspace is
+  reloaded. Downloads with layout data include the DSL and sidecar in one ZIP.
+  Disk watching retires observed self-writes so restoring older content in an
+  external editor is detected (#222, TEA-356).
 - Saving no longer strips relationships from deployment views in Structurizr.
   Relationships between people, software systems, containers and components
   were written below every `deploymentEnvironment` block, and Structurizr only

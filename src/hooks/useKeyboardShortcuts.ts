@@ -4,7 +4,7 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView, isFocalScopeElemen
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
-import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { saveDSLFile, openDSLFile } from '@/lib/fileIO'
 import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
@@ -106,15 +106,28 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
       try {
         // Same rule as the Save button: write a linked workspace in place;
         // only an unlinked one goes through the picker / download (TEA-339).
-        if (isWorkspaceLinked(store.activeWorkspaceFilename)) {
-          await writeLinkedWorkspace(store.workspace, store.activeWorkspaceFilename)
-        } else {
-          const dsl = serializeRoot(store.workspace)
-          if (!await saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)) return
-          const sidecar = extractSidecar(store.workspace) ?? { version: 1 as const, views: {} }
-          await writeSidecarToHandle(serializeSidecar(sidecar))
+        const undoLength = store.undoStack.length
+        const ok = isWorkspaceLinked(store.activeWorkspaceFilename)
+          ? await writeLinkedWorkspace(store.workspace, store.activeWorkspaceFilename)
+          : await saveDSLFile(
+            serializeRoot(store.workspace),
+            `${store.workspace.name ?? 'workspace'}.dsl`,
+            serializeSidecar(extractSidecar(store.workspace) ?? { version: 1, views: {} }),
+          )
+        const current = useWorkspaceStore.getState()
+        if (current.workspace === store.workspace && current.activeWorkspaceFilename === store.activeWorkspaceFilename) {
+          current.setFileSaveFailed(!ok)
+          if (ok) current.setLastSavedUndoLength(undoLength)
+        }
+        if (!ok) {
+          announce('Save failed')
+          return
         }
       } catch (error) {
+        const current = useWorkspaceStore.getState()
+        if (current.workspace === store.workspace && current.activeWorkspaceFilename === store.activeWorkspaceFilename) {
+          current.setFileSaveFailed(true)
+        }
         announce(error instanceof Error ? error.message : 'Save failed')
       }
     }

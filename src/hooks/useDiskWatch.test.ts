@@ -59,4 +59,29 @@ describe('applyDiskSnapshot', () => {
     expect(store().workspace).toBe(before)
     expect(store().diskConflict?.detail).toMatch(/empty model/)
   })
+
+  it('does not reopen a workspace closed while its disk snapshot was parsing', async () => {
+    const snapshot = { content: DSL.replace('"User"', '"Disk user"') }
+    const applying = applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))
+    store().closeWorkspace()
+    expect(await applying).toBe(false)
+    expect(store().workspace).toBeNull()
+    expect(store().diskConflict).toBeNull()
+  })
+
+  it('preserves a local edit made while a disk snapshot was parsing', async () => {
+    const snapshot = { content: DSL.replace('"User"', '"Disk user"') }
+    const applying = applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot))
+    store().replaceWorkspaceFromDSL(DSL.replace('"User"', '"Local user"'))
+    expect(await applying).toBe(false)
+    expect(store().workspace!.model.people[0].name).toBe('Local user')
+    expect(store().diskConflict?.reason).toBe('dirty')
+  })
+
+  it('does not apply a parsed snapshot after its watch target is invalidated', async () => {
+    const snapshot = { content: DSL.replace('"User"', '"Disk user"') }
+    const before = store().workspace
+    expect(await applyDiskSnapshot('w.dsl', snapshot, hashSnapshot(snapshot), () => false)).toBe(false)
+    expect(store().workspace).toBe(before)
+  })
 })

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createFileWatcher, hashContent, hashSnapshot, type WatchedSnapshot } from './fileWatch'
+import {
+  recordSelfWrite, isSelfWrite, resetSaveCoordinator, captureSelfWrite,
+  recordSelfDslWrite, beginSelfWrite, isSelfWritePending, getSelfWriteRevision,
+} from './saveCoordinator'
 
 function makeSource(initial: WatchedSnapshot | null) {
   let current = initial
@@ -25,7 +29,7 @@ describe('hashContent', () => {
 })
 
 describe('createFileWatcher', () => {
-  beforeEach(() => { vi.useFakeTimers() })
+  beforeEach(() => { vi.useFakeTimers(); resetSaveCoordinator() })
   afterEach(() => { vi.useRealTimers() })
 
   it('seeds a baseline on start without firing, then fires on a content change', async () => {
@@ -74,6 +78,118 @@ describe('createFileWatcher', () => {
     src.set({ content: 'theirs' })
     await vi.advanceTimersByTimeAsync(100)
     expect(onChange).toHaveBeenCalledTimes(1)
+    w.dispose()
+  })
+
+  it('acknowledges an identical skipped save so it cannot hide a later external restore', async () => {
+    const src = makeSource({ content: 'original' })
+    const onChange = vi.fn()
+    const w = createFileWatcher({ read: src.read, onChange, isSelfWrite, intervalMs: 100 })
+    await w.start()
+    recordSelfWrite('original') // The write was skipped because these bytes already exist.
+    await w.checkNow()
+    recordSelfWrite('edited')
+    src.set({ content: 'edited' })
+    await w.checkNow()
+    expect(onChange).not.toHaveBeenCalled()
+
+    src.set({ content: 'original' }) // An external tool reverts the previous edit.
+    await w.checkNow()
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ content: 'original' }, hashSnapshot({ content: 'original' }))
+    w.dispose()
+  })
+
+  it('defers visible bytes until close succeeds and the self-write is confirmed', async () => {
+    const src = makeSource({ content: 'original' })
+    const onChange = vi.fn()
+    const w = createFileWatcher({ read: src.read, onChange, isSelfWrite, shouldDefer: isSelfWritePending })
+    await w.start()
+    const token = captureSelfWrite()
+    const finish = beginSelfWrite(token)
+    src.set({ content: 'ours' }) // The swap happened; close() has not resolved.
+    await w.checkNow()
+    expect(w.getBaseline()).toEqual(hashSnapshot({ content: 'original' }))
+    expect(onChange).not.toHaveBeenCalled()
+
+    recordSelfDslWrite('ours', token)
+    finish()
+    await w.checkNow()
+    expect(w.getBaseline()).toEqual(hashSnapshot({ content: 'ours' }))
+    expect(onChange).not.toHaveBeenCalled()
+    w.dispose()
+  })
+
+  it('detects external candidate bytes after an attempted write fails', async () => {
+    const src = makeSource({ content: 'original' })
+    const onChange = vi.fn()
+    const w = createFileWatcher({ read: src.read, onChange, isSelfWrite, shouldDefer: isSelfWritePending })
+    await w.start()
+    const finish = beginSelfWrite(captureSelfWrite())
+    src.set({ content: 'candidate' }) // An external editor produced our candidate.
+    await w.checkNow()
+    finish() // The attempted save failed; no success hash is recorded.
+    await w.checkNow()
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ content: 'candidate' }, hashSnapshot({ content: 'candidate' }))
+    w.dispose()
+  })
+
+  it('discards a read when a write starts before that read finishes', async () => {
+    let complete!: (snapshot: WatchedSnapshot) => void
+    const read = vi.fn().mockResolvedValueOnce({ content: 'original' })
+      .mockImplementationOnce(() => new Promise((resolve) => { complete = resolve }))
+      .mockResolvedValue({ content: 'ours' })
+    const onChange = vi.fn()
+    const w = createFileWatcher({ read, onChange, isSelfWrite, shouldDefer: isSelfWritePending })
+    await w.start()
+    const reading = w.checkNow()
+    const token = captureSelfWrite()
+    const finish = beginSelfWrite(token)
+    complete({ content: 'ours' })
+    await reading
+    expect(w.getBaseline()).toEqual(hashSnapshot({ content: 'original' }))
+    recordSelfDslWrite('ours', token)
+    finish()
+    await w.checkNow()
+    expect(onChange).not.toHaveBeenCalled()
+    w.dispose()
+  })
+
+  it('detects an external restore after two own writes complete between polls', async () => {
+    const src = makeSource({ content: 'original' })
+    const onChange = vi.fn()
+    const w = createFileWatcher({ read: src.read, onChange, isSelfWrite, shouldDefer: isSelfWritePending, readVersion: getSelfWriteRevision })
+    await w.start()
+    recordSelfWrite('B')
+    src.set({ content: 'B' })
+    recordSelfWrite('C')
+    src.set({ content: 'C' })
+    src.set({ content: 'B' }) // External rollback before the next poll.
+    await w.checkNow()
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ content: 'B' }, hashSnapshot({ content: 'B' }))
+    w.dispose()
+  })
+
+  it('retries a snapshot spanning an entire completed write without a false conflict', async () => {
+    let complete!: (snapshot: WatchedSnapshot) => void
+    const read = vi.fn().mockResolvedValueOnce({ content: 'original' })
+      .mockImplementationOnce(() => new Promise((resolve) => { complete = resolve }))
+      .mockResolvedValue({ content: 'C' })
+    const onChange = vi.fn()
+    const w = createFileWatcher({ read, onChange, isSelfWrite, shouldDefer: isSelfWritePending, readVersion: getSelfWriteRevision })
+    await w.start()
+    recordSelfWrite('B')
+    const reading = w.checkNow()
+    const token = captureSelfWrite()
+    const finish = beginSelfWrite(token)
+    recordSelfDslWrite('C', token)
+    finish() // No write remains pending when the old B snapshot completes.
+    complete({ content: 'B' })
+    await reading
+    expect(w.getBaseline()).toEqual(hashSnapshot({ content: 'original' }))
+    expect(onChange).not.toHaveBeenCalled()
+    await w.checkNow()
+    expect(w.getBaseline()).toEqual(hashSnapshot({ content: 'C' }))
+    expect(onChange).not.toHaveBeenCalled()
     w.dispose()
   })
 

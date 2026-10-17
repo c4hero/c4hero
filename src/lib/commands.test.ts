@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { getCommands, CATEGORY_ORDER, CATEGORY_LABELS, type Command } from './commands'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
+import { announce } from '@/lib/announce'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import type { ReactFlowInstance } from '@xyflow/react'
 import type { Workspace } from '@/types/model'
@@ -26,6 +28,13 @@ vi.mock('@/lib/exportUtils', async (importOriginal) => {
     exportCanvasAsSVG: vi.fn(),
   }
 })
+
+vi.mock('@/lib/workspaceSave', () => ({
+  resetIncludedSaveHistory: vi.fn(),
+  isWorkspaceLinked: vi.fn(() => false),
+  writeLinkedWorkspace: vi.fn(async () => true),
+}))
+vi.mock('@/lib/announce', () => ({ announce: vi.fn() }))
 
 function makeWorkspace(): Workspace {
   return {
@@ -120,6 +129,8 @@ beforeEach(() => {
     multiSelectMode: false,
   })
   vi.clearAllMocks()
+  vi.mocked(isWorkspaceLinked).mockReturnValue(false)
+  vi.mocked(writeLinkedWorkspace).mockResolvedValue(true)
 })
 
 afterEach(() => {
@@ -479,15 +490,47 @@ describe('export commands', () => {
     expect(writeSidecarToHandle).not.toHaveBeenCalled()
   })
 
-  it('save serializes the workspace and writes the sidecar', async () => {
+  it('saves an unlinked workspace and its layout in the same request', async () => {
     await command('save').execute()
     expect(saveDSLFile).toHaveBeenCalledOnce()
-    const [dsl, filename] = vi.mocked(saveDSLFile).mock.calls[0]
+    const [dsl, filename, sidecar] = vi.mocked(saveDSLFile).mock.calls[0]
     expect(dsl).toContain('Commands Test')
     expect(filename).toBe('Commands Test.dsl')
     // The landscape view has a pinned element, so a sidecar exists.
-    expect(writeSidecarToHandle).toHaveBeenCalledOnce()
-    expect(vi.mocked(writeSidecarToHandle).mock.calls[0][0]).toContain('"pinned": true')
+    expect(sidecar).toContain('"pinned": true')
+    expect(writeSidecarToHandle).not.toHaveBeenCalled()
+  })
+
+  it('writes a linked collection through the shared workspace save path', async () => {
+    vi.mocked(isWorkspaceLinked).mockReturnValue(true)
+    store().setActiveWorkspaceFilename('commands.dsl')
+    const snapshot = store().workspace!
+    await command('save').execute()
+    expect(writeLinkedWorkspace).toHaveBeenCalledWith(snapshot, 'commands.dsl')
+    expect(saveDSLFile).not.toHaveBeenCalled()
+  })
+
+  it('announces a linked save failure without marking edits saved', async () => {
+    vi.mocked(isWorkspaceLinked).mockReturnValue(true)
+    vi.mocked(writeLinkedWorkspace).mockResolvedValueOnce(false)
+    store().updateWorkspaceMeta({ description: 'Unsaved' })
+    await command('save').execute()
+    expect(announce).toHaveBeenCalledWith('Save failed')
+    expect(store().fileSaveFailed).toBe(true)
+    expect(store().lastSavedUndoLength).toBe(0)
+  })
+
+  it('does not mark a different workspace saved after a pending palette Save', async () => {
+    vi.mocked(isWorkspaceLinked).mockReturnValue(true)
+    let complete!: (ok: boolean) => void
+    vi.mocked(writeLinkedWorkspace).mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+    store().updateWorkspaceMeta({ description: 'First edit' })
+    const saving = command('save').execute()
+    store().loadWorkspace(makeWorkspace())
+    store().updateWorkspaceMeta({ description: 'Second edit' })
+    complete(true)
+    await saving
+    expect(store().lastSavedUndoLength).toBe(0)
   })
 
   it('save does nothing without a workspace', async () => {

@@ -1,5 +1,7 @@
 import type { Workspace } from '@/types/model'
 import { downloadBlob } from '@/lib/exportUtils'
+import { zipBlob } from '@/lib/zip'
+import { notifyHandleChanges } from '@/lib/handleChanges'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isNonEmptyString, isRecord, isStringArray, isStringRecord } from '@/lib/guards'
 import { sidecarName } from '@/lib/sidecar'
@@ -7,7 +9,14 @@ import { safeSuggestedDslName } from '@/lib/filenames'
 import { isElementStatusValue, normalizeElementStatus } from '@/lib/elementStatus'
 import { forEachElementHelper } from '@/store/workspace-helpers'
 import { readJSON, writeJSON, writeString, removeKey } from '@/lib/safeStorage'
-import { recordSelfDslWrite, recordSelfSidecarWrite } from '@/lib/saveCoordinator'
+import {
+  captureSelfWrite,
+  beginSelfWrite,
+  recordSelfDslWrite,
+  recordSelfSidecarWrite,
+  withSelfWriteDestination,
+  type SelfWriteToken,
+} from '@/lib/saveCoordinator'
 import type { WatchedSnapshot } from '@/lib/fileWatch'
 
 const log = createLogger('fileIO')
@@ -111,23 +120,31 @@ export function getCurrentFileHandle(): FileSystemFileHandle | null {
   return currentFileHandle
 }
 
+/** Capture alongside the DSL handle before starting an asynchronous save. */
+export function getCurrentSidecarHandle(): FileSystemFileHandle | null {
+  return currentSidecarHandle
+}
+
 /** Read the open single file (and its sidecar, when one is linked) for the
  *  disk watcher. Resolves `null` when the file no longer exists; rethrows
  *  anything else so a transient failure isn't mistaken for a deletion. */
-export async function readCurrentFile(): Promise<WatchedSnapshot | null> {
-  if (!currentFileHandle) return null
+export async function readCurrentFile(
+  fileHandle = currentFileHandle,
+  sidecarHandle = currentSidecarHandle,
+): Promise<WatchedSnapshot | null> {
+  if (!fileHandle) return null
   let content: string
   try {
-    const file = await currentFileHandle.getFile()
+    const file = await fileHandle.getFile()
     content = await readTextFileWithLimit(file, 'DSL file')
   } catch (err) {
     if (err instanceof DOMException && err.name === 'NotFoundError') return null
     throw err
   }
   let sidecarJson: string | undefined
-  if (currentSidecarHandle) {
+  if (sidecarHandle) {
     try {
-      const sidecarFile = await currentSidecarHandle.getFile()
+      const sidecarFile = await sidecarHandle.getFile()
       sidecarJson = await readTextFileWithLimit(sidecarFile, 'Sidecar file')
     } catch {
       // Sidecar gone or unreadable: treat as "no sidecar" rather than "file gone".
@@ -173,32 +190,68 @@ export async function fileAlreadyHas(handle: FileSystemFileHandle, content: stri
   }
 }
 
-/** Every check-then-write runs through this one queue. A File System Access
- *  write only lands on close(), so a comparison that overlapped an earlier,
+/** Every handle lookup and check-then-write runs through this one queue.
+ *  A File System Access write only lands on close(), so a comparison that overlapped an earlier,
  *  still-open write would read the bytes that write is about to replace —
- *  and could skip a save that was needed (autosave overlapping Ctrl+S, or a
- *  fire-and-forget `!include` write-back overlapping the next save). */
+ *  and could skip a save that was needed (autosave overlapping Ctrl+S, or an
+ *  included fragment write overlapping a direct save). */
 let writeQueue: Promise<unknown> = Promise.resolve()
 
-/** Write `content` to `handle` unless the file already holds exactly it. */
-export function writeFileIfChanged(handle: FileSystemFileHandle, content: string): Promise<void> {
-  const run = writeQueue.then(async () => {
-    if (await fileAlreadyHas(handle, content)) return
+export type FileWriter = (
+  destination: FileSystemFileHandle | (() => Promise<FileSystemFileHandle | null>),
+  content: string,
+  onConfirmed?: () => void,
+  whileWriting?: () => (() => void),
+) => Promise<boolean>
+
+const writeConfirmedFile: FileWriter = async (destination, content, onConfirmed, whileWriting) => {
+  const handle = typeof destination === 'function' ? await destination() : destination
+  if (!handle) return false
+  if (await fileAlreadyHas(handle, content)) {
+    onConfirmed?.()
+    return true
+  }
+  const finish = whileWriting?.()
+  try {
     const writable = await handle.createWritable()
     await writable.write(content)
     await writable.close()
-  })
+    onConfirmed?.()
+    return true
+  } finally {
+    finish?.()
+  }
+}
+
+/** Enqueue one file or a complete workspace save at invocation time. A batch
+ *  must await the provided writer rather than enqueue another task behind
+ *  itself. Sharing this queue also orders bundles with direct file saves. */
+export function enqueueFileWrites<T>(operation: (write: FileWriter) => Promise<T>): Promise<T> {
+  const run = writeQueue.then(() => operation(writeConfirmedFile))
   writeQueue = run.catch(() => {})
   return run
 }
 
+/** Enqueue before resolving a destination, so an earlier slow lookup cannot
+ *  make an older save overwrite a newer request. Returns false only when the
+ *  destination resolver finds no file. `onConfirmed` runs after an unchanged
+ *  file was verified or a changed file was successfully closed. */
+export const writeFileIfChanged: FileWriter = (destination, content, onConfirmed, whileWriting) => (
+  enqueueFileWrites((write) => write(destination, content, onConfirmed, whileWriting))
+)
+
 /** Write DSL content to the current file handle (for auto-save) */
-export async function writeToCurrentHandle(content: string): Promise<boolean> {
-  if (!currentFileHandle || !hasFileSystemAccess()) return false
+export async function writeToCurrentHandle(
+  content: string,
+  fileHandle = currentFileHandle,
+  token: SelfWriteToken = captureSelfWrite(),
+  write: FileWriter = writeFileIfChanged,
+): Promise<boolean> {
+  if (!fileHandle || !hasFileSystemAccess()) return false
+  const destination = { kind: 'file' as const, handle: fileHandle }
+  const selfWrite = withSelfWriteDestination(token, destination)
   try {
-    recordSelfDslWrite(content)
-    await writeFileIfChanged(currentFileHandle, content)
-    return true
+    return await write(fileHandle, content, () => recordSelfDslWrite(content, selfWrite), () => beginSelfWrite(selfWrite))
   } catch (err) {
     log.error('Failed to write to current file handle', err)
     return false
@@ -206,27 +259,31 @@ export async function writeToCurrentHandle(content: string): Promise<boolean> {
 }
 
 /** Write sidecar JSON to the .c4hero.json file alongside the DSL */
-export async function writeSidecarToHandle(json: string): Promise<boolean> {
+export async function writeSidecarToHandle(
+  json: string,
+  fileHandle = currentFileHandle,
+  sidecarHandle = currentSidecarHandle,
+  token: SelfWriteToken = captureSelfWrite(),
+  write: FileWriter = writeFileIfChanged,
+): Promise<boolean> {
   if (!hasFileSystemAccess()) return false
+  const destination = fileHandle ? { kind: 'file' as const, handle: fileHandle } : undefined
+  const selfWrite = destination ? withSelfWriteDestination(token, destination) : token
   try {
-    recordSelfSidecarWrite(json)
-    // If we have an existing sidecar handle, write to it
-    if (currentSidecarHandle) {
-      await writeFileIfChanged(currentSidecarHandle, json)
-      return true
-    }
-    // Otherwise try to create one in the same directory as the DSL file
-    if (currentFileHandle) {
-      const dirHandle = await currentFileHandle.getParent?.()
-      if (dirHandle) {
-        const dslFile = await currentFileHandle.getFile()
+    return await write(async () => {
+      if (sidecarHandle) return sidecarHandle
+      if (fileHandle) {
+        const dirHandle = await fileHandle.getParent?.()
+        if (!dirHandle) return null
+        const dslFile = await fileHandle.getFile()
         const sidecarFileName = sidecarName(dslFile.name)
-        currentSidecarHandle = await dirHandle.getFileHandle(sidecarFileName, { create: true })
-        await writeFileIfChanged(currentSidecarHandle, json)
-        return true
+        const resolved = await dirHandle.getFileHandle(sidecarFileName, { create: true })
+        // A delayed save of an old file must not replace the new file's cache.
+        if (currentFileHandle === fileHandle) currentSidecarHandle = resolved
+        return resolved
       }
-    }
-    return false
+      return null
+    }, json, () => recordSelfSidecarWrite(json, selfWrite), () => beginSelfWrite(selfWrite))
   } catch (err) {
     log.error('Failed to write sidecar file', err)
     return false
@@ -257,27 +314,33 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
         ],
         excludeAcceptAllOption: false,
       })
-      currentFileHandle = handle
       const file = await handle.getFile()
       const content = await readTextFileWithLimit(file, 'DSL file')
       addRecentFile(file.name)
 
       // Try to load sidecar from same directory
       let sidecarJson: string | undefined
+      let linkedSidecar: FileSystemFileHandle | null = null
       try {
         const dirHandle = await handle.getParent?.()
         if (dirHandle) {
           const sidecarFileName = sidecarName(file.name)
           const sidecarFileHandle = await dirHandle.getFileHandle(sidecarFileName)
-          currentSidecarHandle = sidecarFileHandle
           const sidecarFile = await sidecarFileHandle.getFile()
           sidecarJson = await readTextFileWithLimit(sidecarFile, 'Workspace sidecar file')
+          linkedSidecar = sidecarFileHandle
         }
       } catch {
         // No sidecar file found — expected for new workspaces
-        currentSidecarHandle = null
+        linkedSidecar = null
       }
 
+      // A rejected file must leave the existing workspace's save targets
+      // intact. Install the pair only once the new DSL was read successfully.
+      const changed = currentFileHandle !== handle
+      currentFileHandle = handle
+      currentSidecarHandle = linkedSidecar
+      if (changed) notifyHandleChanges()
       return { content, name: file.name, sidecarJson }
     } catch {
       // User cancelled the file picker — not an error
@@ -306,13 +369,30 @@ export async function openDSLFile(): Promise<{ content: string; name: string; si
   })
 }
 
-/** Save content to the current file handle or prompt for new file */
-export async function saveDSLFile(content: string, suggestedName?: string): Promise<boolean> {
+/** A missing sidecar destination is harmless only when it has no data. */
+export function isEmptySidecarJson(json: string): boolean {
+  try {
+    const data: unknown = JSON.parse(json)
+    if (!isRecord(data) || data.version !== 1) return false
+    return Object.entries(data).every(([key, value]) => key === 'version'
+      || (['views', 'elements', 'relationships'].includes(key) && isRecord(value) && Object.keys(value).length === 0))
+  } catch {
+    return false
+  }
+}
+
+/** Save DSL and optional layout together to the captured file or a new file. */
+export async function saveDSLFile(content: string, suggestedName?: string, sidecarJson?: string): Promise<boolean> {
   const safeSuggestedName = safeSuggestedDslName(suggestedName)
   if (hasFileSystemAccess()) {
+    const fileHandle = currentFileHandle
+    const sidecarHandle = fileHandle ? currentSidecarHandle : null
+    const selfWrite = captureSelfWrite()
+    let installedHandle: FileSystemFileHandle | null = null
     try {
-      if (!currentFileHandle) {
-        currentFileHandle = await window.showSaveFilePicker({
+      // Open the chooser during the caller's user activation. Waiting behind
+      // an earlier disk write first could let that activation expire.
+      const destination = fileHandle ? Promise.resolve(fileHandle) : window.showSaveFilePicker({
           suggestedName: safeSuggestedName,
           types: [
             {
@@ -321,20 +401,49 @@ export async function saveDSLFile(content: string, suggestedName?: string): Prom
             },
           ],
           excludeAcceptAllOption: false,
-        })
-      }
-      recordSelfDslWrite(content)
-      await writeFileIfChanged(currentFileHandle, content)
-      return true
+      })
+      // A cancelled picker can reject while an earlier save still owns the
+      // queue. Observe it immediately; the queued await still reports failure.
+      void destination.catch(() => {})
+      return await enqueueFileWrites(async (write) => {
+        const selected = await destination
+        if (!currentFileHandle) {
+          currentFileHandle = selected
+          installedHandle = selected
+        }
+        const selectedToken = withSelfWriteDestination(selfWrite, { kind: 'file', handle: selected })
+        if (!await write(selected, content, () => recordSelfDslWrite(content, selectedToken), () => beginSelfWrite(selectedToken))) return false
+        if (sidecarJson === undefined) return true
+        const selectedSidecar = selected === fileHandle ? sidecarHandle : null
+        if (!selectedSidecar && typeof selected.getParent !== 'function') return isEmptySidecarJson(sidecarJson)
+        return writeSidecarToHandle(sidecarJson, selected, selectedSidecar, selectedToken, write)
+      })
     } catch {
       // User cancelled save picker — not an error
       return false
+    } finally {
+      // Start a newly linked watcher from the completed on-disk save, rather
+      // than reset its coordinator while this first write is still active.
+      if (installedHandle && currentFileHandle === installedHandle) notifyHandleChanges()
     }
   }
 
-  // Fallback: trigger download
-  downloadBlob(new Blob([content], { type: 'text/plain' }), safeSuggestedName)
-  return true
+  // A second automatic download can be blocked independently of the DSL.
+  // Keep meaningful layout in the same download so success covers both files.
+  try {
+    if (sidecarJson !== undefined && !isEmptySidecarJson(sidecarJson)) {
+      downloadBlob(zipBlob([
+        { path: safeSuggestedName, content },
+        { path: sidecarName(safeSuggestedName), content: sidecarJson },
+      ]), safeSuggestedName.replace(/\.dsl$/i, '.zip'))
+    } else {
+      downloadBlob(new Blob([content], { type: 'text/plain' }), safeSuggestedName)
+    }
+    return true
+  } catch (error) {
+    log.error('Failed to download workspace', error)
+    return false
+  }
 }
 
 /** Max crash recovery size: 4MB (localStorage typically caps at 5-10MB) */

@@ -11,6 +11,7 @@ import { normalizeWorkspaceShape, allViewsOf, findViewHelper, forEachElementHelp
 import { getFirstViewKey } from '../workspace-selectors'
 import { hasIncludedFiles } from '@/lib/includeWriteback'
 import { restitchWorkspaceDocument } from '@/lib/workspaceDocument'
+import { resetIncludedSaveHistory } from '@/lib/workspaceSave'
 
 
 /** Map element id -> element name for every element in the model tree. */
@@ -87,6 +88,7 @@ export type LifecycleSlice = Pick<WorkspaceState,
   | 'replaceWorkspaceFromDSL'
   | 'scopeViolations' | 'revalidateScope'
   | 'activeWorkspaceFilename' | 'setActiveWorkspaceFilename'
+  | 'fileSaveFailed' | 'setFileSaveFailed'
 >
 
 export const createLifecycleSlice: StateCreator<
@@ -98,14 +100,17 @@ export const createLifecycleSlice: StateCreator<
   workspace: null,
   scopeViolations: [],
   activeWorkspaceFilename: null,
+  fileSaveFailed: false,
 
   setActiveWorkspaceFilename: (name) => set({ activeWorkspaceFilename: name }),
+  setFileSaveFailed: (failed) => set({ fileSaveFailed: failed }),
 
   revalidateScope: () => set((s) => {
     s.scopeViolations = s.workspace ? validateScope(s.workspace) : []
   }),
 
   loadWorkspace: (workspace) => {
+    resetIncludedSaveHistory()
     // Files and snapshots written before dynamic/deployment views existed
     // lack those arrays; fill them before anything iterates VIEW_ARRAY_KEYS.
     normalizeWorkspaceShape(workspace)
@@ -134,6 +139,7 @@ export const createLifecycleSlice: StateCreator<
       undoStack: [],
       redoStack: [],
       lastSavedUndoLength: 0, // reset so the save indicator doesn't inherit a stale saved position
+      fileSaveFailed: false,
       // Clear view filters so they don't bleed from a previous workspace
       activeTagFilter: [],
       activeStatusFilter: [],
@@ -145,6 +151,7 @@ export const createLifecycleSlice: StateCreator<
   },
 
   reloadWorkspaceFromDisk: (workspace) => {
+    resetIncludedSaveHistory()
     normalizeWorkspaceShape(workspace)
     set((s) => {
       const previousActive = s.activeViewKey ? findViewHelper(s.workspace ?? workspace, s.activeViewKey) : undefined
@@ -173,6 +180,7 @@ export const createLifecycleSlice: StateCreator<
       s.undoStack = []
       s.redoStack = []
       s.lastSavedUndoLength = 0
+      s.fileSaveFailed = false
       s.diskConflict = null
       s.diskFileMissing = false
       s.scopeViolations = validateScope(workspace)
@@ -198,6 +206,7 @@ export const createLifecycleSlice: StateCreator<
       impactTargetIds: null,
       diskConflict: null,
       diskFileMissing: false,
+      fileSaveFailed: false,
       undoStack: [],
       redoStack: [],
       lastClearedHighlightFilters: null,

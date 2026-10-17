@@ -32,6 +32,12 @@ export interface FileWatcherOpts {
    *  (or the user chose to keep their version over). Such reads only move the
    *  baseline; they never fire `onChange`. */
   isSelfWrite?: (hashes: SnapshotHashes, previous: SnapshotHashes) => boolean
+  /** A write can become visible before close() resolves. Defer reads and
+   *  classification until its success or failure is known. */
+  shouldDefer?: () => boolean
+  /** Detect a complete write which starts and finishes during an awaited
+   *  read; its snapshot must be retried rather than classified as current. */
+  readVersion?: () => number
   /** Poll cadence while visible. */
   intervalMs?: number
   /** Visibility probe — polling stops entirely while this is false. */
@@ -91,11 +97,12 @@ export function createFileWatcher(opts: FileWatcherOpts) {
   /** Read once and compare against the baseline. Safe to call at any time;
    *  overlapping calls collapse into one read. */
   async function check(): Promise<void> {
-    if (disposed || checking) return
+    if (disposed || checking || opts.shouldDefer?.()) return
     checking = true
     try {
+      const version = opts.readVersion?.()
       const snapshot = await opts.read()
-      if (disposed) return
+      if (disposed || opts.shouldDefer?.() || version !== opts.readVersion?.()) return
       if (snapshot === null) {
         if (!missingReported) {
           missingReported = true
@@ -105,8 +112,18 @@ export function createFileWatcher(opts: FileWatcherOpts) {
       }
       missingReported = false
       const hashes = hashSnapshot(snapshot)
-      if (baseline === null) { baseline = hashes; return }
-      if (sameHashes(baseline, hashes)) return
+      if (baseline === null) {
+        baseline = hashes
+        // Even unchanged bytes acknowledge a skipped save. Let the
+        // coordinator retire its expectation rather than remember that hash
+        // forever and hide an external edit which later restores it.
+        isSelfWrite(hashes, hashes)
+        return
+      }
+      if (sameHashes(baseline, hashes)) {
+        isSelfWrite(hashes, baseline)
+        return
+      }
       const previous = baseline
       baseline = hashes
       if (isSelfWrite(hashes, previous)) return

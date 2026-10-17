@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { Workspace } from '@/types/model'
+import { makeCountingDirHandle } from './testing/countingDirHandle'
 
 // We need to mock localStorage before importing fileIO so the module-level
 // code picks up the mock. We use vi.stubGlobal in each test.
@@ -361,6 +362,260 @@ describe('file picker hardening', () => {
     }))
     expect(writable.write).toHaveBeenCalledWith('workspace {}')
     expect(writable.close).toHaveBeenCalled()
+  })
+
+  it('opens a save picker during the call even when an earlier operation holds the write queue', async () => {
+    const handle = { getFile: async () => new File(['saved'], 'saved.dsl') }
+    const picker = vi.fn(async () => handle)
+    vi.stubGlobal('showOpenFilePicker', vi.fn())
+    vi.stubGlobal('showSaveFilePicker', picker)
+    const { saveDSLFile, writeFileIfChanged } = await import('./fileIO')
+    let release!: () => void
+    let started!: () => void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const queued = new Promise<void>((resolve) => { started = resolve })
+    const earlier = writeFileIfChanged(async () => { started(); await held; return null }, '')
+    await queued
+    const saved = saveDSLFile('saved')
+    try {
+      expect(picker).toHaveBeenCalledOnce()
+    } finally {
+      release()
+    }
+    expect(await earlier).toBe(false)
+    expect(await saved).toBe(true)
+  })
+
+  it('keeps a delayed old sidecar save out of the new file and its sidecar cache', async () => {
+    const original = makeCountingDirHandle({ 'old.dsl': 'old' })
+    const replacement = makeCountingDirHandle({ 'new.dsl': 'new', 'new.c4hero.json': 'new layout' })
+    let release!: () => void
+    let started!: () => void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const resolving = new Promise<void>((resolve) => { started = resolve })
+    const oldHandle = {
+      ...await original.dir.getFileHandle('old.dsl'),
+      getParent: vi.fn().mockResolvedValueOnce(undefined).mockImplementationOnce(async () => {
+        started()
+        await held
+        return original.dir
+      }),
+    }
+    const newHandle = { ...await replacement.dir.getFileHandle('new.dsl'), getParent: async () => replacement.dir }
+    vi.stubGlobal('showOpenFilePicker', vi.fn().mockResolvedValueOnce([oldHandle]).mockResolvedValueOnce([newHandle]))
+    const { openDSLFile, writeSidecarToHandle, getCurrentSidecarHandle } = await import('./fileIO')
+    expect(await openDSLFile()).toMatchObject({ name: 'old.dsl' })
+    const earlier = writeSidecarToHandle('old saved layout')
+    await resolving
+    try {
+      expect(await openDSLFile()).toMatchObject({ name: 'new.dsl' })
+      expect(getCurrentSidecarHandle()?.name).toBe('new.c4hero.json')
+    } finally {
+      release()
+    }
+    expect(await earlier).toBe(true)
+    expect(getCurrentSidecarHandle()?.name).toBe('new.c4hero.json')
+    expect(await writeSidecarToHandle('new saved layout')).toBe(true)
+    expect(original.content['old.c4hero.json']).toBe('old saved layout')
+    expect(replacement.content['new.c4hero.json']).toBe('new saved layout')
+  })
+
+  it('drops the previous sidecar when a new file cannot resolve a parent directory', async () => {
+    const original = makeCountingDirHandle({ 'old.dsl': 'old', 'old.c4hero.json': 'old layout' })
+    const replacement = makeCountingDirHandle({ 'new.dsl': 'new' })
+    const oldHandle = { ...await original.dir.getFileHandle('old.dsl'), getParent: async () => original.dir }
+    const newHandle = await replacement.dir.getFileHandle('new.dsl')
+    vi.stubGlobal('showOpenFilePicker', vi.fn().mockResolvedValueOnce([oldHandle]).mockResolvedValueOnce([newHandle]))
+    const { openDSLFile, writeSidecarToHandle, getCurrentSidecarHandle } = await import('./fileIO')
+    expect(await openDSLFile()).toMatchObject({ name: 'old.dsl', sidecarJson: 'old layout' })
+    expect(await openDSLFile()).toMatchObject({ name: 'new.dsl' })
+    expect(getCurrentSidecarHandle()).toBeNull()
+    expect(await writeSidecarToHandle('new layout')).toBe(false)
+    expect(original.content['old.c4hero.json']).toBe('old layout')
+  })
+
+  it.each(['unreadable', 'oversized'] as const)('preserves the previous save destinations when the new file is %s', async (failure) => {
+    const rig = makeCountingDirHandle({ 'old.dsl': 'old', 'old.c4hero.json': 'old layout' })
+    const oldHandle = { ...await rig.dir.getFileHandle('old.dsl'), getParent: async () => rig.dir }
+    const createWritable = vi.fn()
+    const rejectedHandle = {
+      createWritable,
+      getFile: async () => {
+        if (failure === 'unreadable') throw new Error('unreadable')
+        return { name: 'rejected.dsl', size: 10 * 1024 * 1024 + 1, text: async () => 'too large' }
+      },
+    }
+    vi.stubGlobal('showOpenFilePicker', vi.fn().mockResolvedValueOnce([oldHandle]).mockResolvedValueOnce([rejectedHandle]))
+    const { openDSLFile, getCurrentFileHandle, getCurrentSidecarHandle, saveDSLFile } = await import('./fileIO')
+    const { getHandleRevision } = await import('./handleChanges')
+    expect(await openDSLFile()).toMatchObject({ name: 'old.dsl' })
+    const revision = getHandleRevision()
+    expect(await openDSLFile()).toBeNull()
+    expect(getHandleRevision()).toBe(revision)
+    expect(getCurrentFileHandle()).toBe(oldHandle)
+    expect(getCurrentSidecarHandle()?.name).toBe('old.c4hero.json')
+    expect(await saveDSLFile('old updated')).toBe(true)
+    expect(rig.content['old.dsl']).toBe('old updated')
+    expect(createWritable).not.toHaveBeenCalled()
+  })
+
+  it('notifies a new file link only after the complete DSL and layout save finishes', async () => {
+    const rig = makeCountingDirHandle({ 'linked.dsl': 'before' })
+    const selected = { ...await rig.dir.getFileHandle('linked.dsl'), getParent: async () => rig.dir }
+    const originalLookup = rig.dir.getFileHandle.bind(rig.dir)
+    let release!: () => void
+    let started!: () => void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const closing = new Promise<void>((resolve) => { started = resolve })
+    vi.spyOn(rig.dir, 'getFileHandle').mockImplementation(async (name, options) => {
+      const handle = await originalLookup(name, options)
+      if (!name.endsWith('.c4hero.json')) return handle
+      return {
+        ...handle,
+        createWritable: async () => {
+          const writable = await handle.createWritable()
+          return {
+            write: (content: string) => writable.write(content),
+            close: async () => { started(); await held; await writable.close() },
+          }
+        },
+      } as unknown as FileSystemFileHandle
+    })
+    vi.stubGlobal('showOpenFilePicker', vi.fn())
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => selected))
+    const { saveDSLFile } = await import('./fileIO')
+    const { getHandleRevision, subscribeHandleChanges } = await import('./handleChanges')
+    const notify = vi.fn()
+    const unsubscribe = subscribeHandleChanges(notify)
+    const revision = getHandleRevision()
+    const layout = '{"version":1,"views":{"V":{"locked":true}}}'
+    try {
+      const saved = saveDSLFile('saved root', 'linked.dsl', layout)
+      await closing
+      try {
+        expect(notify).not.toHaveBeenCalled()
+        expect(getHandleRevision()).toBe(revision)
+      } finally {
+        release()
+      }
+      expect(await saved).toBe(true)
+      expect(notify).toHaveBeenCalledOnce()
+      expect(getHandleRevision()).toBe(revision + 1)
+      expect(rig.content['linked.dsl']).toBe('saved root')
+      expect(rig.content['linked.c4hero.json']).toBe(layout)
+      expect(await saveDSLFile('saved root', 'linked.dsl', layout)).toBe(true)
+      expect(notify).toHaveBeenCalledOnce()
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('reports failure for material layout without a sidecar destination, while empty layout can be omitted', async () => {
+    const handle = { getFile: async () => new File(['saved'], 'saved.dsl') }
+    vi.stubGlobal('showOpenFilePicker', vi.fn())
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => handle))
+    const { saveDSLFile } = await import('./fileIO')
+    expect(await saveDSLFile('saved', 'saved.dsl', '{"version":1,"views":{}}')).toBe(true)
+    expect(await saveDSLFile('saved', 'saved.dsl', '{"version":1,"views":{"V":{"locked":true}}}')).toBe(false)
+    expect(await saveDSLFile('saved', 'saved.dsl', '{"version":1,"unknown":{"important":true}}')).toBe(false)
+  })
+
+  it('includes layout completion in native save success', async () => {
+    const rig = makeCountingDirHandle({ 'saved.dsl': 'before' })
+    const handle = { ...await rig.dir.getFileHandle('saved.dsl'), getParent: async () => rig.dir }
+    const originalLookup = rig.dir.getFileHandle.bind(rig.dir)
+    vi.spyOn(rig.dir, 'getFileHandle').mockImplementation(async (name, options) => {
+      const found = await originalLookup(name, options)
+      if (!name.endsWith('.c4hero.json')) return found
+      return {
+        ...found,
+        createWritable: async () => ({ write: async () => {}, close: async () => { throw new Error('layout close failed') } }),
+      } as unknown as FileSystemFileHandle
+    })
+    vi.stubGlobal('showOpenFilePicker', vi.fn())
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => handle))
+    const { saveDSLFile } = await import('./fileIO')
+    expect(await saveDSLFile('saved', 'saved.dsl', '{"version":1,"views":{"V":{"locked":true}}}')).toBe(false)
+    expect(rig.content['saved.dsl']).toBe('saved')
+    expect(rig.content['saved.c4hero.json']).toBe('')
+  })
+})
+
+describe('download fallback saves', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    delete (window as unknown as Record<string, unknown>).showOpenFilePicker
+  })
+
+  afterEach(() => {
+    vi.resetModules()
+    vi.unstubAllGlobals()
+  })
+
+  it('downloads one ZIP containing both the exact DSL and meaningful layout bytes', async () => {
+    const exports = await import('./exportUtils')
+    const download = vi.spyOn(exports, 'downloadBlob').mockImplementation(() => {})
+    const { saveDSLFile } = await import('./fileIO')
+    const dsl = 'workspace "Café 🙂" {}'
+    const sidecar = '{"version":1,"views":{"V":{"elements":{"api":{"pinned":true,"x":123,"y":456}}}}}'
+    expect(await saveDSLFile(dsl, 'Café.dsl', sidecar)).toBe(true)
+    expect(download).toHaveBeenCalledOnce()
+    const [blob, filename] = download.mock.calls[0]
+    expect(filename).toBe('Café.zip')
+    expect(blob.type).toBe('application/zip')
+
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    const data = new DataView(bytes.buffer)
+    const decoder = new TextDecoder()
+    const entries: Array<{ path: string; content: string }> = []
+    let offset = 0
+    while (data.getUint32(offset, true) === 0x04034b50) {
+      expect(data.getUint16(offset + 8, true)).toBe(0)
+      const size = data.getUint32(offset + 18, true)
+      const nameLength = data.getUint16(offset + 26, true)
+      const extraLength = data.getUint16(offset + 28, true)
+      const contentOffset = offset + 30 + nameLength + extraLength
+      entries.push({
+        path: decoder.decode(bytes.subarray(offset + 30, offset + 30 + nameLength)),
+        content: decoder.decode(bytes.subarray(contentOffset, contentOffset + size)),
+      })
+      offset = contentOffset + size
+    }
+    expect(data.getUint32(offset, true)).toBe(0x02014b50)
+    expect(entries).toEqual([
+      { path: 'Café.dsl', content: dsl },
+      { path: 'Café.c4hero.json', content: sidecar },
+    ])
+  })
+
+  it.each([undefined, '{"version":1,"views":{}}'])('keeps a plain DSL download when layout is empty or absent (%s)', async (sidecar) => {
+    const exports = await import('./exportUtils')
+    const download = vi.spyOn(exports, 'downloadBlob').mockImplementation(() => {})
+    const { saveDSLFile } = await import('./fileIO')
+    expect(await saveDSLFile('workspace {}', 'plain.dsl', sidecar)).toBe(true)
+    expect(download).toHaveBeenCalledOnce()
+    const [blob, filename] = download.mock.calls[0]
+    expect(filename).toBe('plain.dsl')
+    expect(blob.type).toBe('text/plain')
+    expect(await blob.text()).toBe('workspace {}')
+  })
+
+  it('reports failure without starting a download when creating the archive throws', async () => {
+    const exports = await import('./exportUtils')
+    const zip = await import('./zip')
+    const download = vi.spyOn(exports, 'downloadBlob').mockImplementation(() => {})
+    vi.spyOn(zip, 'zipBlob').mockImplementation(() => { throw new Error('archive failed') })
+    const { saveDSLFile } = await import('./fileIO')
+    expect(await saveDSLFile('workspace {}', 'layout.dsl', '{"version":1,"views":{"V":{"locked":true}}}')).toBe(false)
+    expect(download).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])('reports failure if dispatching the %s layout download throws', async (hasLayout) => {
+    const exports = await import('./exportUtils')
+    vi.spyOn(exports, 'downloadBlob').mockImplementation(() => { throw new Error('download failed') })
+    const { saveDSLFile } = await import('./fileIO')
+    const sidecar = hasLayout ? '{"version":1,"views":{"V":{"locked":true}}}' : undefined
+    expect(await saveDSLFile('workspace {}', 'save.dsl', sidecar)).toBe(false)
   })
 })
 

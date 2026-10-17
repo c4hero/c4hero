@@ -10,7 +10,8 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFoc
 import { computeCascadeImpact, orphanedLayoutViewKeys } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
-import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { saveDSLFile } from '@/lib/fileIO'
+import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
@@ -479,11 +480,28 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.workspace) return
         try {
-          const dsl = serializeRoot(s.workspace)
-          if (!await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)) return
-          const sidecar = extractSidecar(s.workspace) ?? { version: 1 as const, views: {} }
-          await writeSidecarToHandle(serializeSidecar(sidecar))
+          const undoLength = s.undoStack.length
+          const ok = isWorkspaceLinked(s.activeWorkspaceFilename)
+            ? await writeLinkedWorkspace(s.workspace, s.activeWorkspaceFilename)
+            : await saveDSLFile(
+              serializeRoot(s.workspace),
+              `${s.workspace.name ?? 'workspace'}.dsl`,
+              serializeSidecar(extractSidecar(s.workspace) ?? { version: 1, views: {} }),
+            )
+          const current = store()
+          if (current.workspace === s.workspace && current.activeWorkspaceFilename === s.activeWorkspaceFilename) {
+            current.setFileSaveFailed(!ok)
+            if (ok) current.setLastSavedUndoLength(undoLength)
+          }
+          if (!ok) {
+            announce('Save failed')
+            return
+          }
         } catch (error) {
+          const current = store()
+          if (current.workspace === s.workspace && current.activeWorkspaceFilename === s.activeWorkspaceFilename) {
+            current.setFileSaveFailed(true)
+          }
           announce(error instanceof Error ? error.message : 'Save failed')
         }
       },

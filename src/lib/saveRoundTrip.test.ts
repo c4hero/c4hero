@@ -146,6 +146,10 @@ describe('the disk watcher still recognises a save that skipped one of its two f
     const workspace = parseDSL(DSL).workspace
     await writeLinkedWorkspace(workspace, 'shop.dsl')
 
+    // Drop the first save's record so only the skipped write can vouch for
+    // this sidecar. Otherwise the assertion also passes without recording it.
+    resetSaveCoordinator()
+
     // Change only the model, so the sidecar serialises identically and is skipped.
     workspace.model.softwareSystems[0].description = 'Changed, so only the DSL moves'
     const sidecarWritesBefore = rig.opened['shop.c4hero.json'] ?? 0
@@ -241,10 +245,11 @@ describe('the comparison is size-capped like every other read', () => {
     const tooBig = {
       size: big.length,
       text: async () => big,
-      arrayBuffer: async () => new TextEncoder().encode(big).buffer,
+      arrayBuffer: vi.fn(async () => new TextEncoder().encode(big).buffer),
     } as unknown as File
     const handle = { getFile: async () => tooBig } as unknown as FileSystemFileHandle
     expect(await fileAlreadyHas(handle, big)).toBe(false)
+    expect(tooBig.arrayBuffer).not.toHaveBeenCalled()
   })
 
   it('still compares normally under the limit', async () => {

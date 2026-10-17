@@ -1,13 +1,14 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { getCurrentFileHandle, readCurrentFile } from '@/lib/fileIO'
+import { getCurrentFileHandle, getCurrentSidecarHandle, readCurrentFile } from '@/lib/fileIO'
 import { getCurrentDirHandle, readDSLFileForWatch, readDSLFileAt } from '@/lib/folderIO'
 import { createFileWatcher, type SnapshotHashes, type WatchedSnapshot } from '@/lib/fileWatch'
-import { isSelfWrite, resetSaveCoordinator } from '@/lib/saveCoordinator'
+import { getSelfWriteRevision, isSelfWrite, isSelfWritePending, resetSaveCoordinator, startWatchingDestination, type SaveDestination } from '@/lib/saveCoordinator'
 import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 import { announce } from '@/lib/announce'
 import { createLogger } from '@/lib/logger'
 import { getTestFileSource, subscribeTestFileSource } from '@/lib/testFileSource'
+import { getHandleRevision, subscribeHandleChanges } from '@/lib/handleChanges'
 
 const log = createLogger('useDiskWatch')
 
@@ -20,29 +21,41 @@ export function isDiskWatchable(activeFilename: string | null): boolean {
   return !!(getCurrentDirHandle() && activeFilename)
 }
 
-function currentFilename(activeFilename: string | null, workspaceName: string | undefined): string {
-  return getTestFileSource()?.filename
-    ?? activeFilename
-    ?? `${workspaceName ?? 'workspace'}.dsl`
-}
-
 /** The workspace store's dirty signal, plus the code pane's own buffer. */
 function hasUnsavedLocalEdits(): boolean {
   const s = useWorkspaceStore.getState()
-  return s.undoStack.length !== s.lastSavedUndoLength || s.codePaneDirty
+  return s.undoStack.length !== s.lastSavedUndoLength || s.codePaneDirty || s.fileSaveFailed
 }
 
 /** Parse what's on disk and swap it in. Returns false (and raises a conflict)
  *  when the text can't be applied safely. */
-export async function applyDiskSnapshot(filename: string, snapshot: WatchedSnapshot, hashes: SnapshotHashes): Promise<boolean> {
+export async function applyDiskSnapshot(
+  filename: string,
+  snapshot: WatchedSnapshot,
+  hashes: SnapshotHashes,
+  canApply: () => boolean = () => true,
+): Promise<boolean> {
   const store = useWorkspaceStore.getState()
   const current = store.workspace
+  const currentFilename = store.activeWorkspaceFilename
+  const currentFile = getCurrentFileHandle()
+  const currentDir = getCurrentDirHandle()
   const { workspace, errors } = await loadWorkspaceDocument({
     content: snapshot.content,
     fallbackName: filename.replace(/\.dsl$/, ''),
     sidecarJson: snapshot.sidecarJson,
-    readInclude: getCurrentDirHandle() ? readDSLFileAt : undefined,
+    readInclude: currentDir ? (path) => readDSLFileAt(path, currentDir) : undefined,
   })
+  // Parsing includes can await disk. Neither a workspace switch nor a local
+  // edit during that read may be overwritten by the old snapshot.
+  const latest = useWorkspaceStore.getState()
+  if (!canApply() || !latest.workspace
+    || latest.activeWorkspaceFilename !== currentFilename
+    || getCurrentFileHandle() !== currentFile || getCurrentDirHandle() !== currentDir) return false
+  if (latest.workspace !== current) {
+    latest.setDiskConflict({ filename, snapshot, hashes, reason: 'dirty' })
+    return false
+  }
   if (errors.length > 0) {
     store.setDiskConflict({
       filename, snapshot, hashes, reason: 'unparseable',
@@ -76,27 +89,48 @@ export async function applyDiskSnapshot(filename: string, snapshot: WatchedSnaps
  */
 export function useDiskWatch() {
   const watchDisk = useWorkspaceStore((s) => s.watchDisk)
-  const workspaceName = useWorkspaceStore((s) => s.workspace?.name)
-  const hasWorkspace = useWorkspaceStore((s) => !!s.workspace)
+  const workspace = useWorkspaceStore((s) => s.workspace)
+  const workspaceName = workspace?.name
+  const hasWorkspace = !!workspace
   const activeFilename = useWorkspaceStore((s) => s.activeWorkspaceFilename)
   const testSource = useSyncExternalStore(subscribeTestFileSource, getTestFileSource, getTestFileSource)
+  // Linking a file changes a module handle without changing the workspace.
+  // Subscribe to that identity change so watching starts immediately.
+  useSyncExternalStore(subscribeHandleChanges, getHandleRevision, getHandleRevision)
   const watcherRef = useRef<ReturnType<typeof createFileWatcher> | null>(null)
+  const fileHandle = getCurrentFileHandle()
+  const dirHandle = getCurrentDirHandle()
+  const watchedFilename = testSource?.filename ?? fileHandle?.name ?? activeFilename ?? `${workspaceName ?? 'workspace'}.dsl`
 
   useEffect(() => {
     if (!watchDisk || !hasWorkspace || !isDiskWatchable(activeFilename)) return
 
-    const filename = currentFilename(activeFilename, workspaceName)
+    let disposed = false
+    const filename = watchedFilename
+    const destination: SaveDestination | null = fileHandle
+      ? { kind: 'file', handle: fileHandle }
+      : dirHandle && activeFilename ? { kind: 'folder', handle: dirHandle, filename: activeFilename } : null
+    const initialSidecar = getCurrentSidecarHandle()
+    const isCurrentTarget = () => !disposed
+      && getCurrentFileHandle() === fileHandle && getCurrentDirHandle() === dirHandle
+      && getTestFileSource() === testSource
+      && !!useWorkspaceStore.getState().workspace
+      && useWorkspaceStore.getState().activeWorkspaceFilename === activeFilename
     const read = (): Promise<WatchedSnapshot | null> => {
-      const test = getTestFileSource()
-      if (test) return test.read()
-      if (getCurrentFileHandle()) return readCurrentFile()
-      if (getCurrentDirHandle() && activeFilename) return readDSLFileForWatch(activeFilename)
+      if (testSource) return testSource.read()
+      if (fileHandle) {
+        // A first save may create the sidecar after watching starts. Capture
+        // that handle for each read, but never borrow another file's sidecar.
+        const sidecar = getCurrentFileHandle() === fileHandle ? getCurrentSidecarHandle() : initialSidecar
+        return readCurrentFile(fileHandle, sidecar)
+      }
+      if (dirHandle && activeFilename) return readDSLFileForWatch(activeFilename, dirHandle)
       return Promise.resolve(null)
     }
 
-    // A fresh watch target means the remembered self-writes belong to the
-    // previous file. Start clean so an old hash can't mask a real edit here.
-    resetSaveCoordinator()
+    // Clear old hashes, while preserving a newly linked file's active save.
+    // Cleanup has already invalidated tokens belonging to a previous target.
+    startWatchingDestination(destination)
 
     const watcher = createFileWatcher({
       read,
@@ -110,12 +144,17 @@ export function useDiskWatch() {
           window.removeEventListener('focus', cb)
         }
       },
-      isSelfWrite,
+      isSelfWrite: (hashes, previous) => !isCurrentTarget() || isSelfWrite(hashes, previous),
+      shouldDefer: isSelfWritePending,
+      readVersion: getSelfWriteRevision,
       onMissing: () => {
+        if (!isCurrentTarget()) return
+        resetSaveCoordinator(destination)
         useWorkspaceStore.getState().setDiskFileMissing(true)
         announce(`${filename} is no longer on disk`)
       },
       onChange: (snapshot, hashes) => {
+        if (!isCurrentTarget()) return
         const store = useWorkspaceStore.getState()
         if (store.diskFileMissing) store.setDiskFileMissing(false)
         if (hasUnsavedLocalEdits()) {
@@ -123,14 +162,16 @@ export function useDiskWatch() {
           announce(`${filename} changed on disk — you have unsaved changes`)
           return
         }
-        void applyDiskSnapshot(filename, snapshot, hashes)
+        void applyDiskSnapshot(filename, snapshot, hashes, isCurrentTarget)
       },
     })
     watcherRef.current = watcher
     watcher.start().catch((err) => log.warn('Disk watch failed to start', err))
 
     return () => {
+      disposed = true
       watcher.dispose()
+      resetSaveCoordinator()
       if (watcherRef.current === watcher) watcherRef.current = null
       const s = useWorkspaceStore.getState()
       if (s.diskConflict) s.setDiskConflict(null)
@@ -138,5 +179,5 @@ export function useDiskWatch() {
     }
     // Re-key on the watched file's identity, not on the workspace ref — a
     // reload swaps the ref but not the file.
-  }, [watchDisk, hasWorkspace, workspaceName, activeFilename, testSource])
+  }, [watchDisk, hasWorkspace, watchedFilename, activeFilename, testSource, fileHandle, dirHandle])
 }

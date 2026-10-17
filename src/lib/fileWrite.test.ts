@@ -1,6 +1,6 @@
 import { File as NativeFile } from 'node:buffer'
 import { describe, expect, it, vi } from 'vitest'
-import { fileAlreadyHas, writeFileIfChanged } from './fileIO'
+import { enqueueFileWrites, fileAlreadyHas, writeFileIfChanged } from './fileIO'
 
 function snapshot(content: string | Uint8Array): File {
   return new NativeFile([content], 'workspace.dsl') as unknown as File
@@ -112,10 +112,100 @@ describe('file writes preserve the latest requested bytes', () => {
     const second = writeFileIfChanged(handle, 'C')
     await Promise.all([
       expect(first).rejects.toThrow(failure),
-      expect(second).resolves.toBeUndefined(),
+      expect(second).resolves.toBe(true),
     ])
 
     expect(opened).toBe(2)
     expect(content).toBe('C')
+  })
+
+  it('orders deferred destination resolution with the writes it precedes', async () => {
+    let content = 'original'
+    const lookupStarted = barrier()
+    const allowLookup = barrier()
+    const handle = {
+      getFile: async () => snapshot(content),
+      createWritable: async () => {
+        let pending = ''
+        return { write: async (value: string) => { pending = value }, close: async () => { content = pending } }
+      },
+    } as unknown as FileSystemFileHandle
+    const first = writeFileIfChanged(async () => {
+      lookupStarted.release()
+      await allowLookup.promise
+      return handle
+    }, 'earlier')
+    await lookupStarted.promise
+    const second = writeFileIfChanged(handle, 'later')
+    allowLookup.release()
+    expect(await Promise.all([first, second])).toEqual([true, true])
+    expect(content).toBe('later')
+  })
+
+  it('confirms successful unchanged and changed saves, but never a failed or missing save', async () => {
+    const confirmed = vi.fn()
+    const writable = { write: vi.fn(async () => {}), close: vi.fn(async () => {}) }
+    const handle = {
+      getFile: async () => snapshot('same'),
+      createWritable: async () => writable,
+    } as unknown as FileSystemFileHandle
+    expect(await writeFileIfChanged(handle, 'same', confirmed)).toBe(true)
+    expect(writable.write).not.toHaveBeenCalled()
+    expect(confirmed).toHaveBeenCalledTimes(1)
+    expect(await writeFileIfChanged(handle, 'changed', confirmed)).toBe(true)
+    expect(confirmed).toHaveBeenCalledTimes(2)
+    writable.close.mockRejectedValueOnce(new Error('close failed'))
+    await expect(writeFileIfChanged(handle, 'changed again', confirmed)).rejects.toThrow('close failed')
+    expect(await writeFileIfChanged(async () => null, 'missing', confirmed)).toBe(false)
+    expect(confirmed).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps all stages of an earlier batch ahead of a later direct save', async () => {
+    let content = 'initial'
+    const firstWritten = barrier()
+    const allowSecond = barrier()
+    const handle = {
+      getFile: async () => snapshot(content),
+      createWritable: async () => {
+        let pending = ''
+        return { write: async (value: string) => { pending = value }, close: async () => { content = pending } }
+      },
+    } as unknown as FileSystemFileHandle
+    const bundle = enqueueFileWrites(async (write) => {
+      await write(handle, 'first stage')
+      firstWritten.release()
+      await allowSecond.promise
+      return write(handle, 'last stage')
+    })
+    await firstWritten.promise
+    const direct = writeFileIfChanged(handle, 'latest direct save')
+    try {
+      await Promise.resolve()
+      expect(content).toBe('first stage')
+    } finally {
+      allowSecond.release()
+      await Promise.all([bundle, direct])
+    }
+    expect(content).toBe('latest direct save')
+  })
+
+  it('defers watcher observations only while a changed write is pending and always clears it', async () => {
+    const events: string[] = []
+    const writable = { write: async () => {}, close: vi.fn(async () => {}) }
+    const handle = {
+      getFile: async () => snapshot('same'),
+      createWritable: async () => writable,
+    } as unknown as FileSystemFileHandle
+    const confirm = () => { events.push('confirmed') }
+    const begin = () => { events.push('started'); return () => { events.push('finished') } }
+    await writeFileIfChanged(handle, 'same', confirm, begin)
+    expect(events).toEqual(['confirmed'])
+    events.length = 0
+    await writeFileIfChanged(handle, 'changed', confirm, begin)
+    expect(events).toEqual(['started', 'confirmed', 'finished'])
+    events.length = 0
+    writable.close.mockRejectedValueOnce(new Error('close failed'))
+    await expect(writeFileIfChanged(handle, 'changed', confirm, begin)).rejects.toThrow('close failed')
+    expect(events).toEqual(['started', 'finished'])
   })
 })

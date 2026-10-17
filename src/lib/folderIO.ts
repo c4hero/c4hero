@@ -1,8 +1,16 @@
 import { sidecarName } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
-import { readTextFileWithLimit, writeFileIfChanged } from '@/lib/fileIO'
+import { readTextFileWithLimit, writeFileIfChanged, type FileWriter } from '@/lib/fileIO'
 import { isRecord } from '@/lib/guards'
-import { recordSelfDslWrite, recordSelfSidecarWrite } from '@/lib/saveCoordinator'
+import { notifyHandleChanges } from '@/lib/handleChanges'
+import {
+  captureSelfWrite,
+  beginSelfWrite,
+  recordSelfDslWrite,
+  recordSelfSidecarWrite,
+  withSelfWriteDestination,
+  type SelfWriteToken,
+} from '@/lib/saveCoordinator'
 import type { WatchedSnapshot } from '@/lib/fileWatch'
 
 const log = createLogger('folderIO')
@@ -10,6 +18,12 @@ const log = createLogger('folderIO')
 // ─── Module-level state ───────────────────────────────────────────────
 
 let currentDirHandle: FileSystemDirectoryHandle | null = null
+
+function installDirHandle(handle: FileSystemDirectoryHandle): void {
+  if (currentDirHandle === handle) return
+  currentDirHandle = handle
+  notifyHandleChanges()
+}
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────
 
@@ -60,7 +74,7 @@ export function getCurrentDirHandle(): FileSystemDirectoryHandle | null {
 }
 
 export async function setDirHandle(handle: FileSystemDirectoryHandle): Promise<void> {
-  currentDirHandle = handle
+  installDirHandle(handle)
   await persistDirHandle()
 }
 
@@ -69,8 +83,8 @@ export async function openFolder(): Promise<{ dirHandle: FileSystemDirectoryHand
   if (!hasFolderAccess()) return null
   try {
     const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
-    currentDirHandle = dirHandle
     const dslFiles = await listDSLFilesIn(dirHandle)
+    installDirHandle(dirHandle)
     await persistDirHandle()
     return { dirHandle, dslFiles }
   } catch (err) {
@@ -109,10 +123,14 @@ export async function readDSLFile(filename: string): Promise<{ content: string; 
 
 /** Walk `a/b/c.dsl` from the current directory handle. `create` makes
  *  intermediate directories; the file itself is created only by the writer. */
-async function resolveFileHandle(relPath: string, create: boolean): Promise<FileSystemFileHandle | null> {
+async function resolveFileHandle(
+  relPath: string,
+  create: boolean,
+  dirHandle = currentDirHandle,
+): Promise<FileSystemFileHandle | null> {
   const parts = splitRelPath(relPath)
   if (parts.length === 0 || parts.some((p) => p === '..')) return null
-  const dir = await resolveDirHandle(parts.slice(0, -1).join('/'), create)
+  const dir = await resolveDirHandle(parts.slice(0, -1).join('/'), create, dirHandle)
   if (!dir) return null
   try {
     return await dir.getFileHandle(parts[parts.length - 1], { create })
@@ -128,11 +146,15 @@ function splitRelPath(rel: string): string[] {
 
 /** Walk `a/b` from the current directory handle. `null` when it does not
  *  exist (or when the path escapes the folder); throws on other failures. */
-async function resolveDirHandle(relDir: string, create: boolean): Promise<FileSystemDirectoryHandle | null> {
-  if (!currentDirHandle) return null
+async function resolveDirHandle(
+  relDir: string,
+  create: boolean,
+  dirHandle = currentDirHandle,
+): Promise<FileSystemDirectoryHandle | null> {
+  if (!dirHandle) return null
   const parts = splitRelPath(relDir)
   if (parts.some((p) => p === '..')) return null
-  let dir = currentDirHandle
+  let dir = dirHandle
   try {
     for (const seg of parts) dir = await dir.getDirectoryHandle(seg, { create })
     return dir
@@ -144,8 +166,8 @@ async function resolveDirHandle(relDir: string, create: boolean): Promise<FileSy
 
 /** Read a text file at a path relative to the open folder (for `!include`
  *  resolution). `null` when it does not exist; throws on other failures. */
-export async function readDSLFileAt(relPath: string): Promise<string | null> {
-  const handle = await resolveFileHandle(relPath, false)
+export async function readDSLFileAt(relPath: string, dirHandle = currentDirHandle): Promise<string | null> {
+  const handle = await resolveFileHandle(relPath, false, dirHandle)
   if (!handle) return null
   const file = await handle.getFile()
   return readTextFileWithLimit(file, 'Included DSL file')
@@ -154,13 +176,15 @@ export async function readDSLFileAt(relPath: string): Promise<string | null> {
 /** Write a text file at a path relative to the open folder (include
  *  write-back). Never creates the file: an included file that vanished is
  *  not silently recreated. */
-export async function writeDSLFileAt(relPath: string, content: string): Promise<boolean> {
+export async function writeDSLFileAt(
+  relPath: string,
+  content: string,
+  dirHandle = currentDirHandle,
+  write: FileWriter = writeFileIfChanged,
+): Promise<boolean> {
   try {
-    const handle = await resolveFileHandle(relPath, false)
-    if (!handle) return false
-    recordSelfDslWrite(content)
-    await writeFileIfChanged(handle, content)
-    return true
+    // Included fragments are not the root DSL watched by saveCoordinator.
+    return await write(() => resolveFileHandle(relPath, false, dirHandle), content)
   } catch (err) {
     log.error('writeDSLFileAt failed', { relPath, err })
     return false
@@ -275,11 +299,11 @@ export async function removeFilesIn(
 /** Read a workspace file for the disk watcher. Unlike `readDSLFile` this is
  *  silent and distinguishes "gone" (`null`) from a transient failure (throws),
  *  because it runs every couple of seconds. */
-export async function readDSLFileForWatch(filename: string): Promise<WatchedSnapshot | null> {
-  if (!currentDirHandle) return null
+export async function readDSLFileForWatch(filename: string, dirHandle = currentDirHandle): Promise<WatchedSnapshot | null> {
+  if (!dirHandle) return null
   let content: string
   try {
-    const fileHandle = await currentDirHandle.getFileHandle(filename)
+    const fileHandle = await dirHandle.getFileHandle(filename)
     const file = await fileHandle.getFile()
     content = await readTextFileWithLimit(file, 'DSL file')
   } catch (err) {
@@ -288,7 +312,7 @@ export async function readDSLFileForWatch(filename: string): Promise<WatchedSnap
   }
   let sidecarJson: string | undefined
   try {
-    const sidecarHandle = await currentDirHandle.getFileHandle(sidecarName(filename))
+    const sidecarHandle = await dirHandle.getFileHandle(sidecarName(filename))
     const sidecarFile = await sidecarHandle.getFile()
     sidecarJson = await readTextFileWithLimit(sidecarFile, 'Sidecar file')
   } catch {
@@ -298,13 +322,23 @@ export async function readDSLFileForWatch(filename: string): Promise<WatchedSnap
 }
 
 /** Write DSL content to a file in the current directory (creates if not present) */
-export async function writeDSLFile(filename: string, content: string): Promise<boolean> {
-  if (!currentDirHandle) return false
+export async function writeDSLFile(
+  filename: string,
+  content: string,
+  dirHandle = currentDirHandle,
+  token: SelfWriteToken = captureSelfWrite(),
+  write: FileWriter = writeFileIfChanged,
+): Promise<boolean> {
+  if (!dirHandle) return false
+  const destination = { kind: 'folder' as const, handle: dirHandle, filename }
+  const selfWrite = withSelfWriteDestination(token, destination)
   try {
-    recordSelfDslWrite(content)
-    const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true })
-    await writeFileIfChanged(fileHandle, content)
-    return true
+    return await write(
+      () => dirHandle.getFileHandle(filename, { create: true }),
+      content,
+      () => recordSelfDslWrite(content, selfWrite),
+      () => beginSelfWrite(selfWrite),
+    )
   } catch (err) {
     log.error('writeDSLFile failed', err)
     return false
@@ -312,14 +346,24 @@ export async function writeDSLFile(filename: string, content: string): Promise<b
 }
 
 /** Write sidecar JSON to the matching .c4hero.json file in the current directory */
-export async function writeSidecarFile(dslFilename: string, json: string): Promise<boolean> {
-  if (!currentDirHandle) return false
+export async function writeSidecarFile(
+  dslFilename: string,
+  json: string,
+  dirHandle = currentDirHandle,
+  token: SelfWriteToken = captureSelfWrite(),
+  write: FileWriter = writeFileIfChanged,
+): Promise<boolean> {
+  if (!dirHandle) return false
+  const destination = { kind: 'folder' as const, handle: dirHandle, filename: dslFilename }
+  const selfWrite = withSelfWriteDestination(token, destination)
   try {
     const filename = sidecarName(dslFilename)
-    recordSelfSidecarWrite(json)
-    const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true })
-    await writeFileIfChanged(fileHandle, json)
-    return true
+    return await write(
+      () => dirHandle.getFileHandle(filename, { create: true }),
+      json,
+      () => recordSelfSidecarWrite(json, selfWrite),
+      () => beginSelfWrite(selfWrite),
+    )
   } catch (err) {
     log.error('writeSidecarFile failed', err)
     return false
@@ -336,8 +380,8 @@ export async function listDSLFiles(): Promise<string[]> {
 
 /** File names directly inside a folder relative to the open folder; `null`
  *  when the folder does not exist. Subdirectories are not listed. */
-export async function listFilesAt(relDir: string): Promise<string[] | null> {
-  const dir = await resolveDirHandle(relDir, false)
+export async function listFilesAt(relDir: string, dirHandle = currentDirHandle): Promise<string[] | null> {
+  const dir = await resolveDirHandle(relDir, false, dirHandle)
   if (!dir) return null
   const names: string[] = []
   for await (const [name, entry] of dir.entries()) if (entry.kind === 'file') names.push(name)
@@ -345,8 +389,8 @@ export async function listFilesAt(relDir: string): Promise<string[] | null> {
 }
 
 /** Read a text file relative to the open folder; `null` when it does not exist. */
-export async function readTextFileAt(relPath: string): Promise<string | null> {
-  const handle = await resolveFileHandle(relPath, false)
+export async function readTextFileAt(relPath: string, dirHandle = currentDirHandle): Promise<string | null> {
+  const handle = await resolveFileHandle(relPath, false, dirHandle)
   if (!handle) return null
   const file = await handle.getFile()
   return readTextFileWithLimit(file, 'Document')
@@ -356,12 +400,13 @@ export async function readTextFileAt(relPath: string): Promise<string | null> {
  *  creating intermediate directories. Unlike the DSL writers this is not
  *  tracked by the save coordinator — it is for files the workspace points at,
  *  not the workspace itself. Rejects a path that escapes the folder. */
-export async function writeTextFileAt(relPath: string, content: string): Promise<boolean> {
+export async function writeTextFileAt(
+  relPath: string,
+  content: string,
+  dirHandle = currentDirHandle,
+): Promise<boolean> {
   try {
-    const handle = await resolveFileHandle(relPath, true)
-    if (!handle) return false
-    await writeFileIfChanged(handle, content)
-    return true
+    return await writeFileIfChanged(() => resolveFileHandle(relPath, true, dirHandle), content)
   } catch (err) {
     log.error('writeTextFileAt failed', { relPath, err })
     return false
@@ -418,7 +463,7 @@ export async function restoreDirHandleByName(name: string): Promise<FileSystemDi
       return null // Folder no longer exists or was moved
     }
 
-    currentDirHandle = handle
+    installDirHandle(handle)
     return handle
   } catch {
     return null
@@ -438,7 +483,7 @@ export async function restoreDirHandle(): Promise<FileSystemDirectoryHandle | nu
     if (!handle) return null
     const perm = await handle.queryPermission({ mode: 'readwrite' })
     if (perm === 'granted') {
-      currentDirHandle = handle
+      installDirHandle(handle)
       return handle
     }
     return null

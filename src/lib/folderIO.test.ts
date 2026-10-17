@@ -19,6 +19,8 @@ import {
   writeTextFileAt,
 } from './folderIO'
 import { makeCountingDirHandle } from './testing/countingDirHandle'
+import { hashContent } from './fileWatch'
+import { isSelfWrite, resetSaveCoordinator } from './saveCoordinator'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -158,6 +160,86 @@ describe('writers skip content that is already on disk', () => {
     await setDirHandle(broken)
     expect(await writeDSLFile('w.dsl', 'anything')).toBe(true)
     expect(opened['w.dsl']).toBe(1)
+  })
+
+  it('keeps public save invocation order when an earlier handle lookup is delayed', async () => {
+    const rig = makeCountingDirHandle({ 'w.dsl': 'original' })
+    let release!: () => void
+    let started!: () => void
+    let lookups = 0
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const lookupStarted = new Promise<void>((resolve) => { started = resolve })
+    const lookup = vi.fn(async (name: string, options?: { create?: boolean }) => {
+      if (++lookups === 1) {
+        started()
+        await held
+      }
+      return rig.dir.getFileHandle(name, options)
+    })
+    const dir = { ...rig.dir, getFileHandle: lookup } as unknown as FileSystemDirectoryHandle
+    await setDirHandle(dir)
+    const earlier = writeDSLFile('w.dsl', 'earlier')
+    await lookupStarted
+    const later = writeDSLFile('w.dsl', 'later')
+    try {
+      await Promise.resolve()
+      expect(lookup).toHaveBeenCalledTimes(1)
+    } finally {
+      release()
+      await Promise.all([earlier, later])
+    }
+    expect(rig.content['w.dsl']).toBe('later')
+  })
+
+  it('captures the directory before queued root, sidecar, include and document lookups', async () => {
+    const original = makeCountingDirHandle({ 'w.dsl': 'old', 'fragment.dsl': 'old' })
+    const replacement = makeCountingDirHandle({ 'w.dsl': 'other', 'fragment.dsl': 'other' })
+    await setDirHandle(original.dir)
+    const writes = [
+      writeDSLFile('w.dsl', 'new root'),
+      writeSidecarFile('w.dsl', 'new layout'),
+      writeDSLFileAt('fragment.dsl', 'new fragment'),
+      writeTextFileAt('new.md', 'new document'),
+    ]
+    await setDirHandle(replacement.dir)
+    expect(await Promise.all(writes)).toEqual([true, true, true, true])
+    expect(original.content).toEqual({
+      'w.dsl': 'new root', 'w.c4hero.json': 'new layout',
+      'fragment.dsl': 'new fragment', 'new.md': 'new document',
+    })
+    expect(replacement.content).toEqual({ 'w.dsl': 'other', 'fragment.dsl': 'other' })
+  })
+
+  it('does not remember a failed close as a completed root save', async () => {
+    const rig = makeCountingDirHandle({ 'w.dsl': 'before' })
+    const dir = {
+      ...rig.dir,
+      getFileHandle: async (name: string, options?: { create?: boolean }) => {
+        const handle = await rig.dir.getFileHandle(name, options)
+        return {
+          ...handle,
+          createWritable: async () => ({ write: async () => {}, close: async () => { throw new Error('close failed') } }),
+        }
+      },
+    } as unknown as FileSystemDirectoryHandle
+    await setDirHandle(dir)
+    resetSaveCoordinator({ kind: 'folder', handle: dir, filename: 'w.dsl' })
+    expect(await writeDSLFile('w.dsl', 'failed edit')).toBe(false)
+    const previous = { dsl: hashContent('before'), sidecar: hashContent('') }
+    expect(isSelfWrite({ dsl: hashContent('failed edit'), sidecar: previous.sidecar }, previous)).toBe(false)
+    resetSaveCoordinator()
+  })
+
+  it('keeps included fragments out of the watched root write history', async () => {
+    const files = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`fragment-${i}.dsl`, 'before']))
+    const rig = makeCountingDirHandle({ 'w.dsl': 'before', ...files })
+    await setDirHandle(rig.dir)
+    resetSaveCoordinator({ kind: 'folder', handle: rig.dir, filename: 'w.dsl' })
+    expect(await writeDSLFile('w.dsl', 'saved root')).toBe(true)
+    for (let i = 0; i < 20; i++) expect(await writeDSLFileAt(`fragment-${i}.dsl`, `fragment ${i}`)).toBe(true)
+    const previous = { dsl: hashContent('before'), sidecar: hashContent('') }
+    expect(isSelfWrite({ dsl: hashContent('saved root'), sidecar: previous.sidecar }, previous)).toBe(true)
+    resetSaveCoordinator()
   })
 })
 

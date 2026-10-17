@@ -165,7 +165,7 @@ export default function FloatingTopPill() {
     try {
       switch (format) {
         case 'dsl':
-          await saveDSLFile(serializeRoot(workspace), `${wsName}.dsl`)
+          if (!await saveDSLFile(serializeRoot(workspace), `${wsName}.dsl`)) return false
           break
         case 'png': {
           const blob = await exportCanvasAsPNG(theme)

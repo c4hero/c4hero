@@ -94,6 +94,10 @@ export interface WorkspaceState extends UndoState {
   presentationMode: boolean
   lastSavedUndoLength: number
   setLastSavedUndoLength: (n: number) => void
+  /** A required workspace write failed, including layout-only writes that
+   *  do not create undo entries. Kept until a complete save or disk reload. */
+  fileSaveFailed: boolean
+  setFileSaveFailed: (failed: boolean) => void
 
   // Focus request — set to an element ID to center the canvas on it, then cleared.
   focusElementId: string | null

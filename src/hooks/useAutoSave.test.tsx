@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
 
 vi.mock('@/lib/workspaceSave', () => ({
+  resetIncludedSaveHistory: vi.fn(),
   isWorkspaceLinked: vi.fn(() => false),
   writeLinkedWorkspace: vi.fn(async () => true),
 }))

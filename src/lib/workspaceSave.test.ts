@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/fileIO', () => ({
+  enqueueFileWrites: vi.fn(async operation => operation(vi.fn())),
   getCurrentFileHandle: vi.fn(() => null),
+  getCurrentSidecarHandle: vi.fn(() => null),
   writeToCurrentHandle: vi.fn(async () => true),
   writeSidecarToHandle: vi.fn(async () => true),
 }))
@@ -10,10 +12,11 @@ vi.mock('@/lib/folderIO', () => ({
   writeDSLFile: vi.fn(async () => true),
   writeSidecarFile: vi.fn(async () => true),
   writeDSLFileAt: vi.fn(async () => true),
+  readDSLFileAt: vi.fn(async () => 's = softwareSystem "Shop"\n'),
 }))
 
-import { getCurrentFileHandle, writeToCurrentHandle, writeSidecarToHandle } from '@/lib/fileIO'
-import { getCurrentDirHandle, writeDSLFile, writeDSLFileAt, writeSidecarFile } from '@/lib/folderIO'
+import { getCurrentFileHandle, getCurrentSidecarHandle, writeToCurrentHandle, writeSidecarToHandle } from '@/lib/fileIO'
+import { getCurrentDirHandle, readDSLFileAt, writeDSLFile, writeDSLFileAt, writeSidecarFile } from '@/lib/folderIO'
 import { isWorkspaceLinked, writeLinkedWorkspace } from './workspaceSave'
 import { parseDSL } from '@/lib/dsl'
 import { applySidecar } from './sidecar'
@@ -24,7 +27,14 @@ const ws = () => parseDSL('workspace "Shop" {\n  model {\n    s = softwareSystem
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getCurrentFileHandle).mockReturnValue(null)
+  vi.mocked(getCurrentSidecarHandle).mockReturnValue(null)
   vi.mocked(getCurrentDirHandle).mockReturnValue(null)
+  vi.mocked(writeToCurrentHandle).mockResolvedValue(true)
+  vi.mocked(writeSidecarToHandle).mockResolvedValue(true)
+  vi.mocked(writeDSLFile).mockResolvedValue(true)
+  vi.mocked(writeSidecarFile).mockResolvedValue(true)
+  vi.mocked(writeDSLFileAt).mockResolvedValue(true)
+  vi.mocked(readDSLFileAt).mockResolvedValue('s = softwareSystem "Shop"\n')
 })
 
 describe('isWorkspaceLinked', () => {
@@ -70,19 +80,89 @@ describe('writeLinkedWorkspace', () => {
     expect(await writeLinkedWorkspace(ws(), 'shop.dsl')).toBe(false)
   })
 
-  it('writes back an included fragment once until it changes', async () => {
+  it('checks included fragments on every save and accepts its own confirmed bytes', async () => {
     vi.mocked(getCurrentDirHandle).mockReturnValue({ name: 'arch' } as unknown as FileSystemDirectoryHandle)
     const w = ws()
     w.includedFiles = [{ path: 'teams/shop.dsl', writable: true, text: 'shop = softwareSystem "Shop"\n' }]
     w.model.softwareSystems[0].sourcePath = 'teams/shop.dsl'
+    vi.mocked(readDSLFileAt).mockResolvedValueOnce(w.includedFiles[0].text!)
     await writeLinkedWorkspace(w, 'root.dsl')
     const first = vi.mocked(writeDSLFileAt).mock.calls.length
     expect(first).toBe(1)
-    await writeLinkedWorkspace(w, 'root.dsl')
-    expect(vi.mocked(writeDSLFileAt).mock.calls.length).toBe(first)
-    w.model.softwareSystems[0].name = 'Shop 2'
+    vi.mocked(readDSLFileAt).mockResolvedValue(vi.mocked(writeDSLFileAt).mock.calls[0][1])
     await writeLinkedWorkspace(w, 'root.dsl')
     expect(vi.mocked(writeDSLFileAt).mock.calls.length).toBe(first + 1)
+    w.model.softwareSystems[0].name = 'Shop 2'
+    await writeLinkedWorkspace(w, 'root.dsl')
+    expect(vi.mocked(writeDSLFileAt).mock.calls.length).toBe(first + 2)
+  })
+
+  it.each(['folder', 'file'])('reports a layout failure after the root succeeds (%s)', async mode => {
+    if (mode === 'folder') {
+      vi.mocked(getCurrentDirHandle).mockReturnValue({ name: 'arch' } as FileSystemDirectoryHandle)
+      vi.mocked(writeSidecarFile).mockResolvedValueOnce(false)
+    } else {
+      vi.mocked(getCurrentFileHandle).mockReturnValue({} as FileSystemFileHandle)
+      vi.mocked(getCurrentSidecarHandle).mockReturnValue({} as FileSystemFileHandle)
+      vi.mocked(writeSidecarToHandle).mockResolvedValueOnce(false)
+    }
+    expect(await writeLinkedWorkspace(ws(), 'shop.dsl')).toBe(false)
+  })
+
+  it('waits for included fragments and retries an unchanged failed fragment', async () => {
+    vi.mocked(getCurrentDirHandle).mockReturnValue({ name: 'arch' } as FileSystemDirectoryHandle)
+    const workspace = ws()
+    workspace.includedFiles = [{ path: 'shop.dsl', writable: true, text: 's = softwareSystem "Shop"\n' }]
+    workspace.model.softwareSystems[0].sourcePath = 'shop.dsl'
+    let finish!: (ok: boolean) => void
+    const began = Promise.withResolvers<void>()
+    vi.mocked(writeDSLFileAt).mockImplementationOnce(() => {
+      began.resolve()
+      return new Promise(resolve => { finish = resolve })
+    })
+    let finished = false
+    const save = writeLinkedWorkspace(workspace, 'root.dsl').then(ok => { finished = true; return ok })
+    await began.promise
+    expect(finished).toBe(false)
+    finish(false)
+    expect(await save).toBe(false)
+    expect(await writeLinkedWorkspace(workspace, 'root.dsl')).toBe(true)
+    expect(writeDSLFileAt).toHaveBeenCalledTimes(2)
+  })
+
+  it('captures the original file and sidecar before a workspace switch', async () => {
+    const originalFile = { name: 'a.dsl' } as FileSystemFileHandle
+    const originalSidecar = { name: 'a.c4hero.json' } as FileSystemFileHandle
+    vi.mocked(getCurrentFileHandle).mockReturnValue(originalFile)
+    vi.mocked(getCurrentSidecarHandle).mockReturnValue(originalSidecar)
+    let finish!: (ok: boolean) => void
+    const began = Promise.withResolvers<void>()
+    vi.mocked(writeToCurrentHandle).mockImplementationOnce(() => {
+      began.resolve()
+      return new Promise(resolve => { finish = resolve })
+    })
+    const save = writeLinkedWorkspace(ws(), null)
+    await began.promise
+    vi.mocked(getCurrentFileHandle).mockReturnValue({ name: 'b.dsl' } as FileSystemFileHandle)
+    vi.mocked(getCurrentSidecarHandle).mockReturnValue({ name: 'b.c4hero.json' } as FileSystemFileHandle)
+    finish(true)
+    expect(await save).toBe(true)
+    expect(vi.mocked(writeSidecarToHandle).mock.calls[0].slice(1, 3)).toEqual([originalFile, originalSidecar])
+  })
+
+  it('saves a native single-file workspace without layout when its parent is unavailable', async () => {
+    vi.mocked(getCurrentFileHandle).mockReturnValue({ name: 'shop.dsl' } as FileSystemFileHandle)
+    expect(await writeLinkedWorkspace(ws(), null)).toBe(true)
+    expect(writeSidecarToHandle).not.toHaveBeenCalled()
+  })
+
+  it('does not report a material layout saved when the single-file parent is unavailable', async () => {
+    vi.mocked(getCurrentFileHandle).mockReturnValue({ name: 'shop.dsl' } as FileSystemFileHandle)
+    vi.mocked(writeSidecarToHandle).mockResolvedValueOnce(false)
+    const workspace = ws()
+    Object.assign(allViewsOf(workspace)[0].elements[0], { pinned: true, x: 123, y: 456 })
+    expect(await writeLinkedWorkspace(workspace, null)).toBe(false)
+    expect(writeSidecarToHandle).toHaveBeenCalledOnce()
   })
 })
 
@@ -90,7 +170,10 @@ describe('writeLinkedWorkspace', () => {
 describe('layout writes', () => {
   it.each(['folder', 'file'])('clears the last position saved in the same session (%s)', async mode => {
     if (mode === 'folder') vi.mocked(getCurrentDirHandle).mockReturnValue({ name: 'arch' } as FileSystemDirectoryHandle)
-    else vi.mocked(getCurrentFileHandle).mockReturnValue({} as FileSystemFileHandle)
+    else {
+      vi.mocked(getCurrentFileHandle).mockReturnValue({} as FileSystemFileHandle)
+      vi.mocked(getCurrentSidecarHandle).mockReturnValue({} as FileSystemFileHandle)
+    }
     const workspace = ws()
     const view = allViewsOf(workspace)[0]
     const el = view.elements[0]
@@ -133,6 +216,7 @@ describe('failed root saves', () => {
       vi.mocked(writeDSLFile).mockResolvedValueOnce(false)
     } else {
       vi.mocked(getCurrentFileHandle).mockReturnValue({} as FileSystemFileHandle)
+      vi.mocked(getCurrentSidecarHandle).mockReturnValue({} as FileSystemFileHandle)
       vi.mocked(writeToCurrentHandle).mockResolvedValueOnce(false)
     }
     const workspace = ws()
