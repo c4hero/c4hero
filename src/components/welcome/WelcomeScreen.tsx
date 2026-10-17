@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
 import { createBigBankSample, createBlankWorkspace } from '@/lib/templates'
-import { openDSLFile, hasFileSystemAccess, isWorkspaceShape, readTextFileWithLimit } from '@/lib/fileIO'
+import { openDSLFile, hasFileSystemAccess, isWorkspaceShape, readTextFileWithLimit } from '@/lib/host'
 import { createLogger } from '@/lib/logger'
 import {
   openFolder,
@@ -18,8 +18,8 @@ import {
   writeCollectionSettings,
   slugifyName,
   folderExists,
-} from '@/lib/folderIO'
-import { getRecentFolders, addRecentFolder, pruneRecentFolders, removeRecentFolder } from '@/lib/fileIO'
+} from '@/lib/host'
+import { getRecentFolders, addRecentFolder, pruneRecentFolders, removeRecentFolder } from '@/lib/host'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
 import { sidecarName } from '@/lib/sidecar'
 import { parseWorkspaceDocument, loadWorkspaceDocument } from '@/lib/workspaceDocument'
@@ -210,7 +210,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     }
 
     const newDir = await parentHandle.getDirectoryHandle(slug, { create: true })
-    const { setDirHandle } = await import('@/lib/folderIO')
+    const { setDirHandle } = await import('@/lib/host')
     await setDirHandle(newDir)
     const friendlyName = displayName.trim() || slug
     await initCollectionSettings(friendlyName)
@@ -225,7 +225,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const { slug, displayName, parentHandle } = duplicateConfirm
     setDuplicateConfirm(null)
     const newDir = await parentHandle.getDirectoryHandle(slug, { create: false })
-    const { setDirHandle } = await import('@/lib/folderIO')
+    const { setDirHandle } = await import('@/lib/host')
     await setDirHandle(newDir)
     const friendlyName = displayName.trim() || slug
     const settings = await initCollectionSettings(friendlyName)
@@ -482,7 +482,7 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
 
   // On mount: filter out recents whose IDB handle no longer exists
   useEffect(() => {
-    import('@/lib/folderIO').then(({ filterValidRecentFolders }) => {
+    import('@/lib/host').then(({ filterValidRecentFolders }) => {
       const all = getRecentFolders()
       filterValidRecentFolders(all.map(f => f.name)).then(validNames => {
         const validSet = new Set(validNames)

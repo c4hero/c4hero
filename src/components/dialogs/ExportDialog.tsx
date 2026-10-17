@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Download, Copy, Check, FolderDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ExportTheme } from '@/lib/exportUtils'
-import { hasDirectoryAccess } from '@/lib/fileIO'
+import { hasDirectoryAccess } from '@/lib/host'
 import { createLogger } from '@/lib/logger'
 import DialogShell from '@/components/shared/DialogShell'
 

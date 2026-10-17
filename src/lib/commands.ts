@@ -10,7 +10,7 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFoc
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
-import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { isVsCodeHost, runVsCodeHistoryCommand, saveDSLFile, writeSidecarToHandle } from '@/lib/host'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
@@ -139,8 +139,8 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'edit',
       icon: Undo2,
       shortcut: `${mod}Z`,
-      when: () => store().canUndo(),
-      execute: () => store().undo(),
+      when: () => isVsCodeHost() || store().canUndo(),
+      execute: () => isVsCodeHost() ? runVsCodeHistoryCommand('undo') : store().undo(),
     },
     {
       id: 'redo',
@@ -148,8 +148,8 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'edit',
       icon: Redo2,
       shortcut: `${mod}⇧Z`,
-      when: () => store().canRedo(),
-      execute: () => store().redo(),
+      when: () => isVsCodeHost() || store().canRedo(),
+      execute: () => isVsCodeHost() ? runVsCodeHistoryCommand('redo') : store().redo(),
     },
     {
       id: 'duplicate-selected',

@@ -48,5 +48,11 @@ scorecard-fixes.md
 *.sw?
 coverage/
 
+# VS Code extension build/package output
+extension/dist/
+extension/media/
+extension/*.vsix
+.vscode-test/
+
 # Structurizr CLI used by the DSL conformance tests (see structurizr-conformance.test.ts)
 .structurizr-cli/

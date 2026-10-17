@@ -7,7 +7,7 @@ let folderOpen = true
 let gate: Promise<void> | null = null
 let failReads = false
 
-vi.mock('@/lib/folderIO', () => ({
+vi.mock('@/lib/host', () => ({
   getCurrentDirHandle: () => (folderOpen ? { name: 'shop' } : null),
   listFilesAt: async (dir: string) => {
     if (gate) await gate

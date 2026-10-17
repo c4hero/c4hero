@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { useRouteSync, useRefreshRedirect } from './useRouteSync'
-import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile } from '@/lib/folderIO'
-import { loadFromLocalStorage } from '@/lib/fileIO'
+import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile } from '@/lib/host'
+import { loadFromLocalStorage } from '@/lib/host'
 import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
 import type { Workspace } from '@/types/model'
 
@@ -21,15 +21,11 @@ vi.mock('react-router-dom', () => ({
   useParams: () => router.params,
 }))
 
-vi.mock('@/lib/folderIO', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/folderIO')>()),
+vi.mock('@/lib/host', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/host')>()),
   getCurrentDirHandle: vi.fn(),
   restoreDirHandleByName: vi.fn(),
   readDSLFile: vi.fn(),
-}))
-
-vi.mock('@/lib/fileIO', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/fileIO')>()),
   loadFromLocalStorage: vi.fn(),
 }))
 

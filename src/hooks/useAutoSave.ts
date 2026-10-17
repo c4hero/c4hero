@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { saveToLocalStorage } from '@/lib/fileIO'
+import { isVsCodeHost, saveToLocalStorage } from '@/lib/host'
 import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { createLogger } from '@/lib/logger'
 
@@ -22,6 +22,10 @@ export function useAutoSave() {
   const idleHandle = useRef<number>(0)
 
   useEffect(() => {
+    // The extension's TextDocument is the persistence and recovery source.
+    // Writing browser storage or a browser handle here would create a second
+    // save lifecycle and break VS Code's dirty/undo semantics.
+    if (isVsCodeHost()) return
     if (!workspace) return
 
     if (timer.current) clearTimeout(timer.current)

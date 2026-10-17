@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest'
 import { loadWorkspaceDocument, parseWorkspaceDocument } from './workspaceDocument'
 import { serializeDSL } from '@/lib/dsl'
 import { planIncludedWrites, serializeRoot, isReadOnlySource } from '@/lib/includeWriteback'
-import { isWorkspaceShape } from '@/lib/fileIO'
+import { isWorkspaceShape } from '@/lib/host'
 
 const ROOT = `workspace "Org" "Everything" {
     model {

@@ -13,8 +13,8 @@ vi.mock('lucide-react', () => ({
 }))
 
 const hasFolderAccessMock = vi.hoisted(() => vi.fn(() => true))
-vi.mock('@/lib/folderIO', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@/lib/folderIO')>()
+vi.mock('@/lib/host', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/host')>()
   return { ...mod, hasFolderAccess: hasFolderAccessMock }
 })
 

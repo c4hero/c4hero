@@ -21,7 +21,7 @@ import {
   type DocsScope,
   type NewDocInput,
 } from '@/lib/docs/bundle'
-import { getCurrentDirHandle, listFilesAt, readTextFileAt, writeTextFileAt } from '@/lib/folderIO'
+import { getCurrentDirHandle, listFilesAt, readTextFileAt, writeTextFileAt } from '@/lib/host'
 import { findElementHelper } from '@/store/workspace-helpers'
 import { useWorkspaceStore } from '@/store/workspace'
 import { createLogger } from '@/lib/logger'

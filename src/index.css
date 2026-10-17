@@ -116,6 +116,37 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* VS Code supplies these classes and color variables to every webview. Keep
+   c4hero's semantic tokens while allowing light, dark and high-contrast themes
+   to follow the workbench automatically. */
+body.vscode-light,
+body.vscode-dark,
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --color-bg-primary: var(--vscode-editor-background);
+  --color-bg-panel: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --color-surface-1: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  --color-surface-2: var(--vscode-input-background, var(--vscode-editorWidget-background));
+  --color-surface-3: var(--vscode-list-hoverBackground, var(--vscode-input-background));
+  --color-border: var(--vscode-widget-border, var(--vscode-contrastBorder));
+  --color-border-hover: var(--vscode-focusBorder);
+  --color-accent: var(--vscode-textLink-foreground);
+  --color-accent-hover: var(--vscode-textLink-activeForeground);
+  --color-text-primary: var(--vscode-editor-foreground);
+  --color-text-secondary: var(--vscode-descriptionForeground);
+  --color-text-muted: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
+  --color-text-subtle: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
+  --color-backdrop: color-mix(in srgb, var(--vscode-editor-background) 75%, transparent);
+  font-family: var(--vscode-font-family);
+}
+
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --color-border: var(--vscode-contrastBorder);
+  --color-border-hover: var(--vscode-focusBorder);
+  --glass-shadow: none;
+}
+
 #root {
   width: 100vw;
   height: 100dvh;

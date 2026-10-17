@@ -1,7 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { getCurrentFileHandle, readCurrentFile } from '@/lib/fileIO'
-import { getCurrentDirHandle, readDSLFileForWatch, readDSLFileAt } from '@/lib/folderIO'
+import { getCurrentFileHandle, isVsCodeHost, readCurrentFile } from '@/lib/host'
+import { getCurrentDirHandle, readDSLFileForWatch, readDSLFileAt } from '@/lib/host'
 import { createFileWatcher, type SnapshotHashes, type WatchedSnapshot } from '@/lib/fileWatch'
 import { isSelfWrite, resetSaveCoordinator } from '@/lib/saveCoordinator'
 import { loadWorkspaceDocument } from '@/lib/workspaceDocument'
@@ -83,6 +83,9 @@ export function useDiskWatch() {
   const watcherRef = useRef<ReturnType<typeof createFileWatcher> | null>(null)
 
   useEffect(() => {
+    // TextDocument changes and the extension's FileSystemWatcher arrive over
+    // the host bridge; polling browser handles here would duplicate them.
+    if (isVsCodeHost()) return
     if (!watchDisk || !hasWorkspace || !isDiskWatchable(activeFilename)) return
 
     const filename = currentFilename(activeFilename, workspaceName)

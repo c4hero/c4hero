@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Save } from 'lucide-react'
 import { useWorkspaceStore } from '@/store/workspace'
 import { serializeRoot } from '@/lib/includeWriteback'
-import { saveDSLFile, hasFileSystemAccess } from '@/lib/fileIO'
+import { saveDSLFile, hasFileSystemAccess, isVsCodeHost } from '@/lib/host'
 import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { announce } from '@/lib/announce'
 
@@ -20,7 +20,7 @@ export default function SaveIndicator() {
   const [savedUndoLength, setSavedUndoLength] = useState(lastSavedUndoLength)
   const savedFlashTimer = useRef<ReturnType<typeof setTimeout>>(null)
   const hasFileHandle = isWorkspaceLinked(activeFilename)
-  const canLinkFiles = hasFileSystemAccess()
+  const canLinkFiles = isVsCodeHost() || hasFileSystemAccess()
 
   async function handleSave() {
     // Read the current workspace at click time rather than subscribing to it;

@@ -29,6 +29,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:vscode": "npm run build --prefix extension",
+    "package:vscode": "npm run build:vscode && npm run package --prefix extension",
+    "test:vscode": "npm test --prefix extension",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",

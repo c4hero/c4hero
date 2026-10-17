@@ -4,7 +4,7 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView, isFocalScopeElemen
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
-import { saveDSLFile, openDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { isVsCodeHost, openDSLFile, runVsCodeHistoryCommand, saveDSLFile, writeSidecarToHandle } from '@/lib/host'
 import { isWorkspaceLinked, writeLinkedWorkspace } from '@/lib/workspaceSave'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { createLogger } from '@/lib/logger'
@@ -74,8 +74,8 @@ function backspaceLikeHandler(destructive: boolean): KeyHandler {
 
 /** Shortcuts that only fire when NOT typing in an input */
 const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
-  'mod+z': (store) => store.undo(),
-  'mod+shift+z': (store) => store.redo(),
+  'mod+z': (store) => isVsCodeHost() ? runVsCodeHistoryCommand('undo') : store.undo(),
+  'mod+shift+z': (store) => isVsCodeHost() ? runVsCodeHistoryCommand('redo') : store.redo(),
   'mod+d': (store) => {
     if (store.selectedElementIds.length > 0) store.duplicateElements(store.selectedElementIds)
   },
@@ -166,7 +166,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     // Toggling it elsewhere would clear the selection and pop the panel open
     // later when a diagram is finally opened, so gate it on the same condition.
     if (!store.workspace) return
-    if (!isCanvasRoute(window.location.pathname)) return
+    if (!isVsCodeHost() && !isCanvasRoute(window.location.pathname)) return
     if (store.aiPanelOpen) {
       store.setAiPanelOpen(false)
       store.setAiSettingsOpen(false)

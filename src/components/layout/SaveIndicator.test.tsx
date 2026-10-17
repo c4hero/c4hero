@@ -1,19 +1,18 @@
 import { render, fireEvent, act, waitFor } from '@testing-library/react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess, writeToCurrentHandle } from '@/lib/fileIO'
-import { getCurrentDirHandle, writeDSLFile } from '@/lib/folderIO'
+import { saveDSLFile, getCurrentFileHandle, hasFileSystemAccess, writeToCurrentHandle } from '@/lib/host'
+import { getCurrentDirHandle, writeDSLFile } from '@/lib/host'
 import type { Workspace } from '@/types/model'
 import SaveIndicator from './SaveIndicator'
 
-vi.mock('@/lib/fileIO', () => ({
+vi.mock('@/lib/host', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/host')>()),
+  isVsCodeHost: vi.fn(() => false),
   saveDSLFile: vi.fn(async () => true),
   getCurrentFileHandle: vi.fn(() => null),
   hasFileSystemAccess: vi.fn(() => false),
   writeToCurrentHandle: vi.fn(async () => true),
   writeSidecarToHandle: vi.fn(async () => true),
-}))
-
-vi.mock('@/lib/folderIO', () => ({
   getCurrentDirHandle: vi.fn(() => null),
   writeDSLFile: vi.fn(async () => true),
   writeSidecarFile: vi.fn(async () => true),

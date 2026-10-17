@@ -6,7 +6,7 @@ import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyC
 import { serializeDSL } from '@/lib/dsl'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { createBlankWorkspace } from '@/lib/templates'
-import { saveDSLFile } from '@/lib/fileIO'
+import { saveDSLFile } from '@/lib/host'
 import { announce } from '@/lib/announce'
 import SaveIndicator from '@/components/layout/SaveIndicator'
 import ViewSwitcher, { ViewSwitcherPanel } from '@/components/layout/ViewSwitcher'
@@ -29,7 +29,7 @@ import {
 import { useSettingsStore } from '@/store/settings'
 import { THEMES, THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
 
-import { listDSLFiles, readDSLFile, readDSLFileAt, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/folderIO'
+import { listDSLFiles, readDSLFile, readDSLFileAt, writeDSLFile, getCurrentDirHandle, slugifyName } from '@/lib/host'
 import { parseDSL } from '@/lib/dsl'
 import { useNavigate } from 'react-router-dom'
 import { WorkspaceTile } from '@/components/welcome/WelcomeLeaves'
