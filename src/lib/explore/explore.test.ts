@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createBigBankSample, createBlankWorkspace } from '@/lib/templates'
 import { buildLayout, connectionsFor, geometryKey } from './layout'
-import { projected, revealFor, stepReveal, stepCamera, stepGlide, zoomAt } from './motion'
+import { detailOpacity, flightPath, frameBox, projected, revealFor, stepReveal, stepCamera, stepGlide, summaryOpacity, zoomAt, zoomBounds } from './motion'
 import { loadExploreCamera, saveExploreCamera } from './persistence'
 import { useWorkspaceStore } from '@/store/workspace'
 
@@ -125,6 +125,45 @@ describe('Explore transitions', () => {
     expect(mid.y + world.y * mid.zoom).toBeCloseTo(screen.y)
     expect(stepCamera(stepCamera(current, target, 25), target, 25).zoom).toBeCloseTo(mid.zoom)
     expect(stepCamera(current, target, 16, true)).toEqual(target)
+  })
+  it('flies between distant cameras without overshooting the destination', () => {
+    const from = { x: 100, y: 50, zoom: .7 }, to = { x: -90000, y: -28000, zoom: 60 }, at = { x: 720, y: 450 }
+    const path = flightPath(from, to, at, 1440)
+    const world = (c: typeof from) => (at.x - c.x) / c.zoom
+    expect(path.at(0).zoom).toBeCloseTo(from.zoom)
+    expect(path.at(1)).toEqual(to)
+    let previous = world(from)
+    for (let t = .05; t < 1; t += .05) {
+      const x = world(path.at(t))
+      // The centred world point moves steadily toward the target, never past it.
+      expect(x).toBeGreaterThanOrEqual(previous - 1e-6)
+      expect(x).toBeLessThanOrEqual(world(to) + 1e-6)
+      previous = x
+    }
+    expect(path.duration).toBeGreaterThanOrEqual(320)
+    expect(path.duration).toBeLessThanOrEqual(950)
+    expect(flightPath(from, from, at, 1440).at(.5)).toEqual(expect.objectContaining({ zoom: from.zoom }))
+  })
+  it('frames expandable cards large and leaves near their native size', () => {
+    const map = buildLayout(createBigBankSample()), area = { x: 0, y: 0, width: 1000, height: 800 }
+    const parent = map.nodes.find(n => n.children.length && n.parent)!, leaf = parent.children[0]
+    const open = frameBox(parent, area)
+    expect(parent.width * open.zoom).toBeCloseTo(700)
+    expect((parent.x + parent.width / 2) * open.zoom + open.x).toBeCloseTo(500)
+    expect(leaf.scale * frameBox(leaf, area).zoom).toBeLessThanOrEqual(1.6 + 1e-9)
+  })
+  it('limits zoom to a readable overview and a few times the smallest card', () => {
+    const map = buildLayout(createBigBankSample()), smallest = Math.min(...map.nodes.map(n => n.scale))
+    expect(zoomBounds(map.nodes, .7)).toEqual({ min: .7 * .4, max: 4 / smallest })
+    expect(zoomBounds(map.nodes, 3).min).toBe(.5)
+    expect(zoomAt({ x: 0, y: 0, zoom: 1 }, 100, { x: 0, y: 0 }, { min: .5, max: 4 }).zoom).toBe(4)
+  })
+  it('fades a parent summary out before its contents fade in', () => {
+    expect(summaryOpacity(0)).toBe(1)
+    expect(summaryOpacity(.45)).toBe(0)
+    expect(detailOpacity(.3)).toBe(0)
+    expect(detailOpacity(1)).toBe(1)
+    for (let r = 0; r <= 1; r += .05) expect(summaryOpacity(r) * detailOpacity(r)).toBeLessThan(.05)
   })
   it('projects endpoints continuously from ancestor boundaries', () => {
     const map = buildLayout(createBigBankSample()), n = map.nodes.find(n => n.parent)!, parent = n.parent!

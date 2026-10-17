@@ -165,6 +165,8 @@ function carryForwardMeasurements(nodes: Node[], measuredNodes: Node[]): Node[] 
 }
 
 
+const DIAGRAM_ZOOM_RANGE = { min: 0.003, max: 10000 }
+
 export default function Canvas() {
   const active = useWorkspaceStore(s => s.rendererMode === 'diagram')
   const host = useRef<HTMLDivElement>(null)
@@ -388,6 +390,11 @@ export default function Canvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const semantic = useSemanticZoom(!active, host, reactFlowInstance, workspace, view, nodes, edges, highlightFilters, themeStyles, viewCountMap)
+  // Zoom's range follows how deep the model goes, stretched to the current
+  // zoom so enabling it never snaps the camera.
+  const currentZoom = reactFlowInstance.getZoom()
+  const zoomRange = semantic.bounds ?? DIAGRAM_ZOOM_RANGE
+  const zoomRangeMin = Math.min(zoomRange.min, currentZoom), zoomRangeMax = Math.max(zoomRange.max, currentZoom)
 
   // Fit view — poll until all content nodes are measured, then call fitView.
   // Overlay nodes (boundary, groups) are excluded from the fit bounds since
@@ -1206,8 +1213,8 @@ export default function Canvas() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         proOptions={RF_PRO_OPTIONS}
-        minZoom={0.003}
-        maxZoom={10000}
+        minZoom={zoomRangeMin}
+        maxZoom={zoomRangeMax}
         snapToGrid={snapToGrid}
         snapGrid={RF_SNAP_GRID}
         connectionRadius={40}

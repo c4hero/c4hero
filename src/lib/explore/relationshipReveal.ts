@@ -28,9 +28,10 @@ export function relationshipRefinements(connections: Connection[]) {
   return refinements
 }
 
-export function relationshipOpacity(c: Connection, refinements: Map<string, Connection[]>, reveal: Map<string, number>, ready: (node: MapNode) => boolean = () => true) {
+/** `curve` maps endpoint visibility to drawn opacity, matching the cards'. */
+export function relationshipOpacity(c: Connection, refinements: Map<string, Connection[]>, reveal: Map<string, number>, ready: (node: MapNode) => boolean = () => true, curve = (alpha: number) => alpha) {
   const visible = (edge: Connection) => ready(edge.from) && ready(edge.to)
-    ? Math.min(visibility(edge.from, reveal), visibility(edge.to, reveal)) : 0
+    ? curve(Math.min(visibility(edge.from, reveal), visibility(edge.to, reveal))) : 0
   let replacement = 0
   for (const detail of refinements.get(c.relationship.id) ?? []) replacement = Math.max(replacement, visible(detail))
   return Math.max(0, visible(c) - replacement)

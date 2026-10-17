@@ -16,6 +16,7 @@ import { useZoomLevel } from '@/hooks/useZoomLevel'
 import { pickHighlightReason } from '@/lib/highlight'
 
 import { SHAPE_ICON_MAP } from '@/lib/nodeIcons'
+import { summaryOpacity } from '@/lib/explore/motion'
 
 interface BaseC4NodeProps {
   data: C4NodeData
@@ -128,7 +129,7 @@ export default function BaseC4Node({
           transform: `scale(${data.semantic.scale})`, transformOrigin: '0 0',
           width: data.semantic.width,
         } : {}),
-        ['--semantic-content-opacity' as string]: 1 - (data.semantic?.reveal ?? 0),
+        ['--semantic-content-opacity' as string]: summaryOpacity(data.semantic?.reveal ?? 0),
         background: resolvedTint,
         border: resolvedBorder,
         // Per-node tier color for selection halo, hover handles, and the

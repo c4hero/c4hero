@@ -83,3 +83,40 @@ it('uses gesture timestamps for inertia even when the release callback is delaye
     expect(camera.getViewport().x).toBe(stopped)
   } finally { camera.dispose() }
 })
+
+it('reveals a focused card even when a queued frame runs before the flight starts', () => {
+  const { camera, workspace } = setup()
+  try {
+    camera.zoomBy(.3)
+    vi.advanceTimersByTime(1000)
+    expect(camera.reveal.get('internetBanking') ?? 0).toBe(0)
+    // A double click wakes the camera before focus is requested.
+    camera.zoomBy(1)
+    camera.focus('internetBanking')
+    vi.advanceTimersByTime(2500)
+    expect(camera.reveal.get('internetBanking')).toBe(1)
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual(['internetBanking'])
+    const node = buildLayout(workspace).byId.get('internetBanking')!, viewport = camera.getViewport()
+    expect((node.x + node.width / 2) * viewport.zoom + viewport.x).toBeCloseTo(200, 1)
+  } finally { camera.dispose() }
+})
+
+it('steps out one level at a time with Escape once nothing is selected', () => {
+  const { camera } = setup()
+  try {
+    camera.focus('signinController')
+    vi.advanceTimersByTime(2500)
+    const zoom = () => camera.getViewport().zoom, frames = [zoom()]
+    camera.escape()
+    expect(useWorkspaceStore.getState().selectedElementIds).toEqual([])
+    vi.advanceTimersByTime(2500)
+    expect(zoom()).toBe(frames[0])
+    for (let i = 0; i < 3; i++) { camera.escape(); vi.advanceTimersByTime(2500); frames.push(zoom()) }
+    // Component, its container, its system, then the whole map.
+    expect(frames[1]).toBeLessThan(frames[0])
+    expect(frames[2]).toBeLessThan(frames[1])
+    expect(frames[3]).toBeLessThan(frames[2])
+    expect(camera.reveal.get('apiApp')).toBe(0)
+    expect(camera.reveal.get('internetBanking')).toBe(0)
+  } finally { camera.dispose() }
+})
