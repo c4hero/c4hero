@@ -1992,12 +1992,14 @@ body {
    derived from --node-glow (the node's tier color, set in BaseC4Node from
    the resolved borderColor) and brightened with white so it reads as a
    glow rather than just a thicker stroke. */
-.c4-node-highlighted > .c4-node {
-  box-shadow:
+.c4-node {
+  --c4-highlight-shadow:
     0 0 0 2px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 70%, white 40%),
     0 0 22px color-mix(in srgb, var(--node-glow, var(--canvas-selection, var(--color-accent))) 50%, transparent),
     0 2px 8px rgba(0, 0, 0, 0.2);
 }
+
+.c4-node-highlighted > .c4-node { box-shadow: var(--c4-highlight-shadow); }
 
 /* Faded sibling — non-matching node when highlight is active. Stays
    readable as ghost context but visibly recedes. Edges with a faded
@@ -2460,3 +2462,53 @@ textarea:focus-visible {
 .c4-md th, .c4-md td { border: 1px solid var(--color-border); padding: 4px 8px; text-align: left; vertical-align: top; }
 .c4-md th { background: var(--color-surface-2); font-weight: 600; }
 .c4-docs-row:hover { background: var(--color-surface-2) !important; border-color: var(--color-border) !important; }
+
+/* The bitmap map has keyboard navigation and needs a visible focus target. */
+.explore-map:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -3px;
+}
+
+
+/* Keep the title visible above the child graph; fade only the parent body. */
+.c4-node[data-semantic-reveal] > .c4-node-body {
+  opacity: var(--semantic-content-opacity, 1);
+}
+
+/* Emphasize the existing hue inside the card, distinct from selection. */
+[data-zoom-active="true"] .c4-node[data-semantic-expandable] {
+  --zoom-inset-opacity: 1;
+  --zoom-inset-width: 2px;
+  --zoom-inset-color: color-mix(in srgb, var(--node-glow) 25%, white);
+}
+.c4-node .semantic-frame {
+  transition: opacity 900ms ease-out, border-color 900ms ease-out, border-width 900ms ease-out;
+}
+[data-zoom-active="true"] .c4-node[data-semantic-expandable] > .semantic-frame {
+  transition-duration: 140ms;
+}
+/* Briefly focus zoomable cards with the same ring and dimming as tag highlights. */
+[data-zoom-pulse="true"] .c4-node[data-semantic-expandable] {
+  animation: zoom-highlight-pulse 2s ease-in-out;
+}
+[data-zoom-pulse="true"] .c4-node:not([data-semantic-expandable]) {
+  animation: zoom-context-pulse 2s ease-in-out;
+}
+@keyframes zoom-highlight-pulse {
+  20%, 55% { box-shadow: var(--c4-highlight-shadow); }
+}
+@keyframes zoom-context-pulse {
+  20%, 55% { opacity: .28; filter: saturate(.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .c4-node .semantic-frame { transition: none; }
+  [data-zoom-pulse="true"] .c4-node[data-semantic-expandable] {
+    animation: none;
+    box-shadow: var(--c4-highlight-shadow);
+  }
+  [data-zoom-pulse="true"] .c4-node:not([data-semantic-expandable]) {
+    animation: none;
+    opacity: .28;
+    filter: saturate(.7);
+  }
+}

@@ -14,7 +14,7 @@ export default defineConfig({
     ? [['list'], ['html', { open: 'never' }]]
     : 'html',
   use: {
-    baseURL: 'http://localhost:3004',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3004',
     trace: 'on-first-retry',
   },
   projects: [
@@ -22,8 +22,18 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'mobile-chromium',
+      use: { ...devices['Pixel 7'] },
+      testMatch: /explore\/(activate-zoom|child-layout-restore|child-relationships|expanded-layout|node-view-navigation|zoom-affordance)\.spec\.ts/,
+    },
+    ...(process.env.ZOOM_CROSS_BROWSER ? [{
+      name: 'mobile-webkit',
+      use: { ...devices['iPhone 13'] },
+      testMatch: /explore\/(activate-zoom|child-layout-restore|child-relationships|expanded-layout|node-view-navigation|zoom-affordance)\.spec\.ts/,
+    }] : []),
   ],
-  webServer: {
+  webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
     command: 'npm run dev',
     url: 'http://localhost:3004',
     reuseExistingServer: !process.env.CI,

@@ -53,6 +53,7 @@ const ScopePickerDialog = lazy(() => import('@/components/shared/ScopePickerDial
 export default function FloatingTopPill() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const rendererMode = useWorkspaceStore((s) => s.rendererMode)
   const undo = useWorkspaceStore((s) => s.undo)
   const redo = useWorkspaceStore((s) => s.redo)
   const canUndo = useWorkspaceStore((s) => s.undoStack.length > 0)
@@ -145,13 +146,13 @@ export default function FloatingTopPill() {
     const wsName = workspace.name ?? 'workspace'
     const views = getAllViews(workspace)
     const activeView = views.find((v) => v.key === activeViewKey)
-    const viewTitle = activeView?.title ?? activeViewKey ?? ''
-    const viewType = activeView ? ` (${LEVEL_BADGE[activeView.type] ?? activeView.type})` : ''
+    const viewTitle = rendererMode === 'explore' ? 'Explore' : activeView?.title ?? activeViewKey ?? ''
+    const viewType = rendererMode === 'diagram' && activeView ? ` (${LEVEL_BADGE[activeView.type] ?? activeView.type})` : ''
     const parts = viewTitle
       ? [`${viewTitle}${viewType}`, wsName]
       : [wsName]
     document.title = `${parts.join(' — ')} | c4hero`
-  }, [workspace, activeViewKey])
+  }, [workspace, activeViewKey, rendererMode])
 
   if (!workspace) return null
 

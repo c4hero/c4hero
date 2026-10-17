@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   LayoutDashboard,
   Maximize2,
+  ScanSearch,
   Settings,
   MousePointerClick,
   Sparkles,
@@ -25,6 +26,8 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
 import AddElementPanel from '@/components/layout/AddElementPanel'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
+import { getActiveCamera } from '@/lib/activeCamera'
+import { editingView, supportsSemanticZoom } from '@/lib/explore/editing'
 import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
 
 const DIRECTION_ICONS: Record<LayoutDirection, React.ReactNode> = {
@@ -42,6 +45,7 @@ const DIRECTION_LABELS: Record<LayoutDirection, string> = {
 }
 
 export default function FloatingToolRail() {
+  const rendererMode = useWorkspaceStore(s => s.rendererMode)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const resetAndRelayout = useWorkspaceStore((s) => s.resetAndRelayout)
@@ -131,7 +135,7 @@ export default function FloatingToolRail() {
 
   if (!workspace) return null
 
-  const view = activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
+  const view = editingView(workspace, activeViewKey, rendererMode)
   const currentDirection = view?.autoLayout?.direction ?? 'TB'
   const lockedCount = view?.elements.filter((el) => el.locked).length ?? 0
   const viewLocked = view?.locked === true
@@ -142,7 +146,7 @@ export default function FloatingToolRail() {
     setArrangePanelOpen(false)
     // Wait for the new layout to be applied (positions recomputed + nodes
     // re-measured) before fitting the viewport to the freshly arranged graph.
-    setTimeout(() => fitContentNodesToViewport(reactFlow), 120)
+    setTimeout(() => { if (getActiveCamera()) getActiveCamera()!.fit(); else fitContentNodesToViewport(reactFlow) }, 120)
   }
 
   return (
@@ -244,6 +248,16 @@ export default function FloatingToolRail() {
         )}
       </div>
 
+      <RailSep />
+      <RailBtn
+        icon={<ScanSearch size={16} />}
+        label="Zoom"
+        disabled={!supportsSemanticZoom(activeViewKey ? getActiveView(workspace, activeViewKey) : undefined)}
+        title="Zoom inside systems and containers (static C4 views)"
+        active={rendererMode === 'explore'}
+        onClick={() => useWorkspaceStore.getState().setRendererMode(rendererMode === 'explore' ? 'diagram' : 'explore')}
+      />
+
       {/* Auto-arrange */}
       <RailSep />
       <div style={{ position: 'relative' }}>
@@ -264,10 +278,6 @@ export default function FloatingToolRail() {
         )}
         {arrangePanelOpen && (
           <>
-            <div
-              style={{ position: 'fixed', inset: 0, zIndex: 49 }}
-              onClick={() => setArrangePanelOpen(false)}
-            />
             <div
               ref={arrangeFlyoutRef}
               role="menu"
@@ -369,7 +379,7 @@ export default function FloatingToolRail() {
       <RailBtn
         icon={<Maximize2 size={16} />}
         label="Zoom to fit"
-        onClick={() => fitContentNodesToViewport(reactFlow)}
+        onClick={() => { if (getActiveCamera()) getActiveCamera()!.fit(); else fitContentNodesToViewport(reactFlow) }}
       />
       <RailSep />
       <RailBtn
@@ -415,13 +425,17 @@ const RailBtn = forwardRef<HTMLButtonElement, {
   color?: string
   active?: boolean
   expanded?: boolean
+  disabled?: boolean
+  title?: string
   onClick?: () => void
-}>(function RailBtn({ icon, label, color, active, expanded, onClick }, ref) {
+}>(function RailBtn({ icon, label, color, active, expanded, disabled, title, onClick }, ref) {
   return (
     <button
       ref={ref}
-      title={label}
+      title={title ?? label}
+      disabled={disabled}
       aria-label={label}
+      aria-pressed={expanded === undefined && active !== undefined ? active : undefined}
       aria-expanded={expanded}
       aria-haspopup={expanded !== undefined ? 'true' : undefined}
       onClick={onClick}
@@ -439,7 +453,8 @@ const RailBtn = forwardRef<HTMLButtonElement, {
         margin: '1px 0',
         ...(active ? { background: 'var(--color-accent-active)' } : {}),
         color: active ? 'var(--color-accent)' : color ?? 'var(--color-text-muted)',
-        cursor: onClick ? 'pointer' : 'default',
+        opacity: disabled ? 0.4 : undefined,
+        cursor: disabled ? 'default' : onClick ? 'pointer' : 'default',
         transition: 'background 0.12s, color 0.12s',
         border: 'none',
       }}
