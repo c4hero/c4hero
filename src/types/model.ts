@@ -212,6 +212,8 @@ export interface AutoLayout {
 }
 
 export interface View {
+  /** Semantic zoom layout for this view, stored in the sidecar. */
+  exploreLayout?: Workspace['exploreLayout']
   type: ViewType
   key: string
   /** Import-only alias for layout saved before the parser normalized the key. */
@@ -429,6 +431,7 @@ export interface StoredViewIdentity {
 /** Layout retained independently of whether a view or element is currently visible.
  * Uses the version-1 sidecar shape; no on-disk migration is needed. */
 export interface SavedViewLayout {
+  exploreLayout?: Workspace['exploreLayout']
   /** The view this layout belongs to. Absent in entries written before
    *  TEA-345, which are matched by key instead. */
   view?: StoredViewIdentity
@@ -437,6 +440,8 @@ export interface SavedViewLayout {
 }
 
 export interface Workspace {
+  /** Zoom layout in parent-body coordinates; saved with the selected view. */
+  exploreLayout?: Omit<SavedViewLayout, 'exploreLayout'> & { direction?: LayoutDirection; hiddenIds?: string[]; positionSpace?: 'parent-body' }
   /** Last loaded/carried layout. Present entries are overlaid on extraction;
    * absent entries survive. An empty map still requests clearing the old file. */
   savedLayout?: Record<string, SavedViewLayout>
