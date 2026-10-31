@@ -22,15 +22,23 @@ const THRESHOLD = SEVERITY_RANK[AUDIT_LEVEL]
  * changed usage assumption means the entry should go.
  */
 const ALLOWLIST = {
-  'GHSA-mh99-v99m-4gvg': {
-    package: 'brace-expansion',
+  'GHSA-g3hv-75wg-m249': {
+    package: 'minimatch',
     reason:
-      'DoS via unbounded brace expansion. Only a dev/build-time transitive ' +
-      '(minimatch <- glob/eslint/rollup); never bundled or shipped to users. ' +
-      'The sole patched release (5.0.8) is ESM-only and breaks the CJS ' +
-      'consumers that pull the vulnerable 1.x/2.x lines ("expand is not a ' +
-      'function"); no backport exists. Re-check when a CJS-compatible patch ships.',
-    review: '2026-10-01',
+      'DoS via globParts amplification in the first/second-phase preprocess, ' +
+      'reachable only from an attacker-supplied glob pattern with ' +
+      'optimizationLevel >= 2. Only a dev/build-time transitive; never bundled ' +
+      'or shipped to users. The 3.x (eslint 9, @eslint/*) and 5.x (filelist ' +
+      '<- jake <- ejs <- rollup-plugin-off-main-thread <- workbox-build) ' +
+      'copies predate that code path entirely. The 10.x copy ' +
+      '(@typescript-eslint/typescript-estree) is only called for projectService ' +
+      'allowDefaultProject, which we do not enable, and at level 1. glob is ' +
+      'the one consumer that sets level 2; it stays on patched 14.x via the ' +
+      'workbox-build override (and glob <14.0.2 trips GHSA-3g3m-2fjr-6pw4). ' +
+      'The patched 11.x line has no backport, and forcing it eight majors up ' +
+      'under eslint 9 was judged riskier than this unreachable path. Re-check ' +
+      'when eslint/typescript-eslint or workbox-build drop the old lines.',
+    review: '2027-01-31',
   },
 }
 
