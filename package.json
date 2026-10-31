@@ -93,6 +93,9 @@
     "postcss": "^8.5.18",
     "serialize-javascript": "^7.0.5",
     "undici": "^7.30.0",
-    "react-router": "8.3.0"
+    "react-router": "8.3.0",
+    "workbox-build": {
+      "glob": "^14.0.2"
+    }
   }
 }
