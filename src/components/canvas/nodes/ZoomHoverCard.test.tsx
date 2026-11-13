@@ -184,7 +184,7 @@ describe('ZoomHoverCard interactions', () => {
     const row = screen.getByText('cv-2').closest('button') as HTMLButtonElement
     fireEvent.mouseEnter(row)
     fireEvent.mouseLeave(row)
-    expect(row.style.background).toBe('transparent')
+    expect(row.style.backgroundColor).toBe('transparent')
 
     const newDiagram = screen.getByText('New diagram').closest('button') as HTMLButtonElement
     fireEvent.mouseEnter(newDiagram)
