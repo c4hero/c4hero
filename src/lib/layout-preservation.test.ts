@@ -679,3 +679,54 @@ it('rejects a scope rename that would overwrite a retained view key, and derived
     view: { type: 'container', softwareSystemId: 'billing2', elementIds: ['api', 'db'] },
   })
 })
+
+
+describe('Zoom layout across persistence boundaries', () => {
+  it.each(['reparse', 'reopen'])('keeps Zoom layouts with keyless views across reorder, removal and return (%s)', boundary => {
+    const unnamedWide = wide.replace(' "Wide"', '')
+    const unnamedNarrow = narrow.replace(' "Narrow"', '')
+    const wideZoom = { positionSpace: 'parent-body' as const, direction: 'LR' as const, elements: { api: { x: .2, y: .3, pinned: true } } }
+    const narrowZoom = { positionSpace: 'parent-body' as const, direction: 'TB' as const, elements: { api: { x: .7, y: .8, locked: true } } }
+    const cross = (text: string) => {
+      if (boundary === 'reopen') reopen(text)
+      else expect(state().replaceWorkspaceFromDSL(text).ok).toBe(true)
+    }
+    load(dsl(`${unnamedWide}\n${unnamedNarrow}`))
+    state().setActiveView('Containers-payments')
+    state().updateExploreLayout(wideZoom)
+    state().setActiveView('Containers-payments-2')
+    state().updateExploreLayout(narrowZoom)
+
+    cross(dsl(`${unnamedNarrow}\n${unnamedWide}`))
+    expect(view(state().workspace!, 'Containers-payments').exploreLayout).toEqual(narrowZoom)
+    expect(view(state().workspace!, 'Containers-payments-2').exploreLayout).toEqual(wideZoom)
+
+    cross(dsl(unnamedNarrow))
+    cycles()
+    expect(view(state().workspace!, 'Containers-payments').exploreLayout).toEqual(narrowZoom)
+    expect(Object.values(layout()).map(entry => entry.exploreLayout)).toContainEqual(wideZoom)
+
+    cross(dsl(`${unnamedWide}\n${unnamedNarrow}`))
+    cycles()
+    expect(view(state().workspace!, 'Containers-payments').exploreLayout).toEqual(wideZoom)
+    expect(view(state().workspace!, 'Containers-payments-2').exploreLayout).toEqual(narrowZoom)
+  })
+
+  it('restores per-view child coordinates, hidden nodes and locks after absent views return', () => {
+    load()
+    const zoom = { positionSpace: 'parent-body' as const, direction: 'LR' as const, hiddenIds: ['db'], elements: { api: { x: .3, y: .7, pinned: true, locked: true } } }
+    state().setActiveView('Wide')
+    state().updateExploreLayout(zoom)
+    place()
+    const before = layout()
+    reopen()
+    expect(view(state().workspace!).exploreLayout).toEqual(zoom)
+    expect(state().replaceWorkspaceFromDSL(dsl(narrow)).ok).toBe(true)
+    cycles()
+    expect(layout().Wide.exploreLayout).toEqual(zoom)
+    expect(state().replaceWorkspaceFromDSL(dsl()).ok).toBe(true)
+    cycles()
+    expect(view(state().workspace!).exploreLayout).toEqual(zoom)
+    expect(layout()).toEqual(before)
+  })
+})

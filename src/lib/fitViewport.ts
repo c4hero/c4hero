@@ -75,7 +75,17 @@ export function fitNodesToViewport(
 
   const bounds = getNodeBounds(nodes)
   if (!bounds) return false
+  reactFlow.setViewport(fitViewportFor(bounds, canvas, options), { duration: options.duration ?? DEFAULT_DURATION })
+  return true
+}
 
+/** The viewport that frames `bounds` (flow coordinates) in the part of
+ *  `canvas` the floating chrome leaves free. */
+export function fitViewportFor(
+  bounds: { centerX: number; centerY: number; width: number; height: number },
+  canvas: RectLike,
+  options: FitOptions = {},
+): { x: number; y: number; zoom: number } {
   const padding = options.padding ?? DEFAULT_PADDING
   const insets = getCanvasFitInsets(canvas)
   // Mirror horizontal insets so single-sided chrome (e.g. tool rail on the
@@ -95,16 +105,7 @@ export function fitNodesToViewport(
 
   const usableCenterX = insets.left + usableWidth / 2
   const usableCenterY = insets.top + usableHeight / 2
-
-  reactFlow.setViewport(
-    {
-      x: usableCenterX - bounds.centerX * zoom,
-      y: usableCenterY - bounds.centerY * zoom,
-      zoom,
-    },
-    { duration: options.duration ?? DEFAULT_DURATION },
-  )
-  return true
+  return { x: usableCenterX - bounds.centerX * zoom, y: usableCenterY - bounds.centerY * zoom, zoom }
 }
 
 export function getCanvasFitInsets(canvas: RectLike): FitInsets {

@@ -13,6 +13,6 @@ const zoomLevelSelector = (state: { transform: [number, number, number] }): Zoom
   return 'normal'
 }
 
-export function useZoomLevel(): ZoomLevel {
-  return useStore(zoomLevelSelector)
+export function useZoomLevel(scale = 1): ZoomLevel {
+  return useStore(state => zoomLevelSelector({ transform: [0, 0, state.transform[2] * scale] }))
 }

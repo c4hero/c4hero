@@ -1,8 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { useWorkspaceStore, getCreatableTypes, getActiveView, getFocalScopeId, buildElementMap } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, getFocalScopeId, buildElementMap } from '@/store/workspace'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
+import { creatableTypes as getEditingCreatableTypes, editingView } from '@/lib/explore/editing'
 import DynamicStepsEditor from './DynamicStepsEditor'
 import DeploymentTopologyEditor from './DeploymentTopologyEditor'
 import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
@@ -33,6 +34,8 @@ const CONTAINER_SUBTYPES = [
 ]
 
 export default function AddElementPanel({ onClose }: { onClose: () => void }) {
+  const mode = useWorkspaceStore(s => s.rendererMode)
+  const selected = useWorkspaceStore(s => s.selectedElementIds)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const toggleElementInView = useWorkspaceStore((s) => s.toggleElementInView)
@@ -93,9 +96,9 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
 
   if (!workspace || !activeViewKey) return null
 
-  const creatableTypes = getCreatableTypes(workspace, activeViewKey)
+  const creatableTypes = getEditingCreatableTypes(workspace, activeViewKey, mode, selected)
   const containersAllowed = scopeAllowsContainers(workspace.scope)
-  const view = getActiveView(workspace, activeViewKey)
+  const view = editingView(workspace, activeViewKey, mode)
   const viewElementIds = new Set(view?.elements.map((e) => e.id) ?? [])
   const hiddenRelationships = (view?.excludedRelationshipIds ?? [])
     .map((id) => workspace.model.relationships.find((relationship) => relationship.id === id))
@@ -147,7 +150,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   // Sort alphabetically so the list is predictable regardless of creation order.
   const allElements = Array.from(elementMap.values())
   const notInView = allElements
-    .filter((el) => allowedTypes.has(el.type) && !viewElementIds.has(el.id) && el.id !== focalScopeId)
+    .filter((el) => (mode === 'explore' || allowedTypes.has(el.type)) && !viewElementIds.has(el.id) && el.id !== focalScopeId)
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const query = search.toLowerCase().trim()
