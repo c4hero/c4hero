@@ -40,6 +40,18 @@ const ALLOWLIST = {
       'when eslint/typescript-eslint or workbox-build drop the old lines.',
     review: '2027-01-31',
   },
+  'GHSA-fc5q-39xc-vjpf': {
+    package: 'picomatch',
+    reason:
+      'ReDoS via single-branch repeated extglobs, reachable only by matching ' +
+      'against an attacker-supplied glob pattern. No patched release exists ' +
+      '(every version <= 4.0.7 is affected). Only a dev/build-time transitive ' +
+      '(vite, vitest, vite-plugin-pwa -> tinyglobby/fdir, @rollup/pluginutils); ' +
+      '`npm ls picomatch --omit=dev` is empty, so it is never bundled or ' +
+      'shipped to users, and every glob it sees comes from our own repo config. ' +
+      'Drop this entry as soon as a patched picomatch ships.',
+    review: '2026-12-17',
+  },
 }
 
 function runAudit() {
