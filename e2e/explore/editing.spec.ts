@@ -24,9 +24,11 @@ test.beforeEach(async ({ page, workspace }) => {
   await page.getByRole('button', { name: 'Zoom', exact: true }).click()
 })
 
-test('dragging a root edits the shared view coordinates and undo restores them', async ({ page }) => {
+test('dragging a root edits the shared view coordinates without an undo entry', async ({ page }) => {
   const node = page.locator('.react-flow__node[data-id="b"]')
   const before = (await node.boundingBox())!
+  const undoDepth = () => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().undoStack.length)
+  const depth = await undoDepth()
   await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2)
   await page.mouse.down()
   await page.mouse.move(before.x + before.width / 2 + 60, before.y + before.height / 2 + 35, { steps: 8 })
@@ -40,8 +42,8 @@ test('dragging a root edits the shared view coordinates and undo restores them',
   expect(position?.x).toBeDefined()
   await page.getByRole('button', { name: 'Zoom', exact: true }).click()
   expect((await node.boundingBox())!.x).toBeCloseTo(moved.x, 1)
-  await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().undo())
-  await expect.poll(async () => (await node.boundingBox())!.x).toBeCloseTo(before.x, 0)
+  // As on the ordinary canvas, moving a top-level card is not an undo step.
+  expect(await undoDepth()).toBe(depth)
 })
 
 test('shared add tools and undo keep Zoom enabled', async ({ page }) => {

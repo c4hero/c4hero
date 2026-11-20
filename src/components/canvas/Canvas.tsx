@@ -23,7 +23,6 @@ import {
 } from '@xyflow/react'
 import { applyAutoLayout } from '@/lib/canvasLayout'
 import { registerActiveCamera } from '@/lib/activeCamera'
-import { pushUndoSnapshot } from '@/store/internals'
 import { fitContentNodesToViewport, fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import type { HighlightFilters } from '@/lib/highlight'
@@ -1081,8 +1080,6 @@ export default function Canvas() {
         return
       }
       let shouldRebuildOverlays = true
-      // Persist one undo entry per completed drag, shared by both behaviors.
-      useWorkspaceStore.setState(s => { pushUndoSnapshot(s) })
       const ctx = overlayDragRef.current
       if (ctx && node.id === ctx.nodeId) {
         // Persist every member at its final dragged position, then drop the
