@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ReactFlowInstance } from '@xyflow/react'
 import { createBigBankSample } from '@/lib/templates'
 import { useWorkspaceStore } from '@/store/workspace'
+import { registerActiveCamera } from '@/lib/activeCamera'
 import { buildLayout } from './layout'
 import { SemanticCamera } from './semanticCamera'
 
@@ -120,3 +121,31 @@ it('steps out one level at a time with Escape once nothing is selected', () => {
     expect(camera.reveal.get('internetBanking')).toBe(0)
   } finally { camera.dispose() }
 })
+
+it('arranging inside one card pins that card\'s contents and nothing else', () => {
+  const { camera, workspace } = setup()
+  const unregister = registerActiveCamera(camera)
+  try {
+    const saved = () => {
+      const s = useWorkspaceStore.getState()
+      return Object.keys(s.workspace!.views.systemLandscapeViews.find(v => v.key === s.activeViewKey)!.exploreLayout?.elements ?? {}).sort()
+    }
+    const api = workspace.model.softwareSystems.flatMap(s => s.containers).find(c => c.id === 'apiApp')!
+    const component = camera.layoutState.byId.get('signinController')!
+    camera.moveNodes([{ id: component.id, x: component.x + 1, y: component.y + 1 }])
+    // The components beside the moved one are fixed; the containers around
+    // them, and every other card, still follow their own layout.
+    expect(saved()).toEqual(api.components.map(c => c.id).sort())
+
+    // Locking a card fixes its own level the same way; locking the view pins nothing more.
+    const system = workspace.model.softwareSystems.find(s => s.containers.includes(api))!
+    const view = useWorkspaceStore.getState().activeViewKey!
+    useWorkspaceStore.getState().setRendererMode('explore')
+    useWorkspaceStore.getState().setElementsLocked(view, [system.containers.find(c => c !== api)!.id], true)
+    const pinned = [...api.components, ...system.containers].map(e => e.id).sort()
+    expect(saved()).toEqual(pinned)
+    useWorkspaceStore.getState().setViewLocked(view, true)
+    expect(saved()).toEqual(pinned)
+  } finally { unregister(); camera.dispose() }
+})
+

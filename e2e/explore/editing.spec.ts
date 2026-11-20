@@ -76,6 +76,8 @@ test('nested positions persist in the sidecar, stay within their parent and undo
   const saved = () => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].exploreLayout?.elements?.api)
   await expect.poll(saved).toBeTruthy()
   expect(await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].exploreLayout?.positionSpace)).toBe('parent-body')
+  // Only the moved card's own level is pinned, not the component inside it.
+  expect(await page.evaluate(() => Object.keys((window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].exploreLayout?.elements ?? {}))).toEqual(['api'])
   await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().undo())
   await expect.poll(saved).toBeUndefined()
 })

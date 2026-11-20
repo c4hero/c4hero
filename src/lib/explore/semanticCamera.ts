@@ -294,10 +294,22 @@ export class SemanticCamera implements ActiveCamera {
     this.flight = { from, start: performance.now(), duration, destination, select }
     this.input()
   }
-  layout(): NonNullable<Workspace['exploreLayout']> {
+  /** The saved layout with the cards that share a parent with one of `ids`
+   * pinned where they now stand. Arranging inside one card fixes that card's
+   * contents only: every other card keeps following its own view and layout. */
+  layout(ids: Iterable<string>): NonNullable<Workspace['exploreLayout']> {
     const s = useWorkspaceStore.getState()
     const existing = s.workspace && s.activeViewKey ? getActiveView(s.workspace, s.activeViewKey)?.exploreLayout : undefined
-    return { ...existing, positionSpace: 'parent-body', elements: { ...existing?.elements, ...Object.fromEntries(this.layoutState.nodes.filter(n => n.parent).map(n => {
+    const arranged = new Set<string>()
+    for (const id of ids) {
+      const parent = this.layoutState.byId.get(id)?.parent
+      if (parent) arranged.add(parent.id)
+    }
+    // Positions saved before the parent-body format use another space. Rewrite
+    // those too, so the format recorded below is true of every entry.
+    const legacy = existing?.positionSpace !== 'parent-body'
+    const pinned = this.layoutState.nodes.filter(n => n.parent && (arranged.has(n.parent.id) || (legacy && existing?.elements?.[n.id]?.x !== undefined)))
+    return { ...existing, positionSpace: 'parent-body', elements: { ...existing?.elements, ...Object.fromEntries(pinned.map(n => {
       const p = n.parent!, padding = 14 * p.scale, header = (p.headerHeight ?? 48) * p.scale
       return [n.id, { ...existing?.elements?.[n.id], pinned: true,
         x: (n.x - p.x - padding) / Math.max(.001, p.width - 2 * padding - n.width),
@@ -309,14 +321,14 @@ export class SemanticCamera implements ActiveCamera {
     const state = useWorkspaceStore.getState()
     const roots = positions.filter(p => !this.layoutState.byId.get(p.id)?.parent)
     if (roots.length) state.updateNodePositions(roots)
-    let nested = false
+    const nested: string[] = []
     for (const p of positions) {
       const node = this.layoutState.byId.get(p.id)
       if (!node?.parent || this.isLocked(p.id)) continue
-      this.drag(p.id, p); nested = true
+      this.drag(p.id, p); nested.push(p.id)
     }
-    if (nested) {
-      state.updateExploreLayout(this.layout())
+    if (nested.length) {
+      state.updateExploreLayout(this.layout(nested))
       this.changed()
     }
   }

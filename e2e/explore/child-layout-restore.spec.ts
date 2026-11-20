@@ -37,7 +37,7 @@ test('children fit their parent after view switches and saving a compact layout'
       await page.waitForTimeout(300)
       await host.evaluate(el => {
         const camera = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic
-        ;(window as unknown as { __testStore(): WorkspaceState }).__testStore().updateExploreLayout(camera.layout())
+        ;(window as unknown as { __testStore(): WorkspaceState }).__testStore().updateExploreLayout(camera.layout(camera.layoutState.nodes.map(n => n.id)))
       })
     }
     await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.focus('internetBanking'))

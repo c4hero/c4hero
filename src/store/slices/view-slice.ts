@@ -409,7 +409,7 @@ export const createViewSlice: StateCreator<
   setElementsLocked: (viewKey, ids, locked) => set((s) => {
     if (!s.workspace || ids.length === 0) return
     if (s.rendererMode === 'explore') {
-      const layout = getActiveCamera()?.layout?.() ?? zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout ?? {}
+      const layout = getActiveCamera()?.layout?.(ids) ?? zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout ?? {}
       pushUndoSnapshot(s)
       layout.elements ??= {}
       const authored = findViewHelper(s.workspace, viewKey)
@@ -444,7 +444,8 @@ export const createViewSlice: StateCreator<
     if (!s.workspace) return
     if (s.rendererMode === 'explore') {
       pushUndoSnapshot(s)
-      zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout = { ...(getActiveCamera()?.layout?.() ?? zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout), locked }
+      // Locking the view stops cards moving; it does not pin where they are.
+      zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout = { ...zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout, locked }
       const authored = findViewHelper(s.workspace, viewKey)
       if (authored) authored.locked = locked || undefined
       return
