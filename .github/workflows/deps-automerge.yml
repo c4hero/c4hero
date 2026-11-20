@@ -1,0 +1,63 @@
+name: Dependabot auto-merge
+
+# Merges green, up-to-date Dependabot PRs in c4hero and c4hero-landing, one per repo per run, asking Dependabot to
+# rebase the next one in between. Logic and safeguards: .github/scripts/deps-automerge.py.
+#
+# Needs the DEPS_AUTOMERGE_TOKEN secret: a fine-grained PAT of the code owner, limited to c4hero/c4hero and
+# c4hero/c4hero-landing, with Pull requests and Contents read/write and Commit statuses and Checks read-only.
+# The code owner's token is needed because c4hero's ruleset requires a code-owner approval, which neither
+# GITHUB_TOKEN nor an App can give.
+
+on:
+  schedule:
+    # Off the top of the hour, when GitHub's scheduler is busiest and delays runs.
+    - cron: '7,22,37,52 * * * *'
+  # React as soon as CI finishes rather than waiting for the next scheduled run. workflow_run always runs this file
+  # from main, and this job never checks out PR code.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Say what it would do, change nothing
+        type: boolean
+        default: false
+
+concurrency:
+  group: deps-automerge
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  automerge:
+    # On CI completions, only Dependabot PRs and pushes to main (which leave other PRs behind) are relevant.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.actor.login == 'dependabot[bot]' ||
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Merge green Dependabot PRs
+        env:
+          GH_TOKEN: ${{ secrets.DEPS_AUTOMERGE_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            # GitHub withholds secrets from some Dependabot-initiated events. The scheduled run still covers
+            # those, so only a scheduled or manual run treats a missing secret as an error.
+            if [ "$GITHUB_EVENT_NAME" = workflow_run ]; then
+              echo "::warning::DEPS_AUTOMERGE_TOKEN not available to this workflow_run; the scheduled run will catch up"
+              exit 0
+            fi
+            echo "::error::DEPS_AUTOMERGE_TOKEN secret is not set"
+            exit 1
+          fi
+          python3 .github/scripts/deps-automerge.py $DRY_RUN
