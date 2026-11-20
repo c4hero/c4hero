@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/workspace'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 for (const nested of [false, true]) {
   test(`node magnifier opens its view with Zoom enabled (${nested ? 'nested' : 'root'})`, async ({ page, workspace }) => {
@@ -29,6 +29,6 @@ for (const nested of [false, true]) {
     await page.getByRole('button', { name: `Zoom into ${nested ? 'API Application' : 'Internet Banking System'}`, exact: true }).click()
     await expect.poll(() => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().activeViewKey)).toBe(view)
     await expect(host).toBeVisible()
-    await expect.poll(() => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().rendererMode)).toBe('explore')
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().rendererMode)).toBe('zoom')
   })
 }

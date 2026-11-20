@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/workspace'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 import type { WorkspaceState } from '../../src/store/workspace-types'
 
 for (const [parent, from, to] of [

@@ -3,7 +3,7 @@ import { useWorkspaceStore, getActiveView, getFocalScopeId, buildElementMap } fr
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
-import { creatableTypes as getEditingCreatableTypes, editingView } from '@/lib/explore/editing'
+import { creatableTypes as getEditingCreatableTypes, editingView } from '@/lib/zoom/editing'
 import DynamicStepsEditor from './DynamicStepsEditor'
 import DeploymentTopologyEditor from './DeploymentTopologyEditor'
 import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
@@ -150,7 +150,7 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
   // Sort alphabetically so the list is predictable regardless of creation order.
   const allElements = Array.from(elementMap.values())
   const notInView = allElements
-    .filter((el) => (mode === 'explore' || allowedTypes.has(el.type)) && !viewElementIds.has(el.id) && el.id !== focalScopeId)
+    .filter((el) => (mode === 'zoom' || allowedTypes.has(el.type)) && !viewElementIds.has(el.id) && el.id !== focalScopeId)
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const query = search.toLowerCase().trim()

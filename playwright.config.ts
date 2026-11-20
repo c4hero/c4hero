@@ -25,12 +25,12 @@ export default defineConfig({
     {
       name: 'mobile-chromium',
       use: { ...devices['Pixel 7'] },
-      testMatch: /explore\/(activate-zoom|child-layout-restore|child-relationships|expanded-layout|node-view-navigation|zoom-affordance)\.spec\.ts/,
+      testMatch: /zoom\/(activate-zoom|child-layout-restore|child-relationships|expanded-layout|node-view-navigation|zoom-affordance)\.spec\.ts/,
     },
     ...(process.env.ZOOM_CROSS_BROWSER ? [{
       name: 'mobile-webkit',
       use: { ...devices['iPhone 13'] },
-      testMatch: /explore\/(activate-zoom|child-layout-restore|child-relationships|expanded-layout|node-view-navigation|zoom-affordance)\.spec\.ts/,
+      testMatch: /zoom\/(activate-zoom|child-layout-restore|child-relationships|expanded-layout|node-view-navigation|zoom-affordance)\.spec\.ts/,
     }] : []),
   ],
   webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {

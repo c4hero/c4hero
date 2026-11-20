@@ -1,5 +1,5 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react'
-import type { Workspace } from '@/types/model'
+import type { ZoomLayout } from '@/types/model'
 import type { ActiveCamera } from '@/lib/activeCamera'
 import { getActiveView } from '@/store/workspace-selectors'
 import { useWorkspaceStore } from '@/store/workspace'
@@ -297,9 +297,9 @@ export class SemanticCamera implements ActiveCamera {
   /** The saved layout with the cards that share a parent with one of `ids`
    * pinned where they now stand. Arranging inside one card fixes that card's
    * contents only: every other card keeps following its own view and layout. */
-  layout(ids: Iterable<string>): NonNullable<Workspace['exploreLayout']> {
+  layout(ids: Iterable<string>): ZoomLayout {
     const s = useWorkspaceStore.getState()
-    const existing = s.workspace && s.activeViewKey ? getActiveView(s.workspace, s.activeViewKey)?.exploreLayout : undefined
+    const existing = s.workspace && s.activeViewKey ? getActiveView(s.workspace, s.activeViewKey)?.zoomLayout : undefined
     const arranged = new Set<string>()
     for (const id of ids) {
       const parent = this.layoutState.byId.get(id)?.parent
@@ -328,7 +328,7 @@ export class SemanticCamera implements ActiveCamera {
       this.drag(p.id, p); nested.push(p.id)
     }
     if (nested.length) {
-      state.updateExploreLayout(this.layout(nested))
+      state.updateZoomLayout(this.layout(nested))
       this.changed()
     }
   }
@@ -343,7 +343,7 @@ export class SemanticCamera implements ActiveCamera {
   private isLocked(id: string) {
     const s = useWorkspaceStore.getState()
     const v = s.workspace && s.activeViewKey ? getActiveView(s.workspace, s.activeViewKey) : undefined
-    return !!(v?.locked || v?.exploreLayout?.locked || v?.exploreLayout?.elements?.[id]?.locked)
+    return !!(v?.locked || v?.zoomLayout?.locked || v?.zoomLayout?.elements?.[id]?.locked)
   }
   dispose() {
     clearTimeout(this.zoomHintTimer); delete this.host.dataset.zoomActive

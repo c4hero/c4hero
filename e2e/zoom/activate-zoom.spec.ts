@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/workspace'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 for (const reducedMotion of ['reduce', 'no-preference'] as const) {
   test(`enabling Zoom reveals the current close-up without moving the camera (${reducedMotion})`, async ({ page, workspace }) => {

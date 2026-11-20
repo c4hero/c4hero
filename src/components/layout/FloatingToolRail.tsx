@@ -27,7 +27,7 @@ import { useFlyoutFocus } from '@/hooks/useFlyoutFocus'
 import AddElementPanel from '@/components/layout/AddElementPanel'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import { getActiveCamera } from '@/lib/activeCamera'
-import { editingView, supportsSemanticZoom } from '@/lib/explore/editing'
+import { editingView, supportsSemanticZoom } from '@/lib/zoom/editing'
 import CanvasSettingsDialog from '@/components/settings/CanvasSettingsDialog'
 
 const DIRECTION_ICONS: Record<LayoutDirection, React.ReactNode> = {
@@ -254,8 +254,8 @@ export default function FloatingToolRail() {
         label="Zoom"
         disabled={!supportsSemanticZoom(activeViewKey ? getActiveView(workspace, activeViewKey) : undefined)}
         title="Zoom inside systems and containers (static C4 views)"
-        active={rendererMode === 'explore'}
-        onClick={() => useWorkspaceStore.getState().setRendererMode(rendererMode === 'explore' ? 'diagram' : 'explore')}
+        active={rendererMode === 'zoom'}
+        onClick={() => useWorkspaceStore.getState().setRendererMode(rendererMode === 'zoom' ? 'diagram' : 'zoom')}
       />
 
       {/* Auto-arrange */}

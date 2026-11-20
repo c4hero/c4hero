@@ -16,7 +16,7 @@ import { useZoomLevel } from '@/hooks/useZoomLevel'
 import { pickHighlightReason } from '@/lib/highlight'
 
 import { SHAPE_ICON_MAP } from '@/lib/nodeIcons'
-import { summaryOpacity } from '@/lib/explore/motion'
+import { summaryOpacity } from '@/lib/zoom/motion'
 
 interface BaseC4NodeProps {
   data: C4NodeData

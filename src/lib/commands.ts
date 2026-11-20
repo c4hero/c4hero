@@ -1,4 +1,4 @@
-import { creatableTypes, editingView } from '@/lib/explore/editing'
+import { creatableTypes, editingView } from '@/lib/zoom/editing'
 import { getActiveCamera } from '@/lib/activeCamera'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -179,7 +179,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         }
         if (!s.workspace || !s.activeViewKey) return
         const ids = s.selectedElementIds.filter(
-          (id) => s.rendererMode === 'explore' || !isFocalScopeElement(s.workspace!, s.activeViewKey!, id),
+          (id) => s.rendererMode === 'zoom' || !isFocalScopeElement(s.workspace!, s.activeViewKey!, id),
         )
         if (ids.length === 0) return
         const impact = computeCascadeImpact(s.workspace, ids)
@@ -236,7 +236,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       },
       execute: () => {
         const s = store()
-        if (s.rendererMode === 'explore') { s.selectElements(getActiveCamera()?.getNodes?.().map(n => n.id) ?? []); return }
+        if (s.rendererMode === 'zoom') { s.selectElements(getActiveCamera()?.getNodes?.().map(n => n.id) ?? []); return }
         if (!s.workspace || !s.activeViewKey) return
         const view = editingView(s.workspace, s.activeViewKey, s.rendererMode)
         if (view) s.selectElements(view.elements.map(e => e.id))

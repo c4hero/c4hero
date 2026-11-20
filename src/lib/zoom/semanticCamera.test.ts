@@ -128,7 +128,7 @@ it('arranging inside one card pins that card\'s contents and nothing else', () =
   try {
     const saved = () => {
       const s = useWorkspaceStore.getState()
-      return Object.keys(s.workspace!.views.systemLandscapeViews.find(v => v.key === s.activeViewKey)!.exploreLayout?.elements ?? {}).sort()
+      return Object.keys(s.workspace!.views.systemLandscapeViews.find(v => v.key === s.activeViewKey)!.zoomLayout?.elements ?? {}).sort()
     }
     const api = workspace.model.softwareSystems.flatMap(s => s.containers).find(c => c.id === 'apiApp')!
     const component = camera.layoutState.byId.get('signinController')!
@@ -140,7 +140,7 @@ it('arranging inside one card pins that card\'s contents and nothing else', () =
     // Locking a card fixes its own level the same way; locking the view pins nothing more.
     const system = workspace.model.softwareSystems.find(s => s.containers.includes(api))!
     const view = useWorkspaceStore.getState().activeViewKey!
-    useWorkspaceStore.getState().setRendererMode('explore')
+    useWorkspaceStore.getState().setRendererMode('zoom')
     useWorkspaceStore.getState().setElementsLocked(view, [system.containers.find(c => c !== api)!.id], true)
     const pinned = [...api.components, ...system.containers].map(e => e.id).sort()
     expect(saved()).toEqual(pinned)

@@ -1,6 +1,6 @@
 // Shared chrome invokes the mounted renderer. No React Flow placeholder camera.
 import type { Node } from '@xyflow/react'
-import type { Workspace } from '@/types/model'
+import type { ZoomLayout } from '@/types/model'
 export interface ActiveCamera {
   zoomBy(factor: number): void
   fit(): void
@@ -13,7 +13,7 @@ export interface ActiveCamera {
   flowToScreenPosition?(point: { x: number; y: number }): { x: number; y: number }
   moveNodes?(positions: { id: string; x: number; y: number }[]): void
   /** The saved layout, pinning the siblings of the given nested cards as they stand. */
-  layout?(ids: Iterable<string>): NonNullable<Workspace['exploreLayout']>
+  layout?(ids: Iterable<string>): ZoomLayout
   exportImage?(theme: 'dark' | 'light' | 'current'): HTMLCanvasElement
   exportSVG?(theme: 'dark' | 'light' | 'current'): string
 }

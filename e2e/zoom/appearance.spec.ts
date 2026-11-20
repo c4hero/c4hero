@@ -2,7 +2,7 @@ import { test, expect } from '../fixtures/workspace'
 import { THEMES } from '../../src/lib/themes'
 import type { ColorTheme } from '../../src/store/settings'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 test.use({ viewport: { width: 2400, height: 1800 } })
 

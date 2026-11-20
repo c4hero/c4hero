@@ -77,7 +77,7 @@ describe('ViewSwitcher (trigger)', () => {
 
   it('keeps the selected view title and badge while Zoom is enabled', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
-    act(() => { useWorkspaceStore.getState().setRendererMode('explore') })
+    act(() => { useWorkspaceStore.getState().setRendererMode('zoom') })
     render(<ViewSwitcher isMobile={false} open={false} onToggle={noop} onClose={noop} onShowCreateView={noop} />)
     expect(screen.getByText('Overview')).toBeTruthy()
     expect(screen.getByText('Map')).toBeTruthy()
@@ -110,18 +110,13 @@ describe('ViewSwitcherPanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('does not offer a separate Explore view', () => {
-    useWorkspaceStore.getState().loadWorkspace(makeWs())
-    render(<ViewSwitcherPanel onClose={noop} onShowCreateView={noop} />)
-    expect(screen.queryByRole('button', { name: 'Explore workspace' })).toBeNull()
-  })
 
   it('keeps Zoom enabled when another authored view is selected', () => {
     useWorkspaceStore.getState().loadWorkspace(makeWs())
-    useWorkspaceStore.getState().setRendererMode('explore')
+    useWorkspaceStore.getState().setRendererMode('zoom')
     render(<ViewSwitcherPanel onClose={noop} onShowCreateView={noop} />)
     fireEvent.click(screen.getByText('Second Map'))
-    expect(useWorkspaceStore.getState().rendererMode).toBe('explore')
+    expect(useWorkspaceStore.getState().rendererMode).toBe('zoom')
     expect(useWorkspaceStore.getState().activeViewKey).toBe('second')
   })
 

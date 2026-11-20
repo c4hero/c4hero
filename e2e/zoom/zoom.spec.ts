@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/workspace'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 test('Zoom toggles behavior without replacing native nodes, edges or the viewport', async ({ page, workspace }) => {
   const errors: string[] = []
@@ -26,7 +26,6 @@ test('Zoom toggles behavior without replacing native nodes, edges or the viewpor
   })
   expect(result.error).toBeNull()
   await expect(page.locator('.react-flow')).toHaveCount(1)
-  await expect(page.locator('canvas[data-explore-canvas]')).toHaveCount(0)
   expect(errors).toEqual([])
 })
 
@@ -162,7 +161,6 @@ test('Zoom follows the selected static view and reconciles model deletion', asyn
   await workspace.loadSample()
   await page.getByRole('button', { name: 'Zoom', exact: true }).click()
   await page.getByRole('button', { name: 'Switch view' }).click()
-  await expect(page.getByRole('button', { name: 'Explore workspace' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Containers', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Zoom', exact: true })).toHaveAttribute('aria-pressed', 'true')
   const host = page.locator('[data-semantic-zoom="true"]')
@@ -222,7 +220,7 @@ test.describe('mobile appearance', () => {
     await page.evaluate(() => {
       const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore()
       const view = s.workspace!.views.systemLandscapeViews.find(v => v.key === s.activeViewKey)!
-      s.updateExploreLayout({ elements: Object.fromEntries(view.elements.map(e => [e.id, { x: 9999, y: 9999 }])) })
+      s.updateZoomLayout({ elements: Object.fromEntries(view.elements.map(e => [e.id, { x: 9999, y: 9999 }])) })
     })
     const result = await page.evaluate(async () => {
       const cards = [...document.querySelectorAll('.c4-node')]
@@ -254,13 +252,13 @@ test.describe('mobile appearance', () => {
 
 // Opt-in, isolated to avoid concurrent browser CPU contention.
 test('50-system / 500-element / 1000-relationship navigation benchmark', async ({ page, workspace }, testInfo) => {
-  test.skip(!process.env.EXPLORE_BENCHMARK, 'Run with EXPLORE_BENCHMARK=1')
+  test.skip(!process.env.ZOOM_BENCHMARK, 'Run with ZOOM_BENCHMARK=1')
   test.setTimeout(90000)
   await workspace.loadBlank()
   await page.evaluate(() => {
     const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore()
     const ws = structuredClone(s.workspace!)
-    ws.name = 'Explore benchmark: 50 systems / 500 elements / 1000 relationships'
+    ws.name = 'Zoom benchmark: 50 systems / 500 elements / 1000 relationships'
     ws.model.softwareSystems = Array.from({ length: 50 }, (_, i) => ({
       id: `s${i}`, type: 'softwareSystem', name: `System ${i}`, tags: [], properties: {},
       containers: Array.from({ length: 3 }, (_, j) => ({ id: `s${i}c${j}`, type: 'container', name: `Service ${i}.${j}`, tags: [], properties: {},

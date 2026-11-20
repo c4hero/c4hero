@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/workspace'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 test('container relationship gives way to child detail and returns when zooming out', async ({ page, workspace }) => {
   await workspace.loadSample()

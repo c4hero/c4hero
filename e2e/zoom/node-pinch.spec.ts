@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/workspace'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 test.use({ hasTouch: true, viewport: { width: 1100, height: 800 } })
 const dsl = `workspace "Node pinch" {

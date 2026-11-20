@@ -1064,7 +1064,7 @@ export default function Canvas() {
       // zoomInto handles both cases: navigate to existing child view, or prompt
       // to create one if none exists. Internally no-ops if the element has no
       // children (person/component/etc.).
-      if (useWorkspaceStore.getState().rendererMode === 'explore') semantic.controller.current?.focus(node.id)
+      if (useWorkspaceStore.getState().rendererMode === 'zoom') semantic.controller.current?.focus(node.id)
       else useWorkspaceStore.getState().zoomInto(node.id)
     },
     [semantic.controller],

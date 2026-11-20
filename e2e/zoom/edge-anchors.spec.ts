@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/workspace'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 for (const parent of ['internetBanking', 'apiApp']) {
   test(`nested edge endpoints track visible handle centres inside ${parent}`, async ({ page, workspace }) => {

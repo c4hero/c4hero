@@ -2,23 +2,22 @@ import { describe, expect, it } from 'vitest'
 import { createBigBankSample, createBlankWorkspace } from '@/lib/templates'
 import { buildLayout, connectionsFor, geometryKey } from './layout'
 import { detailOpacity, flightPath, frameBox, projected, revealFor, stepReveal, stepCamera, stepGlide, summaryOpacity, zoomAt, zoomBounds } from './motion'
-import { loadExploreCamera, saveExploreCamera } from './persistence'
 import { useWorkspaceStore } from '@/store/workspace'
 
-describe('Explore geometry and model isolation', () => {
+describe('Zoom geometry and model isolation', () => {
   it('uses displayed root positions on entry even when Zoom has older saved positions', () => {
     const ws = createBigBankSample()
     const view = ws.views.systemLandscapeViews[0]
     const initial = buildLayout(ws, view)
     const snapshot = new Map(initial.roots.map(n => [n.id, { x: n.x + 23, y: n.y - 9, width: n.width, height: 80 }]))
-    view.exploreLayout = { direction: 'LR', elements: Object.fromEntries(initial.roots.map(n => [n.id, { x: n.x + 100, y: n.y + 50 }])) }
+    view.zoomLayout = { direction: 'LR', elements: Object.fromEntries(initial.roots.map(n => [n.id, { x: n.x + 100, y: n.y + 50 }])) }
     const entered = buildLayout(ws, view, snapshot)
     for (const root of entered.roots) {
       expect({ x: root.x, y: root.y, width: root.width, height: root.height }).toEqual(snapshot.get(root.id))
     }
     // Explicit layout edits inside Zoom still take effect.
     const edited = buildLayout(ws, view, snapshot, false)
-    expect(edited.roots[0].x).toBe(view.exploreLayout.elements![edited.roots[0].id].x)
+    expect(edited.roots[0].x).toBe(view.zoomLayout.elements![edited.roots[0].id].x)
   })
 
   it('automatically chooses a wide, compact child layout while preserving explicit direction', () => {
@@ -31,8 +30,9 @@ describe('Explore geometry and model isolation', () => {
     expect(children[1].x).toBeGreaterThan(children[0].x)
     expect(children[1].y).toBeCloseTo(children[0].y)
     const automaticWidth = children[0].width
-    ws.exploreLayout = { direction: 'TB' }
-    const vertical = buildLayout(ws).byId.get(system.id)!.children
+    const view = ws.views.systemLandscapeViews[0]
+    view.zoomLayout = { direction: 'TB' }
+    const vertical = buildLayout(ws, view).byId.get(system.id)!.children
     expect(vertical[1].y).toBeGreaterThan(vertical[0].y)
     expect(automaticWidth).toBeGreaterThan(vertical[0].width)
   })
@@ -85,7 +85,7 @@ describe('Explore geometry and model isolation', () => {
     expect(bundles.flatMap(b => b.connections.map(c => c.relationship.id)).sort()).toEqual(['a', 'b', 'c', 'd'])
   })
 })
-describe('Explore transitions', () => {
+describe('Zoom transitions', () => {
   it('integrates inertial pan consistently across frame rates and respects reduced motion', () => {
     const velocity = { x: .8, y: -.3 }
     const whole = stepGlide(velocity, 32)
@@ -173,31 +173,23 @@ describe('Explore transitions', () => {
     expect(half.x).toBeCloseTo((closed.x + open.x) / 2)
   })
 })
-describe('Explore persistence and store integration', () => {
-  it('isolates cameras by workspace and rejects corrupt values', () => {
-    localStorage.clear()
-    saveExploreCamera('collection/a', { x: 1, y: 2, zoom: .3 })
-    expect(loadExploreCamera('collection/a')).toEqual({ x: 1, y: 2, zoom: .3 })
-    expect(loadExploreCamera('collection/b')).toBeNull()
-    localStorage.setItem('c4hero.explore.camera.v2:collection/a', '{"x":1,"y":2,"zoom":0}')
-    expect(loadExploreCamera('collection/a')).toBeNull()
-  })
+describe('Zoom persistence and store integration', () => {
   it('switches modes without changing workspace, views or undo, and keeps Zoom enabled when selecting a view', () => {
     const s = useWorkspaceStore; s.getState().loadWorkspace(createBigBankSample())
     const before = s.getState(), workspace = before.workspace, key = before.activeViewKey, undo = before.undoStack
     s.setState({ multiSelectMode: true, canvasSettingsOpen: true })
-    s.getState().setRendererMode('explore')
+    s.getState().setRendererMode('zoom')
     expect(s.getState().multiSelectMode).toBe(false)
     expect(s.getState().canvasSettingsOpen).toBe(false)
     expect(s.getState().workspace).toBe(workspace); expect(s.getState().undoStack).toBe(undo)
     expect(s.getState().activeViewKey).toBe(key)
     s.getState().setActiveView(key!)
-    expect(s.getState().rendererMode).toBe('explore')
+    expect(s.getState().rendererMode).toBe('zoom')
     expect(s.getState().workspace).toBe(workspace)
   })
 })
 
-describe('Explore shares Diagram layout policy', () => {
+describe('Zoom shares Diagram layout policy', () => {
   it('preserves authored relative placement and uses Diagram direction for unplaced nodes', () => {
     const ws = createBigBankSample()
     const a = ws.model.people[0], b = ws.model.softwareSystems[0]

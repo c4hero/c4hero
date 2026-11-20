@@ -3,10 +3,10 @@ import type { Edge, Node, NodeChange, ReactFlowInstance } from '@xyflow/react'
 import type { ElementStyle, View, Workspace } from '@/types/model'
 import type { HighlightFilters } from '@/lib/highlight'
 import { registerActiveCamera } from '@/lib/activeCamera'
-import { buildLayout, connectionsFor, type Box, type MapNode } from '@/lib/explore/layout'
-import { relationshipRefinements, relationshipOpacity } from '@/lib/explore/relationshipReveal'
-import { detailOpacity, visibility } from '@/lib/explore/motion'
-import { SemanticCamera, cameraBounds } from '@/lib/explore/semanticCamera'
+import { buildLayout, connectionsFor, type Box, type MapNode } from '@/lib/zoom/layout'
+import { relationshipRefinements, relationshipOpacity } from '@/lib/zoom/relationshipReveal'
+import { detailOpacity, visibility } from '@/lib/zoom/motion'
+import { SemanticCamera, cameraBounds } from '@/lib/zoom/semanticCamera'
 import { useWorkspaceStore } from '@/store/workspace'
 import { buildNodes, buildEdges, buildDrillableSet } from './canvasBuilders'
 
@@ -63,7 +63,7 @@ export function useSemanticZoom(
   const descendants = useMemo(() => {
     if (!layout || !workspace || !view) return []
     const nested = layout.nodes.filter(n => n.parent)
-    const nestedView: View = { ...view, elements: nested.map(n => ({ id: n.id, x: n.x, y: n.y, ...view.exploreLayout?.elements?.[n.id] })) }
+    const nestedView: View = { ...view, elements: nested.map(n => ({ id: n.id, x: n.x, y: n.y, ...view.zoomLayout?.elements?.[n.id] })) }
     return buildNodes(workspace, nestedView, id => useWorkspaceStore.getState().zoomInto(id), filters, viewCounts, buildDrillableSet(workspace), theme)
   }, [layout, workspace, view, filters, theme, viewCounts])
 
@@ -85,7 +85,7 @@ export function useSemanticZoom(
       return { ...node,
         ...(n.parent ? { measured: measurements.current.get(n.id) ?? { width: n.width, height: n.height }, position: { x: n.x, y: n.y }, hidden: !mounted(n), zIndex: 10 + 2 * depth(n),
           selected: useWorkspaceStore.getState().selectedElementIds.includes(n.id),
-          style: { ...node.style, width: n.width, height: n.height, opacity: intrinsic.has(n.id) ? detailOpacity(alpha) : 0, pointerEvents: alpha > .5 ? undefined : 'none' }, selectable: alpha > .5, draggable: node.draggable !== false && alpha > .5 && !view.exploreLayout?.locked && !view.exploreLayout?.elements?.[n.id]?.locked,
+          style: { ...node.style, width: n.width, height: n.height, opacity: intrinsic.has(n.id) ? detailOpacity(alpha) : 0, pointerEvents: alpha > .5 ? undefined : 'none' }, selectable: alpha > .5, draggable: node.draggable !== false && alpha > .5 && !view.zoomLayout?.locked && !view.zoomLayout?.elements?.[n.id]?.locked,
         } : {}),
         data: { ...node.data, semantic: { scale: n.scale, width: n.width / n.scale, height: n.height / n.scale, reveal: amount, expandable: n.children.length > 0, nested: !!n.parent, onMeasure: reportSize } },
       }

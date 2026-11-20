@@ -1,4 +1,4 @@
-import { creatableTypes, editingView } from '@/lib/explore/editing'
+import { creatableTypes, editingView } from '@/lib/zoom/editing'
 import { getActiveCamera } from '@/lib/activeCamera'
 import { useEffect } from 'react'
 import { useReactFlow } from '@xyflow/react'
@@ -75,7 +75,7 @@ function backspaceLikeHandler(destructive: boolean): KeyHandler {
     const ws = store.workspace
     const viewKey = store.activeViewKey
     const ids = store.selectedElementIds.filter(
-      (id) => store.rendererMode === 'explore' || !isFocalScopeElement(ws, viewKey, id),
+      (id) => store.rendererMode === 'zoom' || !isFocalScopeElement(ws, viewKey, id),
     )
     if (ids.length === 0) return // selection was *only* focal scope — no-op
 
@@ -98,7 +98,7 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.selectedElementIds.length > 0) store.duplicateElements(store.selectedElementIds)
   },
   'mod+a': (store) => {
-    if (store.rendererMode === 'explore') { store.selectElements(getActiveCamera()?.getNodes?.().map(n => n.id) ?? []); return }
+    if (store.rendererMode === 'zoom') { store.selectElements(getActiveCamera()?.getNodes?.().map(n => n.id) ?? []); return }
     if (store.workspace && store.activeViewKey) {
       const view = editingView(store.workspace, store.activeViewKey, store.rendererMode)
       if (view) store.selectElements(view.elements.map(el => el.id))
@@ -284,7 +284,7 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      if (store.rendererMode === 'explore') {
+      if (store.rendererMode === 'zoom') {
         if ((e.key === 'Enter' || e.key === ' ') && target.closest('button, summary, [role=button]')) return
         const camera = getActiveCamera()
         const navigation: Record<string, () => void> = {

@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/workspace'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 const dsl = `workspace "Editing" {
  model {
@@ -73,11 +73,11 @@ test('nested positions persist in the sidecar, stay within their parent and undo
     return { inside: after.x + after.width <= parent.x + parent.width && after.y + after.height <= parent.y + parent.height }
   })
   expect(moved.inside).toBe(true)
-  const saved = () => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].exploreLayout?.elements?.api)
+  const saved = () => page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].zoomLayout?.elements?.api)
   await expect.poll(saved).toBeTruthy()
-  expect(await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].exploreLayout?.positionSpace)).toBe('parent-body')
+  expect(await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].zoomLayout?.positionSpace)).toBe('parent-body')
   // Only the moved card's own level is pinned, not the component inside it.
-  expect(await page.evaluate(() => Object.keys((window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].exploreLayout?.elements ?? {}))).toEqual(['api'])
+  expect(await page.evaluate(() => Object.keys((window as unknown as { __testStore(): WorkspaceState }).__testStore().workspace!.views.systemLandscapeViews[0].zoomLayout?.elements ?? {}))).toEqual(['api'])
   await page.evaluate(() => (window as unknown as { __testStore(): WorkspaceState }).__testStore().undo())
   await expect.poll(saved).toBeUndefined()
 })

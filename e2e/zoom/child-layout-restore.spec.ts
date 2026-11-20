@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/workspace'
 import type { WorkspaceState } from '../../src/store/workspace-types'
-import type { SemanticCamera } from '../../src/lib/explore/semanticCamera'
+import type { SemanticCamera } from '../../src/lib/zoom/semanticCamera'
 
 test('children fit their parent after view switches and saving a compact layout', async ({ page, workspace }) => {
   await workspace.loadSample()
@@ -26,7 +26,7 @@ test('children fit their parent after view switches and saving a compact layout'
     if (stage === 'legacy') {
       await host.evaluate(el => {
         const c = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic
-        ;(window as unknown as { __testStore(): WorkspaceState }).__testStore().updateExploreLayout({
+        ;(window as unknown as { __testStore(): WorkspaceState }).__testStore().updateZoomLayout({
           elements: Object.fromEntries(c.layoutState.nodes.filter(n => n.parent).map(n => [n.id, { x: 0, y: 0, pinned: true }])),
         })
       })
@@ -37,7 +37,7 @@ test('children fit their parent after view switches and saving a compact layout'
       await page.waitForTimeout(300)
       await host.evaluate(el => {
         const camera = (el as HTMLElement & { __semantic: SemanticCamera }).__semantic
-        ;(window as unknown as { __testStore(): WorkspaceState }).__testStore().updateExploreLayout(camera.layout(camera.layoutState.nodes.map(n => n.id)))
+        ;(window as unknown as { __testStore(): WorkspaceState }).__testStore().updateZoomLayout(camera.layout(camera.layoutState.nodes.map(n => n.id)))
       })
     }
     await host.evaluate(el => (el as HTMLElement & { __semantic: SemanticCamera }).__semantic.focus('internetBanking'))

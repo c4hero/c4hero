@@ -18,9 +18,9 @@ export interface MapLayout { nodes: MapNode[]; roots: MapNode[]; byId: Map<strin
 export function geometryKey(workspace: Workspace): string {
   const visit = (e: ModelElement): unknown => [e.id, e.name,
     e.type === 'softwareSystem' ? e.containers.map(visit) : e.type === 'container' ? e.components.map(visit) : []]
-  return JSON.stringify([workspace.exploreLayout, [...workspace.model.people, ...workspace.model.softwareSystems].map(visit),
+  return JSON.stringify([[...workspace.model.people, ...workspace.model.softwareSystems].map(visit),
     workspace.model.relationships.map(r => [r.sourceId, r.destinationId]), workspace.model.groups,
-    [...workspace.views.systemLandscapeViews, ...workspace.views.containerViews, ...workspace.views.componentViews].map(v => [v.type, v.softwareSystemId, v.containerId, v.autoLayout?.direction, v.elements.map(e => [e.id, e.x, e.y])])])
+    [...workspace.views.systemLandscapeViews, ...workspace.views.containerViews, ...workspace.views.componentViews].map(v => [v.type, v.softwareSystemId, v.containerId, v.autoLayout?.direction, v.zoomLayout, v.elements.map(e => [e.id, e.x, e.y])])])
 }
 
 export function contains(parent: MapNode, child: MapNode): boolean {
@@ -29,7 +29,7 @@ export function contains(parent: MapNode, child: MapNode): boolean {
 }
 
 export function buildLayout(workspace: Workspace, activeView?: View, snapshot?: Map<string, Box>, useSnapshotPositions = true, intrinsic?: Map<string, { width: number; height: number; headerHeight?: number }>): MapLayout {
-  const zoomLayout = activeView ? activeView.exploreLayout : workspace.exploreLayout
+  const zoomLayout = activeView?.zoomLayout
   const nodes: MapNode[] = [], byId = new Map<string, MapNode>()
   const hidden = new Set(zoomLayout?.hiddenIds)
   const eligible = zoomElements(workspace, activeView)
@@ -68,7 +68,7 @@ export function buildLayout(workspace: Workspace, activeView?: View, snapshot?: 
       const box = snapshot.get(n.id)
       if (box) saved.set(n.id, { x: box.x, y: box.y })
     }
-    const view: View = { type: authored?.type ?? 'systemLandscape', key: '__explore', elements: siblings.map(n => ({ id: n.id, ...saved.get(n.id) })), relationships: [] }
+    const view: View = { type: authored?.type ?? 'systemLandscape', key: '__zoom', elements: siblings.map(n => ({ id: n.id, ...saved.get(n.id) })), relationships: [] }
     const directions = zoomLayout?.direction ? [zoomLayout.direction] : saved.size ? [authored?.autoLayout?.direction ?? 'TB'] : parent ? ['LR', 'TB'] : [authored?.autoLayout?.direction ?? 'TB']
     const candidates = directions.map(direction => {
       const arranged = applyAutoLayout(siblings.map(n => ({ id: n.id, data: {}, position: saved.get(n.id) ?? { x: 0, y: 0 }, style: { width: n.width, height: n.height } })),

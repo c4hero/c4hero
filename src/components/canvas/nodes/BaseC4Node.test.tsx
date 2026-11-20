@@ -309,7 +309,7 @@ describe('BaseC4Node zoom button', () => {
 })
 
 it('keeps the view navigation magnifier active during semantic Zoom', () => {
-  useWorkspaceStore.setState({ rendererMode: 'explore' })
+  useWorkspaceStore.setState({ rendererMode: 'zoom' })
   const onDrillIn = vi.fn()
   const { node } = renderNode({ data: { childCount: 2, onDrillIn } })
   const button = node.querySelector<HTMLButtonElement>('.c4-node-action-btn')!

@@ -2463,13 +2463,6 @@ textarea:focus-visible {
 .c4-md th { background: var(--color-surface-2); font-weight: 600; }
 .c4-docs-row:hover { background: var(--color-surface-2) !important; border-color: var(--color-border) !important; }
 
-/* The bitmap map has keyboard navigation and needs a visible focus target. */
-.explore-map:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -3px;
-}
-
-
 /* Keep the title visible above the child graph; fade only the parent body. */
 .c4-node[data-semantic-reveal] > .c4-node-body {
   opacity: var(--semantic-content-opacity, 1);

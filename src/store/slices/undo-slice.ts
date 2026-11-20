@@ -1,4 +1,4 @@
-import { zoomLayoutOwner } from '@/lib/explore/editing'
+import { zoomLayoutOwner } from '@/lib/zoom/editing'
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { announce } from '@/lib/announce'
@@ -13,7 +13,7 @@ export type UndoSlice = Pick<WorkspaceState,
   | 'undoStack' | 'redoStack'
   | 'undo' | 'redo' | 'canUndo' | 'canRedo' | 'resetWorkspaceTo'
   | 'lastSavedUndoLength' | 'setLastSavedUndoLength'
-  | 'updateExploreLayout'
+  | 'updateZoomLayout'
 >
 
 export const createUndoSlice: StateCreator<
@@ -25,10 +25,10 @@ export const createUndoSlice: StateCreator<
   undoStack: [],
   redoStack: [],
   lastSavedUndoLength: 0,
-  updateExploreLayout: (layout) => set(s => {
+  updateZoomLayout: (layout) => set(s => {
     if (!s.workspace) return
     pushUndoSnapshot(s)
-    zoomLayoutOwner(s.workspace, s.activeViewKey).exploreLayout = layout
+    zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout = layout
   }),
 
   setLastSavedUndoLength: (n) => set({ lastSavedUndoLength: n }),

@@ -212,8 +212,8 @@ export interface AutoLayout {
 }
 
 export interface View {
-  /** Semantic zoom layout for this view, stored in the sidecar. */
-  exploreLayout?: Workspace['exploreLayout']
+  /** Where Zoom places the cards it reveals inside this view, stored in the sidecar. */
+  zoomLayout?: ZoomLayout
   type: ViewType
   key: string
   /** Import-only alias for layout saved before the parser normalized the key. */
@@ -431,7 +431,7 @@ export interface StoredViewIdentity {
 /** Layout retained independently of whether a view or element is currently visible.
  * Uses the version-1 sidecar shape; no on-disk migration is needed. */
 export interface SavedViewLayout {
-  exploreLayout?: Workspace['exploreLayout']
+  zoomLayout?: ZoomLayout
   /** The view this layout belongs to. Absent in entries written before
    *  TEA-345, which are matched by key instead. */
   view?: StoredViewIdentity
@@ -439,9 +439,12 @@ export interface SavedViewLayout {
   elements?: Record<string, Pick<ElementInView, 'x' | 'y' | 'pinned' | 'locked'>>
 }
 
+/** Where Zoom places the cards it reveals inside a view's systems and
+ * containers. With `positionSpace: 'parent-body'`, positions are fractions of
+ * the parent card's body. */
+export type ZoomLayout = Omit<SavedViewLayout, 'zoomLayout'> & { direction?: LayoutDirection; hiddenIds?: string[]; positionSpace?: 'parent-body' }
+
 export interface Workspace {
-  /** Zoom layout in parent-body coordinates; saved with the selected view. */
-  exploreLayout?: Omit<SavedViewLayout, 'exploreLayout'> & { direction?: LayoutDirection; hiddenIds?: string[]; positionSpace?: 'parent-body' }
   /** Last loaded/carried layout. Present entries are overlaid on extraction;
    * absent entries survive. An empty map still requests clearing the old file. */
   savedLayout?: Record<string, SavedViewLayout>
