@@ -85,6 +85,7 @@ test('pinch cancels a tentative node drag, handles cancellation, then allows one
   await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: p.x + 20, y: p.y, id: 2 }] })
   await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: p.x + 100, y: p.y, id: 2 }] })
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await expect.poll(async () => (await state()).undo).toBe(before.undo + 1)
-  expect((await state()).workspace).not.toBe(before.workspace)
+  // The one-finger drag edits the layout; like any card move it is not an undo step.
+  await expect.poll(async () => (await state()).workspace).not.toBe(before.workspace)
+  expect((await state()).undo).toBe(before.undo)
 })
