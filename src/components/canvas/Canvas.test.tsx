@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   ReactFlowProvider,
   useReactFlow,
-  useStoreApi,
+  useReactFlowStoreApi,
   type Node,
   type ReactFlowInstance,
 } from '@xyflow/react'
@@ -134,11 +134,11 @@ function seed(viewKey = 'cont') {
 // ─── Render harness ────────────────────────────────────────────────────
 
 let rf: ReactFlowInstance | null = null
-let rfStore: ReturnType<typeof useStoreApi> | null = null
+let rfStore: ReturnType<typeof useReactFlowStoreApi>['optionsStore'] | null = null
 
 function Harness() {
   const currentRf = useReactFlow()
-  const currentRfStore = useStoreApi()
+  const currentRfStore = useReactFlowStoreApi().optionsStore
   // Assign in an effect, not during render — mutating module-level test
   // handles during render is a side effect the react-hooks/globals rule
   // (correctly) flags; an effect runs after commit instead.

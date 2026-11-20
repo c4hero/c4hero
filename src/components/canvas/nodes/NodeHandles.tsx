@@ -1,4 +1,5 @@
-import { Handle, Position, useNodeId, useStore } from '@xyflow/react'
+import { Handle, Position, useEdgesStore, useEqualSelector, useNodeId } from '@xyflow/react'
+import type { Edge } from '@xyflow/react'
 import { useMemo } from 'react'
 import {
   CENTER_SLOT,
@@ -43,8 +44,8 @@ export default function NodeHandles() {
 
   // Only subscribe to edges connected to this node (avoids O(N*E) re-renders).
   // Shallow-compare by IDs so the component doesn't re-render when unrelated edges change.
-  const connectedEdges = useStore(
-    (s) => {
+  const connectedEdgesSelector = useEqualSelector(
+    (s: { edges: Edge[] }) => {
       if (!nodeId) return []
       return s.edges.filter(
         (e) => e.source === nodeId || e.target === nodeId,
@@ -54,6 +55,7 @@ export default function NodeHandles() {
       prev.length === next.length &&
       prev.every((e, i) => e.id === next[i].id && e.sourceHandle === next[i].sourceHandle && e.targetHandle === next[i].targetHandle),
   )
+  const connectedEdges = useEdgesStore(connectedEdgesSelector)
 
   // Slots this node's own edges land on, keyed by side. A slot counts as
   // occupied whichever end of the edge it is — the source dot and the target
