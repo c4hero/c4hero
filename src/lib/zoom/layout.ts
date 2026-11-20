@@ -23,6 +23,10 @@ export function geometryKey(workspace: Workspace): string {
     [...workspace.views.systemLandscapeViews, ...workspace.views.containerViews, ...workspace.views.componentViews].map(v => [v.type, v.softwareSystemId, v.containerId, v.autoLayout?.direction, v.zoomLayout, v.elements.map(e => [e.id, e.x, e.y])])])
 }
 
+/** Auto-layouts of one card's contents, keyed by everything that decides them. */
+const arrangements = new Map<string, { id: string; x: number; y: number }[]>()
+const ARRANGEMENT_LIMIT = 500
+
 export function contains(parent: MapNode, child: MapNode): boolean {
   for (let n: MapNode | undefined = child; n; n = n.parent) if (n.id === parent.id) return true
   return false
@@ -30,6 +34,7 @@ export function contains(parent: MapNode, child: MapNode): boolean {
 
 export function buildLayout(workspace: Workspace, activeView?: View, snapshot?: Map<string, Box>, useSnapshotPositions = true, intrinsic?: Map<string, { width: number; height: number; headerHeight?: number }>): MapLayout {
   const zoomLayout = activeView?.zoomLayout
+  const groups = JSON.stringify(workspace.model.groups)
   const nodes: MapNode[] = [], byId = new Map<string, MapNode>()
   const hidden = new Set(zoomLayout?.hiddenIds)
   const eligible = zoomElements(workspace, activeView)
@@ -70,18 +75,30 @@ export function buildLayout(workspace: Workspace, activeView?: View, snapshot?: 
     }
     const view: View = { type: authored?.type ?? 'systemLandscape', key: '__zoom', elements: siblings.map(n => ({ id: n.id, ...saved.get(n.id) })), relationships: [] }
     const directions = zoomLayout?.direction ? [zoomLayout.direction] : saved.size ? [authored?.autoLayout?.direction ?? 'TB'] : parent ? ['LR', 'TB'] : [authored?.autoLayout?.direction ?? 'TB']
+    // Auto-layout is the expensive step, and the whole layout is rebuilt each
+    // time a revealed card reports its measured size. Each arrangement depends
+    // only on what is passed to it, so keep it: a rebuild then re-arranges just
+    // the cards whose own contents changed, not every card in the view.
+    const input = JSON.stringify([view.type, !!parent, siblings.map(n => [n.id, n.width, n.height, saved.get(n.id) ?? null]), edges, groups])
     const candidates = directions.map(direction => {
-      const arranged = applyAutoLayout(siblings.map(n => ({ id: n.id, data: {}, position: saved.get(n.id) ?? { x: 0, y: 0 }, style: { width: n.width, height: n.height } })),
-        edges, view, workspace.model.groups, direction, new Set(), [], parent ? { ranksep: 80, nodesep: 48 } : undefined)
-      const width = Math.max(...arranged.map(n => n.position.x + byId.get(n.id)!.width)) - Math.min(...arranged.map(n => n.position.x))
-      const height = Math.max(...arranged.map(n => n.position.y + byId.get(n.id)!.height)) - Math.min(...arranged.map(n => n.position.y))
+      const key = `${direction}|${input}`
+      let arranged = arrangements.get(key)
+      if (!arranged) {
+        arranged = applyAutoLayout(siblings.map(n => ({ id: n.id, data: {}, position: saved.get(n.id) ?? { x: 0, y: 0 }, style: { width: n.width, height: n.height } })),
+          edges, view, workspace.model.groups, direction, new Set(), [], parent ? { ranksep: 80, nodesep: 48 } : undefined).map(n => ({ id: n.id, x: n.position.x, y: n.position.y }))
+        if (arrangements.size >= ARRANGEMENT_LIMIT) arrangements.clear()
+        arrangements.set(key, arranged)
+      }
+      const width = Math.max(...arranged.map(n => n.x + byId.get(n.id)!.width)) - Math.min(...arranged.map(n => n.x))
+      const height = Math.max(...arranged.map(n => n.y + byId.get(n.id)!.height)) - Math.min(...arranged.map(n => n.y))
       return { arranged, fit: parent ? Math.min((parent.width - 28) / width, Math.max(8, parent.height - (parent.headerHeight ?? 48) - 14) / height) : 1 }
     })
     // Prefer the orientation that makes children largest in the available body;
-    // LR wins ties. This is computed once, never during zoom/reveal.
+    // LR wins ties.
     const arranged = candidates.sort((a, b) => b.fit - a.fit)[0].arranged
-    const minX = Math.min(...arranged.map(n => n.position.x)), minY = Math.min(...arranged.map(n => n.position.y))
-    for (const n of arranged) { const target = byId.get(n.id)!; target.x = n.position.x - (!parent && activeView ? 0 : minX); target.y = n.position.y - (!parent && activeView ? 0 : minY) }
+    const minX = Math.min(...arranged.map(n => n.x)), minY = Math.min(...arranged.map(n => n.y))
+    const placed = arranged.map(n => [n.id, n.x - (!parent && activeView ? 0 : minX), n.y - (!parent && activeView ? 0 : minY)] as const)
+    for (const [id, x, y] of placed) { const target = byId.get(id)!; target.x = x; target.y = y }
     return { width: Math.max(...siblings.map(n => n.x + n.width)), height: Math.max(...siblings.map(n => n.y + n.height)) }
   }
 

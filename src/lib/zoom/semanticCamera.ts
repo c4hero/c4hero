@@ -54,6 +54,7 @@ export class SemanticCamera implements ActiveCamera {
   private previousMove?: { camera: Camera; time: number }
   private flight?: Flight
   private focusedId?: string
+  private area?: { box: Box; at: number }
   /** Cards about to open. Their contents mount and measure invisibly ahead of
    * the crossfade, so it never waits on a burst of new cards. */
   near = new Set<string>()
@@ -110,6 +111,13 @@ export class SemanticCamera implements ActiveCamera {
       this.zooming = false
       this.refreshZoomHint()
     }, TUNING.idleMs)
+  }
+  /** The free canvas, measured at most every `areaMs`. Measuring reads layout,
+   * and this is needed on every frame; the chrome that changes it (the
+   * inspector, a resize) is still followed within a few frames. */
+  private free(now = performance.now()): Box {
+    if (!this.area || now - this.area.at >= TUNING.areaMs) this.area = { box: freeArea(this.host), at: now }
+    return this.area.box
   }
   private wake = () => {
     if (this.disposed || this.frame) return
@@ -204,9 +212,10 @@ export class SemanticCamera implements ActiveCamera {
       }
     }
     this.observeZoom(camera.zoom)
-    const area = freeArea(this.host)
+    const area = this.free(now)
     const state = useWorkspaceStore.getState(), locked = state.selectedElementIds.length > 0 && !flight
     let changed = false
+    const opening: { node: MapNode; next: number }[] = []
     for (const node of this.layoutState.nodes) {
       if (!node.children.length) continue
       // A focus flight opens each level as the camera reaches it, so the
@@ -214,12 +223,32 @@ export class SemanticCamera implements ActiveCamera {
       const raw = revealFor(node, camera.zoom, area.width, area.height)
       const previous = this.reveal.get(node.id) ?? 0
       const next = stepReveal(previous, raw, now - this.lastInput >= TUNING.idleMs || !!flight, dt, this.media.matches, locked)
-      if (previous !== next) { this.reveal.set(node.id, next); changed = true }
       const near = next > 0 || revealFor(node, camera.zoom * TUNING.premount, area.width, area.height) > 0
+      // Not open yet: its contents still have to mount. Decide below how many
+      // cards may open in this frame.
+      if (near && previous === 0 && !this.near.has(node.id)) { opening.push({ node, next }); continue }
+      if (previous !== next) { this.reveal.set(node.id, next); changed = true }
       if (near !== this.near.has(node.id)) { if (near) this.near.add(node.id); else this.near.delete(node.id); changed = true }
     }
+    // Opening a card mounts all of its contents in one render. A fast zoom can
+    // bring many cards into range in the same frame, so open the ones nearest
+    // the centre first and leave the rest for the next frames, rather than
+    // mount everything at once and freeze.
+    let waiting = false
+    if (opening.length) {
+      const x = (area.x + area.width / 2 - camera.x) / camera.zoom, y = (area.y + area.height / 2 - camera.y) / camera.zoom
+      const distance = (n: MapNode) => Math.hypot(n.x + n.width / 2 - x, n.y + n.height / 2 - y)
+      let cards = 0
+      for (const { node, next } of opening.sort((a, b) => distance(a.node) - distance(b.node))) {
+        if (cards && cards + node.children.length > TUNING.openPerFrame) { waiting = true; continue }
+        cards += node.children.length
+        this.near.add(node.id)
+        if (next > 0) this.reveal.set(node.id, next)
+        changed = true
+      }
+    }
     if (changed) this.changed()
-    if (moving || changed) this.frame = requestAnimationFrame(this.tick)
+    if (moving || changed || waiting) this.frame = requestAnimationFrame(this.tick)
     else if (flight) {
       this.flight = undefined
       if (flight.select && !state.selectedElementIds.includes(flight.select)) state.selectElements([flight.select])
@@ -285,7 +314,7 @@ export class SemanticCamera implements ActiveCamera {
     const fallback = this.rf.getViewport()
     this.fly(() => {
       const n = this.layoutState.byId.get(id)
-      return n ? frameBox(n, freeArea(this.host)) : fallback
+      return n ? frameBox(n, this.free()) : fallback
     }, select ? id : undefined)
   }
   private fly(destination: () => Camera, select?: string) {

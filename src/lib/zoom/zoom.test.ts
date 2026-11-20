@@ -100,6 +100,10 @@ describe('Zoom transitions', () => {
     expect(stepReveal(.4, .49, true, 16, true)).toBe(0)
     expect(stepReveal(.4, .5, true, 16, true)).toBe(1)
     expect(stepReveal(.4, 1, true, 1000, false, true)).toBe(.4)
+    // Within 1% of its target a fade is done; it does not trail on unseen.
+    expect(stepReveal(.992, 1, true, 16)).toBe(1)
+    expect(stepReveal(.008, 0, true, 16)).toBe(0)
+    expect(stepReveal(.9, 1, true, 16)).toBeLessThan(1)
     expect(stepReveal(.7, .1, false, 16)).toBeLessThan(.7)
     const once = stepReveal(.1, .9, false, 32)
     expect(stepReveal(stepReveal(.1, .9, false, 16), .9, false, 16)).toBeCloseTo(once)

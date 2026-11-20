@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ReactFlowInstance } from '@xyflow/react'
 import { createBigBankSample } from '@/lib/templates'
+import { parseDSL } from '@/lib/dsl'
 import { useWorkspaceStore } from '@/store/workspace'
 import { registerActiveCamera } from '@/lib/activeCamera'
 import { buildLayout } from './layout'
@@ -147,5 +148,32 @@ it('arranging inside one card pins that card\'s contents and nothing else', () =
     useWorkspaceStore.getState().setViewLocked(view, true)
     expect(saved()).toEqual(pinned)
   } finally { unregister(); camera.dispose() }
+})
+
+it('opens the cards a fast zoom brings into range a few per frame, nearest first', () => {
+  const systems = Array.from({ length: 6 }, (_, i) => `s${i} = softwareSystem "System ${i}" {\n${Array.from({ length: 4 }, (_, j) => `      container "Service ${i}.${j}"`).join('\n')}\n    }`).join('\n    ')
+  const { workspace } = parseDSL(`workspace "Many" {\n  model {\n    ${systems}\n  }\n  views { systemLandscape "Landscape" { include * } }\n}`)
+  const host = document.createElement('div')
+  document.body.append(host)
+  host.getBoundingClientRect = () => new DOMRect(0, 0, 4000, 3000)
+  const layout = buildLayout(workspace)
+  const centre = layout.roots[3]
+  // Zoomed far enough in that every system should show its containers at once.
+  const zoom = 2
+  const viewport = { x: 2000 - (centre.x + centre.width / 2) * zoom, y: 1500 - (centre.y + centre.height / 2) * zoom, zoom }
+  const rf = { getViewport: () => viewport, getZoom: () => viewport.zoom, setViewport: vi.fn(() => Promise.resolve(true)) } as unknown as ReactFlowInstance
+  const camera = new SemanticCamera(host, rf, layout, vi.fn())
+  try {
+    vi.advanceTimersByTime(17)
+    // Eight cards may mount per frame: two systems of four containers, starting
+    // with the one in the middle of the canvas.
+    expect(camera.near.size).toBe(2)
+    expect(camera.near.has(centre.id)).toBe(true)
+    vi.advanceTimersByTime(17)
+    expect(camera.near.size).toBe(4)
+    vi.advanceTimersByTime(1000)
+    expect(camera.near.size).toBe(6)
+    expect([...camera.near].every(id => camera.reveal.get(id) === 1)).toBe(true)
+  } finally { camera.dispose() }
 })
 

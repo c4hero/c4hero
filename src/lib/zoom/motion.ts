@@ -1,5 +1,5 @@
 import type { Box, MapNode } from './layout'
-export const TUNING = { system: [340, 420], container: [365, 450], occupancy: [.51, .65], cameraMs: 110, revealMs: 85, idleMs: 240, premount: 1.6 } as const
+export const TUNING = { system: [340, 420], container: [365, 450], occupancy: [.51, .65], cameraMs: 110, revealMs: 85, idleMs: 240, premount: 1.6, openPerFrame: 8, areaMs: 100 } as const
 export interface Camera { x: number; y: number; zoom: number }
 export interface Point { x: number; y: number }
 /** Integrate exponential drag in screen pixels, independent of frame rate. */
@@ -21,7 +21,9 @@ export function stepReveal(current: number, raw: number, complete: boolean, dt: 
   if (locked) return current
   const target = complete ? Number(raw >= .5) : raw
   const value = reduced ? target : current + (target - current) * (1 - Math.exp(-dt / TUNING.revealMs))
-  return Math.abs(value - target) < .001 ? target : value
+  // Within 1% the difference cannot be seen. Settle there, rather than keep
+  // re-rendering every card for the long tail of the exponential.
+  return Math.abs(value - target) < .01 ? target : value
 }
 export function stepCamera(current: Camera, target: Camera, dt: number, reduced = false, anchor?: { world: Point; screen: Point }): Camera {
   const t = reduced ? 1 : 1 - Math.exp(-dt / TUNING.cameraMs)
