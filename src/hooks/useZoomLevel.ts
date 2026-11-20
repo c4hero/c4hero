@@ -1,4 +1,4 @@
-import { useStore } from '@xyflow/react'
+import { useViewportStore } from '@xyflow/react'
 
 export type ZoomLevel = 'compact' | 'normal' | 'full'
 
@@ -14,5 +14,5 @@ const zoomLevelSelector = (state: { transform: [number, number, number] }): Zoom
 }
 
 export function useZoomLevel(): ZoomLevel {
-  return useStore(zoomLevelSelector)
+  return useViewportStore(zoomLevelSelector)
 }
