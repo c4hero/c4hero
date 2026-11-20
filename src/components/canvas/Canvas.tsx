@@ -166,7 +166,8 @@ function carryForwardMeasurements(nodes: Node[], measuredNodes: Node[]): Node[] 
 }
 
 
-const DIAGRAM_ZOOM_RANGE = { min: 0.003, max: 10000 }
+// The ordinary canvas range. Only Zoom widens it, to however deep the model goes.
+const DIAGRAM_ZOOM_RANGE = { min: 0.1, max: 2 }
 
 export default function Canvas() {
   const active = useWorkspaceStore(s => s.rendererMode === 'diagram')
@@ -391,8 +392,8 @@ export default function Canvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const semantic = useSemanticZoom(!active, host, reactFlowInstance, workspace, view, nodes, edges, highlightFilters, themeStyles, viewCountMap)
-  // Zoom's range follows how deep the model goes, stretched to the current
-  // zoom so enabling it never snaps the camera.
+  // Zoom's range follows how deep the model goes. Either range is stretched to
+  // the current zoom, so switching Zoom on or off never snaps the camera.
   const currentZoom = reactFlowInstance.getZoom()
   const zoomRange = semantic.bounds ?? DIAGRAM_ZOOM_RANGE
   const zoomRangeMin = Math.min(zoomRange.min, currentZoom), zoomRangeMax = Math.max(zoomRange.max, currentZoom)
@@ -558,9 +559,15 @@ export default function Canvas() {
       // structural changes (layoutVersion bump, element add/remove) still fit.
       const prevViewKey = prevSignal ? prevSignal.split(':')[0] : ''
       const isViewSwitch = viewKey !== '' && prevViewKey !== viewKey
+      let refit = false
       if (isViewSwitch) {
         const saved = loadViewport(workspaceRef.current?.name, viewKey)
-        if (saved) {
+        // A viewport saved deep inside Zoom lies outside the ordinary range.
+        // With Zoom off, fit the view instead of restoring a close-up whose
+        // contents are not shown.
+        refit = !!saved && useWorkspaceStore.getState().rendererMode === 'diagram'
+          && (saved.zoom < DIAGRAM_ZOOM_RANGE.min || saved.zoom > DIAGRAM_ZOOM_RANGE.max)
+        if (saved && !refit) {
           // Mark this view as "fitted at this signature" so any subsequent
           // re-render of this effect within the same view doesn't kick off
           // a fit and override the restored viewport.
@@ -574,7 +581,7 @@ export default function Canvas() {
         }
       }
 
-      if (viewKey && lastFitSig !== viewSig) {
+      if (viewKey && (refit || lastFitSig !== viewSig)) {
         fittedSignaturesByView.current.set(viewKey, viewSig)
         expectedFitIds.current = new Set(getViewportFitNodes(initialNodes).map((n) => n.id))
         fitPending.current = true

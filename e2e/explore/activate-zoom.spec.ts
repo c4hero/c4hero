@@ -11,11 +11,13 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
     await parent.hover()
     // Mobile fit starts much farther out: establish the same physical close-up
     // rather than assuming a fixed wheel delta reaches the reveal threshold.
-    for (let i = 0; i < 5 && (await parent.boundingBox())!.width < 600; i++) {
+    // The ordinary canvas stops at 2x, where this card is 560px wide: past
+    // the 420px at which a system opens, and as close as Zoom off can get.
+    for (let i = 0; i < 5 && (await parent.boundingBox())!.width < 500; i++) {
       await page.mouse.wheel(0, -1200)
       await page.waitForTimeout(500)
     }
-    expect((await parent.boundingBox())!.width).toBeGreaterThanOrEqual(600)
+    expect((await parent.boundingBox())!.width).toBeGreaterThanOrEqual(500)
     const camera = () => page.locator('.react-flow__viewport').evaluate(el => getComputedStyle(el).transform)
     const before = await camera()
     await page.getByRole('button', { name: 'Zoom', exact: true }).click()
