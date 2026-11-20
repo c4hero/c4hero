@@ -1,4 +1,5 @@
-import type { Workspace, ElementStatus, LineStyle, SavedViewLayout, View } from '@/types/model'
+import type { Workspace, ElementStatus, LineStyle, SavedViewLayout, View, ZoomLayout } from '@/types/model'
+import { current, isDraft } from 'immer'
 import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
@@ -6,6 +7,10 @@ import { sanitizeFilename } from '@/lib/filenames'
 import { isElementStatusValue, normalizeElementStatus } from '@/lib/elementStatus'
 import { isStoredViewIdentity, resolveViewLayouts, viewIdentityOf } from '@/lib/layoutIdentity'
 import type { LayoutCandidate } from '@/lib/layoutIdentity'
+
+function cloneZoomLayout(layout: ZoomLayout) {
+  return structuredClone(isDraft(layout) ? current(layout) : layout)
+}
 
 const VALID_LINE_STYLES: ReadonlySet<string> = new Set<LineStyle>(['Curved', 'Straight', 'Orthogonal'])
 
@@ -65,9 +70,17 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
 
 function isSidecarView(value: unknown): value is SavedViewLayout {
   if (!isRecord(value)) return false
+  if ('zoomLayout' in value && value.zoomLayout !== undefined && !isZoomLayout(value.zoomLayout)) return false
   if ('locked' in value && value.locked !== undefined && typeof value.locked !== 'boolean') return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
   return true
+}
+
+function isZoomLayout(value: unknown): value is ZoomLayout {
+  if (!isRecord(value) || !isSidecarView(value)) return false
+  const { direction, hiddenIds } = value
+  return (direction === undefined || ['TB', 'BT', 'LR', 'RL'].includes(String(direction)))
+    && (hiddenIds === undefined || (Array.isArray(hiddenIds) && hiddenIds.every(id => typeof id === 'string')))
 }
 
 function isSidecarData(value: unknown): value is SidecarData {
@@ -97,6 +110,7 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
     Object.entries(workspace.savedLayout ?? {}).map(([key, data]) =>
       [key, { ...data,
         ...(data.view ? { view: { ...data.view, ...(data.view.elementIds ? { elementIds: [...data.view.elementIds] } : {}) } } : {}),
+        ...(data.zoomLayout ? { zoomLayout: cloneZoomLayout(data.zoomLayout) } : {}),
         ...(data.elements ? { elements: { ...data.elements } } : {}),
       }]),
   )
@@ -117,11 +131,12 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
     // Every entry says which view it belongs to, so it can be found again
     // after the view's derived key is renumbered (TEA-345).
     const entry: SavedViewLayout = { view: viewIdentityOf(view) }
+    if (view.zoomLayout) entry.zoomLayout = cloneZoomLayout(view.zoomLayout)
     if (view.locked) {
       entry.locked = true
     }
     if (Object.keys(viewElements).length > 0) entry.elements = viewElements
-    if (entry.locked || entry.elements) views[view.key] = entry
+    if (entry.locked || entry.elements || entry.zoomLayout) views[view.key] = entry
     else delete views[view.key]
   }
   if (Object.keys(views).length === 0 && workspace.savedLayout === undefined) return null
@@ -196,6 +211,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       value: {
         ...(trusted && { view: trusted }),
         ...rest,
+        ...(rest.zoomLayout ? { zoomLayout: cloneZoomLayout(rest.zoomLayout) } : {}),
         ...(rest.elements ? { elements: Object.fromEntries(
           Object.entries(rest.elements).map(([id, el]) => [id, { ...el }]),
         ) } : {}),
@@ -230,6 +246,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
   for (const view of views) {
     const viewData = byView.get(view)?.value
     if (!viewData) continue
+    if (viewData.zoomLayout) view.zoomLayout = cloneZoomLayout(viewData.zoomLayout)
     if (viewData.locked) view.locked = true
     if (!viewData.elements) continue
     for (const el of view.elements) {

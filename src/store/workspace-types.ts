@@ -1,6 +1,6 @@
 import type {
   Workspace, ModelElement, Relationship, Group,
-  ViewType, ElementStatus,
+  ViewType, ElementStatus, ZoomLayout,
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
 import type { AiFeatureId } from '@/lib/ai/types'
@@ -38,6 +38,7 @@ export const MAX_UNDO = 25
 export interface UndoState {
   undoStack: Workspace[]
   redoStack: Workspace[]
+  updateZoomLayout: (layout: ZoomLayout) => void
 }
 
 // ─── Highlighter ─────────────────────────────────────────────────────
@@ -65,6 +66,10 @@ export interface DiskConflict {
 
 export interface WorkspaceState extends UndoState {
   workspace: Workspace | null
+
+  // Renderer mode is transient UI state, never workspace data or undo history.
+  rendererMode: 'diagram' | 'zoom'
+  setRendererMode: (mode: 'diagram' | 'zoom') => void
 
   // Navigation
   activeViewKey: string | null
