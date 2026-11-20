@@ -11,7 +11,8 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  useStore,
+  useViewportStore,
+  NodeChangeset,
   type Node,
   type Edge,
   type OnSelectionChangeParams,
@@ -655,14 +656,16 @@ export default function Canvas() {
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     // Cancelling the native drag during pinch takeover emits a final position
     // update. Do not let it overwrite the restored pre-drag coordinates.
-    const acceptedChanges = touchPinching.current ? changes.filter(c => c.type !== 'position') : changes
-    onNodesChange(semantic.handleChanges(acceptedChanges))
+    const all = changes.toArray()
+    const accepted = semantic.handleChanges(touchPinching.current ? all.filter(c => c.type !== 'position') : all)
+    // Hand React Flow's own changeset through untouched unless something was dropped.
+    onNodesChange(accepted.length === all.length ? changes : new NodeChangeset(accepted))
     if (fitPending.current) {
       requestAnimationFrame(fitContentNodes)
     }
     // When content nodes get measured/resized, rebuild group/boundary overlays
     // so they wrap the actual rendered sizes, not the 200×100 dagre defaults.
-    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && !(c.id as string).startsWith('__scope_boundary__'))) {
+    if (changes.getByType('dimensions').some(c => !c.id.startsWith('group-') && !c.id.startsWith('__scope_boundary__'))) {
       requestAnimationFrame(rebuildOverlays)
     }
   }, [onNodesChange, fitContentNodes, rebuildOverlays, semantic])
@@ -974,7 +977,7 @@ export default function Canvas() {
   // `paneDragging` is true the moment a pointer goes down on the pane (even for a
   // plain click), so we additionally require an onMove to fire — that excludes
   // clicks (no movement), and resizes/zoom/programmatic moves aren't pane-drags.
-  const paneDragging = useStore((s) => s.paneDragging)
+  const paneDragging = useViewportStore((s) => s.paneDragging)
   const draggingRef = useRef(false)
   useEffect(() => {
     draggingRef.current = paneDragging
@@ -993,6 +996,9 @@ export default function Canvas() {
 
   const onMoveEnd = useCallback((event: MouseEvent | TouchEvent | null) => {
     semantic.controller.current?.onMoveEnd(event)
+    // React Flow 13 no longer fires onMoveStart for programmatic moves (no
+    // source event), so reveal here too; user pans already revealed on start.
+    setMinimapVisible(true)
     if (hideTimer.current) clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => setMinimapVisible(false), 1500)
     // Persist current viewport per-view so re-entering this view restores
@@ -1219,6 +1225,9 @@ export default function Canvas() {
         snapGrid={RF_SNAP_GRID}
         connectionRadius={40}
         deleteKeyCode={null}
+        // v13 changed these defaults; pin the v12 behavior (light class, no edge elevation on select).
+        forceColorMode="light"
+        elevateEdgesOnSelect={false}
         panOnDrag={spaceHeld ? RF_PAN_ON_DRAG_SPACE : RF_PAN_ON_DRAG_DEFAULT}
         defaultEdgeOptions={RF_DEFAULT_EDGE_OPTIONS}
       >

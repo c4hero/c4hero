@@ -231,11 +231,26 @@ describe('exportCanvasAsSVG', () => {
   it('inlines computed styles when cssText is empty', () => {
     document.body.innerHTML = `
       <div class="react-flow__viewport">
-        <div style="color: rgb(255, 0, 0); transform: translate(1px, 2px)">Styled node</div>
+        <div>Styled node</div>
       </div>
     `
+    // Browsers return '' for a computed declaration's cssText (CSSOM spec), so
+    // model that with a controlled declaration instead of relying on jsdom's
+    // computed-style serialization, which changed in jsdom 31.
+    const decl = document.createElement('div').style
+    decl.color = 'rgb(255, 0, 0)'
+    decl.transform = 'translate(1px, 2px)'
+    const computed = new Proxy(decl, {
+      get(target, prop) {
+        if (prop === 'cssText') return ''
+        const value = Reflect.get(target, prop, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    const spy = vi.spyOn(window, 'getComputedStyle').mockReturnValue(computed)
 
     const svg = exportCanvasAsSVG()
+    spy.mockRestore()
 
     expect(svg).toContain('Styled node')
     expect(svg).toContain('color: rgb(255, 0, 0)')

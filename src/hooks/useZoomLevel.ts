@@ -1,4 +1,4 @@
-import { useStore } from '@xyflow/react'
+import { useViewportStore } from '@xyflow/react'
 
 export type ZoomLevel = 'compact' | 'normal' | 'full'
 
@@ -13,6 +13,8 @@ const zoomLevelSelector = (state: { transform: [number, number, number] }): Zoom
   return 'normal'
 }
 
+/** `scale` is the card's own scale inside a zoomed-into parent, so a nested
+ *  card picks its detail level from its on-screen size, not the canvas zoom. */
 export function useZoomLevel(scale = 1): ZoomLevel {
-  return useStore(state => zoomLevelSelector({ transform: [0, 0, state.transform[2] * scale] }))
+  return useViewportStore(state => zoomLevelSelector({ transform: [0, 0, state.transform[2] * scale] }))
 }
