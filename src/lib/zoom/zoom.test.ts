@@ -187,6 +187,20 @@ describe('Zoom persistence and store integration', () => {
     expect(s.getState().rendererMode).toBe('zoom')
     expect(s.getState().workspace).toBe(workspace)
   })
+  it('turns Zoom off whenever the active view becomes one it cannot run on', () => {
+    const s = useWorkspaceStore; s.getState().loadWorkspace(createBigBankSample())
+    const landscape = s.getState().activeViewKey!
+    s.getState().setRendererMode('zoom')
+    // A new view becomes the active one without going through setActiveView.
+    const dynamic = s.getState().addView('dynamic', 'internetBanking', 'Flow')
+    expect(s.getState().activeViewKey).toBe(dynamic)
+    expect(s.getState().rendererMode).toBe('diagram')
+    // The same holds for a state update that names the view directly.
+    s.getState().setActiveView(landscape); s.getState().setRendererMode('zoom')
+    expect(s.getState().rendererMode).toBe('zoom')
+    s.setState({ activeViewKey: dynamic })
+    expect(s.getState().rendererMode).toBe('diagram')
+  })
 })
 
 describe('Zoom shares Diagram layout policy', () => {

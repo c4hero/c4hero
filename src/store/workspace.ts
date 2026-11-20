@@ -14,6 +14,8 @@ import { createUndoSlice } from './slices/undo-slice'
 import { createLifecycleSlice } from './slices/lifecycle-slice'
 import { createDynamicStepSlice } from './slices/dynamic-step-slice'
 import { createDeploymentSlice } from './slices/deployment-slice'
+import { findViewHelper } from './workspace-helpers'
+import { supportsSemanticZoom } from '@/lib/zoom/editing'
 
 export type { WorkspaceState, UndoState } from './workspace-types'
 export { BUILTIN_TAGS } from './builtin-tags'
@@ -59,3 +61,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     ...createUndoSlice(...a),
   })),
 )
+
+// Zoom runs on static C4 views only. Many actions change the active view (a
+// new view, a delete, undo, a reload from disk), so no single action is the
+// place to remember that. Whatever update leaves Zoom on a view that cannot
+// use it, turn Zoom off.
+useWorkspaceStore.subscribe((s) => {
+  if (s.rendererMode !== 'zoom') return
+  const view = s.workspace && s.activeViewKey ? findViewHelper(s.workspace, s.activeViewKey) : undefined
+  if (!supportsSemanticZoom(view)) useWorkspaceStore.setState({ rendererMode: 'diagram' })
+})
