@@ -136,12 +136,6 @@ export const createViewSlice: StateCreator<
         const copy: View = {
           ...structuredClone(detached),
           key: newKey,
-          // A duplicate is a view the user just created: it has its own key and
-          // has to be written to the DSL. Inheriting the source's provisional
-          // flags would drop it on the next save (`autoView` views are only
-          // written once something authored exists) or write it without its key
-          // (`autoKey`), and a cloned `originalKey` would let it claim the
-          // source's layout (TEA-342).
           autoView: undefined,
           autoKey: undefined,
           originalKey: undefined,
