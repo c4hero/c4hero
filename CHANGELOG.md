@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Zoom into a system or a container on the canvas, without leaving the view.**
+  Turn on Zoom in the tool rail of a system landscape, system context, container
+  or component view, then zoom in: a system opens to show its containers, and a
+  container its components. Zoom back out and each level folds back into its
+  summary. A relationship between two cards gives way to the relationships
+  between what is inside them, and returns when you zoom out. These are the same
+  cards as in every other view, so they can be selected, edited, connected,
+  locked and dragged in place, and PNG and SVG exports show what is on screen.
+  Where a nested card sits is saved per view in the layout file, as
+  `zoomLayout`. A double-click, Enter on a selected card, or a search result
+  (`mod+f`) flies to a card and opens each level on the way; Escape steps back
+  out one level. Pinch works on touch screens, including a pinch that starts on
+  a card. Dynamic and deployment views keep the ordinary canvas. (TEA-334)
 - Element lifecycle status is now an open vocabulary. `Live`, `Planned`,
   `Deprecated` and `Removed` still ship as the built-ins and nothing changes for
   workspaces that only use them, but a status c4hero does not know is no longer
@@ -21,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Switching to another view straight after an edit or an undo no longer snaps
+  back to the view you left. The address bar could replay the old view over the
+  new one before the switch had finished. (TEA-334)
+- A menu with a scrolling list of options, such as the theme picker, no longer
+  closes when you scroll inside it. Scrolling the page or resizing the window
+  still dismisses it. (TEA-334)
 - `include *` in a view is no longer rewritten as a list of elements on save,
   so elements added to the model later still appear in Structurizr. The
   view's own `include` and `exclude` lines are kept and applied in order, as
