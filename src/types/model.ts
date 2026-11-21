@@ -212,6 +212,8 @@ export interface AutoLayout {
 }
 
 export interface View {
+  /** Where Zoom places the cards it reveals inside this view, stored in the sidecar. */
+  zoomLayout?: ZoomLayout
   type: ViewType
   key: string
   /** Import-only alias for layout saved before the parser normalized the key. */
@@ -429,12 +431,18 @@ export interface StoredViewIdentity {
 /** Layout retained independently of whether a view or element is currently visible.
  * Uses the version-1 sidecar shape; no on-disk migration is needed. */
 export interface SavedViewLayout {
+  zoomLayout?: ZoomLayout
   /** The view this layout belongs to. Absent in entries written before
    *  TEA-345, which are matched by key instead. */
   view?: StoredViewIdentity
   locked?: boolean
   elements?: Record<string, Pick<ElementInView, 'x' | 'y' | 'pinned' | 'locked'>>
 }
+
+/** Where Zoom places the cards it reveals inside a view's systems and
+ * containers. With `positionSpace: 'parent-body'`, positions are fractions of
+ * the parent card's body. */
+export type ZoomLayout = Omit<SavedViewLayout, 'zoomLayout'> & { direction?: LayoutDirection; hiddenIds?: string[]; positionSpace?: 'parent-body' }
 
 export interface Workspace {
   /** Last loaded/carried layout. Present entries are overlaid on extraction;

@@ -1,5 +1,6 @@
 import type { Workspace } from '@/types/model'
 import { sanitizeFilename } from '@/lib/filenames'
+import { getActiveCamera } from '@/lib/activeCamera'
 
 /** Export workspace as Structurizr JSON */
 export function exportAsJSON(workspace: Workspace): string {
@@ -57,6 +58,8 @@ function bgForTheme(theme: ExportTheme): string {
 }
 
 export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Blob | null> {
+  const image = getActiveCamera()?.exportImage?.(theme)
+  if (image) return new Promise(resolve => image.toBlob(resolve, 'image/png'))
   const renderer = document.querySelector('.react-flow__renderer') as HTMLElement | null
   if (!renderer) return null
 
@@ -78,6 +81,8 @@ export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Bl
 
 /** Export the canvas viewport as SVG string */
 export function exportCanvasAsSVG(theme: ExportTheme = 'dark'): string | null {
+  const svg = getActiveCamera()?.exportSVG?.(theme)
+  if (svg) return svg
   const exportRoot = document.querySelector('.react-flow__renderer, .react-flow__viewport') as HTMLElement | null
   if (!exportRoot) return null
 
