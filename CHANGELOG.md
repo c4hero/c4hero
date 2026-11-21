@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-21
+
 ### Added
 
 - **Zoom into a system or a container on the canvas, without leaving the view.**
@@ -22,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`mod+f`) flies to a card and opens each level on the way; Escape steps back
   out one level. Pinch works on touch screens, including a pinch that starts on
   a card. Dynamic and deployment views keep the ordinary canvas. (TEA-334)
+- **Hide a relationship in one view without deleting it from the model.**
+  Removing a relationship from a system landscape, system context, container or
+  component view now takes it out of that view only; it stays in the model and
+  in every other view. Bring it back from the Add existing panel. The choice is
+  saved in the Structurizr DSL as an `exclude` on the view, and survives
+  re-adding the elements, reconnecting the relationship and undo. Dynamic steps
+  and deployment views are not affected. (TEA-341)
 - Element lifecycle status is now an open vocabulary. `Live`, `Planned`,
   `Deprecated` and `Removed` still ship as the built-ins and nothing changes for
   workspaces that only use them, but a status c4hero does not know is no longer
@@ -571,6 +580,7 @@ Initial public release. c4hero is a local-first browser-based visual editor for 
 - Canvas interactions no longer trigger browser-back navigation on Backspace in non-text contexts.
 - Boundary-node E2E selectors now match the per-scope ID format.
 
+[0.8.0]: https://github.com/c4hero/c4hero/releases/tag/v0.8.0
 [0.7.0]: https://github.com/c4hero/c4hero/releases/tag/v0.7.0
 [0.6.0]: https://github.com/c4hero/c4hero/releases/tag/v0.6.0
 [0.5.0]: https://github.com/c4hero/c4hero/releases/tag/v0.5.0
