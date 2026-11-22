@@ -15,7 +15,7 @@ import type {
     SoftwareSystemInstance,
 } from '@/types/model'
 import type { ContextAwareParser } from './parser'
-import { nextId, MAX_DEPTH } from './parser'
+import { nextId, MAX_DEPTH, readPropertyBlock, setUserProperty } from './parser'
 import { parseRelationship } from './parser-relationship'
 
 export function parseDeploymentEnvironment(p: ContextAwareParser, model: Model, varName?: string): void {
@@ -401,17 +401,7 @@ function parseElementInstance(
                 p.advance()
                 p.skipNewlines()
                 if (p.match('LBRACE')) {
-                    while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
-                        p.skipNewlines()
-                        if (p.check('RBRACE') || p.peekType() === 'EOF') break
-                        const keyTok = p.peek()
-                        if (keyTok.type !== 'STRING' && keyTok.type !== 'IDENTIFIER') { p.advance(); continue }
-                        const key = p.advance().value
-                        const valTok = p.peek()
-                        if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-                            instance.properties[key] = p.advance().value
-                        }
-                    }
+                    readPropertyBlock(p, instance, (key, value) => setUserProperty(instance.properties, key, value))
                     p.skipNewlines()
                     p.expect('RBRACE')
                 }
@@ -451,17 +441,7 @@ function parseDeploymentElementProperty(p: ContextAwareParser, element: Deployme
     } else if (keyword === 'properties') {
         p.skipNewlines()
         if (p.match('LBRACE')) {
-            while (!p.check('RBRACE') && p.peekType() !== 'EOF') {
-                p.skipNewlines()
-                if (p.check('RBRACE') || p.peekType() === 'EOF') break
-                const keyTok = p.peek()
-                if (keyTok.type !== 'STRING' && keyTok.type !== 'IDENTIFIER') { p.advance(); continue }
-                const key = p.advance().value
-                const valTok = p.peek()
-                if (valTok.type === 'STRING' || valTok.type === 'IDENTIFIER' || valTok.type === 'NUMBER') {
-                    element.properties[key] = p.advance().value
-                }
-            }
+            readPropertyBlock(p, element, (key, value) => setUserProperty(element.properties, key, value))
             p.skipNewlines()
             p.expect('RBRACE')
         }
