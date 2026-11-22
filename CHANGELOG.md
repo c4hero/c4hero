@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its edits (TEA-352). Duplicating connected containers or components inside a
   system from an included file now writes the copied relationship to that file
   too, not to the root (TEA-353).
+- Styles written for the `External` tag (`element "External" { ... }`) apply
+  again to external people and software systems, both in an imported DSL file
+  and after setting Location to External in the inspector (TEA-168). An element
+  whose location is Internal no longer picks them up from a leftover `External`
+  tag.
 
 ## [0.8.0] - 2026-11-21
 

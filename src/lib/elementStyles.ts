@@ -10,6 +10,22 @@ export function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyl
   return map
 }
 
+/** The element's custom tags as the style cascade sees them. People and
+ *  software systems keep externality in `location`, not `tags` (import hoists
+ *  the `External` tag onto the field, and the inspector only sets the field),
+ *  so `location` decides whether the `External` tag applies: External adds it
+ *  as an implicit first custom tag (explicit tags can still override it);
+ *  Internal drops a legacy `External` tag, matching how the model and the
+ *  serializer already resolve that contradiction (TEA-168). */
+function styleTags(element: ModelElement): readonly string[] {
+  const location = 'location' in element ? element.location : undefined
+  if (location === 'External') {
+    return element.tags.includes('External') ? element.tags : ['External', ...element.tags]
+  }
+  if (location === 'Internal') return element.tags.filter((tag) => tag !== 'External')
+  return element.tags
+}
+
 /** Get the best matching style for an element based on its tags.
  *  Cascade order follows Structurizr: Element → type tag → custom tags (in order). */
 export function getElementStyle(
@@ -32,7 +48,7 @@ export function getElementStyle(
   if (typeStyle) matched = { ...matched, ...typeStyle }
 
   // 3. Apply custom tags in order (later tags override earlier ones)
-  for (const tag of element.tags) {
+  for (const tag of styleTags(element)) {
     if (tag === 'Element' || tag === typeTag) continue
     const tagStyle = styleIndex.get(tag)
     if (tagStyle) matched = { ...matched, ...tagStyle }
