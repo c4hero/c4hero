@@ -166,6 +166,31 @@ it('full serialization writes the content of element and views includes once', a
   expect(reopened.workspace.views.systemContextViews.map(v => v.key)).toEqual(['ctx'])
 })
 
+it('full serialization writes an included file once without includedFiles', async () => {
+  const readInclude = async () => 'u = person "U" {\nproperties {\n"b" "1"\n}\n}\n'
+  const { workspace } = await loadWorkspaceDocument({ content: wrap('!include a.dsl'), readInclude })
+  workspace.model.people[0].properties.b = '9'
+  const json: Workspace = JSON.parse(JSON.stringify(workspace))
+  delete json.includedFiles
+  const saved = serializeDSL(json)
+  expect(saved).not.toContain('!include a.dsl')
+  const reopened = await loadWorkspaceDocument({ content: saved, readInclude })
+  expect(reopened.workspace.model.people).toHaveLength(1)
+  expect(reopened.workspace.model.people[0].properties.b).toBe('9')
+})
+
+it('full serialization rewrites a kept include from a folder relative to the root', async () => {
+  const files: Record<string, string> = { 'sub/a.dsl': person('!include p.dsl'), 'sub/p.dsl': '"a" "2"\n' }
+  const readInclude = async (p: string) => files[p] ?? null
+  const { workspace, errors } = await loadWorkspaceDocument({ content: wrap('!include sub/a.dsl'), readInclude })
+  expect(errors).toEqual([])
+  const saved = serializeDSL(workspace)
+  expect(saved).toContain('!include sub/p.dsl')
+  const reopened = await loadWorkspaceDocument({ content: saved, readInclude })
+  expect(reopened.errors).toEqual([])
+  expect(reopened.workspace.model.people[0].properties.a).toBe('2')
+})
+
 it('full serialization keeps an include it did not load', async () => {
   const { workspace: ws } = await loadWorkspaceDocument({
     content: wrap('!include a.dsl\n!include https://example.com/b.dsl'),
@@ -262,6 +287,21 @@ describe('values from an included properties file', () => {
     const saved = serializeRoot(ws)
     expect(saved).toContain('person "U" "" "External"')
     expect((await reload(saved)).workspace.model.people[0].location).toBe('External')
+  })
+
+  it.each([
+    ['set over an included External', '"c4hero.location" "External"\n"a" "1"\n', (ws: Workspace) => { ws.model.people[0].location = 'Unspecified' }],
+    ['read from the include', '"c4hero.location" "Unspecified"\n"a" "1"\n', () => {}],
+  ])('Unspecified %s leaves no stray property once the include is replaced', async (_label, included, edit) => {
+    const { workspace: ws, reload } = await load(person('!include p.dsl'), { 'p.dsl': included })
+    edit(ws)
+    delete ws.model.people[0].properties.a
+    const saved = serializeRoot(ws)
+    expect(saved).not.toContain('!include')
+    const u = (await reload(saved)).workspace.model.people[0]
+    // As in a block without includes, Unspecified is not written.
+    expect(u.properties).toEqual({})
+    expect(u.location).toBeUndefined()
   })
 
   it('full serialization keeps an edited included value without includedFiles', async () => {

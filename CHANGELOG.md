@@ -21,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (TEA-351). Exporting a
   multi-file workspace as one DSL file no longer keeps the `!include` of a file
   whose content it writes inline, which declared that content twice and lost
-  its edits (TEA-352). Duplicating connected containers or components inside a
+  its edits. An include it keeps from a file in a folder now points at that
+  folder's file from the root (TEA-352). Duplicating connected containers or components inside a
   system from an included file now writes the copied relationship to that file
   too, not to the root (TEA-353).
 - Styles written for the `External` tag (`element "External" { ... }`) apply

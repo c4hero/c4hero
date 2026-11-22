@@ -39,7 +39,7 @@ const GROUP_SEPARATOR_KEY = 'structurizr.groupSeparator'
 /** The lines of an element's or relationship's `properties { }` block. */
 interface PropertyBlock {
     lines: PropertyDeclaration[]
-    directives: readonly { raw: string }[]
+    directives: readonly { raw: string; sourcePath?: string }[]
 }
 
 interface ScopedGroup<T extends ModelElement> {
@@ -183,6 +183,30 @@ function propertyLinesFor(
     return lines
 }
 
+/** Every file some modelled content was read from, by its `sourcePath`. */
+function contentFiles(ws: Workspace): string[] {
+    const paths: (string | undefined)[] = []
+    const add = (items: readonly { sourcePath?: string }[] | undefined) => { for (const item of items ?? []) paths.push(item.sourcePath) }
+    const model = ws.model
+    add(model.people)
+    for (const sys of model.softwareSystems) {
+        paths.push(sys.sourcePath)
+        for (const c of sys.containers) { paths.push(c.sourcePath); add(c.components) }
+    }
+    add(model.relationships)
+    add(model.groups)
+    add(model.deploymentEnvironments)
+    add(model.propertyDeclarations)
+    add(ws.propertyDeclarations)
+    add(ws.directives)
+    const views = ws.views
+    for (const list of [views.systemLandscapeViews, views.systemContextViews, views.containerViews, views.componentViews, views.dynamicViews, views.deploymentViews]) add(list)
+    add(views.configuration.styles.elements)
+    add(views.configuration.styles.relationships)
+    if (views.configuration.themesSourcePath) paths.push(views.configuration.themesSourcePath)
+    return paths.filter((p): p is string => p !== undefined)
+}
+
 /** The root-relative file an `!include` line reads, written in `from`
  *  (`null` = the root), or null for any other line or an unreadable target. */
 function includeTarget(raw: string, from: string | null): string | null {
@@ -216,8 +240,6 @@ class SerializerContext {
     private allRelationships: readonly Relationship[]
     /** Included files that declare a deployment environment. */
     private environmentFiles: ReadonlySet<string>
-    /** File of the deployment environment being written. */
-    private environmentOwner: string | null = null
     // Set up by serializeModel() for writeRelationshipsBeforeEnvironment().
     private unwrittenTopLevel = new Set<string>()
     private writtenDirectives = new Set<WorkspaceDirective>()
@@ -239,6 +261,9 @@ class SerializerContext {
      *  Their content is written inline, so the line itself is not, or a reload
      *  would declare that content twice (TEA-352). */
     private inlinedIncludes = new Set<WorkspaceDirective>()
+    /** Full serialization only: the files whose content it writes inline,
+     *  known from `includedFiles` or, without it, from `sourcePath`. */
+    private inlinedFiles: ReadonlySet<string> = new Set()
     /** The unfiltered model: `include *` expands against all of it, whichever
      *  file each element was declared in. */
     private wildcardModel: Workspace['model']
@@ -252,6 +277,7 @@ class SerializerContext {
         this.included = new Set((idSource.includedFiles ?? []).map(f => f.path))
         this.readOnly = new Set((idSource.includedFiles ?? []).filter((f) => !f.writable).map((f) => f.path))
         if (source === undefined) {
+            this.inlinedFiles = new Set([...this.included, ...contentFiles(idSource)])
             for (const d of workspace.directives ?? []) if (this.inlinesInclude(d.raw, d.sourcePath ?? null)) this.inlinedIncludes.add(d)
         }
         this.allRelationships = idSource.model.relationships
@@ -448,12 +474,24 @@ class SerializerContext {
     private inlinesInclude(raw: string, from: string | null): boolean {
         if (this.source !== undefined) return false
         const target = includeTarget(raw, from)
-        return target !== null && this.included.has(target)
+        return target !== null && this.inlinedFiles.has(target)
+    }
+
+    /** Full serialization writes everything into the root, so a kept
+     *  `!include` read from a file in a folder is rewritten relative to the
+     *  root, or it would no longer find its file. */
+    private rootRelative(raw: string, from: string | null | undefined): string {
+        if (this.source !== undefined || !from?.includes('/')) return raw
+        const target = includeTarget(raw, from)
+        if (target === null) return raw
+        return `!include ${/\s/.test(target) ? `"${target}"` : target}`
     }
 
     /** The `!` lines to write in an element's own block. */
     private elementDirectives(el: { directives?: string[]; sourcePath?: string }): string[] {
-        return (el.directives ?? []).filter((d) => !this.inlinesInclude(d, el.sourcePath ?? null))
+        return (el.directives ?? [])
+            .filter((d) => !this.inlinesInclude(d, el.sourcePath ?? null))
+            .map((d) => this.rootRelative(d, el.sourcePath))
     }
 
     private elementName(id: string): string {
@@ -674,7 +712,10 @@ class SerializerContext {
      *  null when it writes none. With a PropertyLayout, only the lines and `!`
      *  lines of the file being written, each in its recorded position; see
      *  PropertyLayout. */
-    private propertyBlock(props: Record<string, string>, layout: PropertyLayout | undefined, owner: string | null, element = false): PropertyBlock | null {
+    private propertyBlock(
+        props: Record<string, string>, layout: PropertyLayout | undefined, owner: string | null,
+        element = false, location?: string,
+    ): PropertyBlock | null {
         if (!layout) {
             const lines = Object.entries(props).map(([key, value]) => ({ key, value, slot: 0 }))
             return lines.length > 0 ? { lines, directives: [] } : null
@@ -691,8 +732,12 @@ class SerializerContext {
             ? new Set([...this.included, ...layout.declarations.flatMap((d) => d.sourcePath ?? [])].filter((path) => path !== owner))
             : this.readOnly
         layout = this.inlineDeletedIncludes(layout, props, source)
-        const lines = propertyLinesFor(props, layout.declarations, source, unwritten, owner, equivalent)
+        let lines = propertyLinesFor(props, layout.declarations, source, unwritten, owner, equivalent)
         const directives = layout.directives.filter((d) => (d.sourcePath ?? null) === source)
+        // Once no `!` line is left (each was replaced by its values), the
+        // parser reads Unspecified back as a plain property, so it is not
+        // written, as in a block that never had an include.
+        if (location === 'Unspecified' && directives.length === 0) lines = lines.filter((l) => l.key !== 'c4hero.location')
         return lines.length > 0 || directives.length > 0 ? { lines, directives } : null
     }
 
@@ -817,7 +862,7 @@ class SerializerContext {
      */
     private emitPropertyLines(
         lines: PropertyDeclaration[], scopes: WorkspaceDirective['scope'][],
-        directives: readonly { raw: string; scope?: WorkspaceDirective['scope'] }[]
+        directives: readonly { raw: string; scope?: WorkspaceDirective['scope']; sourcePath?: string }[]
             = (this.workspace.directives ?? []).filter((d) => scopes.includes(d.scope)),
     ): boolean {
         let open = false
@@ -848,7 +893,7 @@ class SerializerContext {
             if (this.inlinedIncludes.has(directive as WorkspaceDirective)) continue
             // No scope: a line of an element's or relationship's properties block.
             setOpen(directive.scope === undefined || directive.scope.endsWith('Properties'))
-            this.emit(directive.raw)
+            this.emit(this.rootRelative(directive.raw, directive.sourcePath))
             any = true
         }
         setOpen(false)
@@ -866,7 +911,7 @@ class SerializerContext {
             if (d.scope !== scope && !(scope === 'model' && d.scope === 'modelProperties')) continue
             if (scope === 'model' && (d.after || d.groupId)) continue
             if (scope === 'model') any = this.emitModelDirective(d) || any
-            else if (!this.inlinedIncludes.has(d)) { this.emit(d.raw); any = true }
+            else if (!this.inlinedIncludes.has(d)) { this.emit(this.rootRelative(d.raw, d.sourcePath)); any = true }
         }
         return any
     }
@@ -1078,21 +1123,21 @@ class SerializerContext {
     // ─── Deployment ─────────────────────────────────────────────────
 
     private serializeDeploymentEnvironment(env: DeploymentEnvironment): void {
-        this.environmentOwner = env.sourcePath ?? null
         this.emit(`deploymentEnvironment "${this.escapeString(env.name)}" {`)
         this.depth++
         for (let i = 0; i < env.deploymentNodes.length; i++) {
             if (i > 0) this.emitBlank()
-            this.serializeDeploymentNode(env.deploymentNodes[i])
+            this.serializeDeploymentNode(env.deploymentNodes[i], env.sourcePath ?? null)
         }
         this.depth--
         this.emit('}')
     }
 
-    private serializeDeploymentNode(node: DeploymentNode): void {
+    /** `owner`: the environment's file, which its properties blocks belong to. */
+    private serializeDeploymentNode(node: DeploymentNode, owner: string | null): void {
         const varName = this.idToVar.get(node.id)
         const extraTags = this.getExtraTags(node.tags, ['Element', 'Deployment Node'])
-        const propertyBlock = this.deploymentPropertyBlock(node)
+        const propertyBlock = this.deploymentPropertyBlock(node, owner)
 
         const parts: string[] = []
         parts.push('deploymentNode')
@@ -1114,16 +1159,16 @@ class SerializerContext {
         if (propertyBlock) this.serializePropertyBlock(propertyBlock)
 
         for (const infra of node.infrastructureNodes) {
-            this.serializeInfrastructureNode(infra)
+            this.serializeInfrastructureNode(infra, owner)
         }
         for (const inst of node.softwareSystemInstances) {
-            this.serializeElementInstance('softwareSystemInstance', inst, inst.softwareSystemId, ['Software System Instance'])
+            this.serializeElementInstance('softwareSystemInstance', inst, inst.softwareSystemId, ['Software System Instance'], owner)
         }
         for (const inst of node.containerInstances) {
-            this.serializeElementInstance('containerInstance', inst, inst.containerId, ['Container Instance'])
+            this.serializeElementInstance('containerInstance', inst, inst.containerId, ['Container Instance'], owner)
         }
         for (const child of node.children) {
-            this.serializeDeploymentNode(child)
+            this.serializeDeploymentNode(child, owner)
         }
 
         this.depth--
@@ -1131,15 +1176,15 @@ class SerializerContext {
     }
 
     /** The properties block of a deployment node, infrastructure node or
-     *  instance, which belongs to its environment's file. */
-    private deploymentPropertyBlock(el: { properties: Record<string, string>; propertyLayout?: PropertyLayout }): PropertyBlock | null {
-        return this.propertyBlock(this.emittableProperties(el.properties), el.propertyLayout, this.environmentOwner)
+     *  instance, which belongs to its environment's file, `owner`. */
+    private deploymentPropertyBlock(el: { properties: Record<string, string>; propertyLayout?: PropertyLayout }, owner: string | null): PropertyBlock | null {
+        return this.propertyBlock(this.emittableProperties(el.properties), el.propertyLayout, owner)
     }
 
-    private serializeInfrastructureNode(infra: InfrastructureNode): void {
+    private serializeInfrastructureNode(infra: InfrastructureNode, owner: string | null): void {
         const varName = this.idToVar.get(infra.id)
         const extraTags = this.getExtraTags(infra.tags, ['Element', 'Infrastructure Node'])
-        const propertyBlock = this.deploymentPropertyBlock(infra)
+        const propertyBlock = this.deploymentPropertyBlock(infra, owner)
         const hasBlock = !!infra.url || propertyBlock !== null
 
         const parts: string[] = []
@@ -1171,12 +1216,13 @@ class SerializerContext {
         inst: ContainerInstance | SoftwareSystemInstance,
         referencedId: string,
         defaultTags: string[],
+        owner: string | null,
     ): void {
         const varName = this.idToVar.get(inst.id)
         const ref = this.idToVar.get(referencedId) ?? referencedId
         const extraTags = this.getExtraTags(inst.tags, defaultTags)
         const url = inst.url
-        const propertyBlock = this.deploymentPropertyBlock(inst)
+        const propertyBlock = this.deploymentPropertyBlock(inst, owner)
         const hasBlock = !!url || propertyBlock !== null
 
         const parts: string[] = [keyword, ref]
@@ -1199,7 +1245,7 @@ class SerializerContext {
         const varName = this.idToVar.get(person.id)
         const extraTags = this.locationAwareTags(person, ['Element', 'Person'])
         const props = this.elementProperties(person)
-        const propertyBlock = this.propertyBlock(props, person.propertyLayout, person.sourcePath ?? null, true)
+        const propertyBlock = this.propertyBlock(props, person.propertyLayout, person.sourcePath ?? null, true, person.location)
         const hasProperties = propertyBlock !== null
         const hasBlock = !!person.url || hasProperties || this.elementDirectives(person).length > 0
 
@@ -1230,7 +1276,7 @@ class SerializerContext {
         const varName = this.idToVar.get(sys.id)
         const extraTags = this.locationAwareTags(sys, ['Element', 'Software System'])
         const props = this.elementProperties(sys)
-        const propertyBlock = this.propertyBlock(props, sys.propertyLayout, sys.sourcePath ?? null, true)
+        const propertyBlock = this.propertyBlock(props, sys.propertyLayout, sys.sourcePath ?? null, true, sys.location)
         const hasProperties = propertyBlock !== null
         const hasBody = sys.containers.length > 0 || !!sys.url || hasProperties || this.elementDirectives(sys).length > 0
 
