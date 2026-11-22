@@ -1,4 +1,4 @@
-import type { IncludedFile, PropertyDeclaration, PropertyLayout, Workspace, WorkspaceDirective } from '@/types/model'
+import type { DeploymentNode, IncludedFile, PropertyDeclaration, PropertyLayout, Workspace, WorkspaceDirective } from '@/types/model'
 import { parseDSL, type ParseError } from '@/lib/dsl'
 import { applySidecar, parseSidecar } from '@/lib/sidecar'
 import {
@@ -154,6 +154,14 @@ export function stitchWorkspaceDocument(
     }
   }
   for (const rel of workspace.model.relationships) placeLayout(rel.propertyLayout)
+  const placeDeploymentLayouts = (nodes: DeploymentNode[]) => {
+    for (const node of nodes) {
+      placeLayout(node.propertyLayout)
+      for (const el of [...node.infrastructureNodes, ...node.containerInstances, ...node.softwareSystemInstances]) placeLayout(el.propertyLayout)
+      placeDeploymentLayouts(node.children)
+    }
+  }
+  for (const env of workspace.model.deploymentEnvironments ?? []) placeDeploymentLayouts(env.deploymentNodes)
   const themesPath = fileOf(themesLine)
   if (themesPath) workspace.views.configuration.themesSourcePath = themesPath
 

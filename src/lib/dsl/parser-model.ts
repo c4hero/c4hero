@@ -27,7 +27,12 @@ type Element = Person | SoftwareSystem | Container | Component
 function applyStructurizrConventions(element: Element): void {
     if (element.type === 'person' || element.type === 'softwareSystem') {
         const location = element.properties['c4hero.location']
-        if (element.location === undefined && (location === 'External' || location === 'Internal')) {
+        // With `!` lines in its properties block, c4hero writes every location
+        // as this property, Unspecified included, to override an include
+        // (TEA-351). Elsewhere Unspecified stays a plain property.
+        const written = location === 'External' || location === 'Internal' || (location === 'Unspecified'
+            && element.propertyLayout?.declarations.some(d => d.key === 'c4hero.location'))
+        if (element.location === undefined && written) {
             element.location = location
             delete element.properties['c4hero.location']
         }

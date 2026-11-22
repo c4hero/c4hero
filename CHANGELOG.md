@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Values from an `!include` now survive editing and saving.** An `!include`
+  inside the `properties { }` block of a deployment node, infrastructure node
+  or instance is now kept on save, as it already was for other elements
+  (TEA-350). Deleting a property that an included file sets, or clearing a
+  status, owner or location it sets, now persists: the include is replaced by
+  the values it still supplies. Setting the location to Unspecified over an
+  included location reloads as Unspecified, and an included External location
+  is no longer copied into the root file as a tag. A workspace imported from
+  JSON without its list of included files keeps an edited included value
+  (TEA-351). Exporting a
+  multi-file workspace as one DSL file no longer keeps the `!include` of a file
+  whose content it writes inline, which declared that content twice and lost
+  its edits. An include it keeps from a file in a folder now points at that
+  folder's file from the root (TEA-352). Duplicating connected containers or components inside a
+  system from an included file now writes the copied relationship to that file
+  too, not to the root (TEA-353).
 - Styles written for the `External` tag (`element "External" { ... }`) apply
   again to external people and software systems, both in an imported DSL file
   and after setting Location to External in the inspector (TEA-168). An element
@@ -89,8 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `!include` inside the `properties { }` block of a person, software system,
   container, component or relationship was dropped on save, and the included
   values were copied into the root file. The include is now kept, and each line
-  stays in its place around it. Deployment nodes, infrastructure nodes and
-  instances are not covered yet. A custom
+  stays in its place around it. A custom
   `structurizr.groupSeparator` is no longer replaced with `/` when groups are
   nested, so `Group:` style tags keep matching. Editing a property whose value
   came from a read-only include now writes the new value into the root file

@@ -114,6 +114,8 @@ export interface ContainerInstance {
   containerId: string
   tags: string[]
   properties: Record<string, string>
+  /** See PropertyLayout. */
+  propertyLayout?: PropertyLayout
   url?: string
 }
 
@@ -124,6 +126,8 @@ export interface SoftwareSystemInstance {
   softwareSystemId: string
   tags: string[]
   properties: Record<string, string>
+  /** See PropertyLayout. */
+  propertyLayout?: PropertyLayout
   url?: string
 }
 

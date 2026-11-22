@@ -2,7 +2,7 @@ import { isReadOnlySource } from '@/lib/includeWriteback'
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
-  ViewType, ElementInView, DeploymentNode, RelationshipExclusion,
+  ViewType, ElementInView, DeploymentNode, Relationship, RelationshipExclusion,
 } from '@/types/model'
 import type { CascadeImpact } from './workspace-types'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
@@ -950,19 +950,22 @@ export function duplicateElementsInTree(
 
   // Duplicate relationships that connect two elements within the duplicated set
   // so the cloned subgraph keeps its internal connectivity.
+  const relationshipCopies: Relationship[] = []
   for (const rel of ws.model.relationships) {
     const newSourceId = idMapping.get(rel.sourceId)
     const newDestId = idMapping.get(rel.destinationId)
     if (newSourceId && newDestId) {
       const newRelId = freshId()
-      ws.model.relationships.push({
+      const copy: Relationship = {
         ...deepCloneMaybeDraft(rel),
         propertyLayout: undefined,
         sourcePath: undefined,
         id: newRelId,
         sourceId: newSourceId,
         destinationId: newDestId,
-      })
+      }
+      ws.model.relationships.push(copy)
+      relationshipCopies.push(copy)
       for (const v of allViewsOf(ws)) {
         // A view's `exclude "* -> *"` line hides the copy too, on reload as
         // in Structurizr, so it is hidden here, as addRelationship does (#230).
@@ -1000,6 +1003,13 @@ export function duplicateElementsInTree(
     if (!copy) continue
     if (copy.type === 'person' || copy.type === 'softwareSystem') { setSubtree(copy, undefined); continue }
     setSubtree(copy, findParentHelper(ws, newId)?.sourcePath)
+  }
+  // A relationship copy goes with its copied endpoints when they share a
+  // file, so that file keeps them connected (TEA-353); otherwise the root.
+  for (const rel of relationshipCopies) {
+    const path = findElementHelper(ws, rel.sourceId)?.sourcePath
+    if (path !== undefined && path === findElementHelper(ws, rel.destinationId)?.sourcePath) rel.sourcePath = path
+    else delete rel.sourcePath
   }
   return newIds
 }

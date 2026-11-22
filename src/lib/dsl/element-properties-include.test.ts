@@ -175,3 +175,69 @@ describe('property precedence across serialization paths', () => {
     })
   }
 })
+
+describe('deployment properties blocks with ! lines (TEA-350)', () => {
+  const deployment = (nodeBlock: string, infraBlock: string, instanceBlock: string) => `workspace {
+model {
+s = softwareSystem "S" {
+c = container "C"
+}
+deploymentEnvironment "Live" {
+n = deploymentNode "N" {
+${nodeBlock}
+i = infrastructureNode "I" {
+${infraBlock}
+}
+ci = containerInstance c {
+${instanceBlock}
+}
+si = softwareSystemInstance s {
+${instanceBlock}
+}
+}
+}
+}
+views {}
+}`
+
+  it('keeps the include and override order of nodes, infrastructure nodes and instances', async () => {
+    const { root, reopened } = await roundTrip(
+      deployment(
+        'properties {\n"a" "1"\n!include p.dsl\n}',
+        'properties {\n!include p.dsl\n}',
+        'properties {\n!include p.dsl\n"a" "1"\n}',
+      ),
+      { 'p.dsl': '"a" "2"\n"b" "3"\n' },
+    )
+    expect(root.match(/!include p\.dsl/g)).toHaveLength(4)
+    expect(root).not.toContain('"b" "3"')
+    expect(root).toMatch(/"a" "1"\s+!include p\.dsl/)
+    expect(root).toMatch(/!include p\.dsl\s+"a" "1"/)
+    const node = reopened.workspace.model.deploymentEnvironments[0].deploymentNodes[0]
+    expect(node.properties).toEqual({ a: '2', b: '3' })
+    expect(node.infrastructureNodes[0].properties).toEqual({ a: '2', b: '3' })
+    expect(node.containerInstances[0].properties).toEqual({ a: '1', b: '3' })
+    expect(node.softwareSystemInstances[0].properties).toEqual({ a: '1', b: '3' })
+    expect(serializeRoot(reopened.workspace)).toBe(root)
+  })
+
+  it('writes an edit after the include, so it survives a reload', async () => {
+    const files = { 'p.dsl': '"a" "2"\n' }
+    const { loaded } = await roundTrip(
+      deployment('properties {\n!include p.dsl\n}', 'properties {\n!include p.dsl\n}', 'properties {\n!include p.dsl\n}'),
+      files,
+    )
+    const node = loaded.workspace.model.deploymentEnvironments[0].deploymentNodes[0]
+    node.properties.a = 'node'
+    node.infrastructureNodes[0].properties.a = 'infra'
+    node.containerInstances[0].properties.a = 'instance'
+    const root = serializeRoot(loaded.workspace)
+    expect(root.match(/!include p\.dsl/g)).toHaveLength(4)
+    const reopened = await loadWorkspaceDocument({ content: root, readInclude: async (p) => files[p as 'p.dsl'] ?? null })
+    const again = reopened.workspace.model.deploymentEnvironments[0].deploymentNodes[0]
+    expect(again.properties.a).toBe('node')
+    expect(again.infrastructureNodes[0].properties.a).toBe('infra')
+    expect(again.containerInstances[0].properties.a).toBe('instance')
+    expect(again.softwareSystemInstances[0].properties.a).toBe('2')
+  })
+})
