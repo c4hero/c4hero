@@ -1,6 +1,7 @@
 import type { Workspace, View } from '@/types/model'
 import type { EditOp, EditPlan } from './types'
 import { flattenElements } from './context'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 // Classify where a proposed operation lands relative to the view the user is on,
 // so a plan preview can label each change. Heuristic but pure + unit-tested.
@@ -26,6 +27,9 @@ interface ScopeCtx {
   viewIds: Set<string>
   ids: Set<string>
   nameToId: Map<string, string>
+  /** Relationships the view draws: the ones it lists, and the ones an
+   *  `include *` view draws as implied arrows between other elements (#230). */
+  drawnRelationshipIds: Set<string>
 }
 
 function buildScopeCtx(ws: Workspace, view: View): ScopeCtx {
@@ -36,7 +40,9 @@ function buildScopeCtx(ws: Workspace, view: View): ScopeCtx {
     const k = e.name.trim().toLowerCase()
     if (k && !nameToId.has(k)) nameToId.set(k, e.id)
   }
-  return { viewIds: new Set(view.elements.map((e) => e.id)), ids, nameToId }
+  const drawnRelationshipIds = new Set(view.relationships.map((r) => r.id))
+  for (const implied of wildcardImpliedRelationships(ws.model, view)) drawnRelationshipIds.add(implied.relationship.id)
+  return { viewIds: new Set(view.elements.map((e) => e.id)), ids, nameToId, drawnRelationshipIds }
 }
 
 function classifyWithCtx(op: EditOp, view: View, ctx: ScopeCtx, viewRefs?: ReadonlySet<string>): PlanScope {
@@ -67,7 +73,7 @@ function classifyWithCtx(op: EditOp, view: View, ctx: ScopeCtx, viewRefs?: Reado
     case 'deleteElement':
       return inView(op.id) ? 'view' : 'model'
     case 'updateRelationship':
-      return view.relationships.some((r) => r.id === op.id) ? 'view' : 'model'
+      return ctx.drawnRelationshipIds.has(op.id) ? 'view' : 'model'
     case 'addView':
       // A view-creating op produces the visible artifact itself — label it 'view'
       // so the plan preview flags it as landing on-screen (a new screen).

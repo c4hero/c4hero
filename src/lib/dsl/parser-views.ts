@@ -1,9 +1,9 @@
 // DSL parser — `views { ... }` block handling.
 //
 // Extracted from parser.ts. Each function takes the parser instance as its
-// first argument so it can use the shared token-navigation helpers and
-// access viewExcludedIds / the resolveRef map without inheriting the full
-// parser class.
+// first argument so it can use the shared token-navigation helpers, the
+// resolveRef map and the per-view include/exclude records without
+// inheriting the full parser class.
 
 import type { Workspace, View, ViewType, AutoLayout, LayoutDirection, Model, Relationship } from '@/types/model'
 import type { ContextAwareParser } from './parser'
@@ -663,6 +663,7 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
                             p.addError(`Unresolved reference: '${ref.ref}'`, ref.token)
                         }
                         view.elements.push({ id: resolvedId ?? ref.ref })
+                        p.noteExplicitInclude(view, resolvedId ?? ref.ref)
                     }
                 }
                 continue
@@ -670,9 +671,8 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
 
             if (kw === 'exclude') {
                 p.advance()
-                const excluded = p.viewExcludedIds.get(view) ?? new Set<string>()
                 while (p.check('STAR') || p.check('IDENTIFIER') || p.check('STRING') || p.check('KEYWORD')) {
-                    if (p.check('STAR')) { excluded.add(p.advance().value); continue }
+                    if (p.check('STAR')) { p.advance(); continue }
                     if (p.check('STRING') && p.peek().value.includes('->')) {
                         const expression = p.advance().value
                         const [sourceRef, destinationRef, ...rest] = expression.split('->').map(s => s.trim())
@@ -688,6 +688,19 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
                                     if (!excludedRelationships.includes(id)) excludedRelationships.push(id)
                                 }
                             }
+                            // The line itself is kept as written: it also
+                            // hides implied relationships, which no id
+                            // above names, and later ones that match (#230).
+                            const end = (ref: string) =>
+                                ref === '*' ? '*' : p.resolveRef(ref) ?? (p.elementsById.has(ref) ? ref : undefined)
+                            const source = end(sourceRef)
+                            const destination = end(destinationRef)
+                            if (source !== undefined && destination !== undefined) {
+                                const expressions = (view.excludedRelationshipExpressions ??= [])
+                                if (!expressions.some(x => x.sourceId === source && x.destinationId === destination)) {
+                                    expressions.push({ sourceId: source, destinationId: destination })
+                                }
+                            }
                             continue
                         }
                     }
@@ -697,9 +710,8 @@ function parseViewBody(p: ContextAwareParser, view: View, model: Model): void {
                     if (!resolvedId && ref.ref.includes('.')) {
                         p.addError(`Unresolved reference: '${ref.ref}'`, ref.token)
                     }
-                    excluded.add(resolvedId ?? ref.ref)
+                    p.noteExclude(view, resolvedId ?? ref.ref)
                 }
-                p.viewExcludedIds.set(view, excluded)
                 continue
             }
 

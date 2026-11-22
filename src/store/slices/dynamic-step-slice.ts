@@ -2,7 +2,9 @@ import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import type { Relationship, View, Workspace } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { allViewsOf, elementExists, findViewHelper, restoreViewElement } from '../workspace-helpers'
+import {
+  allViewsOf, elementExists, findViewHelper, restoreViewElement, showWildcardArrivals, excludePair, viewExcludesPair,
+} from '../workspace-helpers'
 
 /** Sequential renumber + membership recompute after any step edit.
  *
@@ -77,11 +79,20 @@ export const createDynamicStepSlice: StateCreator<
       // deployment views derive their edges from the topology.
       for (const v of allViewsOf(ws)) {
         if (v.type === 'dynamic' || v.type === 'deployment') continue
+        // A view that hides the pair, by an `exclude` line or on the canvas,
+        // keeps it hidden, as addRelationship does (#230).
+        if (viewExcludesPair(ws, v, sourceId, destinationId)) {
+          excludePair(ws, v, sourceId, destinationId)
+          continue
+        }
         const ids = new Set(v.elements.map(e => e.id))
         if (ids.has(sourceId) && ids.has(destinationId) && !v.relationships.some(r => r.id === rel!.id)) {
           v.relationships.push({ id: rel.id })
         }
       }
+      // An `include *` view also shows what the relationship makes
+      // eligible, as Structurizr will (#230).
+      showWildcardArrivals(ws)
     }
 
     view.relationships.push({

@@ -4,7 +4,9 @@ import { buildEdges, buildNodes } from './canvasBuilders'
 import { handleSide, handleSlot } from './handleSlots'
 import type { HighlightFilters } from '@/lib/highlight'
 import { THEMES } from '@/lib/themes'
-import type { ElementStyle, Workspace } from '@/types/model'
+import { parseDSL } from '@/lib/dsl'
+import { buildElementMap } from '@/store/workspace'
+import type { ElementStyle, Relationship, RelationshipStyle, View, Workspace } from '@/types/model'
 
 const NO_FILTERS: HighlightFilters = {
   tags: [],
@@ -182,5 +184,171 @@ describe('buildEdges handle routing', () => {
         expect(handleSlot(handle!)).not.toBeNull()
       }
     }
+  })
+})
+
+/** The model from #230: each relationship sits below the level at least one
+ *  of the views shows. */
+function issueDsl(containerViewBody = 'include *', extraModel = '', extraViews = ''): string {
+  return `
+workspace "Container view include *" {
+  model {
+    user = person "User"
+    a = softwareSystem "System A" {
+      web = container "Web" {
+        ctrl = component "Controller"
+      }
+      db = container "Database"
+    }
+    b = softwareSystem "System B" {
+      api = container "B API"
+    }
+    user -> ctrl "Uses"
+    web -> db "Reads from"
+    web -> api "Calls" "HTTPS" "Critical"
+${extraModel}
+  }
+  views {
+    systemContext a "ContextA" {
+      include *
+    }
+    container a "ContainersA" {
+      ${containerViewBody}
+    }
+${extraViews}
+    styles {
+      relationship "Critical" {
+        color #ff0000
+      }
+    }
+  }
+}`
+}
+
+function parsed(dsl: string): Workspace {
+  const { workspace, errors } = parseDSL(dsl)
+  expect(errors).toHaveLength(0)
+  return workspace
+}
+
+function staticView(ws: Workspace, key: string): View {
+  return [
+    ...ws.views.systemLandscapeViews,
+    ...ws.views.systemContextViews,
+    ...ws.views.containerViews,
+    ...ws.views.componentViews,
+  ].find((v) => v.key === key)!
+}
+
+/** The view's edges, with every node laid out in a row. */
+function viewEdges(ws: Workspace, key: string) {
+  const view = staticView(ws, key)
+  const nodes: Node[] = view.elements.map((e, i) => ({ id: e.id, position: { x: i * 300, y: 0 }, data: {} }))
+  return buildEdges(ws, view, nodes, NO_FILTERS)
+}
+
+/** `Source -> Target 'description'` per edge, as drawn. */
+function edgeLabels(ws: Workspace, key: string): string[] {
+  const names = buildElementMap(ws)
+  return viewEdges(ws, key)
+    .map((e) => `${names.get(e.source)?.name} -> ${names.get(e.target)?.name} '${(e.data as { relationship: Relationship }).relationship.description ?? ''}'`)
+    .sort()
+}
+
+describe('buildEdges implied relationships in include * views (#230)', () => {
+  it('draws what Structurizr draws in the issue\'s container view', () => {
+    const ws = parsed(issueDsl())
+    // Main drew Web -> B API only because include * wrongly showed that
+    // container; Structurizr shows System B and draws all three.
+    expect(edgeLabels(ws, 'ContainersA')).toEqual([
+      "User -> Web 'Uses'",
+      "Web -> Database 'Reads from'",
+      "Web -> System B 'Calls'",
+    ])
+  })
+
+  it('draws an implied edge with the relationship it comes from', () => {
+    const ws = parsed(issueDsl())
+    const edges = viewEdges(ws, 'ContainersA')
+    const relationshipIds = new Set(ws.model.relationships.map((r) => r.id))
+    const calls = ws.model.relationships.find((r) => r.description === 'Calls')!
+    const implied = edges.find((e) => e.source === 'web' && e.target === 'b')!
+    // Its own edge id, so it never collides with a relationship's edge…
+    expect(relationshipIds.has(implied.id)).toBe(false)
+    expect(new Set(edges.map((e) => e.id)).size).toBe(edges.length)
+    // …but the relationship's label, technology and tag style, and selecting
+    // it selects that relationship.
+    const data = implied.data as { relationship: Relationship; relationshipStyle?: RelationshipStyle; implied?: boolean }
+    expect(data.relationship).toBe(calls)
+    expect(data.implied).toBe(true)
+    expect(data.relationshipStyle?.color).toBe('#ff0000')
+    // Dragging its end would move `web -> api`, which it does not show.
+    expect(implied.reconnectable).toBe(false)
+
+    const direct = edges.find((e) => e.source === 'web' && e.target === 'db')!
+    expect(relationshipIds.has(direct.id)).toBe(true)
+    expect((direct.data as { implied?: boolean }).implied).toBeUndefined()
+    expect(direct.reconnectable).toBeUndefined()
+  })
+
+  it('draws system level relationships in a context view', () => {
+    const ws = parsed(issueDsl())
+    expect(edgeLabels(ws, 'ContextA')).toEqual([
+      "System A -> System B 'Calls'",
+      "User -> System A 'Uses'",
+    ])
+  })
+
+  it('draws relationships to sibling containers and other systems in a component view', () => {
+    const ws = parsed(issueDsl('include *', `
+    ctrl -> db "Queries"
+    ctrl -> api "Fetches"
+    db -> api "Replicates"`, `
+    component web "ComponentsWeb" {
+      include *
+    }`))
+    expect(edgeLabels(ws, 'ComponentsWeb')).toEqual([
+      "Controller -> Database 'Queries'",
+      "Controller -> System B 'Fetches'",
+      "Database -> System B 'Replicates'",
+      "User -> Controller 'Uses'",
+    ])
+  })
+
+  it('labels a pair with the first relationship that implies it', () => {
+    const ws = parsed(issueDsl('include *', `
+    web -> api "Calls again"`))
+    expect(edgeLabels(ws, 'ContextA')).toContain("System A -> System B 'Calls'")
+    expect(edgeLabels(ws, 'ContextA')).not.toContain("System A -> System B 'Calls again'")
+  })
+
+  it('implies nothing over an explicit relationship declared before it', () => {
+    const ws = parsed(issueDsl().replace('user -> ctrl "Uses"', 'a -> b "Depends on"\n    user -> ctrl "Uses"'))
+    expect(edgeLabels(ws, 'ContextA')).toEqual([
+      "System A -> System B 'Depends on'",
+      "User -> System A 'Uses'",
+    ])
+  })
+
+  it('draws no arrow an exclude line hides, implied ones included', () => {
+    // Structurizr draws nothing in either view: `* -> *` matches every
+    // relationship, and `user -> *` the implied User -> Web.
+    const ws = parsed(issueDsl('include *\n      exclude "user -> *"', '', `
+    systemContext a "ContextNone" {
+      include *
+      exclude "* -> *"
+    }`))
+    expect(edgeLabels(ws, 'ContextNone')).toEqual([])
+    expect(edgeLabels(ws, 'ContainersA')).toEqual([
+      "Web -> Database 'Reads from'",
+      "Web -> System B 'Calls'",
+    ])
+  })
+
+  it('leaves a view with its own include list as it was', () => {
+    // Structurizr draws User -> Web and Web -> System B here too; views with
+    // their own include lists keep drawing only what they list, for now.
+    const ws = parsed(issueDsl('include user web db b'))
+    expect(edgeLabels(ws, 'ContainersA')).toEqual(["Web -> Database 'Reads from'"])
   })
 })

@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useWorkspaceStore } from '@/store/workspace'
+import { parseDSL } from '@/lib/dsl'
 import type { Workspace } from '@/types/model'
 import RightPanel from './RightPanel'
 
@@ -415,5 +416,63 @@ describe('RightPanel — Remove from view button (touch parity)', () => {
     render(<RightPanel />)
 
     expect(screen.queryByLabelText(/remove from view/i)).toBeNull()
+  })
+})
+
+describe('RightPanel — relationships in an include * view (#230)', () => {
+  // The container view from #230: `user -> ctrl` and `web -> api` sit below
+  // the level the view shows, so it draws them as the implied User -> Web
+  // and Web -> System B.
+  function issueWorkspace(): Workspace {
+    return parseDSL(`workspace {
+      model {
+        user = person "User"
+        a = softwareSystem "System A" {
+          web = container "Web" {
+            ctrl = component "Controller"
+          }
+          db = container "Database"
+        }
+        b = softwareSystem "System B" {
+          api = container "B API"
+        }
+        user -> ctrl "Uses"
+        web -> db "Reads from"
+        web -> api "Calls"
+      }
+      views {
+        container a "ContainersA" {
+          include *
+        }
+      }
+    }`).workspace
+  }
+
+  function select(description: string) {
+    useWorkspaceStore.getState().loadWorkspace(issueWorkspace())
+    useWorkspaceStore.getState().setActiveView('ContainersA')
+    const rel = useWorkspaceStore.getState().workspace!.model.relationships.find((r) => r.description === description)!
+    useWorkspaceStore.getState().selectRelationship(rel.id)
+    render(<RightPanel />)
+    return rel
+  }
+
+  it('hides a relationship the view lists', () => {
+    const rel = select('Reads from')
+    expect(screen.queryByTestId('implied-relationship-note')).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('Remove relationship from view'))
+
+    const view = useWorkspaceStore.getState().workspace!.views.containerViews[0]
+    expect(view.relationships.map((r) => r.id)).not.toContain(rel.id)
+    expect(view.excludedRelationshipIds).toEqual([rel.id])
+  })
+
+  it('says where an implied arrow comes from instead of offering to hide it', () => {
+    // Hiding it would need `exclude "user -> web"`, which the view cannot
+    // keep, and removing `user -> ctrl` from the view would change nothing.
+    select('Uses')
+    expect(screen.queryByLabelText('Remove relationship from view')).toBeNull()
+    expect(screen.getByTestId('implied-relationship-note').textContent).toContain('Shown in this view as User → Web')
   })
 })

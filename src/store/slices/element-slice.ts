@@ -18,6 +18,7 @@ import {
   findViewHelper,
   appendScopedView,
   selectCreated,
+  showWildcardArrivals,
 } from '../workspace-helpers'
 import { getFirstViewKey } from '../workspace-selectors'
 
@@ -341,6 +342,8 @@ export const createElementSlice: StateCreator<
       }
       createdIds = duplicateElementsInTree(s.workspace, ids, s.activeViewKey, freshId)
       if (createdIds.length === 0) return
+      // A copied relationship can connect a copy to an `include *` view's scope (#230).
+      showWildcardArrivals(s.workspace)
       pushUndoSnapshot(s)
       s.selectedElementIds = createdIds
       s.selectedRelationshipId = null

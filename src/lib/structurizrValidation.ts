@@ -342,8 +342,11 @@ function usesDefaultImpliedRelationships(ws: Workspace): boolean {
  * Relationship checks 4 and 5.
  *
  * Both depend on Structurizr's *ordering*, so this walks
- * `model.relationships` in the order the serializer emits them (it writes the
- * array straight through, after the elements).
+ * `model.relationships` in the order the serializer emits them. It writes the
+ * array in order after the elements, except that it moves some relationships
+ * above a deployment environment (#231). It never moves one past another that
+ * connects a common element pair, explicitly or by implication, and only
+ * those relationships' order matters here.
  *
  * - A relationship between an element and any of its ancestors or descendants
  *   is rejected outright.

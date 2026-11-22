@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useNavigate, useLocation, useParams } from 'react-router-dom'
+import { useNavigate, useLocation, useNavigationType, useParams } from 'react-router-dom'
 import { useWorkspaceStore, allViewsOf } from '@/store/workspace'
 import { getCurrentDirHandle, restoreDirHandleByName, readDSLFile, readDSLFileAt } from '@/lib/host'
 import { loadFromLocalStorage } from '@/lib/host'
@@ -31,13 +31,21 @@ export function useRouteSync() {
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   const navigate = useNavigate()
   const location = useLocation()
+  const navigationType = useNavigationType()
   const { viewKey: urlViewKey } = useParams<{ viewKey?: string }>()
   const isInitialSync = useRef(true)
+  const appliedInitialView = useRef(false)
+  const pendingPaths = useRef<string[]>([])
+  const previousPath = useRef(location.pathname)
 
   // On mount / workspace load: apply view key from URL
   useEffect(() => {
     if (isVsCodeHost()) return
-    if (!workspace) return
+    if (!workspace) { appliedInitialView.current = false; pendingPaths.current = []; return }
+    // Immutable edits and undo replace workspace too. Replaying the old URL
+    // then can overwrite a view switch before its navigation has committed.
+    if (appliedInitialView.current) return
+    appliedInitialView.current = true
     if (urlViewKey) {
       const decoded = decodeURIComponent(urlViewKey)
       if (decoded !== activeViewKey) {
@@ -56,6 +64,7 @@ export function useRouteSync() {
     if (!workspace) return
     const targetPath = buildCanvasPath(activeViewKey)
     if (location.pathname !== targetPath) {
+      pendingPaths.current.push(targetPath)
       if (isInitialSync.current) {
         navigate(targetPath, { replace: true })
       } else {
@@ -71,6 +80,17 @@ export function useRouteSync() {
     if (isVsCodeHost()) return
     if (!workspace) return
 
+    // A navigation requested by state can commit after a newer view switch.
+    // Acknowledge it without replaying that older view into the store.
+    const pathChanged = previousPath.current !== location.pathname
+    previousPath.current = location.pathname
+    const pendingIndex = pendingPaths.current.lastIndexOf(location.pathname)
+    if (pendingIndex >= 0) {
+      pendingPaths.current.splice(0, pendingIndex + 1)
+      return
+    }
+    if (pathChanged) pendingPaths.current = []
+
     // Check if we navigated away from canvas
     const match = location.pathname.match(/^\/collection\/[^/]+\/[^/]+(?:\/(.+))?$/)
     if (!match) {
@@ -83,7 +103,14 @@ export function useRouteSync() {
     if (viewFromUrl && viewFromUrl !== activeViewKey) {
       const allViews = allViewsOf(workspace)
       if (allViews.some(v => v.key === viewFromUrl)) {
+        // Only history navigation (back/forward) moves the view. A PUSH or
+        // REPLACE is the effect above echoing an earlier view change: the
+        // router commits it in a transition, so it can land after a newer
+        // switch, and applying it would bounce the user back to the older
+        // view. The effect above has already pushed the newer path.
+        if (navigationType !== 'POP') return
         useWorkspaceStore.setState({
+          rendererMode: 'diagram',
           activeViewKey: viewFromUrl,
           selectedElementIds: [],
           selectedRelationshipId: null,

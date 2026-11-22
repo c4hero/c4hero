@@ -74,6 +74,14 @@ describe('ViewSwitcher (trigger)', () => {
     fireEvent.click(screen.getByLabelText('Switch view'))
     expect(onToggle).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps the selected view title and badge while Zoom is enabled', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    act(() => { useWorkspaceStore.getState().setRendererMode('zoom') })
+    render(<ViewSwitcher isMobile={false} open={false} onToggle={noop} onClose={noop} onShowCreateView={noop} />)
+    expect(screen.getByText('Overview')).toBeTruthy()
+    expect(screen.getByText('Map')).toBeTruthy()
+  })
 })
 
 describe('ViewSwitcherPanel', () => {
@@ -100,6 +108,16 @@ describe('ViewSwitcherPanel', () => {
     fireEvent.click(screen.getByText('API Context'))
     expect(useWorkspaceStore.getState().activeViewKey).toBe('ctx')
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+
+  it('keeps Zoom enabled when another authored view is selected', () => {
+    useWorkspaceStore.getState().loadWorkspace(makeWs())
+    useWorkspaceStore.getState().setRendererMode('zoom')
+    render(<ViewSwitcherPanel onClose={noop} onShowCreateView={noop} />)
+    fireEvent.click(screen.getByText('Second Map'))
+    expect(useWorkspaceStore.getState().rendererMode).toBe('zoom')
+    expect(useWorkspaceStore.getState().activeViewKey).toBe('second')
   })
 
   it('renames a view via the pencil button and Enter', () => {

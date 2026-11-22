@@ -6,8 +6,8 @@ const DEFAULT_NODE_WIDTH = 200
 const DEFAULT_NODE_HEIGHT = 100
 const GROUP_PADDING = 24
 const GROUP_PADDING_TOP = 52
-const BOUNDARY_PADDING = 32
-const BOUNDARY_PADDING_TOP = 64
+export const BOUNDARY_PADDING = 32
+export const BOUNDARY_PADDING_TOP = 64
 const BOUNDARY_SPANNING_GROUP_PADDING = GROUP_PADDING + BOUNDARY_PADDING + 16
 const BOUNDARY_SPANNING_GROUP_PADDING_TOP = GROUP_PADDING_TOP + BOUNDARY_PADDING_TOP + 16
 const OVERLAY_CLUSTER_GAP = 72
@@ -438,6 +438,7 @@ export function applyAutoLayout(
   direction: string = 'TB',
   boundaryInternalIds: Set<string> = new Set(),
   boundaryClusters: LayoutBoundaryCluster[] = [],
+  spacing = { ranksep: 300, nodesep: 250 },
 ): Node[] {
   const frozenIds = new Set(
     view.elements.filter(e => e.x !== undefined && e.y !== undefined).map(e => e.id),
@@ -447,7 +448,7 @@ export function applyAutoLayout(
 
   const g = new dagre.graphlib.Graph({ compound: true })
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: direction, ranksep: 300, nodesep: 250 })
+  g.setGraph({ rankdir: direction, ...spacing })
 
   const sizeById = new Map<string, { width: number; height: number }>()
   const nodeIds = new Set(nodes.map(n => n.id))

@@ -1,10 +1,17 @@
+import { zoomLayoutOwner, zoomElements } from '@/lib/zoom/editing'
 import type { StateCreator } from 'zustand'
 import { current } from 'immer'
 import type { WorkspaceState } from '../workspace-types'
 import type { View } from '@/types/model'
 import { nanoid, pushUndoSnapshot } from '../internals'
-import { findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews, orphanedLayoutViewKeys } from '../workspace-helpers'
+import {
+  findViewHelper, VIEW_ARRAY_KEYS, appendScopedView, restoreViewElement, materializeAutoViews, orphanedLayoutViewKeys,
+  idsEnteringView, idsLeavingView, makeRoomInWildcardView, noteHiddenFromView, noteShownInView, showWildcardArrivals,
+  dropCoveringExclusions,
+} from '../workspace-helpers'
+import { viewExpressionsExclude } from '@/lib/dsl/wildcard'
 import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
+import { getActiveCamera } from '@/lib/activeCamera'
 import { defaultViewTitle, uniqueViewTitle } from '../workspace-helpers'
 
 /** View management: create / delete / rename / duplicate views, plus the
@@ -208,6 +215,13 @@ export const createViewSlice: StateCreator<
   }),
 
   removeElementsFromView: (viewKey, ids) => set((s) => {
+    if (s.workspace && s.rendererMode === 'zoom') {
+      pushUndoSnapshot(s)
+      const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout ??= {}
+      layout.hiddenIds = [...new Set([...(layout.hiddenIds ?? []), ...ids])]
+      s.selectedElementIds = []
+      return
+    }
     if (!s.workspace) return
     if (ids.length === 0) return
     const ws = s.workspace
@@ -218,10 +232,13 @@ export const createViewSlice: StateCreator<
     // The keymap layer should already filter these out, but the helper guards
     // again so future callers can't accidentally bypass the rule.
     const focalId = getFocalScopeId(view)
-    const removable = new Set(ids.filter((id) => id !== focalId))
-    if (removable.size === 0) return
+    const requested = new Set(ids.filter((id) => id !== focalId))
+    if (requested.size === 0) return
 
     pushUndoSnapshot(s)
+    // An `include *` view keeps the hide, so a save writes it as `exclude` (#230).
+    noteHiddenFromView(ws, view, view.elements.map((e) => e.id).filter((id) => requested.has(id)))
+    const removable = idsLeavingView(ws, view, requested)
     for (const id of removable) {
       if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[id]
     }
@@ -231,6 +248,8 @@ export const createViewSlice: StateCreator<
       if (!rel) return false
       return !removable.has(rel.sourceId) && !removable.has(rel.destinationId)
     })
+    // An `include *` view shows what a hidden element was keeping out of it.
+    showWildcardArrivals(ws, [view])
   }),
 
   removeRelationshipFromView: (viewKey, relationshipId) => set((s) => {
@@ -271,7 +290,10 @@ export const createViewSlice: StateCreator<
       .map((r) => r.id))
     const wasExcluded = view.excludedRelationshipIds?.some((id) => pairIds.has(id)) ?? false
     const wasMissing = [...pairIds].some((id) => !view.relationships.some((r) => r.id === id))
-    if (!wasExcluded && !wasMissing) return
+    // An `exclude "a -> b"` line of the view's own that hides the pair would
+    // hide it again on reload, so it goes too (#230).
+    const lineHides = viewExpressionsExclude(view, rel.sourceId, rel.destinationId)
+    if (!wasExcluded && !wasMissing && !lineHides) return
     pushUndoSnapshot(s)
     if (wasMissing) {
       const presentIds = new Set(view.relationships.map((r) => r.id))
@@ -281,9 +303,17 @@ export const createViewSlice: StateCreator<
       view.excludedRelationshipIds = view.excludedRelationshipIds!.filter((id) => !pairIds.has(id))
       if (view.excludedRelationshipIds.length === 0) delete view.excludedRelationshipIds
     }
+    if (lineHides) dropCoveringExclusions(s.workspace, view, rel.sourceId, rel.destinationId)
   }),
 
   toggleElementInView: (viewKey, elementId) => set((s) => {
+    if (s.workspace && s.rendererMode === 'zoom' && zoomElements(s.workspace, findViewHelper(s.workspace, viewKey)).some(e => e.id === elementId)) {
+      pushUndoSnapshot(s)
+      const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout ??= {}
+      const hidden = layout.hiddenIds ?? []
+      layout.hiddenIds = hidden.includes(elementId) ? hidden.filter(id => id !== elementId) : [...hidden, elementId]
+      return
+    }
     if (!s.workspace) return
     const ws = s.workspace
     const view = findViewHelper(ws, viewKey)
@@ -291,29 +321,43 @@ export const createViewSlice: StateCreator<
     const idx = view.elements.findIndex(e => e.id === elementId)
     pushUndoSnapshot(s)
     if (idx >= 0) {
-      if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[elementId]
-      view.elements.splice(idx, 1)
+      // An `include *` view keeps the hide, so a save writes it as `exclude` (#230).
+      noteHiddenFromView(ws, view, [elementId])
+      const leaving = idsLeavingView(ws, view, [elementId])
+      for (const id of leaving) {
+        if (ws.savedLayout?.[viewKey]?.elements) delete ws.savedLayout[viewKey].elements[id]
+      }
+      view.elements = view.elements.filter(e => !leaving.has(e.id))
       // Also remove relationships that reference this element
       view.relationships = view.relationships.filter(r => {
         const rel = ws.model.relationships.find(mr => mr.id === r.id)
         if (!rel) return false
-        return rel.sourceId !== elementId && rel.destinationId !== elementId
+        return !leaving.has(rel.sourceId) && !leaving.has(rel.destinationId)
       })
+      showWildcardArrivals(ws, [view])
     } else {
+      // In an `include *` view, the element replaces its shown parent or
+      // child: Structurizr never shows both (#230).
+      makeRoomInWildcardView(ws, view, elementId)
       // Capture IDs already in the view BEFORE adding the new element
       const existingElementIds = new Set(view.elements.map(e => e.id))
+      noteShownInView(view, elementId)
       // Absence caused by a DSL edit is not a reset. Restore the retained
       // position when the user brings the element back; explicit removal
-      // above already discards its retained entry.
-      view.elements.push(restoreViewElement(ws, viewKey, elementId))
-      // Auto-add any model relationships that connect the new element to elements
+      // above already discards its retained entry. In an `include *`
+      // deployment view a node comes back with what runs on it, as in
+      // Structurizr once its `exclude` line is gone (#230).
+      const entering = idsEnteringView(ws, view, elementId)
+      for (const id of entering) view.elements.push(restoreViewElement(ws, viewKey, id))
+      // Auto-add any model relationships that connect the new elements to elements
       // already present in the view (avoids forcing the user to re-draw connections)
+      const enteringIds = new Set(entering)
       const existingRelIds = new Set(view.relationships.map(r => r.id))
+      const links = (from: string, to: string) =>
+        enteringIds.has(from) && (existingElementIds.has(to) || (enteringIds.has(to) && to !== from))
       for (const rel of ws.model.relationships) {
         if (existingRelIds.has(rel.id)) continue
-        const linksNewEl =
-          (rel.sourceId === elementId && existingElementIds.has(rel.destinationId)) ||
-          (rel.destinationId === elementId && existingElementIds.has(rel.sourceId))
+        const linksNewEl = links(rel.sourceId, rel.destinationId) || links(rel.destinationId, rel.sourceId)
         if (linksNewEl && !view.excludedRelationshipIds?.includes(rel.id)) {
           view.relationships.push({ id: rel.id })
           existingRelIds.add(rel.id)
@@ -337,6 +381,20 @@ export const createViewSlice: StateCreator<
 
   resetAndRelayout: (viewKey, direction) => set((s) => {
     if (!s.workspace) return
+    if (s.rendererMode === 'zoom') {
+      if (findViewHelper(s.workspace, viewKey)?.locked || zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout?.locked) return
+      const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout ?? {}
+      pushUndoSnapshot(s)
+      zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout = { ...layout, direction: direction ?? layout.direction,
+        elements: Object.fromEntries(Object.entries(layout.elements ?? {}).filter(([, e]) => e.locked)) }
+      const authored = findViewHelper(s.workspace, viewKey)
+      if (authored && !authored.locked) {
+        clearUnlockedPositions(authored)
+        if (direction) authored.autoLayout = { ...authored.autoLayout, direction }
+      }
+      s.layoutVersion += 1
+      return
+    }
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     if (view.locked) return
@@ -350,6 +408,19 @@ export const createViewSlice: StateCreator<
 
   setElementsLocked: (viewKey, ids, locked) => set((s) => {
     if (!s.workspace || ids.length === 0) return
+    if (s.rendererMode === 'zoom') {
+      const layout = getActiveCamera()?.layout?.(ids) ?? zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout ?? {}
+      pushUndoSnapshot(s)
+      layout.elements ??= {}
+      const authored = findViewHelper(s.workspace, viewKey)
+      for (const id of ids) {
+        const root = authored?.elements.find(e => e.id === id)
+        if (root) root.locked = locked || undefined
+        layout.elements[id] = { ...layout.elements[id], locked }
+      }
+      zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout = layout
+      return
+    }
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     const targets = new Set(ids)
@@ -360,6 +431,7 @@ export const createViewSlice: StateCreator<
     pushUndoSnapshot(s)
     for (const el of changed) {
       el.locked = locked || undefined
+      if (view.zoomLayout?.elements?.[el.id]) view.zoomLayout.elements[el.id].locked = locked || undefined
       // Adopt the current position as hand-authored. Without this, a
       // locked-but-never-dragged node is persisted only via `locked`, and
       // unlocking it later would silently drop the position it had been
@@ -370,15 +442,32 @@ export const createViewSlice: StateCreator<
 
   setViewLocked: (viewKey, locked) => set((s) => {
     if (!s.workspace) return
+    if (s.rendererMode === 'zoom') {
+      pushUndoSnapshot(s)
+      // Locking the view stops cards moving; it does not pin where they are.
+      zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout = { ...zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout, locked }
+      const authored = findViewHelper(s.workspace, viewKey)
+      if (authored) authored.locked = locked || undefined
+      return
+    }
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     if ((view.locked ?? false) === locked) return
     pushUndoSnapshot(s)
     view.locked = locked || undefined
+    if (view.zoomLayout) view.zoomLayout.locked = locked || undefined
   }),
 
   unlockAllInView: (viewKey) => set((s) => {
     if (!s.workspace) return
+    if (s.rendererMode === 'zoom') {
+      pushUndoSnapshot(s)
+      const layout = zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout ??= {}
+      for (const el of Object.values(layout.elements ?? {})) el.locked = false
+      const authored = findViewHelper(s.workspace, viewKey)
+      for (const el of authored?.elements ?? []) el.locked = false
+      return
+    }
     const view = findViewHelper(s.workspace, viewKey)
     if (!view) return
     const locked = view.elements.filter((el) => el.locked)
@@ -386,6 +475,7 @@ export const createViewSlice: StateCreator<
     pushUndoSnapshot(s)
     for (const el of locked) {
       el.locked = undefined
+      if (view.zoomLayout?.elements?.[el.id]) view.zoomLayout.elements[el.id].locked = undefined
       // Same as setElementsLocked: unlocking releases the node, it doesn't
       // forfeit the position the lock was holding.
       if (el.x !== undefined && el.y !== undefined) el.pinned = true

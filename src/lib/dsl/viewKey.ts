@@ -1,4 +1,4 @@
-import type { ViewType } from '@/types/model'
+import type { View, ViewType } from '@/types/model'
 
 // View-key conformance (TEA-166).
 //
@@ -20,6 +20,13 @@ export const VIEW_KEY_PATTERN = /^[A-Za-z0-9_-]+$/
 /** True when `key` is a view key the real Structurizr parser accepts. */
 export function isConformantViewKey(key: string): boolean {
   return VIEW_KEY_PATTERN.test(key)
+}
+
+/** Whether the DSL save writes this key explicitly. A generated key must
+ *  occupy the slot before a header description; layout identity must use
+ *  that same key before and after the save. Other generated keys stay absent. */
+export function shouldWriteViewKey(view: Pick<View, 'key' | 'autoKey' | 'autoTitle' | 'title'>): boolean {
+  return !!view.key && (!view.autoKey || !!(view.autoTitle && view.title))
 }
 
 /** Fold a raw key down to Structurizr's character class: every run of illegal

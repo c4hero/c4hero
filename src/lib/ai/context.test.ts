@@ -6,6 +6,7 @@ import {
 } from './context'
 import { makeWorkspace } from './testFixture'
 import type { View } from '@/types/model'
+import { parseDSL } from '@/lib/dsl'
 
 describe('flattenElements', () => {
   it('walks people, systems, containers, and components in order', () => {
@@ -93,6 +94,43 @@ describe('viewLabel / serializeViewContext', () => {
     const text = serializeViewContext(makeWorkspace(), v)
     expect(text).not.toContain('r2 | Web App -> Database')
     expect(text).toMatch(/RELATIONSHIPS ON SCREEN[\s\S]*\(none\)/)
+  })
+
+  it('lists the arrows an include * view draws as implied relationships (#230)', () => {
+    const { workspace } = parseDSL(`workspace {
+      model {
+        user = person "User"
+        a = softwareSystem "System A" {
+          web = container "Web" {
+            ctrl = component "Controller"
+          }
+          db = container "Database"
+        }
+        b = softwareSystem "System B" {
+          api = container "B API"
+        }
+        user -> ctrl "Uses"
+        web -> db "Reads from"
+        web -> api "Calls"
+      }
+      views {
+        systemContext a "ContextA" {
+          include *
+        }
+        container a "ContainersA" {
+          include *
+        }
+      }
+    }`)
+    const id = (description: string) => workspace.model.relationships.find((r) => r.description === description)!.id
+    const context = serializeViewContext(workspace, workspace.views.systemContextViews[0])
+    expect(context).not.toMatch(/RELATIONSHIPS ON SCREEN[\s\S]*\(none\)/)
+    expect(context).toContain(`${id('Uses')} | User -> System A | Uses (implied by User -> Controller)`)
+    expect(context).toContain(`${id('Calls')} | System A -> System B | Calls (implied by Web -> B API)`)
+    const containers = serializeViewContext(workspace, workspace.views.containerViews[0])
+    expect(containers).toContain(`${id('Reads from')} | Web -> Database | Reads from`)
+    expect(containers).toContain(`${id('Uses')} | User -> Web | Uses (implied by User -> Controller)`)
+    expect(containers).toContain(`${id('Calls')} | Web -> System B | Calls (implied by Web -> B API)`)
   })
 
   it('reports an empty view', () => {

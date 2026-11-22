@@ -28,24 +28,24 @@ export interface WhatsNewRelease {
 }
 
 export const WHATS_NEW: WhatsNewRelease | null = {
-  id: '2026-09-docs-and-interop',
-  date: 'September 2026',
+  id: '2026-11-zoom',
+  date: 'November 2026',
   items: [
     {
-      title: 'Documentation and decision records live in the model',
-      body: 'c4hero now reads and writes the !docs and !adrs folders a Structurizr workspace points at. The inspector gains a Docs tab, elements with documentation get a badge on the canvas, and New doc / New decision write adr-tools-style markdown that other tools can read.',
+      title: 'Zoom into a system, then a container',
+      body: 'Turn on Zoom in the tool rail and scroll in. A system opens to show its containers, and a container its components, with the relationships between them. Scroll back out and each level folds back into its summary.',
     },
     {
-      title: 'The AI assistant reads them too',
-      body: 'Deep review, chat, the interview and the ADR drafter all see your docs and decisions. A model that no longer honours an accepted decision is a high-severity finding, and the interviewer stops asking what you have already written down. Still BYOK, still local.',
+      title: 'Still the real diagram',
+      body: 'The cards you zoom into are the same ones as in every other view: select them, edit them, connect them and drag them into place. Search flies straight to any card and opens each level on the way.',
     },
     {
-      title: 'Import from C4-PlantUML and Mermaid',
-      body: 'Bring an existing diagram in from the two most common C4-as-code formats instead of retyping it. Multi-file workspaces work too: open a folder and !include is resolved across files, and saving no longer strips the directives.',
+      title: 'Hide a relationship in one view',
+      body: 'Remove a relationship from a single view without deleting it from the model. Bring it back from the Add existing panel. The choice is saved in your Structurizr DSL.',
     },
     {
-      title: 'Find out before the file leaves your machine',
-      body: 'The code pane now says when saving will change one of your values, and when a model would be rejected by other Structurizr tools — a name that encodes to nothing, two views sharing a key, a tag that will be split in half. Warnings only: nothing is blocked or rewritten.',
+      title: 'Statuses of your own',
+      body: 'Lifecycle status is no longer limited to Live, Planned, Deprecated and Removed. Declare your own under Custom statuses in canvas settings, or use one in the DSL and it becomes a status with its own dot and filter.',
     },
   ],
   link: { label: 'Full release notes', url: 'https://c4hero.com/changelog' },

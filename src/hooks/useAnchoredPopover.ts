@@ -115,9 +115,10 @@ export function useAnchoredPopover<T extends HTMLElement = HTMLButtonElement, P 
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpenState(false)
     }
-    function onReposition() {
-      // Close rather than reflow — the trigger's intent is "show this until
-      // dismissed," and any scroll/resize is itself a dismiss signal.
+    function onReposition(event: Event) {
+      // Browsing a scrollable option list must not dismiss that same list.
+      if (event.type === 'scroll' && event.target instanceof Node && popupRef.current?.contains(event.target)) return
+      // Outside scrolling or resizing moves the anchor, so dismiss the popup.
       setOpenState(false)
     }
     document.addEventListener('mousedown', onDocClick)

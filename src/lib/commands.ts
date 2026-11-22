@@ -1,5 +1,7 @@
 import { openVsCodeDocument } from '@/lib/host'
 import { reportHostError } from '@/lib/host/status'
+import { creatableTypes, editingView } from '@/lib/zoom/editing'
+import { getActiveCamera } from '@/lib/activeCamera'
 import type { LucideIcon } from 'lucide-react'
 import {
   UserRound, Globe, Box, Puzzle, Layers, Undo2, Redo2, Trash2,
@@ -8,7 +10,7 @@ import {
   Presentation, FolderOpen, Image, FileCode, Copy, Plus,
   Highlighter, MousePointerClick, RotateCcw, CircleHelp, Sparkles, Radar, Eye, EyeOff, FileInput, FolderDown, BookOpen,
 } from 'lucide-react'
-import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, getAllViews, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact, orphanedLayoutViewKeys } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
@@ -68,7 +70,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['new', 'person', 'user', 'actor'],
       when: () => {
         const s = store()
-        return !!s.workspace && getCreatableTypes(s.workspace, s.activeViewKey).canCreatePerson
+        return !!s.workspace && creatableTypes(s.workspace, s.activeViewKey, s.rendererMode, s.selectedElementIds).canCreatePerson
       },
       execute: () => { store().addPerson('New Person') },
     },
@@ -81,7 +83,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['new', 'system', 'software'],
       when: () => {
         const s = store()
-        return !!s.workspace && getCreatableTypes(s.workspace, s.activeViewKey).canCreateSystem
+        return !!s.workspace && creatableTypes(s.workspace, s.activeViewKey, s.rendererMode, s.selectedElementIds).canCreateSystem
       },
       execute: () => { store().addSoftwareSystem('New System') },
     },
@@ -94,12 +96,12 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['new', 'container', 'service', 'database'],
       when: () => {
         const s = store()
-        return !!s.workspace && getCreatableTypes(s.workspace, s.activeViewKey).canCreateContainer !== null
+        return !!s.workspace && creatableTypes(s.workspace, s.activeViewKey, s.rendererMode, s.selectedElementIds).canCreateContainer !== null
       },
       execute: () => {
         const s = store()
         if (!s.workspace) return
-        const ct = getCreatableTypes(s.workspace, s.activeViewKey)
+        const ct = creatableTypes(s.workspace, s.activeViewKey, s.rendererMode, s.selectedElementIds)
         if (ct.canCreateContainer) s.addContainer(ct.canCreateContainer, 'New Container')
       },
     },
@@ -112,12 +114,12 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['new', 'component', 'module'],
       when: () => {
         const s = store()
-        return !!s.workspace && getCreatableTypes(s.workspace, s.activeViewKey).canCreateComponent !== null
+        return !!s.workspace && creatableTypes(s.workspace, s.activeViewKey, s.rendererMode, s.selectedElementIds).canCreateComponent !== null
       },
       execute: () => {
         const s = store()
         if (!s.workspace) return
-        const ct = getCreatableTypes(s.workspace, s.activeViewKey)
+        const ct = creatableTypes(s.workspace, s.activeViewKey, s.rendererMode, s.selectedElementIds)
         if (ct.canCreateComponent) s.addComponent(ct.canCreateComponent, 'New Component')
       },
     },
@@ -180,7 +182,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         }
         if (!s.workspace || !s.activeViewKey) return
         const ids = s.selectedElementIds.filter(
-          (id) => !isFocalScopeElement(s.workspace!, s.activeViewKey!, id),
+          (id) => s.rendererMode === 'zoom' || !isFocalScopeElement(s.workspace!, s.activeViewKey!, id),
         )
         if (ids.length === 0) return
         const impact = computeCascadeImpact(s.workspace, ids)
@@ -199,9 +201,12 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       keywords: ['remove', 'hide', 'exclude', 'view'],
       when: () => {
         const s = store()
-        return s.selectedRelationshipId !== null && s.activeViewKey !== null
-          && !!s.workspace
-          && !['dynamic', 'deployment'].includes(getActiveView(s.workspace, s.activeViewKey)?.type ?? '')
+        if (s.selectedRelationshipId === null || s.activeViewKey === null || !s.workspace) return false
+        const view = getActiveView(s.workspace, s.activeViewKey)
+        // Only a relationship the view lists can be hidden from it: an arrow
+        // an `include *` view draws as implied by it is not one (#230).
+        return !!view && !['dynamic', 'deployment'].includes(view.type)
+          && view.relationships.some((r) => r.id === s.selectedRelationshipId)
       },
       execute: () => {
         const s = store()
@@ -229,13 +234,14 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       when: () => {
         const s = store()
         if (!s.workspace || !s.activeViewKey) return false
-        const view = getActiveView(s.workspace, s.activeViewKey)
+        const view = editingView(s.workspace, s.activeViewKey, s.rendererMode)
         return !!view && view.elements.length > 0
       },
       execute: () => {
         const s = store()
+        if (s.rendererMode === 'zoom') { s.selectElements(getActiveCamera()?.getNodes?.().map(n => n.id) ?? []); return }
         if (!s.workspace || !s.activeViewKey) return
-        const view = getActiveView(s.workspace, s.activeViewKey)
+        const view = editingView(s.workspace, s.activeViewKey, s.rendererMode)
         if (view) s.selectElements(view.elements.map(e => e.id))
       },
     },
@@ -248,7 +254,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       icon: Maximize2,
       shortcut: '0',
       keywords: ['fit', 'zoom', 'reset'],
-      execute: () => { fitContentNodesToViewport(reactFlow) },
+      execute: () => { if (getActiveCamera()) getActiveCamera()!.fit(); else fitContentNodesToViewport(reactFlow) },
     },
     {
       id: 'zoom-in',
@@ -256,7 +262,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: ZoomIn,
       shortcut: '+',
-      execute: () => { reactFlow?.zoomIn({ duration: 200 }) },
+      execute: () => { if (getActiveCamera()) getActiveCamera()!.zoomBy(1.25); else reactFlow?.zoomIn({ duration: 200 }) },
     },
     {
       id: 'zoom-out',
@@ -264,7 +270,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'view',
       icon: ZoomOut,
       shortcut: '−',
-      execute: () => { reactFlow?.zoomOut({ duration: 200 }) },
+      execute: () => { if (getActiveCamera()) getActiveCamera()!.zoomBy(1 / 1.25); else reactFlow?.zoomOut({ duration: 200 }) },
     },
     {
       id: 'auto-arrange',

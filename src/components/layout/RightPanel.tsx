@@ -1,3 +1,4 @@
+import { zoomLayoutOwner } from '@/lib/zoom/editing'
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useWorkspaceStore, getSelectedElement, getSelectedDeploymentElement, getRelationshipById, buildElementMap, getAllViews, getActiveView, isFocalScopeElement } from '@/store/workspace'
 import { computeCascadeImpact } from '@/store/workspace-helpers'
@@ -14,6 +15,7 @@ import { useAiProvider } from '@/store/ai-settings'
 import { suggestFieldValue, suggestTags } from '@/lib/ai'
 import { useSettingsStore } from '@/store/settings'
 import { elementStatusVocabulary, statusColor } from '@/lib/elementStatus'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 
 interface StatusOption { value: ElementStatus | undefined; label: string; color: string | null }
 
@@ -129,6 +131,7 @@ function SuggestButton({ onClick, busy, multiline, title }: { onClick: () => voi
 // ─── Element Properties ──────────────────────────────────────────────
 
 function ElementProperties({ element, onClose }: { element: ModelElement; onClose: () => void }) {
+  const zoomOn = useWorkspaceStore(s => s.rendererMode === 'zoom')
   const [activeTab, setActiveTab] = useState<PanelTab>('properties')
   const updateElement = useWorkspaceStore((s) => s.updateElement)
   const updateElementLive = useWorkspaceStore((s) => s.updateElementLive)
@@ -202,6 +205,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
     v.elements.some(e => e.id === element.id)
   ) : []
   const isLocked = useWorkspaceStore((s) => {
+    if (s.rendererMode === 'zoom') return !!s.workspace && zoomLayoutOwner(s.workspace, s.activeViewKey).zoomLayout?.elements?.[element.id]?.locked === true
     if (!s.workspace || !s.activeViewKey) return false
     const view = getActiveView(s.workspace, s.activeViewKey)
     return view?.elements.find((el) => el.id === element.id)?.locked === true
@@ -237,7 +241,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               {busyField === 'all' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             </button>
           )}
-          {activeViewKey && appearsInActiveView && (
+          {activeViewKey && (zoomOn || appearsInActiveView) && (
             <button
               onClick={() => setElementsLocked(activeViewKey, [element.id], !isLocked)}
               className="btn-icon !min-h-7 !min-w-7 !p-1"
@@ -251,7 +255,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               {isLocked ? <Lock size={14} /> : <LockOpen size={14} />}
             </button>
           )}
-          {!isFocal && activeViewKey && appearsInActiveView && (
+          {(zoomOn || !isFocal) && activeViewKey && (zoomOn || appearsInActiveView) && (
             <button
               onClick={() => {
                 if (!activeViewKey) return
@@ -616,6 +620,7 @@ function ViewLink({ viewKey, title }: { viewKey: string; title: string }) {
 // ─── Relationship Properties ─────────────────────────────────────────
 
 function RelationshipProperties({ relationship, onClose }: { relationship: Relationship; onClose: () => void }) {
+  const zoomOn = useWorkspaceStore(s => s.rendererMode === 'zoom')
   const workspace = useWorkspaceStore((s) => s.workspace)
   const updateRelationship = useWorkspaceStore((s) => s.updateRelationship)
   const deleteRelationship = useWorkspaceStore((s) => s.deleteRelationship)
@@ -625,9 +630,29 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
   const activeView = workspace && activeViewKey ? getActiveView(workspace, activeViewKey) : undefined
 
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
+  const systemFor = (id: string) => workspace?.model.softwareSystems.find(system =>
+    system.id === id || system.containers.some(container => container.id === id || container.components.some(component => component.id === id)),
+  )?.id
+  const sourceSystem = systemFor(relationship.sourceId)
+  const scopeLabel = sourceSystem && sourceSystem === systemFor(relationship.destinationId)
+    ? 'Within-system relationship'
+    : relationship.sourceId === relationship.destinationId ? 'Within-element relationship' : 'Cross-system relationship'
   const source = elementMap.get(relationship.sourceId)
   const dest = elementMap.get(relationship.destinationId)
   const safeUrl = relationship.url ? normalizeSafeExternalUrl(relationship.url) : null
+  // Hiding takes the relationship out of the view's own list, so only a
+  // relationship the view lists can be hidden. An `include *` view also
+  // draws arrows Structurizr implies from it between other elements; those
+  // could only be hidden by an exclude line naming that pair, which the view
+  // cannot keep, so the inspector says where the arrow comes from instead
+  // (#230).
+  const listedInView = activeView?.relationships.some((r) => r.id === relationship.id) ?? false
+  const impliedHere = useMemo(
+    () => workspace && activeView
+      ? wildcardImpliedRelationships(workspace.model, activeView).find((implied) => implied.relationship.id === relationship.id)
+      : undefined,
+    [workspace, activeView, relationship.id],
+  )
 
   return (
     <div className="flex flex-1 flex-col">
@@ -639,10 +664,10 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
             <ArrowRight size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
             <span className="truncate max-w-[80px]">{dest?.name ?? '?'}</span>
           </div>
-          <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Relationship</div>
+          <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{zoomOn ? scopeLabel : 'Relationship'}</div>
         </div>
         <div className="flex items-center gap-1">
-          {activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment' && (
+          {activeViewKey && activeView?.type !== 'dynamic' && activeView?.type !== 'deployment' && listedInView && (
             <button
               onClick={() => removeRelationshipFromView(activeViewKey, relationship.id)}
               className="btn-icon !min-h-7 !min-w-7 !p-1"
@@ -667,6 +692,11 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {impliedHere && (
+          <p data-testid="implied-relationship-note" className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+            Shown in this view as {elementMap.get(impliedHere.sourceId)?.name ?? '?'} → {elementMap.get(impliedHere.destinationId)?.name ?? '?'}: Structurizr implies that relationship from this one.
+          </p>
+        )}
         <div>
           <FieldLabel>Description</FieldLabel>
           <EditableField value={relationship.description ?? ''} placeholder="e.g. Makes API calls to..." aria-label="Description" onCommit={(v) => updateRelationship(relationship.id, { description: v || undefined })} />

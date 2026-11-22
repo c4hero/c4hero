@@ -14,6 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refresh, VS Code themes, and SecretStorage for optional AI keys. Layout-only
   edits leave DSL bytes unchanged. CI produces an installable VSIX. (TEA-327)
 
+## [0.8.0] - 2026-11-21
+
+### Added
+
+- **Zoom into a system or a container on the canvas, without leaving the view.**
+  Turn on Zoom in the tool rail of a system landscape, system context, container
+  or component view, then zoom in: a system opens to show its containers, and a
+  container its components. Zoom back out and each level folds back into its
+  summary. A relationship between two cards gives way to the relationships
+  between what is inside them, and returns when you zoom out. These are the same
+  cards as in every other view, so they can be selected, edited, connected,
+  locked and dragged in place, and PNG and SVG exports show what is on screen.
+  Where a nested card sits is saved per view in the layout file, as
+  `zoomLayout`. A double-click, Enter on a selected card, or a search result
+  (`mod+f`) flies to a card and opens each level on the way; Escape steps back
+  out one level. Pinch works on touch screens, including a pinch that starts on
+  a card. Dynamic and deployment views keep the ordinary canvas. (TEA-334)
+- **Hide a relationship in one view without deleting it from the model.**
+  Removing a relationship from a system landscape, system context, container or
+  component view now takes it out of that view only; it stays in the model and
+  in every other view. Bring it back from the Add existing panel. The choice is
+  saved in the Structurizr DSL as an `exclude` on the view, and survives
+  re-adding the elements, reconnecting the relationship and undo. Dynamic steps
+  and deployment views are not affected. (TEA-341)
 - Element lifecycle status is now an open vocabulary. `Live`, `Planned`,
   `Deprecated` and `Removed` still ship as the built-ins and nothing changes for
   workspaces that only use them, but a status c4hero does not know is no longer
@@ -26,6 +50,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Switching to another view straight after an edit or an undo no longer snaps
+  back to the view you left. The address bar could replay the old view over the
+  new one before the switch had finished. (TEA-334)
+- A menu with a scrolling list of options, such as the theme picker, no longer
+  closes when you scroll inside it. Scrolling the page or resizing the window
+  still dismisses it. (TEA-334)
+- `include *` in a view is no longer rewritten as a list of elements on save,
+  so elements added to the model later still appear in Structurizr. The
+  view's own `include` and `exclude` lines are kept and applied in order, as
+  Structurizr does, and an element hidden from or added to the view on the
+  canvas is saved as its own `exclude` or `include` line. An element that a
+  relationship drawn in another view brings into the wildcard now appears in
+  the view, instead of being saved as hidden. System context, container and
+  component views show what Structurizr's `include *` shows: a relationship
+  with anything inside another software system brings in that system, never
+  its containers, and excluding a deployment node also hides what runs on it.
+  Every `include *` view other than a deployment view also draws
+  Structurizr's implied relationships between the boxes it shows: a
+  relationship declared further down the hierarchy, between containers or
+  components, appears as an arrow between the elements the view shows,
+  labelled like the first relationship that implies it. A relationship
+  `exclude` such as `"* -> *"`, `"user -> *"` or `"a -> b"` hides those
+  arrows too, as in Structurizr, and is saved as written rather than as one
+  line per relationship it matched (#230).
+- Saved layouts now record view identity, keeping positions and locks with
+  distinguishable unnamed views when siblings are deleted or reordered
+  (TEA-345). Ambiguous layouts remain saved for recovery. Older sidecars still
+  load by key and gain identity on save; identical unnamed views still need
+  explicit keys to distinguish their layouts.
 - Workspace- and model-level `properties { }` blocks are no longer discarded
   on save (#219). Each line is written back to its own file and position, so a
   value set in an `!include`d file is not copied into the root and an override
@@ -41,6 +94,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nested, so `Group:` style tags keep matching. Editing a property whose value
   came from a read-only include now writes the new value into the root file
   instead of losing it (TEA-349).
+- Workspace saves now leave a DSL or layout file untouched when its existing
+  UTF-8 bytes exactly match the saved output. Repeated saves preserve file
+  modification times and reduce disk watcher activity, while model edits and
+  node drags still reach disk. Autosave now gives idle callbacks a one-second
+  deadline so busy canvas or editor activity cannot leave disk writes waiting
+  indefinitely (#222, TEA-356).
+- Saving no longer strips relationships from deployment views in Structurizr.
+  Relationships between people, software systems, containers and components
+  were written below every `deploymentEnvironment` block, and Structurizr only
+  copies a relationship onto the container and software system instances
+  created after it, so deployment views lost arrows such as `web -> db`
+  between the deployed containers. They are now written above the
+  environments, also when an environment comes from an `!include`d file,
+  while relationships to deployment nodes and instances stay below. A
+  relationship the file had placed after an environment now reaches its
+  instances in Structurizr too, as c4hero's canvas already showed. The old
+  order is kept when a `!` line at or after the environment is anything but
+  an `!include` of a file c4hero writes back, and for a relationship that uses
+  an element such an `!include` declares, or that connects the same elements
+  or their parents as a relationship in that file (#231).
 - Exported PNG and SVG images now include relationship arrowheads (#207).
 - Relationship arrowheads and start dots take the relationship's own color
   instead of always using the theme edge color.
@@ -514,6 +587,7 @@ Initial public release. c4hero is a local-first browser-based visual editor for 
 - Canvas interactions no longer trigger browser-back navigation on Backspace in non-text contexts.
 - Boundary-node E2E selectors now match the per-scope ID format.
 
+[0.8.0]: https://github.com/c4hero/c4hero/releases/tag/v0.8.0
 [0.7.0]: https://github.com/c4hero/c4hero/releases/tag/v0.7.0
 [0.6.0]: https://github.com/c4hero/c4hero/releases/tag/v0.6.0
 [0.5.0]: https://github.com/c4hero/c4hero/releases/tag/v0.5.0

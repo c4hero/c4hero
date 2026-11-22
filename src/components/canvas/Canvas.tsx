@@ -1,5 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ConnectionPreview from './edges/ConnectionPreview'
+import { useSemanticZoom } from './useSemanticZoom'
+import { useCanvasTouchPinch } from './useCanvasTouchPinch'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useDocsLoader } from '@/hooks/useDocsLoader'
+import { useCanvasTheme } from '@/hooks/useCanvasTheme'
 import {
   ReactFlow,
   Background,
@@ -7,16 +11,19 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  useStore,
+  useViewportStore,
+  NodeChangeset,
   type Node,
   type Edge,
   type OnSelectionChangeParams,
   type Connection,
+  type Viewport,
   BackgroundVariant,
   reconnectEdge,
 } from '@xyflow/react'
 import { applyAutoLayout } from '@/lib/canvasLayout'
-import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
+import { registerActiveCamera } from '@/lib/activeCamera'
+import { fitContentNodesToViewport, fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import type { HighlightFilters } from '@/lib/highlight'
 import type { View, Workspace } from '@/types/model'
@@ -24,11 +31,6 @@ import { useWorkspaceStore, getActiveView, allViewsOf, buildRelationshipMap } fr
 import { useSettingsStore } from '@/store/settings'
 import {
   THEMES,
-  THEME_CANVAS_BACKGROUNDS,
-  THEME_SELECTION_COLORS,
-  THEME_EDGE_COLORS,
-  THEME_LABEL_COLORS,
-  THEME_LABEL_MUTED_COLORS,
   isLightCanvasTheme,
 } from '@/lib/themes'
 import { nodeTypes } from './nodes'
@@ -44,6 +46,7 @@ import {
 } from './canvasBuilders'
 import { buildDeploymentNodes, deploymentBoundaryMemberIds } from './deploymentBuilders'
 import { deploymentViewRelationships } from '@/lib/deployment'
+import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -162,7 +165,13 @@ function carryForwardMeasurements(nodes: Node[], measuredNodes: Node[]): Node[] 
 }
 
 
+// The ordinary canvas range. Only Zoom widens it, to however deep the model goes.
+const DIAGRAM_ZOOM_RANGE = { min: 0.1, max: 2 }
+
 export default function Canvas() {
+  const active = useWorkspaceStore(s => s.rendererMode === 'diagram')
+  const host = useRef<HTMLDivElement>(null)
+  const touchPinching = useRef(false)
   useDocsLoader()
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
@@ -208,11 +217,20 @@ export default function Canvas() {
   const canvasGuideDismissed = useSettingsStore((s) => s.canvasGuideDismissed)
   const updateSettings = useSettingsStore((s) => s.update)
   const themeStyles = THEMES[colorTheme]
-  const themeCanvasBackground = THEME_CANVAS_BACKGROUNDS[colorTheme]
-  const themeSelectionColor = THEME_SELECTION_COLORS[colorTheme]
-  const themeEdgeColor = THEME_EDGE_COLORS[colorTheme]
   const isLightCanvas = isLightCanvasTheme(colorTheme)
   const reactFlowInstance = useReactFlow()
+  useLayoutEffect(() => {
+    if (!active) return
+    return registerActiveCamera({
+      getViewport: () => reactFlowInstance.getViewport(),
+      getNodes: () => reactFlowInstance.getNodes().map(n => ({ ...n, position: reactFlowInstance.getInternalNode(n.id)?.internals.positionAbsolute ?? n.position })),
+      zoomBy: factor => { void reactFlowInstance.zoomTo(reactFlowInstance.getZoom() * factor, { duration: 200 }) },
+      fit: () => { fitContentNodesToViewport(reactFlowInstance) },
+      focus: id => useWorkspaceStore.setState({ focusElementId: id }),
+      pan: (dx, dy) => { const vp = reactFlowInstance.getViewport(); void reactFlowInstance.setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy }) },
+      escape: () => useWorkspaceStore.getState().clearSelection(),
+    })
+  }, [active, reactFlowInstance])
   const guideAutoOpened = useRef(false)
 
   useEffect(() => {
@@ -226,47 +244,7 @@ export default function Canvas() {
     updateSettings({ canvasGuideDismissed: true })
   }, [setCanvasGuideOpen, updateSettings])
 
-  // Cascade canvas-related theme vars to document.documentElement so the
-  // floating chrome (top pill, tool rail, inspector, etc.) — which is rendered
-  // outside the canvas tree — can also read them.
-  useEffect(() => {
-    const root = document.documentElement
-    const set = (key: string, value: string | null) => {
-      if (value == null) root.style.removeProperty(key)
-      else root.style.setProperty(key, value)
-    }
-    const labelColorOverride = THEME_LABEL_COLORS[colorTheme]
-    const labelMutedOverride = THEME_LABEL_MUTED_COLORS[colorTheme]
-    const boundaryBorder = colorTheme === 'highContrast'
-      ? '#000000'
-      : isLightCanvas
-        ? 'color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 42%, transparent)'
-        : null
-    set('--canvas-bg', themeCanvasBackground ?? null)
-    set('--canvas-selection', themeSelectionColor)
-    set('--canvas-label-color', labelColorOverride ?? (isLightCanvas ? '#1f2937' : 'var(--color-text-secondary)'))
-    set('--canvas-label-muted', labelMutedOverride ?? (isLightCanvas ? '#475569' : 'var(--color-text-muted)'))
-    set('--canvas-edge', themeEdgeColor ?? null)
-    set('--canvas-boundary-border', boundaryBorder)
-    set('--canvas-boundary-bg', isLightCanvas ? 'rgba(15, 23, 42, 0.012)' : null)
-    set('--canvas-boundary-title', isLightCanvas ? 'var(--canvas-label-muted)' : null)
-    set('--canvas-boundary-subtitle', isLightCanvas ? 'color-mix(in srgb, var(--canvas-label-muted) 74%, transparent)' : null)
-    if (isLightCanvas) root.setAttribute('data-canvas-light', '')
-    else root.removeAttribute('data-canvas-light')
-    return () => {
-      set('--canvas-bg', null)
-      set('--canvas-selection', null)
-      set('--canvas-label-color', null)
-      set('--canvas-label-muted', null)
-      set('--canvas-edge', null)
-      set('--canvas-boundary-border', null)
-      set('--canvas-boundary-bg', null)
-      set('--canvas-boundary-title', null)
-      set('--canvas-boundary-subtitle', null)
-      root.removeAttribute('data-canvas-light')
-    }
-  }, [themeCanvasBackground, themeSelectionColor, themeEdgeColor, isLightCanvas, colorTheme])
-
+  useCanvasTheme()
   // Stable callback refs — avoid new function references every render which would
   // invalidate expensive useMemos that depend on them.
   // Uses zoomInto (not drillInto) so that clicking the zoom button on a system
@@ -362,6 +340,11 @@ export default function Canvas() {
         if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
         tempEdges.push({ id: rel.id, source: rel.sourceId, target: rel.destinationId })
       }
+      // The implied relationships an `include *` view draws shape its layout
+      // too, as they do in Structurizr's (#230).
+      for (const implied of wildcardImpliedRelationships(workspace.model, view)) {
+        tempEdges.push({ id: implied.id, source: implied.sourceId, target: implied.destinationId })
+      }
     }
 
     // 3. Auto-layout: position unpinned nodes, keep pinned ones.
@@ -407,6 +390,12 @@ export default function Canvas() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const semantic = useSemanticZoom(!active, host, reactFlowInstance, workspace, view, nodes, edges, highlightFilters, themeStyles, viewCountMap)
+  // Zoom's range follows how deep the model goes. Either range is stretched to
+  // the current zoom, so switching Zoom on or off never snaps the camera.
+  const currentZoom = reactFlowInstance.getZoom()
+  const zoomRange = semantic.bounds ?? DIAGRAM_ZOOM_RANGE
+  const zoomRangeMin = Math.min(zoomRange.min, currentZoom), zoomRangeMax = Math.max(zoomRange.max, currentZoom)
 
   // Fit view — poll until all content nodes are measured, then call fitView.
   // Overlay nodes (boundary, groups) are excluded from the fit bounds since
@@ -556,7 +545,6 @@ export default function Canvas() {
       // Structural change for the current view — swap nodes and edges.
       setNodes(initialNodes)
       setEdges(initialEdges)
-
       // Decide whether to refit. Fit only when THIS view hasn't been fitted
       // yet in this session, or when its content has changed (element count
       // or layout version) since the last fit.
@@ -570,9 +558,15 @@ export default function Canvas() {
       // structural changes (layoutVersion bump, element add/remove) still fit.
       const prevViewKey = prevSignal ? prevSignal.split(':')[0] : ''
       const isViewSwitch = viewKey !== '' && prevViewKey !== viewKey
+      let refit = false
       if (isViewSwitch) {
         const saved = loadViewport(workspaceRef.current?.name, viewKey)
-        if (saved) {
+        // A viewport saved deep inside Zoom lies outside the ordinary range.
+        // With Zoom off, fit the view instead of restoring a close-up whose
+        // contents are not shown.
+        refit = !!saved && useWorkspaceStore.getState().rendererMode === 'diagram'
+          && (saved.zoom < DIAGRAM_ZOOM_RANGE.min || saved.zoom > DIAGRAM_ZOOM_RANGE.max)
+        if (saved && !refit) {
           // Mark this view as "fitted at this signature" so any subsequent
           // re-render of this effect within the same view doesn't kick off
           // a fit and override the restored viewport.
@@ -586,7 +580,7 @@ export default function Canvas() {
         }
       }
 
-      if (viewKey && lastFitSig !== viewSig) {
+      if (viewKey && (refit || lastFitSig !== viewSig)) {
         fittedSignaturesByView.current.set(viewKey, viewSig)
         expectedFitIds.current = new Set(getViewportFitNodes(initialNodes).map((n) => n.id))
         fitPending.current = true
@@ -617,7 +611,10 @@ export default function Canvas() {
           // its computed draggable flag (canvasBuilders.ts) but not the
           // structural signal above, so this is the only branch that ever
           // applies it to an already-mounted node.
-          return next ? { ...n, data: next.data, className: next.className, draggable: next.draggable } : n
+          const authored = view?.elements.find(e => e.id === n.id)
+          const position = !isDragging.current && authored?.x !== undefined && authored.y !== undefined
+            ? { x: authored.x, y: authored.y } : n.position
+          return next ? { ...n, position, data: next.data, className: next.className, draggable: next.draggable } : n
         })
       })
       requestAnimationFrame(rebuildOverlays)
@@ -663,22 +660,28 @@ export default function Canvas() {
   }, [storeSelectedElementIds, storeSelectedRelationshipId, storeSelectedGroupId, setNodes, setEdges])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
-    onNodesChange(changes)
+    // Cancelling the native drag during pinch takeover emits a final position
+    // update. Do not let it overwrite the restored pre-drag coordinates.
+    const all = changes.toArray()
+    const accepted = semantic.handleChanges(touchPinching.current ? all.filter(c => c.type !== 'position') : all)
+    // Hand React Flow's own changeset through untouched unless something was dropped.
+    onNodesChange(accepted.length === all.length ? changes : new NodeChangeset(accepted))
     if (fitPending.current) {
       requestAnimationFrame(fitContentNodes)
     }
     // When content nodes get measured/resized, rebuild group/boundary overlays
     // so they wrap the actual rendered sizes, not the 200×100 dagre defaults.
-    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && !(c.id as string).startsWith('__scope_boundary__'))) {
+    if (changes.getByType('dimensions').some(c => !c.id.startsWith('group-') && !c.id.startsWith('__scope_boundary__'))) {
       requestAnimationFrame(rebuildOverlays)
     }
-  }, [onNodesChange, fitContentNodes, rebuildOverlays])
+  }, [onNodesChange, fitContentNodes, rebuildOverlays, semantic])
 
   // Center view on newly created element (e.g. focused from the interview).
   const focusElementId = useWorkspaceStore((s) => s.focusElementId)
   const clearFocusElement = useWorkspaceStore((s) => s.clearFocusElement)
   useEffect(() => {
     if (!focusElementId) return
+    if (!active) { semantic.controller.current?.focus(focusElementId); clearFocusElement(); return }
     const targetId = focusElementId
     // A focus often switches the active view first, which remounts the canvas
     // nodes — so the target may not exist for several frames. Poll a bounded
@@ -704,7 +707,7 @@ export default function Canvas() {
     }
     raf = requestAnimationFrame(run)
     return () => cancelAnimationFrame(raf)
-  }, [focusElementId, clearFocusElement, reactFlowInstance])
+  }, [active, focusElementId, clearFocusElement, reactFlowInstance, semantic.controller])
 
   // Suppress inspector opening during drag (works on touch too).
   // onSelectionChange fires at touch-start before any movement, so we schedule
@@ -714,6 +717,23 @@ export default function Canvas() {
   const selectionGestureActive = useRef(false)
   const pendingSelectionIds = useRef<string[] | null>(null)
   const shiftKeyDown = useRef(false)
+  const dragStartPositions = useRef<Map<string, { x: number; y: number }> | null>(null)
+
+  useCanvasTouchPinch(host, () => {
+    touchPinching.current = true
+    if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
+    isDragging.current = true
+    semantic.controller.current?.interrupt()
+    const positions = dragStartPositions.current
+    const selected = new Set(useWorkspaceStore.getState().selectedElementIds)
+    // A first finger may have started moving/selecting a card before the second
+    // lands. Restore authored selection and cancel that tentative layout edit.
+    setNodes(previous => previous.map(n => ({ ...n,
+      position: positions?.get(n.id) ?? n.position, dragging: false,
+      selected: isOverlayNode(n) ? n.selected : selected.has(n.id),
+    })))
+    dragStartPositions.current = null
+  }, () => { touchPinching.current = false; isDragging.current = false })
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -744,6 +764,7 @@ export default function Canvas() {
   } | null>(null)
 
   const onNodeDragStart = useCallback((_event: MouseEvent | TouchEvent, node: Node) => {
+    dragStartPositions.current = new Map(reactFlowInstance.getNodes().map(n => [n.id, { ...n.position }]))
     isDragging.current = false
     let memberSet: Set<string> | null = null
 
@@ -962,23 +983,28 @@ export default function Canvas() {
   // `paneDragging` is true the moment a pointer goes down on the pane (even for a
   // plain click), so we additionally require an onMove to fire — that excludes
   // clicks (no movement), and resizes/zoom/programmatic moves aren't pane-drags.
-  const paneDragging = useStore((s) => s.paneDragging)
+  const paneDragging = useViewportStore((s) => s.paneDragging)
   const draggingRef = useRef(false)
   useEffect(() => {
     draggingRef.current = paneDragging
     if (!paneDragging) document.documentElement.removeAttribute('data-canvas-panning')
   }, [paneDragging])
 
-  const onMove = useCallback(() => {
+  const onMove = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+    semantic.controller.current?.onMove(event, viewport)
     if (draggingRef.current) document.documentElement.setAttribute('data-canvas-panning', '')
-  }, [])
+  }, [semantic.controller])
 
   const onMoveStart = useCallback(() => {
     setMinimapVisible(true)
     if (hideTimer.current) clearTimeout(hideTimer.current)
   }, [])
 
-  const onMoveEnd = useCallback(() => {
+  const onMoveEnd = useCallback((event: MouseEvent | TouchEvent | null) => {
+    semantic.controller.current?.onMoveEnd(event)
+    // React Flow 13 no longer fires onMoveStart for programmatic moves (no
+    // source event), so reveal here too; user pans already revealed on start.
+    setMinimapVisible(true)
     if (hideTimer.current) clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => setMinimapVisible(false), 1500)
     // Persist current viewport per-view so re-entering this view restores
@@ -987,7 +1013,14 @@ export default function Canvas() {
     if (rf && activeViewKey) {
       saveViewport(workspaceRef.current?.name, activeViewKey, rf.getViewport())
     }
-  }, [activeViewKey])
+  }, [activeViewKey, semantic.controller])
+
+  // Persist the same viewport on route/presentation teardown in either mode.
+  useEffect(() => () => {
+    const rf = rfInitInstance.current
+    const key = viewRef.current?.key
+    if (rf && key) saveViewport(workspaceRef.current?.name, key, rf.getViewport())
+  }, [])
 
   // Safety: never leave the chrome faded if we unmount mid-drag.
   useEffect(() => () => document.documentElement.removeAttribute('data-canvas-panning'), [])
@@ -1031,13 +1064,21 @@ export default function Canvas() {
       // zoomInto handles both cases: navigate to existing child view, or prompt
       // to create one if none exists. Internally no-ops if the element has no
       // children (person/component/etc.).
-      useWorkspaceStore.getState().zoomInto(node.id)
+      if (useWorkspaceStore.getState().rendererMode === 'zoom') semantic.controller.current?.focus(node.id)
+      else useWorkspaceStore.getState().zoomInto(node.id)
     },
-    [],
+    [semantic.controller],
   )
 
   const onNodeDragStop = useCallback(
     (_event: MouseEvent | TouchEvent, node: Node) => {
+      dragStartPositions.current = null
+      if (touchPinching.current) { overlayDragRef.current = null; return }
+      if (semantic.controller.current?.layoutState.byId.get(node.id)?.parent) {
+        semantic.controller.current.moveNodes([{ id: node.id, ...node.position }])
+        setTimeout(() => { isDragging.current = false }, 50)
+        return
+      }
       let shouldRebuildOverlays = true
       const ctx = overlayDragRef.current
       if (ctx && node.id === ctx.nodeId) {
@@ -1071,7 +1112,7 @@ export default function Canvas() {
       // Reset drag flag slightly after stop so any trailing onSelectionChange is still suppressed
       setTimeout(() => { isDragging.current = false }, 50)
     },
-    [updateNodePosition, updateNodePositions, setNodes],
+    [updateNodePosition, updateNodePositions, setNodes, semantic.controller],
   )
 
 
@@ -1118,7 +1159,7 @@ export default function Canvas() {
   const hasScopeBoundary = nodes.some(n => n.type === 'boundary')
 
   return (
-    <div className="h-full w-full">
+    <div ref={host} className="h-full w-full" data-semantic-zoom={!active ? 'true' : 'false'}>
       {!hasContentNodes && !hasScopeBoundary && (
         <div
           style={{
@@ -1151,8 +1192,15 @@ export default function Canvas() {
         </div>
       )}
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={semantic.nodes}
+        edges={semantic.edges}
+        zoomOnScroll={active}
+        zoomOnDoubleClick={active}
+        elevateNodesOnSelect={active}
+        // Space is already handled by spaceHeld below. React Flow's built-in
+        // activation also enables scroll panning and delays gesture-end 150ms,
+        // which would leave a pause before the semantic camera starts gliding.
+        panActivationKeyCode={active ? 'Space' : null}
         onInit={onInit}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
@@ -1167,18 +1215,23 @@ export default function Canvas() {
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
+        connectionLineComponent={ConnectionPreview}
+        connectionLineContainerStyle={{ zIndex: 1001, pointerEvents: 'none' }}
         onConnect={onConnect}
         onReconnect={onReconnect}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         proOptions={RF_PRO_OPTIONS}
-        minZoom={0.1}
-        maxZoom={2}
+        minZoom={zoomRangeMin}
+        maxZoom={zoomRangeMax}
         snapToGrid={snapToGrid}
         snapGrid={RF_SNAP_GRID}
         connectionRadius={40}
         deleteKeyCode={null}
+        // v13 changed these defaults; pin the v12 behavior (light class, no edge elevation on select).
+        forceColorMode="light"
+        elevateEdgesOnSelect={false}
         panOnDrag={spaceHeld ? RF_PAN_ON_DRAG_SPACE : RF_PAN_ON_DRAG_DEFAULT}
         defaultEdgeOptions={RF_DEFAULT_EDGE_OPTIONS}
       >
