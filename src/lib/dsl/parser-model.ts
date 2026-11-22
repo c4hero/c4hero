@@ -38,9 +38,8 @@ function applyStructurizrConventions(element: Element): void {
         // contradiction in the field's favour and does not re-emit the tag
         // (see locationAwareTags) — emitting it would flip the element to
         // External on the next parse.
-        // Known consequence of the hoist: canvas styles keyed on the
-        // "External" tag no longer match (style lookup reads tags only, not
-        // location) — tracked as TEA-168.
+        // Canvas styles keyed on the "External" tag still match after the
+        // hoist: getElementStyle reads `location` as an implicit tag (TEA-168).
         if (i !== -1 && element.location === undefined) {
             element.location = 'External'
             element.tags.splice(i, 1)
