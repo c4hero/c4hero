@@ -9,6 +9,7 @@ import {
 } from '@/lib/deployment'
 import { buildStyleIndex, getElementStyle } from './canvasBuilders'
 import type { LayoutBoundaryCluster } from '@/lib/canvasLayout'
+import { resolveTechIcon } from '@/lib/techIcons/registry'
 
 const BOUNDARY_Z = -100
 const BOUNDARY_PADDING = 32
@@ -146,7 +147,7 @@ export function buildDeploymentBoundaryNodes(workspace: Workspace, view: View, l
       position: { x: minX - pad, y: minY - padTop },
       measured: { width, height },
       style: { width, height, pointerEvents: 'none' },
-      data: { name: spec.name, typeLabel: spec.typeLabel, deploymentNodeId: spec.id },
+      data: { name: spec.name, typeLabel: spec.typeLabel, deploymentNodeId: spec.id, iconSlug: spec.iconSlug },
       // Deeper (more nested) boundaries sit above their ancestors so their
       // labels aren't covered.
       zIndex: BOUNDARY_Z + depth,
@@ -166,7 +167,7 @@ export function buildDeploymentBoundaryNodes(workspace: Workspace, view: View, l
       position: { x: 0, y: 0 },
       measured: { width: EMPTY_BOUNDARY_W, height: EMPTY_BOUNDARY_H },
       style: { width: EMPTY_BOUNDARY_W, height: EMPTY_BOUNDARY_H, pointerEvents: 'none' },
-      data: { name: first.name, typeLabel: first.technology ?? 'Deployment Node', empty: true, deploymentNodeId: first.id },
+      data: { name: first.name, typeLabel: first.technology ?? 'Deployment Node', empty: true, deploymentNodeId: first.id, iconSlug: resolveTechIcon(first.properties, first.technology) },
       zIndex: BOUNDARY_Z,
       selectable: false,
       draggable: false,

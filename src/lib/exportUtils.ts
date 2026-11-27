@@ -1,6 +1,7 @@
 import type { Workspace } from '@/types/model'
 import { sanitizeFilename } from '@/lib/filenames'
 import { getActiveCamera } from '@/lib/activeCamera'
+import { settleTechIcons } from '@/lib/techIcons/loader'
 
 /** Export workspace as Structurizr JSON */
 export function exportAsJSON(workspace: Workspace): string {
@@ -64,6 +65,7 @@ export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Bl
   if (!renderer) return null
 
   try {
+    await settleTechIcons(renderer)
     const { toBlob } = await import('html-to-image')
     const bg = bgForTheme(theme)
     return await toBlob(renderer, {
@@ -79,7 +81,8 @@ export async function exportCanvasAsPNG(theme: ExportTheme = 'dark'): Promise<Bl
   }
 }
 
-/** Export the canvas viewport as SVG string */
+/** Export the canvas viewport as SVG string. Await settleTechIcons() first
+ *  (from '@/lib/techIcons/loader') so pending technology logos are drawn. */
 export function exportCanvasAsSVG(theme: ExportTheme = 'dark'): string | null {
   const svg = getActiveCamera()?.exportSVG?.(theme)
   if (svg) return svg

@@ -243,3 +243,21 @@ describe('highlight filters on deployment views', () => {
     expect(edges.every(e => e.className === 'c4-edge-highlighted' || e.className === 'c4-edge-faded')).toBe(true)
   })
 })
+
+describe('technology logos on deployment boundaries (TEA-383)', () => {
+  it('carries the auto-detected or pinned logo on each deployment node boundary', () => {
+    const dsl = DEPLOYMENT_DSL
+      .replace('deploymentNode "Web Server" "" "Ubuntu" {', 'deploymentNode "Web Server" "" "Kubernetes" {')
+      .replace('deploymentNode "Database Server" "" "Ubuntu" {', 'deploymentNode "Database Server" "" "Ubuntu" {\n                        properties {\n                            "c4hero.icon" "docker"\n                        }')
+    const { workspace: ws, errors } = parseDSL(dsl)
+    expect(errors).toHaveLength(0)
+    const view = deploymentView(ws)
+    const boundaries = buildDeploymentBoundaryNodes(ws, view, layout(buildDeploymentNodes(ws, view, NO_FILTERS, [])))
+    const icon = (name: string) => (boundaries.find(b => (b.data as { name: string }).name === name)!.data as { iconSlug?: string }).iconSlug
+
+    expect(icon('Web Server')).toBe('kubernetes')
+    expect(icon('Database Server')).toBe('docker')
+    // "Data Center" has no technology at all.
+    expect(icon('Data Center')).toBeUndefined()
+  })
+})

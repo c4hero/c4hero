@@ -236,6 +236,30 @@ describe('updateDeploymentElement / getSelectedDeploymentElement', () => {
     expect(infra.technology).toBe('ALB')
   })
 
+  it('pins, hides and clears a technology icon on nodes and infrastructure (TEA-383)', () => {
+    const nodeId = env().deploymentNodes[0].id
+    const infraId = useWorkspaceStore.getState().addInfrastructureNode('Live', nodeId)
+    const { updateDeploymentElement } = useWorkspaceStore.getState()
+    updateDeploymentElement('Live', nodeId, { icon: 'kubernetes' })
+    updateDeploymentElement('Live', infraId, { icon: 'none' })
+    expect(env().deploymentNodes[0].properties['c4hero.icon']).toBe('kubernetes')
+    expect(env().deploymentNodes[0].infrastructureNodes[0].properties['c4hero.icon']).toBe('none')
+
+    // Unchanged pins are not edits (no undo entry); clearing removes the key.
+    const undoDepth = useWorkspaceStore.getState().undoStack.length
+    updateDeploymentElement('Live', nodeId, { icon: 'kubernetes' })
+    expect(useWorkspaceStore.getState().undoStack.length).toBe(undoDepth)
+    updateDeploymentElement('Live', nodeId, { icon: undefined })
+    expect(env().deploymentNodes[0].properties).not.toHaveProperty('c4hero.icon')
+
+    // Round-trips through the DSL as an ordinary property.
+    updateDeploymentElement('Live', nodeId, { icon: 'nginx' })
+    const dsl = serializeDSL(ws())
+    expect(dsl).toContain('"c4hero.icon" "nginx"')
+    const { workspace: reparsed } = parseDSL(dsl)
+    expect(reparsed.model.deploymentEnvironments![0].deploymentNodes[0].properties['c4hero.icon']).toBe('nginx')
+  })
+
   it('resolves selected deployment elements of every kind', () => {
     const nodeId = env().deploymentNodes[0].id
     const infraId = useWorkspaceStore.getState().addInfrastructureNode('Live', nodeId)

@@ -17,12 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Icon field in the inspector picks a different logo, for any element, or
   turns it off. That choice is saved as a `c4hero.icon` property, which other
   Structurizr tools ignore. Logos come from Simple Icons, ship with the app and
-  load only when a diagram needs one (TEA-381). The interactive HTML export
-  shows the logos too, still as one offline file (TEA-384). Technologies
-  with no logo in the set (AWS and Azure services, SQL Server, Oracle,
-  Micronaut, gRPC and others) show a matching icon in the vendor's colour,
-  such as a function icon for AWS Lambda; a real logo still wins when both
-  match (TEA-386).
+  load only when a diagram needs one (TEA-381). PNG and SVG exports include
+  the logos, even when started before they finish loading (TEA-385). On
+  deployment views, infrastructure nodes and deployment nodes show logos too,
+  and their inspector has the same Icon field (TEA-383). The interactive HTML
+  export shows the logos too, still as one offline file (TEA-384).
+  Technologies with no logo in the set (AWS and Azure services, SQL Server,
+  Oracle, Micronaut, gRPC and others) show a matching icon in the vendor's
+  colour, such as a function icon for AWS Lambda; a real logo still wins when
+  both match (TEA-386).
 
 ### Fixed
 

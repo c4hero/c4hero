@@ -3,7 +3,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import LoadingDot from '@/components/shared/LoadingDot'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
-import { loadTechIconCatalog } from '@/lib/techIcons/loader'
+import { loadTechIconCatalog, settleTechIcons } from '@/lib/techIcons/loader'
 import { serializeDSL } from '@/lib/dsl'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { createBlankWorkspace } from '@/lib/templates'
@@ -174,6 +174,7 @@ export default function FloatingTopPill() {
           break
         }
         case 'svg': {
+          await settleTechIcons()
           const svg = exportCanvasAsSVG(theme)
           if (svg) downloadFile(svg, `${wsName}-${theme}.svg`, 'image/svg+xml')
           break

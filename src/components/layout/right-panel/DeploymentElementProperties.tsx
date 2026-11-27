@@ -2,6 +2,7 @@ import { useWorkspaceStore } from '@/store/workspace'
 import type { SelectedDeploymentElement } from '@/store/workspace-selectors'
 import { X, Trash2, ArrowRight } from 'lucide-react'
 import { FieldLabel, EditableField } from './fields'
+import TechIconField from './TechIconField'
 
 const KIND_LABELS: Record<SelectedDeploymentElement['kind'], string> = {
   deploymentNode: 'Deployment Node',
@@ -87,6 +88,14 @@ export default function DeploymentElementProperties({ sel, onClose }: {
                 placeholder="e.g. AWS EC2, Kubernetes..."
                 aria-label="Deployment element technology"
                 onCommit={(v) => updateDeploymentElement(sel.environment, id, { technology: v })}
+              />
+            </div>
+            <div>
+              <FieldLabel>Icon</FieldLabel>
+              <TechIconField
+                properties={sel.element.properties}
+                technology={sel.element.technology}
+                onChange={(icon) => updateDeploymentElement(sel.environment, id, { icon })}
               />
             </div>
             <div>
