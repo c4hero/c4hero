@@ -40,6 +40,10 @@ export function attachRightDragPan(element: HTMLElement, callbacks: RightDragPan
   let press: { id: number; x: number; y: number; target: Element; start: Viewport; panning: boolean } | null = null
   let lastRelease = -Infinity
   let lastMenuKey = -Infinity
+  // Touch and pen pointers that are down. A long press sends a context menu
+  // event while the finger is still down; touch keeps its own behaviour.
+  const touches = new Set<number>()
+  const touchEnd = (event: PointerEvent) => { touches.delete(event.pointerId) }
 
   const finish = (event: PointerEvent | null) => {
     const ended = press
@@ -78,7 +82,10 @@ export function attachRightDragPan(element: HTMLElement, callbacks: RightDragPan
   const blur = () => finish(null)
 
   const down = (event: PointerEvent) => {
-    if (event.button !== 2 || event.pointerType !== 'mouse') return
+    if (event.pointerType !== 'mouse') { touches.add(event.pointerId); return }
+    // A lost touch release must not leave mouse right clicks to the browser.
+    touches.clear()
+    if (event.button !== 2) return
     const target = event.target
     if (!(target instanceof Element) || !target.closest('.react-flow') || target.closest(EXCLUDED)) return
     finish(null)
@@ -91,7 +98,7 @@ export function attachRightDragPan(element: HTMLElement, callbacks: RightDragPan
   }
   const contextMenu = (event: MouseEvent) => {
     const target = event.target
-    if (!(target instanceof Element) || !target.closest('.react-flow') || target.closest(EXCLUDED)) return
+    if (touches.size || !(target instanceof Element) || !target.closest('.react-flow') || target.closest(EXCLUDED)) return
     event.preventDefault()
     // Sent on press (macOS, Linux): the release decides. Sent on release
     // (Windows): the release already decided.
@@ -113,11 +120,15 @@ export function attachRightDragPan(element: HTMLElement, callbacks: RightDragPan
   element.addEventListener('pointerdown', down, true)
   element.addEventListener('contextmenu', contextMenu, true)
   element.addEventListener('keydown', key, true)
+  window.addEventListener('pointerup', touchEnd, true)
+  window.addEventListener('pointercancel', touchEnd, true)
   return () => {
     finish(null)
     element.removeEventListener('pointerdown', down, true)
     element.removeEventListener('contextmenu', contextMenu, true)
     element.removeEventListener('keydown', key, true)
+    window.removeEventListener('pointerup', touchEnd, true)
+    window.removeEventListener('pointercancel', touchEnd, true)
   }
 }
 

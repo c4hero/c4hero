@@ -1132,6 +1132,10 @@ body {
 /* Canvas right-click menu (TEA-393): row-menu styling plus shortcut hints. */
 .canvas-context-menu {
   min-width: 228px;
+}
+/* The menu itself takes focus so arrow keys work; its items show the ring. */
+.canvas-context-menu:focus,
+.canvas-context-menu:focus-visible {
   outline: none;
 }
 .canvas-context-menu .row-menu-item {

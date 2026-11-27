@@ -106,6 +106,18 @@ describe('attachRightDragPan', () => {
     expect(viewport).toEqual({ x: 10, y: 20, zoom: 2 })
   })
 
+  it('leaves a touch long press to the browser', () => {
+    node.dispatchEvent(pointer('pointerdown', { x: 100, y: 100, button: 0, buttons: 1, pointerType: 'touch' }))
+    const longPress = menu(100, 100)
+    node.dispatchEvent(longPress)
+    expect(longPress.defaultPrevented).toBe(false)
+    expect(onMenu).not.toHaveBeenCalled()
+    window.dispatchEvent(pointer('pointerup', { x: 100, y: 100, button: 0, pointerType: 'touch' }))
+    const mouseMenu = menu(100, 100)
+    node.dispatchEvent(mouseMenu)
+    expect(mouseMenu.defaultPrevented).toBe(true)
+  })
+
   it('ends the pan when the button was released outside the window', () => {
     press(node)
     drag(150, 100)
