@@ -22,10 +22,13 @@ export const LABEL_BELOW = .7
 /** An open card's title shrinks to this fraction, leaving its body to the contents. */
 export const OPEN_HEADER = .5
 const childScale = (n: MapNode) => Math.min(...n.children.map(c => c.scale))
-export function revealFor(n: MapNode, zoom: number, width: number, height: number) {
+/** `open`: the card is already open. The readability gate only decides when it
+ * opens; once open it stays so down to the ordinary size, so closing chrome that
+ * widens the canvas, such as the inspector, never shuts it again. */
+export function revealFor(n: MapNode, zoom: number, width: number, height: number, open = false) {
   if (!n.children.length) return 0
   const [start, end] = n.element.type === 'softwareSystem' ? TUNING.system : TUNING.container
-  const size = Math.min(smooth(start, end, n.width * zoom), smooth(...LEGIBLE, childScale(n) * zoom))
+  const size = Math.min(smooth(start, end, n.width * zoom), open ? 1 : smooth(...LEGIBLE, childScale(n) * zoom))
   return Math.max(size, smooth(...TUNING.occupancy, Math.max(n.width * zoom / Math.max(1, width), n.height * zoom / Math.max(1, height))))
 }
 /** The open card's title scale for a reveal amount, on the summary's fade curve. */

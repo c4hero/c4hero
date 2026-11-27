@@ -200,6 +200,15 @@ describe('Zoom into a card with many children', () => {
     expect(atCardSize(n)).toBe(0)
     expect(revealFor(n, frameBox(n, area).zoom, area.width, area.height)).toBe(1)
   })
+  it('stays open down to card size once open, even when the canvas widens', () => {
+    const { ws, system } = dense(), n = buildLayout(ws).byId.get(system.id)!
+    // Framed in a canvas narrowed by the inspector, then the inspector closes.
+    const zoom = frameBox(n, { x: 0, y: 0, width: 900, height: 800 }).zoom
+    expect(revealFor(n, zoom, 1280, 800)).toBeLessThan(.5)
+    expect(revealFor(n, zoom, 1280, 800, true)).toBe(1)
+    // Shrunk below the ordinary card size, it closes after all.
+    expect(revealFor(n, 300 / n.width, 1280, 800, true)).toBe(0)
+  })
 })
 
 describe('Authored child positions spaced for narrower cards', () => {
