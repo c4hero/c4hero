@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { JSDOM } from 'jsdom'
 import { exportWorkspaceAsHtml, htmlExportFilename, wrapText } from './htmlExport'
 import { createBigBankSample } from './templates'
+import { TECH_ICON_CATALOG } from './techIcons/catalog'
 import { parseDSL } from './dsl'
 import type { Workspace } from '@/types/model'
 
@@ -348,5 +349,62 @@ describe('the exported viewer, running', () => {
     const { document } = dom(exportWorkspaceAsHtml(ws))
     expect(document.querySelectorAll('.node')).toHaveLength(0)
     expect(document.querySelector('.stage:not([hidden])')).toBeTruthy()
+  })
+})
+
+describe('exportWorkspaceAsHtml — technology logos (TEA-384)', () => {
+  // Imported directly: in the app the catalog is a lazy chunk the caller loads.
+  const techIcons = TECH_ICON_CATALOG
+  const KOTLIN = 'M24 24H0V0h24L12 12Z'
+
+  function logos(html: string): Record<string, string | null> {
+    const { document } = dom(html)
+    const out: Record<string, string | null> = {}
+    for (const node of document.querySelectorAll('.stage[data-view="Containers"] .node')) {
+      out[node.getAttribute('data-id')!] = node.querySelector('.n-icon use')?.getAttribute('href') ?? null
+    }
+    return out
+  }
+
+  it('draws nothing without the catalog, as before', () => {
+    const html = exportWorkspaceAsHtml(shop())
+    expect(html).not.toContain('n-icon')
+    expect(html).not.toContain('<symbol')
+  })
+
+  it('draws auto-detected logos from shared symbols', () => {
+    const html = exportWorkspaceAsHtml(shop(), { techIcons })
+    expect(logos(html)).toEqual({ cust: null, web: '#ti-react', db: '#ti-postgresql' })
+    // Each used logo is stored once, however many nodes and views draw it.
+    expect(html.match(/<symbol id="ti-react"/g)).toHaveLength(1)
+    expect(html.match(/<symbol /g)).toHaveLength(2)
+    const { document } = dom(html)
+    expect(document.querySelector('.n-icon title')!.textContent).toBe('React')
+  })
+
+  it('honours a pinned logo and a pinned none', () => {
+    const ws = shop()
+    const [web, db] = ws.model.softwareSystems[0].containers
+    web.properties['c4hero.icon'] = 'kotlin'
+    db.properties['c4hero.icon'] = 'none'
+    const html = exportWorkspaceAsHtml(ws, { techIcons })
+    expect(logos(html)).toEqual({ cust: null, web: '#ti-kotlin', db: null })
+    expect(html).toContain(KOTLIN)
+    expect(html).not.toContain('id="ti-postgresql"')
+  })
+
+  it('falls back to the text colour when the brand colour vanishes on the node fill', () => {
+    const ws = shop()
+    ws.model.softwareSystems[0].containers[0].technology = 'Kafka'
+    ws.views.configuration.styles.elements.push({ tag: 'Container', background: '#111111', color: '#eeeeee' })
+    const { document } = dom(exportWorkspaceAsHtml(ws, { techIcons }))
+    expect(document.querySelector('.stage[data-view="Containers"] [data-id="web"] .n-icon use')!.getAttribute('fill')).toBe('#eeeeee')
+  })
+
+  it('keeps the no-network guarantees with logos on', () => {
+    const html = exportWorkspaceAsHtml(shop(), { techIcons })
+    expect(html).not.toMatch(/url\((?!#)/)
+    expect(html).not.toMatch(/href="(?!#)/)
+    expect(exportWorkspaceAsHtml(shop(), { techIcons })).toBe(html)
   })
 })

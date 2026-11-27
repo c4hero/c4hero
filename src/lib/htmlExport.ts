@@ -10,6 +10,8 @@ import { applyAutoLayout, type LayoutBoundaryCluster } from '@/lib/canvasLayout'
 import { THEMES } from '@/lib/themes'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
+import { resolveTechIcon, techIconColor, type TechIconSlug } from '@/lib/techIcons/registry'
+import type { TechIconCatalog } from '@/lib/techIcons/loader'
 
 /**
  * Export a workspace as one self-contained `.html` file.
@@ -49,6 +51,9 @@ const DESC_CHARS = 31
 const TECH_CHARS = 30
 const NAME_MAX_LINES = 3
 const DESC_MAX_LINES = 3
+/** Technology logo, drawn in the node's top-right corner beside the type
+ *  label, so it never collides with the wrapped name below (TEA-384). */
+const ICON_SIZE = 18
 
 const BOUNDARY_PAD = 30
 const BOUNDARY_PAD_TOP = 54
@@ -83,6 +88,11 @@ export interface HtmlExportOptions {
   title?: string
   /** Credited in the footer, e.g. `c4hero 0.3.0`. */
   generator?: string
+  /** Technology logos (TEA-384): pass the loaded catalog
+   *  (`await loadTechIconCatalog()`) to draw each element's logo, as on the
+   *  canvas. Without it the export has no logos. Kept as an input rather than
+   *  loaded here so the exporter stays synchronous and deterministic. */
+  techIcons?: TechIconCatalog
 }
 
 interface RenderNode {
@@ -101,6 +111,8 @@ interface RenderNode {
   strokeWidth: number
   /** View key to open when this node is drilled into. */
   drillTo?: string
+  /** Technology logo, drawn from a shared `<symbol>`. */
+  icon?: { slug: TechIconSlug; title: string; fill: string }
 }
 
 interface RenderEdge {
@@ -155,7 +167,7 @@ export function exportWorkspaceAsHtml(workspace: Workspace, options: HtmlExportO
   const drillTargets = buildDrillTargets(workspace)
 
   const views = exportableViews(workspace).map((view) =>
-    layoutView(workspace, view, themeStyles, drillTargets),
+    layoutView(workspace, view, themeStyles, drillTargets, options.techIcons),
   )
 
   const data = {
@@ -164,7 +176,7 @@ export function exportWorkspaceAsHtml(workspace: Workspace, options: HtmlExportO
     elements: buildElementDetails(workspace, drillTargets),
   }
 
-  return renderDocument({ title, background, views, data, generator: options.generator })
+  return renderDocument({ title, background, views, data, generator: options.generator, techIcons: options.techIcons })
 }
 
 /** Suggested filename for a workspace export. */
@@ -392,6 +404,7 @@ function layoutView(
   view: View,
   themeStyles: ElementStyle[],
   drillTargets: Map<string, string>,
+  techIcons?: TechIconCatalog,
 ): RenderView {
   const elementIndex = indexElements(workspace)
   const styleIndex = buildStyleIndex([...themeStyles, ...workspace.views.configuration.styles.elements])
@@ -521,6 +534,12 @@ function layoutView(
     const box = boxes.get(element.id)!
     const shape = shapes.get(element.id)!
     const style = resolveStyle(element, styleIndex)
+    const background = style.background ?? '#1f2937'
+    const color = style.color ?? '#e5e7eb'
+    // Same rules as the canvas: pinned `c4hero.icon`, `none`, or auto-detect;
+    // brand colour unless it vanishes against the node's own fill.
+    const slug = techIcons ? resolveTechIcon(element.properties, 'technology' in element ? element.technology : undefined) : undefined
+    const iconData = slug ? techIcons![slug] : undefined
     return {
       id: element.id,
       x: round(box.x + offsetX),
@@ -531,8 +550,8 @@ function layoutView(
       nameLines: shape.nameLines,
       technology: shape.technology,
       descLines: shape.descLines,
-      background: style.background ?? '#1f2937',
-      color: style.color ?? '#e5e7eb',
+      background,
+      color,
       stroke: style.stroke ?? style.color ?? '#64748b',
       // Coerced rather than trusted: unlike the colors, this lands in an SVG
       // attribute as a bare number, and a workspace can reach us from
@@ -540,6 +559,7 @@ function layoutView(
       // parser's numeric guard.
       strokeWidth: finiteOr(style.strokeWidth, 1.5),
       drillTo: drillTargets.get(element.id) === view.key ? undefined : drillTargets.get(element.id),
+      ...(slug && iconData ? { icon: { slug, title: iconData.title, fill: techIconColor(iconData.hex, background, color) } } : {}),
     }
   })
 
@@ -612,6 +632,16 @@ function renderNode(node: RenderNode): string {
     }
   }
 
+  if (node.icon) {
+    const x = node.x + node.w - NODE_PAD - ICON_SIZE
+    const y = node.y + NODE_PAD - 3
+    lines.push(
+      `<svg class="n-icon" x="${round(x)}" y="${round(y)}" width="${ICON_SIZE}" height="${ICON_SIZE}" viewBox="0 0 24 24">` +
+      `<title>${escapeHtml(node.icon.title)}</title>` +
+      `<use href="#${iconSymbolId(node.icon.slug)}" fill="${escapeHtml(node.icon.fill)}"/></svg>`,
+    )
+  }
+
   const label = [node.typeLabel, node.nameLines.join(' ')].join(': ')
   const drill = node.drillTo ? ` data-drill="${escapeHtml(node.drillTo)}"` : ''
   return [
@@ -675,9 +705,27 @@ interface DocumentInput {
   views: RenderView[]
   data: unknown
   generator?: string
+  techIcons?: TechIconCatalog
 }
 
-function renderDocument({ title, background, views, data, generator }: DocumentInput): string {
+function iconSymbolId(slug: TechIconSlug): string {
+  return `ti-${slug}`
+}
+
+/** One hidden `<svg>` holding a `<symbol>` per logo the export actually uses,
+ *  so a logo drawn on fifty nodes is stored once. Same-document `<use>`
+ *  references, so the no-network CSP is untouched. Sorted for determinism. */
+function renderIconSymbols(views: RenderView[], techIcons: TechIconCatalog | undefined): string {
+  if (!techIcons) return ''
+  const used = [...new Set(views.flatMap((view) => view.nodes.flatMap((node) => (node.icon ? [node.icon.slug] : []))))].sort()
+  if (used.length === 0) return ''
+  const symbols = used
+    .map((slug) => `<symbol id="${iconSymbolId(slug)}" viewBox="0 0 24 24"><path d="${escapeHtml(techIcons[slug].path)}"/></symbol>`)
+    .join('')
+  return `<svg class="icon-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>${symbols}</defs></svg>`
+}
+
+function renderDocument({ title, background, views, data, generator, techIcons }: DocumentInput): string {
   const tabs = views
     .map(
       (view, index) =>
@@ -712,7 +760,7 @@ function renderDocument({ title, background, views, data, generator }: DocumentI
 <button type="button" id="fit">Fit</button>
 </div>
 </header>
-<main class="canvas">${stages}${empty}</main>
+<main class="canvas">${renderIconSymbols(views, techIcons)}${stages}${empty}</main>
 <aside id="details" class="details" hidden aria-label="Element details"></aside>
 <footer class="foot"><span id="view-desc"></span><span class="grow"></span><span>${escapeHtml(generator ?? 'c4hero')} &middot; static export</span></footer>
 <script type="application/json" id="c4-data">${embedJson(data)}</script>
@@ -783,6 +831,7 @@ body {
 .n-name { font-size: 14px; font-weight: 650; }
 .n-tech { font-size: 11px; font-style: italic; opacity: 0.8; }
 .n-desc { font-size: 11.5px; opacity: 0.85; }
+.icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .node.dim { opacity: 0.18; }
 .node.hit rect { stroke-width: 3; }
 .node.selected rect { stroke: var(--accent); stroke-width: 3; }
