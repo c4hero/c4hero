@@ -94,10 +94,21 @@ describe('buildBoundaryNodes', () => {
     expect(result).toHaveLength(1)
     expect((result[0].data as { name: string }).name).toBe('System A')
     expect((result[0].data as { empty?: boolean }).empty).toBeUndefined()
-    expect(result[0].draggable).toBe(false)
+    // TEA-396: its label drags it (and its members); the body stays click-through.
+    expect(result[0].draggable).toBe(true)
+    expect(result[0].style?.pointerEvents).toBe('none')
     expect(result[0].focusable).toBe(false)
     // Sized to the container, not the empty default
     expect(result[0].style?.width).not.toBe(400)
+  })
+
+  it('pins the boundary on a locked view', () => {
+    const view: View = {
+      type: 'container', key: 'cont', softwareSystemId: 'sysA', locked: true,
+      elements: [{ id: 'a1' }], relationships: [],
+    }
+    const result = buildBoundaryNodes(ws(), view, [el('a1', 0, 0)])
+    expect(result[0].draggable).toBe(false)
   })
 
   it('emits no boundaries on a Landscape view (no scope concept)', () => {

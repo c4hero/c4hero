@@ -386,7 +386,10 @@ export function buildBoundaryNodes(
       data: { name, typeLabel },
       zIndex: BOUNDARY_Z,
       selectable: false,
-      draggable: false,
+      // Dragged by its label (the body stays click-through): Canvas's overlay
+      // drag moves every member, and nested groups, by the same delta.
+      // A locked view pins it with the rest of the layout.
+      draggable: view.locked !== true,
       focusable: false,
     }
   }
