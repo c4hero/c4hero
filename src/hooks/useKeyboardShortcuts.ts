@@ -42,7 +42,7 @@ const META_SHORTCUTS: Record<string, KeyHandler> = {
  * Focal-scope IDs are always filtered out; if only focal-scope IDs were
  * selected, the key is a no-op.
  */
-function backspaceLikeHandler(destructive: boolean): KeyHandler {
+export function backspaceLikeHandler(destructive: boolean): KeyHandler {
   return (store) => {
     if (store.selectedRelationshipId) {
       const activeView = store.workspace && store.activeViewKey
