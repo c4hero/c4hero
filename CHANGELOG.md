@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Oracle, Micronaut, gRPC and others) show a matching icon in the vendor's
   colour, such as a function icon for AWS Lambda; a real logo still wins when
   both match (TEA-386).
+- **Right-click and drag pans the canvas.** Hold the right mouse button and
+  drag anywhere on the canvas, over nodes, edges and boundaries too, to move
+  around the diagram, as in Figma or Miro. It works in diagram and Zoom mode,
+  where letting go mid-drag glides like a normal pan. A right click that
+  doesn't move stays a right click. On Windows it still opens the browser's
+  menu; macOS and Linux open that menu on press, before a drag can start, so
+  there the canvas keeps it closed. The Menu key and Shift+F10 still open it
+  everywhere (TEA-390).
 
 ### Fixed
 

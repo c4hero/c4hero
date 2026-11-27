@@ -1,6 +1,7 @@
 import ConnectionPreview from './edges/ConnectionPreview'
 import { useSemanticZoom } from './useSemanticZoom'
 import { useCanvasTouchPinch } from './useCanvasTouchPinch'
+import { useCanvasRightDragPan } from './useCanvasRightDragPan'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useDocsLoader } from '@/hooks/useDocsLoader'
 import { useCanvasTheme } from '@/hooks/useCanvasTheme'
@@ -65,7 +66,9 @@ const RF_PRO_OPTIONS = { hideAttribution: true }
 const RF_SNAP_GRID: [number, number] = [32, 32]
 const RF_DEFAULT_EDGE_OPTIONS = { type: 'relationship', reconnectable: true }
 const RF_PAN_ON_DRAG_DEFAULT = [0]
-const RF_PAN_ON_DRAG_SPACE = [0, 1, 2]
+// Right-drag pans everywhere through useCanvasRightDragPan, so React Flow
+// never gets button 2; giving it too would pan twice over the empty pane.
+const RF_PAN_ON_DRAG_SPACE = [0, 1]
 const SCOPE_BOUNDARY_PREFIX = '__scope_boundary__'
 
 function isScopeBoundaryNode(node: Pick<Node, 'id'>): boolean {
@@ -718,6 +721,21 @@ export default function Canvas() {
   const pendingSelectionIds = useRef<string[] | null>(null)
   const shiftKeyDown = useRef(false)
   const dragStartPositions = useRef<Map<string, { x: number; y: number }> | null>(null)
+
+  // Right-drag pans in both renderers. Feeding the semantic camera the real
+  // pointer events gives Zoom mode the same glide on release as a left pan.
+  useCanvasRightDragPan(host, {
+    getViewport: () => (rfInitInstance.current ?? reactFlowInstance).getViewport(),
+    setViewport: (viewport) => { void (rfInitInstance.current ?? reactFlowInstance).setViewport(viewport) },
+    onPan: (event, viewport) => {
+      semantic.controller.current?.onMove(event, viewport)
+      document.documentElement.setAttribute('data-canvas-panning', '')
+    },
+    onPanEnd: (event) => {
+      document.documentElement.removeAttribute('data-canvas-panning')
+      if (event) semantic.controller.current?.onMoveEnd(event)
+    },
+  })
 
   useCanvasTouchPinch(host, () => {
     touchPinching.current = true
