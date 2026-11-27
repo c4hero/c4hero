@@ -152,10 +152,16 @@ function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, 
   return [...overlays, ...contentOnly]
 }
 
+/** Zoom draws its own cards, scaled to fit inside their parents. Their
+ * measurements say nothing about the size of the same card in a Diagram. */
+function measuredAsDiagram(node: Node): boolean {
+  return !!(node.measured?.width && node.measured?.height) && !(node.data as { semantic?: unknown } | undefined)?.semantic
+}
+
 function carryForwardMeasurements(nodes: Node[], measuredNodes: Node[]): Node[] {
   const measuredById = new Map<string, { width?: number; height?: number }>()
   for (const node of measuredNodes) {
-    if (node.measured?.width && node.measured?.height) measuredById.set(node.id, node.measured)
+    if (measuredAsDiagram(node)) measuredById.set(node.id, node.measured!)
   }
   if (measuredById.size === 0) return nodes
   return nodes.map((node) => {
@@ -309,8 +315,15 @@ export default function Canvas() {
     return map
   }, [viewStructureKey])
 
-  const { initialNodes, initialEdges } = useMemo(() => {
-    if (!workspace || !view) return { initialNodes: [], initialEdges: [] }
+  // A view's first layout runs before its cards are measured, so it spaces
+  // every card as if it had the default size; cards are sized to their content,
+  // and wider ones would end up touching. Bumped once they are measured, to lay
+  // the view out again with real sizes before its positions are saved.
+  const [measureTick, setMeasureTick] = useState(0)
+  // Views whose cards never reported a size: save their estimated layout.
+  const unmeasurable = useRef(new Set<string>())
+  const { initialNodes, initialEdges, estimatedIds } = useMemo(() => {
+    if (!workspace || !view) return { initialNodes: [], initialEdges: [], estimatedIds: [] }
     const direction = view.autoLayout?.direction ?? 'TB'
 
     // 1. Build nodes with raw positions from view. Deployment views resolve
@@ -321,6 +334,10 @@ export default function Canvas() {
       ? buildDeploymentNodes(workspace, view, highlightFilters, themeStyles)
       : buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
     const layoutNodes = carryForwardMeasurements(rawNodes, reactFlowInstance.getNodes())
+    const placed = new Set(view.elements.filter(e => e.x !== undefined && e.y !== undefined).map(e => e.id))
+    const estimatedIds = unmeasurable.current.has(view.key) ? [] : layoutNodes
+      .filter(n => !placed.has(n.id) && !(n.measured?.width && n.measured?.height))
+      .map(n => n.id)
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre.
     //    Deployment views take theirs from the same explicit + derived set the
@@ -364,8 +381,11 @@ export default function Canvas() {
     // 5. Build final edges using post-layout positions for handle routing
     const edges = buildEdges(workspace, view, allNodes, highlightFilters)
 
-    return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance])
+    return { initialNodes: allNodes, initialEdges: edges, estimatedIds }
+    // measureTick only re-reads the measured sizes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, measureTick])
+  const estimated = estimatedIds.length > 0
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.
@@ -375,8 +395,13 @@ export default function Canvas() {
   // disconnected new node ends up far off as its own component. Persisting
   // the initial layout makes those siblings frozen, letting the bbox-park
   // heuristic in applyAutoLayout drop the new node next to existing content.
+  // A fit scheduled for a view whose layout was still estimated; it is fitted
+  // again once the measured layout is saved.
+  const refitAfterMeasure = useRef<string | null>(null)
   useEffect(() => {
-    if (!view) return
+    // While Zoom draws the view, its own cards are never mounted or measured:
+    // leave its positions unsaved until it is shown as a Diagram.
+    if (!view || estimated || !active) return
     const updates = new Map<string, { x: number; y: number }>()
     for (const ve of view.elements) {
       if (ve.x !== undefined && ve.y !== undefined) continue
@@ -386,7 +411,17 @@ export default function Canvas() {
       }
     }
     if (updates.size > 0) syncAutoLayoutPositions(view.key, updates)
-  }, [initialNodes, view, syncAutoLayoutPositions])
+    if (refitAfterMeasure.current === view.key) {
+      refitAfterMeasure.current = null
+      // The saved positions reach the mounted nodes on the next commit.
+      fitPending.current = true
+      fitAttempts.current = 0
+      expectedFitIds.current = null
+      requestAnimationFrame(() => requestAnimationFrame(fitContentNodes))
+    }
+  // fitContentNodes is declared below; it is stable and only called later.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialNodes, view, syncAutoLayoutPositions, estimated, active])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -580,8 +615,10 @@ export default function Canvas() {
         }
       }
 
+      refitAfterMeasure.current = null
       if (viewKey && (refit || lastFitSig !== viewSig)) {
         fittedSignaturesByView.current.set(viewKey, viewSig)
+        if (estimated) refitAfterMeasure.current = viewKey
         expectedFitIds.current = new Set(getViewportFitNodes(initialNodes).map((n) => n.id))
         fitPending.current = true
         fitAttempts.current = 0
@@ -619,7 +656,24 @@ export default function Canvas() {
       })
       requestAnimationFrame(rebuildOverlays)
     }
-  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, rebuildOverlays, activeViewKey, view, layoutVersion, tryRestoreViewport])
+  }, [initialNodes, initialEdges, setNodes, setEdges, fitContentNodes, rebuildOverlays, activeViewKey, view, layoutVersion, tryRestoreViewport, estimated])
+
+  // Wait for the cards of an estimated layout to be measured, then lay the view
+  // out again with their real sizes. If they never are, keep the estimate.
+  useEffect(() => {
+    if (!view || !estimatedIds.length || !active) return
+    const key = view.key, ids = new Set(estimatedIds)
+    let raf = 0, attempts = 0
+    const poll = () => {
+      const measured = (rfInitInstance.current ?? reactFlowInstance).getNodes().filter(n => ids.has(n.id) && measuredAsDiagram(n))
+      if (measured.length === ids.size) { setMeasureTick(t => t + 1); return }
+      if (attempts++ < MAX_MEASURE_ATTEMPTS) { raf = requestAnimationFrame(poll); return }
+      unmeasurable.current.add(key)
+      setMeasureTick(t => t + 1)
+    }
+    raf = requestAnimationFrame(poll)
+    return () => cancelAnimationFrame(raf)
+  }, [view, estimatedIds, reactFlowInstance, active])
 
   // Reconcile RF's internal `selected` flag with the store. Without this, an
   // outside-click that clears the store selection (e.g. clicking a filter chip
