@@ -17,6 +17,11 @@ import { pickHighlightReason } from '@/lib/highlight'
 
 import { SHAPE_ICON_MAP } from '@/lib/nodeIcons'
 import { summaryOpacity } from '@/lib/zoom/motion'
+import { resolveTechIcon, techIconColor } from '@/lib/techIcons/registry'
+import { useTechIconCatalog } from '@/lib/techIcons/loader'
+import { useSettingsStore } from '@/store/settings'
+import { THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
+import TechIcon from '@/components/shared/TechIcon'
 
 interface BaseC4NodeProps {
   data: C4NodeData
@@ -81,6 +86,16 @@ export default function BaseC4Node({
   const resolvedBorder = selected
     ? `2px solid ${borderColor}`
     : `${borderWidth}px ${borderLine} ${borderColor}`
+
+  // Technology icon (TEA-381): pinned via `c4hero.icon`, else auto-detected
+  // from the technology string. Until the lazy catalog arrives (or when
+  // nothing matches) the node keeps its type glyph.
+  const techIconSlug = resolveTechIcon(element.properties, technology)
+  const techCatalog = useTechIconCatalog(techIconSlug !== undefined)
+  const techIcon = techIconSlug && techCatalog ? techCatalog[techIconSlug] : undefined
+  // Contrast is judged against the canvas, which the icon tile blends with.
+  const canvasBackground = useSettingsStore((s) => THEME_CANVAS_BACKGROUNDS[s.colorTheme] ?? '#0d1117')
+  const techIconFill = techIcon ? techIconColor(techIcon.hex, canvasBackground, resolvedTypeColor) : undefined
 
   // Opacity: Structurizr uses 0–100, CSS uses 0–1
   const resolvedOpacity = style?.opacity != null ? style.opacity / 100 : undefined
@@ -174,7 +189,31 @@ export default function BaseC4Node({
               color: resolvedTypeColor,
             }}
           >
-            <ResolvedIcon size={14} />
+            {techIcon && techIconFill ? <TechIcon icon={techIcon} size={14} color={techIconFill} /> : <ResolvedIcon size={14} />}
+          </span>
+        ) : techIconSlug ? (
+          // The tile is drawn as soon as a logo is known, holding the type
+          // glyph until the lazy catalog arrives, so the node never changes
+          // height under the user (or a pending connection) when it does.
+          <span
+            className={techIcon ? 'c4-node-tech-icon' : 'c4-node-tech-icon-pending'}
+            data-tech-icon={techIcon ? techIconSlug : undefined}
+            title={techIcon?.title}
+            style={{
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              borderRadius: 7,
+              background: 'color-mix(in srgb, var(--canvas-bg, var(--color-bg-primary)) 62%, transparent)',
+              border: `1px solid color-mix(in srgb, ${borderColor} 35%, transparent)`,
+            }}
+          >
+            {techIcon && techIconFill
+              ? <TechIcon icon={techIcon} size={16} color={techIconFill} />
+              : <ResolvedIcon size={16} aria-hidden="true" style={{ color: resolvedTypeColor }} />}
           </span>
         ) : (
           <ResolvedIcon size={16} aria-hidden="true" style={{ flexShrink: 0, color: resolvedTypeColor }} />

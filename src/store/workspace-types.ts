@@ -192,7 +192,7 @@ export interface WorkspaceState extends UndoState {
   addSoftwareSystem: (name: string, position?: { x: number; y: number }, location?: 'Internal' | 'External') => string
   addContainer: (systemId: string, name: string, position?: { x: number; y: number }, extraTag?: string) => string
   addComponent: (containerId: string, name: string, position?: { x: number; y: number }) => string
-  updateElement: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified' }) => void
+  updateElement: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified'; icon?: string }) => void
   /** Same as updateElement but does NOT push an undo entry — for live typing previews */
   updateElementLive: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified', technology?: string }) => void
   updateElementTechnology: (id: string, technology: string) => void

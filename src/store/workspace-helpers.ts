@@ -1,4 +1,5 @@
 import { isReadOnlySource } from '@/lib/includeWriteback'
+import { TECH_ICON_PROPERTY } from '@/lib/techIcons/registry'
 import { current, isDraft } from 'immer'
 import type {
   Workspace, View, ModelElement, Person, SoftwareSystem, Container, Component,
@@ -286,7 +287,12 @@ export function invalidateElementIndex(ws: Workspace): void {
 
 /** Patch shape that updateElement / updateElementLive both consume. */
 export type ElementPatch = Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>>
-  & { location?: 'Internal' | 'External' | 'Unspecified'; technology?: string }
+  & {
+    location?: 'Internal' | 'External' | 'Unspecified'; technology?: string
+    /** Pinned technology icon slug, `none` to hide it, or undefined for
+     *  auto-detect. Stored as the `c4hero.icon` property (TEA-381). */
+    icon?: string
+  }
 
 /** Apply a patch to an element in-place. Returns true only when the
  *  element was found AND at least one field changed. Returning false
@@ -318,6 +324,15 @@ export function applyElementPatch(ws: Workspace, id: string, patch: ElementPatch
     if (patch.technology !== undefined && (el.type === 'container' || el.type === 'component')) {
       const cur = (el as Container | Component).technology
       if (cur !== patch.technology) { (el as Container | Component).technology = patch.technology; changed = true }
+    }
+    if ('icon' in patch) {
+      const cur = el.properties[TECH_ICON_PROPERTY]
+      if (patch.icon) {
+        if (cur !== patch.icon) { el.properties[TECH_ICON_PROPERTY] = patch.icon; changed = true }
+      } else if (cur !== undefined) {
+        delete el.properties[TECH_ICON_PROPERTY]
+        changed = true
+      }
     }
     return true
   })

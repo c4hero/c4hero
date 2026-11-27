@@ -9,6 +9,7 @@ import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import DocsPane from '@/components/docs/DocsPane'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
+import TechIconField from './right-panel/TechIconField'
 import GroupProperties from './right-panel/GroupProperties'
 import DeploymentElementProperties from './right-panel/DeploymentElementProperties'
 import { useAiProvider } from '@/store/ai-settings'
@@ -382,6 +383,10 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                 </div>
               </div>
             )}
+            <div>
+              <FieldLabel>Icon</FieldLabel>
+              <TechIconField properties={element.properties} technology={tech} onChange={(icon) => updateElement(element.id, { icon })} />
+            </div>
             <div>
               <FieldLabel>Description</FieldLabel>
               <div style={{ position: 'relative' }}>
