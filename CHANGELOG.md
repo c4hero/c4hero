@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deployment views, infrastructure nodes and deployment nodes show logos too,
   and their inspector has the same Icon field (TEA-383). The interactive HTML
   export shows the logos too, still as one offline file (TEA-384).
+  Technologies with no logo in the set (AWS and Azure services, SQL Server,
+  Oracle, Micronaut, gRPC and others) show a matching icon in the vendor's
+  colour, such as a function icon for AWS Lambda; a real logo still wins when
+  both match (TEA-386).
 
 ### Fixed
 

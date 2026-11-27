@@ -12,6 +12,7 @@ import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { wildcardImpliedRelationships } from '@/lib/dsl/wildcard'
 import { resolveTechIcon, techIconColor, type TechIconSlug } from '@/lib/techIcons/registry'
 import type { TechIconCatalog } from '@/lib/techIcons/loader'
+import type { TechIconData } from '@/lib/techIcons/catalog'
 
 /**
  * Export a workspace as one self-contained `.html` file.
@@ -638,7 +639,7 @@ function renderNode(node: RenderNode): string {
     lines.push(
       `<svg class="n-icon" x="${round(x)}" y="${round(y)}" width="${ICON_SIZE}" height="${ICON_SIZE}" viewBox="0 0 24 24">` +
       `<title>${escapeHtml(node.icon.title)}</title>` +
-      `<use href="#${iconSymbolId(node.icon.slug)}" fill="${escapeHtml(node.icon.fill)}"/></svg>`,
+      `<use href="#${iconSymbolId(node.icon.slug)}" fill="${escapeHtml(node.icon.fill)}" color="${escapeHtml(node.icon.fill)}"/></svg>`,
     )
   }
 
@@ -720,9 +721,19 @@ function renderIconSymbols(views: RenderView[], techIcons: TechIconCatalog | und
   const used = [...new Set(views.flatMap((view) => view.nodes.flatMap((node) => (node.icon ? [node.icon.slug] : []))))].sort()
   if (used.length === 0) return ''
   const symbols = used
-    .map((slug) => `<symbol id="${iconSymbolId(slug)}" viewBox="0 0 24 24"><path d="${escapeHtml(techIcons[slug].path)}"/></symbol>`)
+    .map((slug) => `<symbol id="${iconSymbolId(slug)}" viewBox="0 0 24 24">${iconBody(techIcons[slug])}</symbol>`)
     .join('')
   return `<svg class="icon-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>${symbols}</defs></svg>`
+}
+
+/** A brand mark is one path that takes the `<use>` element's fill. A category
+ *  glyph (TEA-386) is Lucide strokes in `currentColor`, which takes its `color`. */
+function iconBody(icon: TechIconData): string {
+  if (!icon.glyph) return `<path d="${escapeHtml(icon.path)}"/>`
+  const shapes = icon.glyph
+    .map(([tag, attrs]) => `<${tag}${Object.entries(attrs).map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join('')}/>`)
+    .join('')
+  return `<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${shapes}</g>`
 }
 
 function renderDocument({ title, background, views, data, generator, techIcons }: DocumentInput): string {

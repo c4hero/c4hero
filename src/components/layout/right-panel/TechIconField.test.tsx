@@ -12,7 +12,7 @@ describe('TechIconField', () => {
   })
 
   it('says when auto-detect finds nothing', () => {
-    render(<TechIconField properties={{}} technology="Micronaut" onChange={vi.fn()} />)
+    render(<TechIconField properties={{}} technology="Bespoke engine" onChange={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Icon: Auto · no match' })).toBeTruthy()
   })
 

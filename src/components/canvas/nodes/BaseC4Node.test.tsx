@@ -337,7 +337,7 @@ describe('technology icon (TEA-381)', () => {
 
   it('keeps the type glyph when nothing matches', async () => {
     await loadTechIconCatalog()
-    const { node } = renderNode({ props: { technology: 'Micronaut' } })
+    const { node } = renderNode({ props: { technology: 'Bespoke engine' } })
     expect(node.querySelector('.c4-node-tech-icon')).toBeNull()
     expect(node.querySelector('.c4-node-header .lucide-box')).not.toBeNull()
   })
@@ -350,6 +350,18 @@ describe('technology icon (TEA-381)', () => {
 
     const hidden = renderNode({ element: { properties: { 'c4hero.icon': 'none' } }, props: { technology: 'Kotlin' } })
     expect(hidden.node.querySelector('.c4-node-tech-icon')).toBeNull()
+  })
+
+  it('draws a category glyph as vendor-coloured strokes (TEA-386)', async () => {
+    await loadTechIconCatalog()
+    const { node } = renderNode({ props: { technology: 'AWS Lambda' } })
+    const tile = node.querySelector<HTMLElement>('.c4-node-tech-icon')!
+    expect(tile.dataset.techIcon).toBe('aws-lambda')
+    expect(tile.title).toBe('AWS Lambda')
+    const svg = tile.querySelector('svg')!
+    expect(svg.getAttribute('fill')).toBe('none')
+    expect(svg.getAttribute('stroke')).toBe('#FF9900')
+    expect(svg.querySelector('path')).not.toBeNull()
   })
 
   it('falls back to the type colour when the brand colour would vanish on the canvas', async () => {
