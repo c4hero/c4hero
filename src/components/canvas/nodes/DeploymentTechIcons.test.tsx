@@ -37,7 +37,7 @@ describe('technology logos on deployment views (TEA-383)', () => {
 
   it('keeps the server glyph for an unknown technology or a pinned none', () => {
     const { container } = renderNodes([
-      { id: 'a', type: 'infrastructureNode', position: { x: 0, y: 0 }, data: { infra: infra({ id: 'a', technology: 'ELB' }) } },
+      { id: 'a', type: 'infrastructureNode', position: { x: 0, y: 0 }, data: { infra: infra({ id: 'a', technology: 'HAProxy' }) } },
       { id: 'b', type: 'infrastructureNode', position: { x: 0, y: 200 }, data: { infra: infra({ id: 'b', technology: 'NGINX', properties: { 'c4hero.icon': 'none' } }) } },
     ])
     expect(container.querySelector('.c4-node-tech-icon')).toBeNull()

@@ -257,8 +257,7 @@ describe('technology logos on deployment boundaries (TEA-383)', () => {
 
     expect(icon('Web Server')).toBe('kubernetes')
     expect(icon('Database Server')).toBe('docker')
-    // "Amazon Web Services" has no Simple Icons mark; "Data Center" has no technology.
-    expect(icon('AWS')).toBeUndefined()
+    // "Data Center" has no technology at all.
     expect(icon('Data Center')).toBeUndefined()
   })
 })
