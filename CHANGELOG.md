@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Icon field in the inspector picks a different logo, for any element, or
   turns it off. That choice is saved as a `c4hero.icon` property, which other
   Structurizr tools ignore. Logos come from Simple Icons, ship with the app and
-  load only when a diagram needs one (TEA-381).
+  load only when a diagram needs one (TEA-381). PNG and SVG exports include
+  the logos, even when started before they finish loading (TEA-385).
 
 ### Fixed
 

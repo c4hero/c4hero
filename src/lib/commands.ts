@@ -14,6 +14,7 @@ import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
+import { settleTechIcons } from '@/lib/techIcons/loader'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import { announce } from '@/lib/announce'
@@ -572,9 +573,10 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
       category: 'export',
       icon: Image,
       keywords: ['export', 'svg', 'vector'],
-      execute: () => {
+      execute: async () => {
         const s = store()
         if (!s.workspace) return
+        await settleTechIcons()
         const svg = exportCanvasAsSVG()
         if (svg) downloadFile(svg, `${s.workspace.name ?? 'workspace'}.svg`, 'image/svg+xml')
       },
