@@ -192,11 +192,14 @@ export default function BaseC4Node({
           >
             {techIcon && techIconFill ? <TechIcon icon={techIcon} size={14} color={techIconFill} /> : <ResolvedIcon size={14} />}
           </span>
-        ) : techIcon && techIconFill ? (
+        ) : techIconSlug ? (
+          // The tile is drawn as soon as a logo is known, holding the type
+          // glyph until the lazy catalog arrives, so the node never changes
+          // height under the user (or a pending connection) when it does.
           <span
-            className="c4-node-tech-icon"
-            data-tech-icon={techIconSlug}
-            title={techIcon.title}
+            className={techIcon ? 'c4-node-tech-icon' : 'c4-node-tech-icon-pending'}
+            data-tech-icon={techIcon ? techIconSlug : undefined}
+            title={techIcon?.title}
             style={{
               flexShrink: 0,
               display: 'inline-flex',
@@ -209,7 +212,9 @@ export default function BaseC4Node({
               border: `1px solid color-mix(in srgb, ${borderColor} 35%, transparent)`,
             }}
           >
-            <TechIcon icon={techIcon} size={16} color={techIconFill} />
+            {techIcon && techIconFill
+              ? <TechIcon icon={techIcon} size={16} color={techIconFill} />
+              : <ResolvedIcon size={16} aria-hidden="true" style={{ color: resolvedTypeColor }} />}
           </span>
         ) : (
           <ResolvedIcon size={16} aria-hidden="true" style={{ flexShrink: 0, color: resolvedTypeColor }} />
