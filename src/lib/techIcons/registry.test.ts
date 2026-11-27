@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { TECH_ICON_CATALOG } from './catalog'
 import {
-  TECH_ICON_SLUGS, isTechIconSlug, matchTechIcon, normalizeTech, resolveTechIcon, techIconColor,
+  GENERIC_TECH_ICONS, TECH_ICON_SLUGS, isTechIconSlug, matchTechIcon, normalizeTech, resolveTechIcon, techIconColor,
 } from './registry'
 import { applyElementPatch } from '@/store/workspace-helpers'
 import { parseDSL, serializeDSL } from '@/lib/dsl'
@@ -12,7 +12,9 @@ describe('tech icon registry', () => {
     for (const slug of TECH_ICON_SLUGS) {
       const icon = TECH_ICON_CATALOG[slug]
       expect(icon, slug).toBeDefined()
-      expect(icon.path.length, slug).toBeGreaterThan(0)
+      // A brand mark has a path; a category glyph (TEA-386) has Lucide shapes.
+      expect(icon.path ? icon.path.length : icon.glyph!.length, slug).toBeGreaterThan(0)
+      expect(Boolean(icon.glyph), slug).toBe(GENERIC_TECH_ICONS.has(slug))
       expect(icon.hex, slug).toMatch(/^[0-9A-F]{6}$/i)
     }
     expect(Object.keys(TECH_ICON_CATALOG).sort()).toEqual([...TECH_ICON_SLUGS].sort())
@@ -50,7 +52,7 @@ describe('tech icon registry', () => {
   it.each([
     [undefined],
     [''],
-    ['Micronaut'],
+    ['Bespoke engine'],
     ['Go to market'],
     ['Elastic Beanstalk'],
     ['Apache Camel'],
@@ -129,5 +131,54 @@ describe('pinned icon storage', () => {
     const { workspace: parsed } = parseDSL(dsl)
     expect(parsed.model.softwareSystems[0].containers[0].properties['c4hero.icon']).toBe('redis')
     expect(serializeDSL(parsed)).toBe(dsl)
+  })
+})
+
+describe('category glyphs for technologies Simple Icons lacks (TEA-386)', () => {
+  it.each([
+    ['AWS Lambda', 'aws-lambda'],
+    ['Amazon S3', 'aws-s3'],
+    ['S3 API', 'aws-s3'],
+    ['DynamoDB', 'aws-dynamodb'],
+    ['SQS', 'aws-sqs'],
+    ['ELB', 'aws-elb'],
+    ['Amazon Web Services', 'aws'],
+    ['AWS region', 'aws'],
+    ['Azure Functions', 'azure-functions'],
+    ['Azure Cosmos DB', 'azure-cosmos-db'],
+    ['Service Bus', 'azure-service-bus'],
+    ['Microsoft Azure', 'azure'],
+    ['SQL Server', 'sql-server'],
+    ['MSSQL 2019', 'sql-server'],
+    ['Oracle 12c', 'oracle'],
+    ['Micronaut', 'micronaut'],
+    ['gRPC', 'grpc'],
+    ['OpenAI API', 'openai'],
+    ['Xamarin', 'xamarin'],
+  ])('matches %j to %s', (tech, slug) => {
+    expect(matchTechIcon(tech)).toBe(slug)
+  })
+
+  it('prefers a real brand mark over a category glyph, wherever it appears', () => {
+    expect(matchTechIcon('Micronaut, Kotlin')).toBe('kotlin')
+    expect(matchTechIcon('AWS Lambda, Node.js')).toBe('nodedotjs')
+    expect(matchTechIcon('Azure Kubernetes Service')).toBe('kubernetes')
+    // Glyph only when nothing branded matches.
+    expect(matchTechIcon('Micronaut, gRPC')).toBe('micronaut')
+  })
+
+  it('keeps ordinary words from matching a service', () => {
+    expect(matchTechIcon('Lambda calculus engine')).toBeUndefined()
+    expect(matchTechIcon('Front door of the app')).toBeUndefined()
+    expect(matchTechIcon('Oracle of truth')).toBeUndefined()
+  })
+
+  it('still sends Aurora PostgreSQL to the PostgreSQL mark', () => {
+    expect(matchTechIcon('Amazon Aurora PostgreSQL')).toBe('postgresql')
+    expect(matchTechIcon('Aurora')).toBe('aws-rds')
+  })
+
+  it('Java keeps the OpenJDK mark', () => {
+    expect(matchTechIcon('Java')).toBe('openjdk')
   })
 })

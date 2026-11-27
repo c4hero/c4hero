@@ -18,7 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   turns it off. That choice is saved as a `c4hero.icon` property, which other
   Structurizr tools ignore. Logos come from Simple Icons, ship with the app and
   load only when a diagram needs one (TEA-381). The interactive HTML export
-  shows the logos too, still as one offline file (TEA-384).
+  shows the logos too, still as one offline file (TEA-384). Technologies
+  with no logo in the set (AWS and Azure services, SQL Server, Oracle,
+  Micronaut, gRPC and others) show a matching icon in the vendor's colour,
+  such as a function icon for AWS Lambda; a real logo still wins when both
+  match (TEA-386).
 
 ### Fixed
 

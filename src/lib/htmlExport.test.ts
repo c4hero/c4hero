@@ -401,6 +401,18 @@ describe('exportWorkspaceAsHtml — technology logos (TEA-384)', () => {
     expect(document.querySelector('.stage[data-view="Containers"] [data-id="web"] .n-icon use')!.getAttribute('fill')).toBe('#eeeeee')
   })
 
+  it('draws a category glyph as strokes in the vendor colour (TEA-386)', () => {
+    const ws = shop()
+    ws.model.softwareSystems[0].containers[1].technology = 'Amazon DynamoDB'
+    const html = exportWorkspaceAsHtml(ws, { techIcons })
+    expect(logos(html)).toEqual({ cust: null, web: '#ti-react', db: '#ti-aws-dynamodb' })
+    expect(html).toMatch(/<symbol id="ti-aws-dynamodb" viewBox="0 0 24 24"><g fill="none" stroke="currentColor"[^>]*><ellipse /)
+    const { document } = dom(html)
+    const use = document.querySelector('.stage[data-view="Containers"] [data-id="db"] .n-icon use')!
+    expect(use.getAttribute('color')).toBe('#FF9900')
+    expect(document.querySelector('.stage[data-view="Containers"] [data-id="db"] .n-icon title')!.textContent).toBe('Amazon DynamoDB')
+  })
+
   it('keeps the no-network guarantees with logos on', () => {
     const html = exportWorkspaceAsHtml(shop(), { techIcons })
     expect(html).not.toMatch(/url\((?!#)/)

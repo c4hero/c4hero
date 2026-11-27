@@ -31,16 +31,25 @@ import {
   type SimpleIcon,
 } from 'simple-icons'
 import type { TechIconSlug } from './registry'
+import { GLYPHS, type GlyphName, type GlyphNode } from './glyphs'
 
-export interface TechIconData {
+/** A logo: either a Simple Icons brand mark (one filled path), or, for
+ *  technologies Simple Icons has no mark for, a category glyph drawn in the
+ *  vendor's colour (TEA-386). */
+export type TechIconData = {
   title: string
   /** Brand colour, six hex digits without '#'. */
   hex: string
-  /** SVG path on a 24×24 viewBox. */
-  path: string
-}
+} & (
+  | { /** SVG path on a 24×24 viewBox, filled. */ path: string; glyph?: undefined }
+  | { /** Lucide geometry on a 24×24 viewBox, stroked. */ glyph: readonly GlyphNode[]; path?: undefined }
+)
 
 const pick = ({ title, hex, path }: SimpleIcon): TechIconData => ({ title, hex, path })
+const generic = (title: string, hex: string, glyph: GlyphName): TechIconData => ({ title, hex, glyph: GLYPHS[glyph] })
+
+const AWS = 'FF9900'
+const AZURE = '0078D4'
 
 export const TECH_ICON_CATALOG: Record<TechIconSlug, TechIconData> = {
   kotlin: pick(siKotlin),
@@ -194,4 +203,41 @@ export const TECH_ICON_CATALOG: Record<TechIconSlug, TechIconData> = {
   sanity: pick(siSanity),
   minio: pick(siMinio),
   ceph: pick(siCeph),
+  // Category glyphs in the vendor's colour (TEA-386). Not brand marks.
+  'aws-lambda': generic('AWS Lambda', AWS, 'function'),
+  'aws-s3': generic('Amazon S3', AWS, 'storage'),
+  'aws-dynamodb': generic('Amazon DynamoDB', AWS, 'database'),
+  'aws-rds': generic('Amazon RDS', AWS, 'database'),
+  'aws-sqs': generic('Amazon SQS', AWS, 'queue'),
+  'aws-sns': generic('Amazon SNS / EventBridge', AWS, 'messaging'),
+  'aws-kinesis': generic('Amazon Kinesis', AWS, 'stream'),
+  'aws-api-gateway': generic('Amazon API Gateway', AWS, 'gateway'),
+  'aws-elb': generic('Elastic Load Balancing', AWS, 'gateway'),
+  'aws-ec2': generic('Amazon EC2', AWS, 'compute'),
+  'aws-ecs': generic('Amazon ECS / Fargate', AWS, 'container'),
+  'aws-cloudfront': generic('Amazon CloudFront', AWS, 'cdn'),
+  'aws-cognito': generic('Amazon Cognito', AWS, 'auth'),
+  'aws-cloudwatch': generic('Amazon CloudWatch', AWS, 'monitoring'),
+  'aws-ses': generic('Amazon SES', AWS, 'email'),
+  aws: generic('AWS', AWS, 'cloud'),
+  'azure-functions': generic('Azure Functions', AZURE, 'function'),
+  'azure-storage': generic('Azure Storage', AZURE, 'storage'),
+  'azure-cosmos-db': generic('Azure Cosmos DB', AZURE, 'database'),
+  'azure-sql': generic('Azure SQL', AZURE, 'database'),
+  'azure-service-bus': generic('Azure Service Bus', AZURE, 'queue'),
+  'azure-event-hubs': generic('Azure Event Hubs', AZURE, 'stream'),
+  'azure-app-service': generic('Azure App Service', AZURE, 'compute'),
+  'azure-api-management': generic('Azure API Management', AZURE, 'gateway'),
+  'azure-front-door': generic('Azure Front Door', AZURE, 'cdn'),
+  'azure-entra-id': generic('Microsoft Entra ID', AZURE, 'auth'),
+  'azure-monitor': generic('Azure Monitor', AZURE, 'monitoring'),
+  azure: generic('Azure', AZURE, 'cloud'),
+  'sql-server': generic('SQL Server', 'CC2927', 'database'),
+  oracle: generic('Oracle Database', 'F80000', 'database'),
+  micronaut: generic('Micronaut', '94A3B8', 'framework'),
+  grpc: generic('gRPC', '244C5A', 'rpc'),
+  openai: generic('OpenAI', '10A37F', 'ai'),
+  twilio: generic('Twilio', 'F22F46', 'messaging'),
+  sendgrid: generic('SendGrid', '1A82E2', 'email'),
+  xamarin: generic('Xamarin', '3498DB', 'mobile'),
 }
