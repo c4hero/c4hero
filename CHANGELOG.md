@@ -51,6 +51,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shape. Opening a view for the first time with Zoom on no longer saves a
   layout spaced for the narrowest card, which left wider cards touching in that
   view (TEA-392).
+- **System and container boundaries can be dragged.** On Container and
+  Component views, the label of a software-system or container boundary
+  showed a grab cursor, but dragging it panned the canvas instead. Now
+  dragging the label moves the boundary with every container or component
+  inside it, and any groups nested there, like deployment-node boundaries
+  already did. It works in diagram and Zoom mode. A locked view keeps it in
+  place, and dragging the empty space inside a boundary still pans
+  (TEA-396).
 - **Values from an `!include` now survive editing and saving.** An `!include`
   inside the `properties { }` block of a deployment node, infrastructure node
   or instance is now kept on save, as it already was for other elements
