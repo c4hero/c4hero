@@ -5,6 +5,7 @@ import BaseC4Node from './BaseC4Node'
 import type { C4NodeData } from './types'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { SoftwareSystem, Container } from '@/types/model'
+import { loadTechIconCatalog } from '@/lib/techIcons/loader'
 
 // ─── jsdom stubs required by React Flow (official testing recipe) ─────
 class ResizeObserverStub {
@@ -317,4 +318,43 @@ it('keeps the view navigation magnifier active during semantic Zoom', () => {
   fireEvent.click(button)
   expect(onDrillIn).toHaveBeenCalledWith('sys-1')
   act(() => useWorkspaceStore.setState({ rendererMode: 'diagram' }))
+})
+
+describe('technology icon (TEA-381)', () => {
+  it('shows the auto-detected logo in a tile in place of the type glyph', async () => {
+    const { node } = renderNode({ props: { technology: 'Kotlin, Micronaut' } })
+    const tile = await waitFor(() => {
+      const el = node.querySelector<HTMLElement>('.c4-node-tech-icon')
+      expect(el).not.toBeNull()
+      return el!
+    })
+    expect(tile.dataset.techIcon).toBe('kotlin')
+    expect(tile.title).toBe('Kotlin')
+    expect(tile.querySelector('svg')?.getAttribute('fill')).toBe('#7F52FF')
+    // The Box type glyph is gone from the header.
+    expect(node.querySelector('.c4-node-header .lucide-box')).toBeNull()
+  })
+
+  it('keeps the type glyph when nothing matches', async () => {
+    await loadTechIconCatalog()
+    const { node } = renderNode({ props: { technology: 'Micronaut' } })
+    expect(node.querySelector('.c4-node-tech-icon')).toBeNull()
+    expect(node.querySelector('.c4-node-header .lucide-box')).not.toBeNull()
+  })
+
+  it('honours a pinned icon and a pinned none', async () => {
+    await loadTechIconCatalog()
+    const pinned = renderNode({ element: { properties: { 'c4hero.icon': 'redis' } }, props: { technology: 'Kotlin' } })
+    expect(pinned.node.querySelector<HTMLElement>('.c4-node-tech-icon')?.dataset.techIcon).toBe('redis')
+    pinned.unmount()
+
+    const hidden = renderNode({ element: { properties: { 'c4hero.icon': 'none' } }, props: { technology: 'Kotlin' } })
+    expect(hidden.node.querySelector('.c4-node-tech-icon')).toBeNull()
+  })
+
+  it('falls back to the type colour when the brand colour would vanish on the canvas', async () => {
+    await loadTechIconCatalog()
+    const { node } = renderNode({ props: { technology: 'Kafka', typeColor: '#7dd3fc' } })
+    expect(node.querySelector('.c4-node-tech-icon svg')?.getAttribute('fill')).toBe('#7dd3fc')
+  })
 })

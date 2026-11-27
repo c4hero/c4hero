@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Nodes show the logo of their technology.** A container or component whose
+  technology names a well-known tool (Kotlin, React, .NET, PostgreSQL, Kafka,
+  Redis and about 150 others) shows that tool's logo beside its name, so the
+  stack reads at a glance. Nothing needs setting up: the logo comes from the
+  technology field, and elements with no match keep their type icon. The new
+  Icon field in the inspector picks a different logo, for any element, or
+  turns it off. That choice is saved as a `c4hero.icon` property, which other
+  Structurizr tools ignore. Logos come from Simple Icons, ship with the app and
+  load only when a diagram needs one (TEA-381).
+
 ### Fixed
 
 - **Values from an `!include` now survive editing and saving.** An `!include`

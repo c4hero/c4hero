@@ -61,6 +61,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5",
+    "simple-icons": "^16.38.1",
     "web-vitals": "^6.2.2",
     "zustand": "^5.1.0"
   },
