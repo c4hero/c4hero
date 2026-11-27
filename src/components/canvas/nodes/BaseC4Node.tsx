@@ -18,7 +18,7 @@ import { pickHighlightReason } from '@/lib/highlight'
 import { SHAPE_ICON_MAP } from '@/lib/nodeIcons'
 import { summaryOpacity } from '@/lib/zoom/motion'
 import { resolveTechIcon, techIconColor } from '@/lib/techIcons/registry'
-import { useTechIconCatalog } from '@/lib/techIcons/loader'
+import { useTechIconCatalog, TECH_ICON_PENDING_ATTR } from '@/lib/techIcons/loader'
 import { useSettingsStore } from '@/store/settings'
 import { THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
 import TechIcon from '@/components/shared/TechIcon'
@@ -138,6 +138,7 @@ export default function BaseC4Node({
       ref={cardRef}
       data-semantic-expandable={data.semantic?.expandable || undefined}
       data-semantic-reveal={data.semantic ? data.semantic.reveal : undefined}
+      {...(techIconSlug && !techCatalog ? { [TECH_ICON_PENDING_ATTR]: '' } : {})}
       className={`c4-node relative ${selected ? 'selected' : ''} ${isPerson ? 'c4-node-person' : ''}`}
       style={{
         ...(data.semantic && data.semantic.scale !== 1 ? {

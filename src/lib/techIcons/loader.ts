@@ -38,6 +38,11 @@ function subscribe(listener: () => void) {
 
 const snapshot = () => catalog
 
+/** True once the catalog has loaded in this page. */
+export function isTechIconCatalogLoaded(): boolean {
+  return catalog !== null
+}
+
 /** The icon catalog, or null until it has loaded. Pass `wanted: false` to
  *  read it without starting a load (nothing on screen needs an icon). */
 export function useTechIconCatalog(wanted = true): TechIconCatalog | null {
@@ -46,4 +51,25 @@ export function useTechIconCatalog(wanted = true): TechIconCatalog | null {
     if (wanted && !current) void loadTechIconCatalog()
   }, [wanted, current])
   return current
+}
+
+/** Set on a node whose logo is known but whose catalog hasn't arrived yet. */
+export const TECH_ICON_PENDING_ATTR = 'data-tech-icon-pending'
+
+/**
+ * Wait until no node in `root` is still waiting for its logo (TEA-385). An
+ * image export captures the DOM as it stands, so one started straight after
+ * a workspace opens could catch the type glyph instead of the logo. Returns
+ * at once when nothing is pending, so workspaces without logos never load
+ * the catalog just to export.
+ */
+export async function settleTechIcons(root: ParentNode = document): Promise<void> {
+  if (!root.querySelector(`[${TECH_ICON_PENDING_ATTR}]`)) return
+  await loadTechIconCatalog()
+  // Let React commit the re-render the catalog triggers. Two frames, with a
+  // timeout in case frames are paused (a background tab).
+  await Promise.race([
+    new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    new Promise<void>((resolve) => setTimeout(resolve, 150)),
+  ])
 }
