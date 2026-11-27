@@ -37,8 +37,8 @@ function InfrastructureNode({ data }: NodeProps & { data: InfrastructureNodeData
       aria-label={`Infrastructure node: ${infra.name}${technology ? ` (${technology})` : ''}${infra.description ? ` - ${infra.description}` : ''}`}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {iconSlug && icon && fill
-          ? <TechIconTile slug={iconSlug} icon={icon} fill={fill} borderColor={INFRA_BORDER} />
+        {iconSlug
+          ? <TechIconTile slug={iconSlug} icon={icon} fill={fill} borderColor={INFRA_BORDER} placeholder={<Server size={16} aria-hidden="true" style={{ color: INFRA_COLOR }} />} />
           : <Server size={16} aria-hidden="true" style={{ flexShrink: 0, color: INFRA_COLOR }} />}
         <div className="c4-node-name" style={{ flex: 1, minWidth: 0 }}>{infra.name}</div>
       </div>

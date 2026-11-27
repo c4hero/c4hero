@@ -187,8 +187,14 @@ export default function BaseC4Node({
           >
             {techIcon && techIconFill ? <TechIcon icon={techIcon} size={14} color={techIconFill} /> : <ResolvedIcon size={14} />}
           </span>
-        ) : techIconSlug && techIcon && techIconFill ? (
-          <TechIconTile slug={techIconSlug} icon={techIcon} fill={techIconFill} borderColor={borderColor} />
+        ) : techIconSlug ? (
+          <TechIconTile
+            slug={techIconSlug}
+            icon={techIcon}
+            fill={techIconFill}
+            borderColor={borderColor}
+            placeholder={<ResolvedIcon size={16} aria-hidden="true" style={{ color: resolvedTypeColor }} />}
+          />
         ) : (
           <ResolvedIcon size={16} aria-hidden="true" style={{ flexShrink: 0, color: resolvedTypeColor }} />
         )}
