@@ -17,11 +17,10 @@ import { pickHighlightReason } from '@/lib/highlight'
 
 import { SHAPE_ICON_MAP } from '@/lib/nodeIcons'
 import { summaryOpacity } from '@/lib/zoom/motion'
-import { resolveTechIcon, techIconColor } from '@/lib/techIcons/registry'
-import { useTechIconCatalog, TECH_ICON_PENDING_ATTR } from '@/lib/techIcons/loader'
-import { useSettingsStore } from '@/store/settings'
-import { THEME_CANVAS_BACKGROUNDS } from '@/lib/themes'
+import { resolveTechIcon } from '@/lib/techIcons/registry'
 import TechIcon from '@/components/shared/TechIcon'
+import TechIconTile from './TechIconTile'
+import { useNodeTechIcon } from './useNodeTechIcon'
 
 interface BaseC4NodeProps {
   data: C4NodeData
@@ -91,11 +90,7 @@ export default function BaseC4Node({
   // from the technology string. Until the lazy catalog arrives (or when
   // nothing matches) the node keeps its type glyph.
   const techIconSlug = resolveTechIcon(element.properties, technology)
-  const techCatalog = useTechIconCatalog(techIconSlug !== undefined)
-  const techIcon = techIconSlug && techCatalog ? techCatalog[techIconSlug] : undefined
-  // Contrast is judged against the canvas, which the icon tile blends with.
-  const canvasBackground = useSettingsStore((s) => THEME_CANVAS_BACKGROUNDS[s.colorTheme] ?? '#0d1117')
-  const techIconFill = techIcon ? techIconColor(techIcon.hex, canvasBackground, resolvedTypeColor) : undefined
+  const { icon: techIcon, fill: techIconFill, pendingProps: techIconPending } = useNodeTechIcon(techIconSlug, resolvedTypeColor)
 
   // Opacity: Structurizr uses 0–100, CSS uses 0–1
   const resolvedOpacity = style?.opacity != null ? style.opacity / 100 : undefined
@@ -138,7 +133,7 @@ export default function BaseC4Node({
       ref={cardRef}
       data-semantic-expandable={data.semantic?.expandable || undefined}
       data-semantic-reveal={data.semantic ? data.semantic.reveal : undefined}
-      {...(techIconSlug && !techCatalog ? { [TECH_ICON_PENDING_ATTR]: '' } : {})}
+      {...techIconPending}
       className={`c4-node relative ${selected ? 'selected' : ''} ${isPerson ? 'c4-node-person' : ''}`}
       style={{
         ...(data.semantic && data.semantic.scale !== 1 ? {
@@ -192,25 +187,8 @@ export default function BaseC4Node({
           >
             {techIcon && techIconFill ? <TechIcon icon={techIcon} size={14} color={techIconFill} /> : <ResolvedIcon size={14} />}
           </span>
-        ) : techIcon && techIconFill ? (
-          <span
-            className="c4-node-tech-icon"
-            data-tech-icon={techIconSlug}
-            title={techIcon.title}
-            style={{
-              flexShrink: 0,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 28,
-              height: 28,
-              borderRadius: 7,
-              background: 'color-mix(in srgb, var(--canvas-bg, var(--color-bg-primary)) 62%, transparent)',
-              border: `1px solid color-mix(in srgb, ${borderColor} 35%, transparent)`,
-            }}
-          >
-            <TechIcon icon={techIcon} size={16} color={techIconFill} />
-          </span>
+        ) : techIconSlug && techIcon && techIconFill ? (
+          <TechIconTile slug={techIconSlug} icon={techIcon} fill={techIconFill} borderColor={borderColor} />
         ) : (
           <ResolvedIcon size={16} aria-hidden="true" style={{ flexShrink: 0, color: resolvedTypeColor }} />
         )}

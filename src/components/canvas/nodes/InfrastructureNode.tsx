@@ -3,6 +3,12 @@ import { type NodeProps } from '@xyflow/react'
 import type { InfrastructureNode as InfraNodeModel } from '@/types/model'
 import { Server } from 'lucide-react'
 import NodeHandles from './NodeHandles'
+import TechIconTile from './TechIconTile'
+import { useNodeTechIcon } from './useNodeTechIcon'
+import { resolveTechIcon } from '@/lib/techIcons/registry'
+
+const INFRA_COLOR = 'var(--color-type-infra, var(--color-text-muted))'
+const INFRA_BORDER = 'var(--color-border-infra, var(--color-border))'
 
 export interface InfrastructureNodeData {
   infra: InfraNodeModel
@@ -14,9 +20,13 @@ export interface InfrastructureNodeData {
 function InfrastructureNode({ data }: NodeProps & { data: InfrastructureNodeData }) {
   const { infra } = data
   const technology = infra.technology
+  // Technology logo in place of the server glyph (TEA-383), as on C4 nodes.
+  const iconSlug = resolveTechIcon(infra.properties, technology)
+  const { icon, fill, pendingProps } = useNodeTechIcon(iconSlug, INFRA_COLOR)
 
   return (
     <div
+      {...pendingProps}
       className="c4-node relative"
       style={{
         background: 'var(--color-tint-infra, var(--color-surface-2))',
@@ -27,7 +37,9 @@ function InfrastructureNode({ data }: NodeProps & { data: InfrastructureNodeData
       aria-label={`Infrastructure node: ${infra.name}${technology ? ` (${technology})` : ''}${infra.description ? ` - ${infra.description}` : ''}`}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Server size={16} aria-hidden="true" style={{ flexShrink: 0, color: 'var(--color-type-infra, var(--color-text-muted))' }} />
+        {iconSlug && icon && fill
+          ? <TechIconTile slug={iconSlug} icon={icon} fill={fill} borderColor={INFRA_BORDER} />
+          : <Server size={16} aria-hidden="true" style={{ flexShrink: 0, color: INFRA_COLOR }} />}
         <div className="c4-node-name" style={{ flex: 1, minWidth: 0 }}>{infra.name}</div>
       </div>
 
