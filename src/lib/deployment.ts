@@ -15,6 +15,7 @@ import type {
     InfrastructureNode,
     Relationship,
 } from '@/types/model'
+import { resolveTechIcon, type TechIconSlug } from '@/lib/techIcons/registry'
 
 /** Depth-first walk over an environment's deployment node tree. */
 export function walkDeploymentNodes(env: DeploymentEnvironment, visit: (node: DeploymentNode) => void): void {
@@ -184,6 +185,8 @@ export interface DeploymentBoundarySpec {
     /** Content leaf node ids anywhere in this node's subtree. Boundary geometry
      *  is the union of these members' rects. */
     memberIds: string[]
+    /** Technology logo shown beside the boundary title (TEA-383). */
+    iconSlug?: TechIconSlug
 }
 
 /** One boundary spec per deployment node that has at least one visible leaf in
@@ -200,7 +203,8 @@ export function buildDeploymentBoundarySpecs(
             const typeLabel = node.technology
                 ? (instanceCount ? `${node.technology} · ×${instanceCount}` : node.technology)
                 : (instanceCount ? `Deployment Node · ×${instanceCount}` : 'Deployment Node')
-            specs.push({ id: node.id, name: node.name, typeLabel, depth, memberIds })
+            const iconSlug = resolveTechIcon(node.properties, node.technology)
+            specs.push({ id: node.id, name: node.name, typeLabel, depth, memberIds, ...(iconSlug ? { iconSlug } : {}) })
         }
         for (const child of node.children) visit(child, depth + 1)
     }

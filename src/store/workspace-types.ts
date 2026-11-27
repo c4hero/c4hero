@@ -248,7 +248,9 @@ export interface WorkspaceState extends UndoState {
   /** Patch a deployment node's / infrastructure node's editable fields from the
    *  inspector. A blank name is ignored (deployment elements must stay named);
    *  blank technology/description clear the field. */
-  updateDeploymentElement: (environment: string, id: string, patch: { name?: string; technology?: string; description?: string }) => void
+  /** `icon`: pinned technology logo slug, `none`, or undefined for auto-detect
+   *  (the `c4hero.icon` property, TEA-383). */
+  updateDeploymentElement: (environment: string, id: string, patch: { name?: string; technology?: string; description?: string; icon?: string }) => void
 
   // View management
   addView: (type: ViewType, scopeId?: string, title?: string, options?: { environment?: string }) => string
