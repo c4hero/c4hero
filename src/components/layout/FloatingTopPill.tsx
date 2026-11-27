@@ -3,6 +3,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import LoadingDot from '@/components/shared/LoadingDot'
 import { useWorkspaceStore, getAllViews } from '@/store/workspace'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG, copyCanvasAsPNG, copyTextToClipboard, type ExportTheme } from '@/lib/exportUtils'
+import { loadTechIconCatalog } from '@/lib/techIcons/loader'
 import { serializeDSL } from '@/lib/dsl'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { createBlankWorkspace } from '@/lib/templates'
@@ -181,7 +182,10 @@ export default function FloatingTopPill() {
           // Loaded on demand — the standalone viewer pulls in the layout engine,
           // which most sessions never need.
           const { exportWorkspaceAsHtml, htmlExportFilename } = await import('@/lib/htmlExport')
+          // Logos (TEA-384): the catalog is a lazy chunk, loaded here once.
+          const techIcons = (await loadTechIconCatalog()) ?? undefined
           const html = exportWorkspaceAsHtml(workspace, {
+            techIcons,
             themeStyles: THEMES[colorTheme],
             background: THEME_CANVAS_BACKGROUNDS[colorTheme] ?? undefined,
             generator: `c4hero ${__APP_VERSION__}`,

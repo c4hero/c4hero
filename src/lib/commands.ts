@@ -14,6 +14,7 @@ import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeRoot } from '@/lib/includeWriteback'
 import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
+import { loadTechIconCatalog } from '@/lib/techIcons/loader'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
 import { announce } from '@/lib/announce'
@@ -521,7 +522,9 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
           // Loaded on demand — the standalone viewer pulls in the layout engine.
           const { exportWorkspaceAsHtml, htmlExportFilename } = await import('@/lib/htmlExport')
           const theme = useSettingsStore.getState().colorTheme
+          const techIcons = (await loadTechIconCatalog()) ?? undefined
           const html = exportWorkspaceAsHtml(s.workspace, {
+            techIcons,
             themeStyles: THEMES[theme],
             background: THEME_CANVAS_BACKGROUNDS[theme] ?? undefined,
             generator: `c4hero ${__APP_VERSION__}`,
