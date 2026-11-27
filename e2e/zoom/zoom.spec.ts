@@ -226,7 +226,7 @@ test.describe('mobile appearance', () => {
       const cards = [...document.querySelectorAll('.c4-node')]
       const snapshot = () => cards.map(card => [card, ...card.querySelectorAll('.c4-node-name, p, .c4-type-chip, .c4-node-view-count, svg')].map(el => {
         const s = getComputedStyle(el)
-        return { box: el.getBoundingClientRect().toJSON(), text: el.textContent, color: s.color, border: s.border, font: [s.fontFamily, s.fontSize, s.fontWeight, s.lineHeight], clamp: s.webkitLineClamp }
+        return { title: !!el.closest('.c4-node-header'), box: el.getBoundingClientRect().toJSON(), text: el.textContent, color: s.color, border: s.border, font: [s.fontFamily, s.fontSize, s.fontWeight, s.lineHeight], clamp: s.webkitLineClamp }
       }))
       const before = snapshot(), camera = getComputedStyle(document.querySelector('.react-flow__viewport')!).transform
       ;(document.querySelector('button[aria-label="Zoom"]') as HTMLButtonElement).click()
@@ -235,7 +235,11 @@ test.describe('mobile appearance', () => {
         await new Promise<void>(r => requestAnimationFrame(() => r()))
         frames.push({ cards: snapshot(), camera: getComputedStyle(document.querySelector('.react-flow__viewport')!).transform })
       }
-      return { before, camera, frames, retained: cards.every(c => c.isConnected), count: cards.length, renderedCount: document.querySelectorAll('.c4-node').length }
+      // An open card shrinks its title to make room for its contents; every
+      // other part of every card must match.
+      const open = cards.map(card => Number(card.getAttribute('data-semantic-reveal')) > 0)
+      const comparable = (shot: ReturnType<typeof snapshot>) => shot.map((parts, i) => parts.filter(p => !open[i] || !p.title))
+      return { before: comparable(before), camera, frames: frames.map(f => ({ ...f, cards: comparable(f.cards) })), retained: cards.every(c => c.isConnected), count: cards.length, renderedCount: document.querySelectorAll('.c4-node').length }
     })
     expect(result.retained).toBe(true)
     // Hidden descendants may be present in React Flow, but roots are never duplicated.

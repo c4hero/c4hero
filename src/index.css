@@ -2468,6 +2468,37 @@ textarea:focus-visible {
   opacity: var(--semantic-content-opacity, 1);
 }
 
+/* An open card's title shrinks so its contents get the body. */
+.c4-node[data-semantic-expandable] > .c4-node-header {
+  transform: scale(var(--semantic-header-scale, 1));
+  transform-origin: left top;
+}
+/* The row keeps its layout; its right-hand icons and buttons slide back out to
+   the card's edge instead of shrinking toward the middle with it. */
+.c4-node[data-semantic-expandable] > .c4-node-header > :is(.c4-node-lock, .c4-node-actions) {
+  position: relative;
+  left: calc(100% / var(--semantic-header-scale, 1) - 100%);
+}
+/* A nested card too small to read shows only its name, filling the card. */
+.c4-node[data-semantic-label] > .c4-node-header,
+.c4-node[data-semantic-label] > .c4-node-body {
+  visibility: hidden;
+}
+.c4-node-label {
+  position: absolute;
+  inset: 10px 14px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  align-content: center;
+  overflow: hidden;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
 /* Emphasize the existing hue inside the card, distinct from selection. */
 [data-zoom-active="true"] .c4-node[data-semantic-expandable] {
   --zoom-inset-opacity: 1;
