@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createBigBankSample, createBlankWorkspace } from '@/lib/templates'
-import { buildLayout, connectionsFor, geometryKey } from './layout'
-import { detailOpacity, flightPath, frameBox, projected, revealFor, stepReveal, stepCamera, stepGlide, summaryOpacity, zoomAt, zoomBounds } from './motion'
+import { buildLayout, connectionsFor, geometryKey, spreadApart } from './layout'
+import { detailOpacity, flightPath, frameBox, headerScale, OPEN_HEADER, projected, revealFor, stepReveal, stepCamera, stepGlide, summaryOpacity, zoomAt, zoomBounds } from './motion'
 import { useWorkspaceStore } from '@/store/workspace'
 
 describe('Zoom geometry and model isolation', () => {
@@ -169,6 +169,11 @@ describe('Zoom transitions', () => {
     expect(detailOpacity(1)).toBe(1)
     for (let r = 0; r <= 1; r += .05) expect(summaryOpacity(r) * detailOpacity(r)).toBeLessThan(.05)
   })
+  it('shrinks an open card title along with its summary fade', () => {
+    expect(headerScale(0)).toBe(1)
+    expect(headerScale(.45)).toBe(OPEN_HEADER)
+    expect(headerScale(1)).toBe(OPEN_HEADER)
+  })
   it('projects endpoints continuously from ancestor boundaries', () => {
     const map = buildLayout(createBigBankSample()), n = map.nodes.find(n => n.parent)!, parent = n.parent!
     const closed = projected(n, new Map()), open = projected(n, new Map([[parent.id, 1]])), half = projected(n, new Map([[parent.id, .5]]))
@@ -177,6 +182,65 @@ describe('Zoom transitions', () => {
     expect(half.x).toBeCloseTo((closed.x + open.x) / 2)
   })
 })
+describe('Zoom into a card with many children', () => {
+  function dense(count = 27) {
+    const ws = createBigBankSample()
+    const system = ws.model.softwareSystems.find(s => s.containers.length > 2)!
+    const template = system.containers[0]
+    system.containers = Array.from({ length: count }, (_, i) => ({ ...template, id: `dense${i}`, name: `Service ${i}`, components: [] }))
+    // A fan-out tree: as a graph layout it is many times wider than tall.
+    ws.model.relationships = system.containers.slice(1).map((c, i) => ({ id: `tree${i}`, sourceId: `dense${Math.floor(i / 3)}`, destinationId: c.id, tags: [], properties: {} }))
+    return { ws, system }
+  }
+  it('waits to open until it fills most of the screen, while an ordinary card opens at card size', () => {
+    const { ws, system } = dense(), area = { x: 0, y: 0, width: 1600, height: 900 }
+    const n = buildLayout(ws).byId.get(system.id)!, ordinary = buildLayout(createBigBankSample()).byId.get('internetBanking')!
+    const atCardSize = (card: typeof n) => revealFor(card, 460 / card.width, area.width, area.height)
+    expect(atCardSize(ordinary)).toBe(1)
+    expect(atCardSize(n)).toBe(0)
+    expect(revealFor(n, frameBox(n, area).zoom, area.width, area.height)).toBe(1)
+  })
+  it('stays open down to card size once open, even when the canvas widens', () => {
+    const { ws, system } = dense(), n = buildLayout(ws).byId.get(system.id)!
+    // Framed in a canvas narrowed by the inspector, then the inspector closes.
+    const zoom = frameBox(n, { x: 0, y: 0, width: 900, height: 800 }).zoom
+    expect(revealFor(n, zoom, 1280, 800)).toBeLessThan(.5)
+    expect(revealFor(n, zoom, 1280, 800, true)).toBe(1)
+    // Shrunk below the ordinary card size, it closes after all.
+    expect(revealFor(n, 300 / n.width, 1280, 800, true)).toBe(0)
+  })
+})
+
+describe('Authored child positions spaced for narrower cards', () => {
+  it('spreads overlapping cards apart evenly, keeping the diagram shape', () => {
+    // Laid out for 200-wide cards 258 apart; the middle card measures 280.
+    const cards = [{ id: 'a', width: 200, height: 80 }, { id: 'b', width: 280, height: 80 }, { id: 'c', width: 200, height: 80 }, { id: 'd', width: 200, height: 80 }]
+    const positions = new Map([['a', { x: 0, y: 0 }], ['b', { x: 258, y: 0 }], ['c', { x: 516, y: 0 }], ['d', { x: 258, y: 300 }]])
+    const before = new Map(positions)
+    spreadApart(cards, positions)
+    const box = (id: string) => { const c = cards.find(c => c.id === id)!, p = positions.get(id)!; return { ...p, right: p.x + c.width, bottom: p.y + c.height } }
+    for (const a of cards) for (const b of cards) {
+      if (a === b) continue
+      const A = box(a.id), B = box(b.id)
+      expect(A.right <= B.x || B.right <= A.x || A.bottom <= B.y || B.bottom <= A.y).toBe(true)
+    }
+    // One uniform factor on the card centres: the shape is unchanged.
+    const centre = (map: Map<string, { x: number; y: number }>, id: string) => { const c = cards.find(c => c.id === id)!, p = map.get(id)!; return { x: p.x + c.width / 2, y: p.y + c.height / 2 } }
+    const factor = centre(positions, 'c').x / centre(before, 'c').x
+    expect(factor).toBeGreaterThan(1)
+    for (const { id } of cards) {
+      expect(centre(positions, id).x).toBeCloseTo(centre(before, id).x * factor)
+      expect(centre(positions, id).y).toBeCloseTo(centre(before, id).y * factor)
+    }
+  })
+  it('leaves an arrangement that already fits untouched', () => {
+    const cards = [{ id: 'a', width: 200, height: 80 }, { id: 'b', width: 200, height: 80 }]
+    const positions = new Map([['a', { x: 0, y: 0 }], ['b', { x: 260, y: 0 }]])
+    spreadApart(cards, positions)
+    expect(positions.get('b')).toEqual({ x: 260, y: 0 })
+  })
+})
+
 describe('Zoom persistence and store integration', () => {
   it('switches modes without changing workspace, views or undo, and keeps Zoom enabled when selecting a view', () => {
     const s = useWorkspaceStore; s.getState().loadWorkspace(createBigBankSample())

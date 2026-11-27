@@ -73,6 +73,7 @@ export function buildLayout(workspace: Workspace, activeView?: View, snapshot?: 
       const box = snapshot.get(n.id)
       if (box) saved.set(n.id, { x: box.x, y: box.y })
     }
+    if (parent && saved.size > 1) spreadApart(siblings.filter(n => saved.has(n.id)), saved)
     const view: View = { type: authored?.type ?? 'systemLandscape', key: '__zoom', elements: siblings.map(n => ({ id: n.id, ...saved.get(n.id) })), relationships: [] }
     const directions = zoomLayout?.direction ? [zoomLayout.direction] : saved.size ? [authored?.autoLayout?.direction ?? 'TB'] : parent ? ['LR', 'TB'] : [authored?.autoLayout?.direction ?? 'TB']
     // Auto-layout is the expensive step, and the whole layout is rebuilt each
@@ -157,6 +158,32 @@ export function buildLayout(workspace: Workspace, activeView?: View, snapshot?: 
   }
   const x = Math.min(0, ...roots.map(n => n.x)) - 60, y = Math.min(0, ...roots.map(n => n.y)) - 60
   return { nodes, roots, byId, bounds: { x, y, width: Math.max(120, size.width + 120, ...roots.map(n => n.x + n.width - x + 60)), height: Math.max(120, size.height + 120, ...roots.map(n => n.y + n.height - y + 60)) } }
+}
+
+/** Clear space kept between two authored cards, in Diagram units. */
+const SPREAD_GAP = 24
+
+/** A Diagram view can be laid out before its cards are measured, spacing them
+ * for the narrowest card; wider cards then touch or overlap. Scale the whole
+ * arrangement about its origin, the least that separates every overlapping
+ * pair at their real sizes, so the diagram keeps its shape. */
+export function spreadApart(cards: { id: string; width: number; height: number }[], positions: Map<string, { x: number; y: number }>) {
+  let spread = 1
+  for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
+    const a = cards[i], b = cards[j], pa = positions.get(a.id)!, pb = positions.get(b.id)!
+    const dx = Math.abs(pb.x + b.width / 2 - pa.x - a.width / 2), dy = Math.abs(pb.y + b.height / 2 - pa.y - a.height / 2)
+    const needX = (a.width + b.width) / 2 + SPREAD_GAP, needY = (a.height + b.height) / 2 + SPREAD_GAP
+    if (dx >= needX || dy >= needY) continue
+    // Scaling separates a pair along whichever axis gets there first; cards
+    // sharing a centre cannot be separated by scaling at all.
+    const factor = Math.min(dx ? needX / dx : Infinity, dy ? needY / dy : Infinity)
+    if (Number.isFinite(factor)) spread = Math.max(spread, factor)
+  }
+  if (spread === 1) return
+  for (const card of cards) {
+    const p = positions.get(card.id)!
+    positions.set(card.id, { x: (p.x + card.width / 2) * spread - card.width / 2, y: (p.y + card.height / 2) * spread - card.height / 2 })
+  }
 }
 
 export function translateSubtree(node: MapNode, dx: number, dy: number) {

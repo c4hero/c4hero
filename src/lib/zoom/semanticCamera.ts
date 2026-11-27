@@ -220,8 +220,8 @@ export class SemanticCamera implements ActiveCamera {
       if (!node.children.length) continue
       // A focus flight opens each level as the camera reaches it, so the
       // dive reads as one continuous motion rather than a jump cut.
-      const raw = revealFor(node, camera.zoom, area.width, area.height)
       const previous = this.reveal.get(node.id) ?? 0
+      const raw = revealFor(node, camera.zoom, area.width, area.height, previous >= .5)
       const next = stepReveal(previous, raw, now - this.lastInput >= TUNING.idleMs || !!flight, dt, this.media.matches, locked)
       const near = next > 0 || revealFor(node, camera.zoom * TUNING.premount, area.width, area.height) > 0
       // Not open yet: its contents still have to mount. Decide below how many

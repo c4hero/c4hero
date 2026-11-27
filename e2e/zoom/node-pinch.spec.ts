@@ -27,7 +27,8 @@ for (const zoomMode of [false, true]) {
       }
       const node = page.locator(`.react-flow__node[data-id="${id}"] .c4-node`)
       const bounds = (await node.boundingBox())!
-      const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+      // An open card's contents fill its body: start the pinch on its title row.
+      const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height * (id === 'api' ? .12 : .5) }
       expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.react-flow__node')?.getAttribute('data-id'), center)).toBe(id)
       const state = () => page.evaluate(() => { const s = (window as unknown as { __testStore(): WorkspaceState }).__testStore(); return { workspace: JSON.stringify(s.workspace), undo: s.undoStack.length, selection: s.selectedElementIds } })
       const before = await state()

@@ -16,7 +16,8 @@ import { useZoomLevel } from '@/hooks/useZoomLevel'
 import { pickHighlightReason } from '@/lib/highlight'
 
 import { SHAPE_ICON_MAP } from '@/lib/nodeIcons'
-import { summaryOpacity } from '@/lib/zoom/motion'
+import { summaryOpacity, headerScale, OPEN_HEADER, LABEL_BELOW } from '@/lib/zoom/motion'
+import { useViewportStore } from '@xyflow/react'
 import { resolveTechIcon } from '@/lib/techIcons/registry'
 import TechIcon from '@/components/shared/TechIcon'
 import TechIconTile from './TechIconTile'
@@ -109,6 +110,14 @@ export default function BaseC4Node({
   const nested = !!data.semantic?.nested
   const nameClamp = nested ? 2 : isCompact ? 1 : isFull ? undefined : 2
   const descClamp = nested ? 3 : isCompact ? undefined : isFull ? undefined : 3
+  // Too small on screen to read as a card: show the name alone, large.
+  const labelOnly = useViewportStore(state => nested && state.transform[2] * (data.semantic?.scale ?? 1) < LABEL_BELOW)
+  // An opening card's title shrinks so its contents get the body. Set only
+  // while it opens, so a closed card renders exactly as in a Diagram.
+  const titleScale = data.semantic?.expandable && data.semantic.reveal > 0 ? headerScale(data.semantic.reveal) : 1
+  // The row keeps its layout; its right-hand icons and buttons slide back out
+  // to the card's edge instead of shrinking toward the middle with it.
+  const toEdge = titleScale !== 1 ? { position: 'relative' as const, left: `calc(100% / ${titleScale} - 100%)` } : undefined
   const cardRef = useRef<HTMLDivElement>(null)
   const reportSize = data.semantic?.onMeasure
   useLayoutEffect(() => {
@@ -119,7 +128,7 @@ export default function BaseC4Node({
       // Computed border-box dimensions retain subpixel text layout. offsetHeight
       // rounds to whole pixels, which becomes a visible error at deep zoom.
       const box = getComputedStyle(card)
-      reportSize(element.id, { width: parseFloat(box.width) || card.offsetWidth, height: parseFloat(box.height) || card.offsetHeight, headerHeight: header.offsetTop + header.offsetHeight + 12 })
+      reportSize(element.id, { width: parseFloat(box.width) || card.offsetWidth, height: parseFloat(box.height) || card.offsetHeight, headerHeight: header.offsetTop + header.offsetHeight * OPEN_HEADER + 8 })
     }
     measure()
     const observer = new ResizeObserver(measure)
@@ -133,6 +142,7 @@ export default function BaseC4Node({
       ref={cardRef}
       data-semantic-expandable={data.semantic?.expandable || undefined}
       data-semantic-reveal={data.semantic ? data.semantic.reveal : undefined}
+      data-semantic-label={labelOnly || undefined}
       {...techIconPending}
       className={`c4-node relative ${selected ? 'selected' : ''} ${isPerson ? 'c4-node-person' : ''}`}
       style={{
@@ -168,7 +178,7 @@ export default function BaseC4Node({
       )}
 
       {/* Row 1: icon + title + action buttons */}
-      <div className="c4-node-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="c4-node-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', ...(titleScale !== 1 && { transform: `scale(${titleScale})`, transformOrigin: 'left top' }) }}>
         {isPerson ? (
           <span
             aria-hidden="true"
@@ -207,6 +217,7 @@ export default function BaseC4Node({
         {hasDocs && (
           <span
             className="c4-node-lock"
+            style={toEdge}
             role="img"
             aria-label={`${element.name} has documentation`}
             title="Has documentation — see the Docs tab"
@@ -217,6 +228,7 @@ export default function BaseC4Node({
         {data.locked && (
           <span
             className="c4-node-lock"
+            style={toEdge}
             role="img"
             aria-label={`${element.name} is locked in place`}
             title="Locked — Auto-arrange and dragging leave this where it is"
@@ -224,7 +236,7 @@ export default function BaseC4Node({
             <Lock size={11} />
           </span>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }} className="c4-node-actions">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, ...toEdge }} className="c4-node-actions">
           {viewCount > 1 && (
             <span
               className="c4-node-view-count nodrag"
@@ -280,6 +292,7 @@ export default function BaseC4Node({
         ))}
       </div>
 
+      {labelOnly && <div className="c4-node-label" aria-hidden="true" style={{ color: style?.color ?? resolvedTypeColor }}>{element.name}</div>}
       {data.semantic?.expandable && <div className="semantic-frame" aria-hidden="true" style={{ position: 'absolute', inset: 7, border: `var(--zoom-inset-width, 1px) solid var(--zoom-inset-color, ${borderColor})`, borderRadius: isPerson ? 999 : 7, opacity: 'calc(var(--zoom-inset-opacity, .52) * var(--semantic-content-opacity, 1))', pointerEvents: 'none' }} />}
       <NodeHandles />
       {reasonLabel && (

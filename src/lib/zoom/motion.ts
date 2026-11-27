@@ -12,11 +12,27 @@ export function stepGlide(velocity: Point, dt: number, reduced = false) {
 }
 export const clamp = (v: number, low: number, high: number) => Math.max(low, Math.min(high, v))
 export function smooth(a: number, b: number, v: number) { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t) }
-export function revealFor(n: MapNode, zoom: number, width: number, height: number) {
+/** On-screen scale of a card's children (their scale times the camera zoom)
+ * between which a card may open just for being large on screen. A card with
+ * many children shrinks them a long way to fit, and opening it at an ordinary
+ * size shows only specks: it waits until it fills most of the screen instead. */
+export const LEGIBLE = [.16, .26] as const
+/** Below this on-screen scale a nested card shows only its name, set large. */
+export const LABEL_BELOW = .7
+/** An open card's title shrinks to this fraction, leaving its body to the contents. */
+export const OPEN_HEADER = .5
+const childScale = (n: MapNode) => Math.min(...n.children.map(c => c.scale))
+/** `open`: the card is already open. The readability gate only decides when it
+ * opens; once open it stays so down to the ordinary size, so closing chrome that
+ * widens the canvas, such as the inspector, never shuts it again. */
+export function revealFor(n: MapNode, zoom: number, width: number, height: number, open = false) {
   if (!n.children.length) return 0
   const [start, end] = n.element.type === 'softwareSystem' ? TUNING.system : TUNING.container
-  return Math.max(smooth(start, end, n.width * zoom), smooth(...TUNING.occupancy, Math.max(n.width * zoom / Math.max(1, width), n.height * zoom / Math.max(1, height))))
+  const size = Math.min(smooth(start, end, n.width * zoom), open ? 1 : smooth(...LEGIBLE, childScale(n) * zoom))
+  return Math.max(size, smooth(...TUNING.occupancy, Math.max(n.width * zoom / Math.max(1, width), n.height * zoom / Math.max(1, height))))
 }
+/** The open card's title scale for a reveal amount, on the summary's fade curve. */
+export const headerScale = (reveal: number) => 1 - (1 - OPEN_HEADER) * smooth(0, .45, reveal)
 export function stepReveal(current: number, raw: number, complete: boolean, dt: number, reduced = false, locked = false) {
   if (locked) return current
   const target = complete ? Number(raw >= .5) : raw

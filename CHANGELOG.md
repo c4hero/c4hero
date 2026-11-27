@@ -41,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Zoom into a system or container with many children is readable.** Its
+  children keep their diagram layout, but one too small to read as a card now
+  shows just its name, set large, and an open card's title shrinks to its top
+  left corner to leave the room to its contents. A card whose children would
+  still be specks waits to open until it fills most of the screen, rather than
+  opening at card size. Children that a saved diagram places too close
+  together for their real sizes are spread apart evenly, keeping the diagram's
+  shape. Opening a view for the first time with Zoom on no longer saves a
+  layout spaced for the narrowest card, which left wider cards touching in that
+  view (TEA-392).
 - **System and container boundaries can be dragged.** On Container and
   Component views, the label of a software-system or container boundary
   showed a grab cursor, but dragging it panned the canvas instead. Now

@@ -54,6 +54,8 @@ for (const theme of Object.keys(THEMES) as ColorTheme[]) {
         }, zoom)
         await page.waitForTimeout(100)
         await page.getByRole('button', { name: 'Zoom', exact: true }).click()
+        // Compare against the ordinary cards only once no card is still open.
+        await expect(page.locator('.c4-node[data-semantic-reveal]')).toHaveCount(0)
         await page.waitForTimeout(100)
         const result = await page.evaluate(async () => {
           const cards = [...document.querySelectorAll('.c4-node')]
@@ -63,7 +65,7 @@ for (const theme of Object.keys(THEMES) as ColorTheme[]) {
               const elements = [card, ...card.querySelectorAll('.c4-node-name, p, .c4-type-chip, svg, svg path')]
               return elements.map(el => {
                 const s = getComputedStyle(el), r = el.getBoundingClientRect()
-                return { box: [r.x, r.y, r.width, r.height], color: s.color, background: s.backgroundColor,
+                return { title: !!el.closest('.c4-node-header'), box: [r.x, r.y, r.width, r.height], color: s.color, background: s.backgroundColor,
                   border: [s.borderWidth, s.borderColor, s.borderStyle, s.borderRadius],
                   font: [s.fontFamily, s.fontSize, s.fontWeight, s.lineHeight, s.letterSpacing],
                   spacing: [s.padding, s.margin, s.gap], path: el.getAttribute('d') }
@@ -76,7 +78,11 @@ for (const theme of Object.keys(THEMES) as ColorTheme[]) {
           const before = snapshot()
           ;(document.querySelector('button[aria-label="Zoom"]') as HTMLButtonElement).click()
           await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
-          return { before, after: snapshot(), sameNodes: cards.every(n => n.isConnected), sameEdges: edges.every(n => n.isConnected), count: edges.length, ids: edges.map(e => e.id).sort(),
+          // An open card shrinks its title to make room for its contents; every
+          // other part of every card must match.
+          const open = cards.map(card => Number(card.getAttribute('data-semantic-reveal')) > 0)
+          const comparable = (s: ReturnType<typeof snapshot>) => ({ ...s, cards: s.cards.map((parts, i) => parts.filter(p => !open[i] || !p.title)) })
+          return { before: comparable(before), after: comparable(snapshot()), sameNodes: cards.every(n => n.isConnected), sameEdges: edges.every(n => n.isConnected), count: edges.length, ids: edges.map(e => e.id).sort(),
             unique: new Set(edges.map(e => e.id)).size, canvases: document.querySelectorAll('.react-flow').length }
         })
         expect(result.after, `${theme}/${view}/${zoom}`).toEqual(result.before)

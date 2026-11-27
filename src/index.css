@@ -2503,6 +2503,26 @@ textarea:focus-visible {
   opacity: var(--semantic-content-opacity, 1);
 }
 
+/* A nested card too small to read shows only its name, filling the card. */
+.c4-node[data-semantic-label] > .c4-node-header,
+.c4-node[data-semantic-label] > .c4-node-body {
+  visibility: hidden;
+}
+.c4-node-label {
+  position: absolute;
+  inset: 10px 14px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  align-content: center;
+  overflow: hidden;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
 /* Emphasize the existing hue inside the card, distinct from selection. */
 [data-zoom-active="true"] .c4-node[data-semantic-expandable] {
   --zoom-inset-opacity: 1;
