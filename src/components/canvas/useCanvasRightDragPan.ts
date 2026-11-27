@@ -5,8 +5,8 @@ import type { Viewport } from '@xyflow/react'
  * press counts as a pan instead of a right click. */
 export const RIGHT_DRAG_THRESHOLD = 4
 
-/** A context menu arriving this long after a right-drag ends belongs to that
- * drag (Windows opens it on release), so it is suppressed. */
+/** A context menu event arriving this long after a right release belongs to
+ * that press (Windows sends it on release), which has already been handled. */
 const RELEASE_MENU_WINDOW_MS = 500
 
 // Native menus stay available where people expect them: text fields, the
@@ -20,22 +20,30 @@ export interface RightDragPanCallbacks {
   onPan?: (event: PointerEvent, viewport: Viewport) => void
   /** The pan finished; `event` is the release, or null if it was abandoned. */
   onPanEnd?: (event: PointerEvent | null) => void
+  /** Open the canvas's own menu for a right click that didn't drag, or for a
+   * menu asked for from the keyboard or with macOS Ctrl+click. `keyboard` is
+   * true when there was no pointer position to open it at. */
+  onMenu: (target: Element, point: { x: number; y: number }, keyboard: boolean) => void
 }
 
 /** Right-button drag pans the viewport anywhere on the canvas, over nodes,
  * edges and boundaries too. React Flow's `panOnDrag=[2]` cannot do that: it
  * marks nodes and edges `nopan` and only lets the middle button through.
  *
- * A press that never travels past the threshold stays a plain right click and
- * keeps its context menu where the platform allows it. Windows opens the menu
- * on release, after the drag is decided, so only menus following a drag are
- * suppressed. macOS and Linux open it on press, before anyone can know whether
- * a drag follows, and the open menu would swallow the drag; there the press-
- * time menu is always suppressed. Keyboard menus (Menu key, Shift+F10) and
- * macOS Ctrl+click are not right-button presses and are left alone. */
+ * A press that never travels past the threshold stays a right click and opens
+ * the canvas's own menu on release. The browser's menu can't do that: macOS
+ * and Linux open it on press, before anyone can know whether a drag follows,
+ * and the open menu would swallow the drag. So the canvas suppresses the
+ * browser's menu and opens its own, the same way on every platform. Text
+ * fields, the floating chrome and React Flow's panels keep the browser's. */
 export function attachRightDragPan(element: HTMLElement, callbacks: RightDragPanCallbacks): () => void {
-  let press: { id: number; x: number; y: number; start: Viewport; panning: boolean } | null = null
-  let lastDragEnd = -Infinity
+  let press: { id: number; x: number; y: number; target: Element; start: Viewport; panning: boolean } | null = null
+  let lastRelease = -Infinity
+  let lastMenuKey = -Infinity
+  // Touch and pen pointers that are down. A long press sends a context menu
+  // event while the finger is still down; touch keeps its own behaviour.
+  const touches = new Set<number>()
+  const touchEnd = (event: PointerEvent) => { touches.delete(event.pointerId) }
 
   const finish = (event: PointerEvent | null) => {
     const ended = press
@@ -44,9 +52,13 @@ export function attachRightDragPan(element: HTMLElement, callbacks: RightDragPan
     window.removeEventListener('pointerup', up, true)
     window.removeEventListener('pointercancel', cancel, true)
     window.removeEventListener('blur', blur)
-    if (!ended?.panning) return
-    lastDragEnd = performance.now()
-    callbacks.onPanEnd?.(event)
+    if (!ended || !event) {
+      if (ended?.panning) callbacks.onPanEnd?.(null)
+      return
+    }
+    lastRelease = performance.now()
+    if (ended.panning) callbacks.onPanEnd?.(event)
+    else callbacks.onMenu(ended.target, { x: event.clientX, y: event.clientY }, false)
   }
   const move = (event: PointerEvent) => {
     if (!press || event.pointerId !== press.id) return
@@ -70,32 +82,53 @@ export function attachRightDragPan(element: HTMLElement, callbacks: RightDragPan
   const blur = () => finish(null)
 
   const down = (event: PointerEvent) => {
-    if (event.button !== 2 || event.pointerType !== 'mouse') return
+    if (event.pointerType !== 'mouse') { touches.add(event.pointerId); return }
+    // A lost touch release must not leave mouse right clicks to the browser.
+    touches.clear()
+    if (event.button !== 2) return
     const target = event.target
     if (!(target instanceof Element) || !target.closest('.react-flow') || target.closest(EXCLUDED)) return
     finish(null)
     const start = callbacks.getViewport()
-    press = { id: event.pointerId, x: event.clientX, y: event.clientY, start, panning: false }
+    press = { id: event.pointerId, x: event.clientX, y: event.clientY, target, start, panning: false }
     window.addEventListener('pointermove', move, true)
     window.addEventListener('pointerup', up, true)
     window.addEventListener('pointercancel', cancel, true)
     window.addEventListener('blur', blur)
   }
   const contextMenu = (event: MouseEvent) => {
-    // Pressed and not yet released: a press-time platform, and a drag may follow.
-    if (press) { event.preventDefault(); return }
-    if (performance.now() - lastDragEnd < RELEASE_MENU_WINDOW_MS) {
-      lastDragEnd = -Infinity
-      event.preventDefault()
-    }
+    const target = event.target
+    if (touches.size || !(target instanceof Element) || !target.closest('.react-flow') || target.closest(EXCLUDED)) return
+    event.preventDefault()
+    // Sent on press (macOS, Linux): the release decides. Sent on release
+    // (Windows): the release already decided.
+    if (press) return
+    if (performance.now() - lastRelease < RELEASE_MENU_WINDOW_MS) { lastRelease = -Infinity; return }
+    // No right press: the Menu key, Shift+F10 or macOS Ctrl+click. A keyboard
+    // menu opens at the focused element.
+    const keyboard = performance.now() - lastMenuKey < RELEASE_MENU_WINDOW_MS
+    lastMenuKey = -Infinity
+    if (!keyboard) { callbacks.onMenu(target, { x: event.clientX, y: event.clientY }, false); return }
+    const rect = target.getBoundingClientRect()
+    callbacks.onMenu(target, { x: rect.left + Math.min(rect.width / 2, 24), y: rect.top + Math.min(rect.height / 2, 24) }, true)
+  }
+
+  const key = (event: KeyboardEvent) => {
+    if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) lastMenuKey = performance.now()
   }
 
   element.addEventListener('pointerdown', down, true)
   element.addEventListener('contextmenu', contextMenu, true)
+  element.addEventListener('keydown', key, true)
+  window.addEventListener('pointerup', touchEnd, true)
+  window.addEventListener('pointercancel', touchEnd, true)
   return () => {
     finish(null)
     element.removeEventListener('pointerdown', down, true)
     element.removeEventListener('contextmenu', contextMenu, true)
+    element.removeEventListener('keydown', key, true)
+    window.removeEventListener('pointerup', touchEnd, true)
+    window.removeEventListener('pointercancel', touchEnd, true)
   }
 }
 
@@ -110,6 +143,7 @@ export function useCanvasRightDragPan(host: RefObject<HTMLElement | null>, callb
       setViewport: viewport => latest.current.setViewport(viewport),
       onPan: (event, viewport) => latest.current.onPan?.(event, viewport),
       onPanEnd: event => latest.current.onPanEnd?.(event),
+      onMenu: (target, point, keyboard) => latest.current.onMenu(target, point, keyboard),
     })
   }, [host])
 }

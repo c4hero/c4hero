@@ -85,10 +85,11 @@ test.describe('Right-drag panning', () => {
     expect(afterEdge.y - afterPane.y).toBeCloseTo(30, 0)
   })
 
-  test('a plain right click keeps its context menu and does not pan', async ({ page, workspace }) => {
+  test('a plain right click on a node opens the canvas menu instead of panning', async ({ page, workspace }) => {
     await workspace.loadSample()
     await workspace.waitForCanvasSettled()
-    const id = await workspace.getVisibleNodeByName('Internet Banking System').getAttribute('data-id')
+    const menus = await watchContextMenus(page)
+    const id = await workspace.getVisibleNodeByName('Mainframe Banking System').getAttribute('data-id')
     const start = await nodeCenter(page, id!)
     const before = await pan(page)
 
@@ -99,23 +100,65 @@ test.describe('Right-drag panning', () => {
     await page.mouse.up({ button: 'right' })
     expect(await pan(page)).toEqual(before)
 
-    // Where the menu opens on release (Windows), it is left to open.
-    const result = await page.evaluate(({ x, y }) => {
-      const target = document.elementFromPoint(x, y)!
-      const opts = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: x, clientY: y }
-      target.dispatchEvent(new PointerEvent('pointerdown', { ...opts, button: 2, buttons: 2 }))
-      target.dispatchEvent(new PointerEvent('pointerup', { ...opts, button: 2, buttons: 0 }))
-      const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: x, clientY: y })
-      target.dispatchEvent(menu)
-      return menu.defaultPrevented
-    }, start)
-    expect(result).toBe(false)
+    const menu = page.getByRole('menu', { name: 'Canvas actions' })
+    await expect(menu).toBeVisible()
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      'Zoom in', /^Duplicate/, 'Lock position', 'What breaks if I remove this?', /^Remove from view/, /^Delete from model/,
+    ])
+    // It opens where the pointer let go (flipped left near the window's edge),
+    // and the node it was opened on is selected.
+    const box = await menu.boundingBox()
+    expect(Math.min(Math.abs(box!.x - (start.x + 2)), Math.abs(box!.x + box!.width - (start.x + 2)))).toBeLessThan(2)
+    await expect(page.locator(`.react-flow__node[data-id="${id}"]`)).toHaveClass(/selected/)
+    // The browser's own menu never opened.
+    expect(await menus()).not.toContain(false)
 
-    // A keyboard menu is never a pan.
+    // Escape closes the menu but keeps the selection.
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(page.locator(`.react-flow__node[data-id="${id}"]`)).toHaveClass(/selected/)
+
+    // A menu item does what its shortcut does.
+    await page.mouse.click(start.x, start.y, { button: 'right' })
+    await menu.getByRole('menuitem', { name: 'Lock position' }).click()
+    await expect(menu).toHaveCount(0)
+    const locked = await page.evaluate((elementId) => {
+      const s = (window as unknown as { __testStore(): { workspace: { views: { systemLandscapeViews: { elements: { id: string; locked?: boolean }[] }[] } } } }).__testStore()
+      return s.workspace.views.systemLandscapeViews[0].elements.find(e => e.id === elementId)?.locked
+    }, id!)
+    expect(locked).toBe(true)
+  })
+
+  test('a right click on empty canvas opens canvas actions, and one after a drag opens nothing', async ({ page, workspace }) => {
+    await workspace.loadSample()
+    await workspace.waitForCanvasSettled()
+    const pane = await page.locator('.react-flow__pane').boundingBox()
+    const point = { x: pane!.x + 200, y: pane!.y + pane!.height - 120 }
+    const menu = page.getByRole('menu', { name: 'Canvas actions' })
+
+    await rightDrag(page, point, { x: 80, y: -40 })
+    await page.waitForTimeout(200)
+    await expect(menu).toHaveCount(0)
+
+    await page.mouse.click(point.x, point.y, { button: 'right' })
+    await expect(menu.getByRole('menuitem')).toHaveText([/^Add element/, /^Select All/, /^Zoom to Fit/, /^Auto-Arrange/])
+    await menu.getByRole('menuitem', { name: /Add element/ }).click()
+    await expect(page.getByText('Create new')).toBeVisible()
+  })
+
+  test('Shift+F10 opens the menu for the focused node, with the first item focused', async ({ page, workspace }) => {
+    await workspace.loadSample()
+    await workspace.waitForCanvasSettled()
     const menus = await watchContextMenus(page)
+    const id = await workspace.getVisibleNodeByName('Internet Banking System').getAttribute('data-id')
     await page.locator(`.react-flow__node[data-id="${id}"]`).focus()
     await page.keyboard.press('Shift+F10')
-    expect(await menus()).toEqual([false])
+    const menu = page.getByRole('menu', { name: 'Canvas actions' })
+    await expect(menu).toBeVisible()
+    await expect(menu.getByRole('menuitem').first()).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await expect(menu.getByRole('menuitem').nth(1)).toBeFocused()
+    expect(await menus()).toEqual([true])
   })
 
   test('right-drag pans in Zoom mode', async ({ page, workspace }) => {
@@ -137,5 +180,12 @@ test.describe('Right-drag panning', () => {
       return [Math.round(after.x - before.x), Math.round(after.y - before.y)]
     }).toEqual([-90, 60])
     expect(await menus()).not.toContain(false)
+    await expect(page.getByRole('menu', { name: 'Canvas actions' })).toHaveCount(0)
+
+    // A plain right click on a card opens the menu, whose Zoom in focuses it.
+    const now = await nodeCenter(page, id!)
+    await page.mouse.click(now.x, now.y, { button: 'right' })
+    await page.getByRole('menu', { name: 'Canvas actions' }).getByRole('menuitem', { name: 'Zoom in' }).click()
+    await expect.poll(async () => (await page.locator(`.react-flow__node[data-id="${id}"]`).boundingBox())?.width ?? 0).toBeGreaterThan(now.box.width * 1.5)
   })
 })

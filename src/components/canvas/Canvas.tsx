@@ -2,6 +2,9 @@ import ConnectionPreview from './edges/ConnectionPreview'
 import { useSemanticZoom } from './useSemanticZoom'
 import { useCanvasTouchPinch } from './useCanvasTouchPinch'
 import { useCanvasRightDragPan } from './useCanvasRightDragPan'
+import CanvasContextMenu from './CanvasContextMenu'
+import { canvasMenuSections, menuTargetFor, selectForMenu, type CanvasMenuItem } from './canvasContextMenu'
+import { getCommands } from '@/lib/commands'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useDocsLoader } from '@/hooks/useDocsLoader'
 import { useCanvasTheme } from '@/hooks/useCanvasTheme'
@@ -28,7 +31,7 @@ import { fitContentNodesToViewport, fitNodesToViewport, isContentFitNode } from 
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import type { HighlightFilters } from '@/lib/highlight'
 import type { View, Workspace } from '@/types/model'
-import { useWorkspaceStore, getActiveView, allViewsOf, buildRelationshipMap } from '@/store/workspace'
+import { useWorkspaceStore, getActiveView, allViewsOf, buildRelationshipMap, getZoomTarget } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import {
   THEMES,
@@ -722,6 +725,36 @@ export default function Canvas() {
   const shiftKeyDown = useRef(false)
   const dragStartPositions = useRef<Map<string, { x: number; y: number }> | null>(null)
 
+  // The canvas's own right-click menu (TEA-393). Double-click's zoom-in is one
+  // of its items, so both share this.
+  const zoomIntoNode = useCallback((id: string) => {
+    if (useWorkspaceStore.getState().rendererMode === 'zoom') semantic.controller.current?.focus(id)
+    else useWorkspaceStore.getState().zoomInto(id)
+  }, [semantic.controller])
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; keyboard: boolean; sections: CanvasMenuItem[][] } | null>(null)
+  const closeContextMenu = useCallback(() => setContextMenu(null), [])
+  const openContextMenu = useCallback((target: Element, point: { x: number; y: number }, keyboard: boolean) => {
+    const rf = rfInitInstance.current ?? reactFlowInstance
+    const menuTarget = menuTargetFor(target, {
+      isElement: (id) => { const node = rf.getNode(id); return !!node?.data?.element && !isOverlayNode(node) },
+      relationshipOf: (id) => (rf.getEdge(id)?.data as { relationship?: { id: string } } | undefined)?.relationship?.id,
+    })
+    if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
+    selectForMenu(menuTarget)
+    const sections = canvasMenuSections(menuTarget, {
+      commands: getCommands(rf),
+      zoomInto: zoomIntoNode,
+      canZoomInto: (id) => {
+        const s = useWorkspaceStore.getState()
+        if (s.rendererMode === 'zoom') return !!semantic.controller.current?.layoutState.byId.get(id)?.children.length
+        return !!s.workspace && !!getZoomTarget(s.workspace, id)
+      },
+    })
+    setContextMenu(sections.length ? { ...point, keyboard, sections } : null)
+  }, [reactFlowInstance, semantic.controller, zoomIntoNode])
+  // A menu belongs to the view it opened on.
+  useEffect(() => { setContextMenu(null) }, [activeViewKey, active])
+
   // Right-drag pans in both renderers. Feeding the semantic camera the real
   // pointer events gives Zoom mode the same glide on release as a left pan.
   useCanvasRightDragPan(host, {
@@ -735,6 +768,7 @@ export default function Canvas() {
       document.documentElement.removeAttribute('data-canvas-panning')
       if (event) semantic.controller.current?.onMoveEnd(event)
     },
+    onMenu: openContextMenu,
   })
 
   useCanvasTouchPinch(host, () => {
@@ -1082,10 +1116,9 @@ export default function Canvas() {
       // zoomInto handles both cases: navigate to existing child view, or prompt
       // to create one if none exists. Internally no-ops if the element has no
       // children (person/component/etc.).
-      if (useWorkspaceStore.getState().rendererMode === 'zoom') semantic.controller.current?.focus(node.id)
-      else useWorkspaceStore.getState().zoomInto(node.id)
+      zoomIntoNode(node.id)
     },
-    [semantic.controller],
+    [zoomIntoNode],
   )
 
   const onNodeDragStop = useCallback(
@@ -1269,6 +1302,15 @@ export default function Canvas() {
         )}
       </ReactFlow>
       {canvasGuideOpen && <CanvasGuide onClose={closeCanvasGuide} />}
+      {contextMenu && (
+        <CanvasContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          keyboard={contextMenu.keyboard}
+          sections={contextMenu.sections}
+          onClose={closeContextMenu}
+        />
+      )}
     </div>
   )
 }
