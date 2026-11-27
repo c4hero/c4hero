@@ -1,6 +1,9 @@
 import { memo } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
+import TechIcon from '@/components/shared/TechIcon'
+import type { TechIconSlug } from '@/lib/techIcons/registry'
+import { useNodeTechIcon } from './useNodeTechIcon'
 
 interface BoundaryNodeData {
   name: string
@@ -9,7 +12,11 @@ interface BoundaryNodeData {
   /** Set on deployment-node boundaries: clicking the label selects the node
    *  so the inspector can edit its name / technology / description. */
   deploymentNodeId?: string
+  /** Deployment nodes only: the technology logo beside the title (TEA-383). */
+  iconSlug?: TechIconSlug
 }
+
+const BOUNDARY_TITLE_COLOR = 'var(--canvas-boundary-title, var(--color-text-dim))'
 
 function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }) {
   const emptyTitle = data.deploymentNodeId
@@ -17,10 +24,12 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
     : data.typeLabel === 'Software System'
       ? 'Add containers to this system'
       : 'Add components to this container'
+  const { icon, fill, pendingProps } = useNodeTechIcon(data.iconSlug, BOUNDARY_TITLE_COLOR)
 
   return (
     <>
       <div
+        {...pendingProps}
         className="c4-overlay-drag-handle"
         onClick={() => {
           // A drag suppresses click, so this only fires on a plain click.
@@ -42,12 +51,20 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
         }}
       >
         <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
           fontSize: 'var(--text-xs-plus)',
           fontWeight: 700,
-          color: 'var(--canvas-boundary-title, var(--color-text-dim))',
+          color: BOUNDARY_TITLE_COLOR,
           letterSpacing: '0.02em',
           whiteSpace: 'nowrap',
         }}>
+          {icon && fill && (
+            <span className="c4-boundary-tech-icon" data-tech-icon={data.iconSlug} title={icon.title} style={{ display: 'inline-flex' }}>
+              <TechIcon icon={icon} size={14} color={fill} />
+            </span>
+          )}
           {data.name}
         </span>
         <span style={{

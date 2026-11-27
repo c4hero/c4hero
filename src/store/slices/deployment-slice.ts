@@ -5,6 +5,7 @@ import { nanoid, pushUndoSnapshot } from '../internals'
 import { expandDeploymentElements, walkDeploymentNodes } from '@/lib/deployment'
 import { restoreViewElement } from '../workspace-helpers'
 import { withDeploymentDescendants } from '@/lib/dsl/wildcard'
+import { TECH_ICON_PROPERTY } from '@/lib/techIcons/registry'
 
 function envByName(ws: Workspace, environment: string): DeploymentEnvironment | undefined {
   return (ws.model.deploymentEnvironments ?? []).find(e => e.name === environment)
@@ -190,11 +191,16 @@ export const createDeploymentSlice: StateCreator<
     if (name && name !== target.name) { changed = true }
     if ('technology' in patch && patch.technology !== target.technology) { changed = true }
     if ('description' in patch && patch.description !== target.description) { changed = true }
+    if ('icon' in patch && (patch.icon || undefined) !== target.properties[TECH_ICON_PROPERTY]) { changed = true }
     if (!changed) return
     pushUndoSnapshot(s)
     if (name) target.name = name
     if ('technology' in patch) target.technology = patch.technology || undefined
     if ('description' in patch) target.description = patch.description || undefined
+    if ('icon' in patch) {
+      if (patch.icon) target.properties[TECH_ICON_PROPERTY] = patch.icon
+      else delete target.properties[TECH_ICON_PROPERTY]
+    }
   }),
 
   renameDeploymentElement: (environment, id, name) => set((s) => {
