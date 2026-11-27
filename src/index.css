@@ -1334,6 +1334,12 @@ body {
 .c4ai {
   transition: opacity 0.16s ease;
 }
+/* Right-drag pans over nodes and edges too, whose own cursors would otherwise
+   show through. */
+[data-canvas-panning] .react-flow,
+[data-canvas-panning] .react-flow * {
+  cursor: grabbing !important;
+}
 [data-canvas-panning] .glass-panel,
 [data-canvas-panning] .glass-panel-solid,
 [data-canvas-panning] .glass-flyout,
