@@ -112,6 +112,12 @@ export default function BaseC4Node({
   const descClamp = nested ? 3 : isCompact ? undefined : isFull ? undefined : 3
   // Too small on screen to read as a card: show the name alone, large.
   const labelOnly = useViewportStore(state => nested && state.transform[2] * (data.semantic?.scale ?? 1) < LABEL_BELOW)
+  // An opening card's title shrinks so its contents get the body. Set only
+  // while it opens, so a closed card renders exactly as in a Diagram.
+  const titleScale = data.semantic?.expandable && data.semantic.reveal > 0 ? headerScale(data.semantic.reveal) : 1
+  // The row keeps its layout; its right-hand icons and buttons slide back out
+  // to the card's edge instead of shrinking toward the middle with it.
+  const toEdge = titleScale !== 1 ? { position: 'relative' as const, left: `calc(100% / ${titleScale} - 100%)` } : undefined
   const cardRef = useRef<HTMLDivElement>(null)
   const reportSize = data.semantic?.onMeasure
   useLayoutEffect(() => {
@@ -145,7 +151,6 @@ export default function BaseC4Node({
           width: data.semantic.width,
         } : {}),
         ['--semantic-content-opacity' as string]: summaryOpacity(data.semantic?.reveal ?? 0),
-        ...(data.semantic?.expandable && { ['--semantic-header-scale' as string]: headerScale(data.semantic.reveal) }),
         background: resolvedTint,
         border: resolvedBorder,
         // Per-node tier color for selection halo, hover handles, and the
@@ -173,7 +178,7 @@ export default function BaseC4Node({
       )}
 
       {/* Row 1: icon + title + action buttons */}
-      <div className="c4-node-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="c4-node-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', ...(titleScale !== 1 && { transform: `scale(${titleScale})`, transformOrigin: 'left top' }) }}>
         {isPerson ? (
           <span
             aria-hidden="true"
@@ -212,6 +217,7 @@ export default function BaseC4Node({
         {hasDocs && (
           <span
             className="c4-node-lock"
+            style={toEdge}
             role="img"
             aria-label={`${element.name} has documentation`}
             title="Has documentation — see the Docs tab"
@@ -222,6 +228,7 @@ export default function BaseC4Node({
         {data.locked && (
           <span
             className="c4-node-lock"
+            style={toEdge}
             role="img"
             aria-label={`${element.name} is locked in place`}
             title="Locked — Auto-arrange and dragging leave this where it is"
@@ -229,7 +236,7 @@ export default function BaseC4Node({
             <Lock size={11} />
           </span>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }} className="c4-node-actions">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, ...toEdge }} className="c4-node-actions">
           {viewCount > 1 && (
             <span
               className="c4-node-view-count nodrag"
